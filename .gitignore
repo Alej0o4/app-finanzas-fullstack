@@ -1,0 +1,6 @@
+# Ignorar entornos virtuales
+backend/venv/
+
+# Ignorar archivos compilados temporales de Python
+backend/__pycache__/
+*.pyc
