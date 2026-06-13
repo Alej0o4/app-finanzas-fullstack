@@ -1,16 +1,21 @@
 from fastapi import FastAPI
-# 1. Importamos las herramientas de nuestra base de datos y los modelos
 from app.core.database import engine, Base
 from app.models import models
 
-# 2. ¡La instrucción de fabricación!
-# Esto le dice a SQLAlchemy: "Revisa todos los modelos y crea las tablas físicas en el archivo .db si no existen"
+# IMPORTANTE: Importamos nuestro nuevo enrutador
+from app.api import transactions
+
+# Creamos las tablas
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="API de Finanzas Personales",
     description="Backend para gestión de ingresos, gastos y presupuestos."
 )
+
+# IMPORTANTE: Conectamos el enrutador secundario a la API
+# Le ponemos el prefijo "/api/transactions" para mantener todo ordenado
+app.include_router(transactions.router, prefix="/api/transactions", tags=["Transacciones"])
 
 @app.get("/")
 def ruta_raiz():
