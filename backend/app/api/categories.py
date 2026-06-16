@@ -1,66 +1,52 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import or_  # Para hacer consultas con lógica "O" (OR)
+from sqlalchemy import or_
 from typing import List
 
 from app.core.database import get_db
 from app.models import models
 from app.schemas import schemas
+from app.core.security import get_current_user
 
 router = APIRouter()
 
-# Ruta A: CREAR CATEGORÍA
 @router.post("/", response_model=schemas.CategoryResponse)
 def crear_categoria(
     categoria: schemas.CategoryCreate, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
-    # Si nos envían un user_id, validamos defensivamente que el usuario exista
-    if categoria.user_id is not None:
-        usuario = db.query(models.User).filter(models.User.id == categoria.user_id).first()
-        if not usuario:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Error: El usuario con ID {categoria.user_id} no existe."
-            )
-            
-    nueva_categoria = models.Category(**categoria.dict())
+    nueva_categoria = models.Category(**categoria.dict(), user_id=current_user.id)
     db.add(nueva_categoria)
     db.commit()
     db.refresh(nueva_categoria)
     return nueva_categoria
 
-
-# Ruta B: LISTAR CATEGORÍAS (Lógica Avanzada de Aislamiento)
 @router.get("/", response_model=List[schemas.CategoryResponse])
 def obtener_categorias(
-    user_id: int, # El ID del usuario que consulta
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
-    # 🔒 Filtrado Inteligente: Traemos las categorías donde:
-    # El user_id sea NULL (del sistema) O el user_id coincida con el usuario actual
     categorias = db.query(models.Category).filter(
         or_(
             models.Category.user_id == None,
-            models.Category.user_id == user_id
+            models.Category.user_id == current_user.id
         )
     ).all()
     return list(categorias)
 
-# Añade esto al final de app/api/categories.py
-
-# Ruta C: ACTUALIZAR CATEGORÍA (PUT)
 @router.put("/{category_id}", response_model=schemas.CategoryResponse)
 def actualizar_categoria(
     category_id: int,
     categoria_actualizada: schemas.CategoryBase,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ) -> models.Category:
     categoria = db.query(models.Category).filter(models.Category.id == category_id).first()
-    if not categoria:
-        raise HTTPException(status_code=404, detail="La categoría no existe.")
     
-    # 🔒 Blindaje: Si el user_id es NULL, es del sistema y no se puede modificar
+    if not categoria or (categoria.user_id != current_user.id and categoria.user_id is not None):
+        raise HTTPException(status_code=404, detail="La categoría no existe o no tienes permisos.")
+    
     if categoria.user_id is None:
         raise HTTPException(status_code=403, detail="No se pueden modificar las categorías base del sistema.")
         
@@ -71,22 +57,20 @@ def actualizar_categoria(
     db.refresh(categoria)
     return categoria
 
-
-# Ruta D: ELIMINAR CATEGORÍA (DELETE)
 @router.delete("/{category_id}")
 def eliminar_categoria(
     category_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
     categoria = db.query(models.Category).filter(models.Category.id == category_id).first()
-    if not categoria:
-        raise HTTPException(status_code=404, detail="La categoría no existe.")
+    
+    if not categoria or (categoria.user_id != current_user.id and categoria.user_id is not None):
+         raise HTTPException(status_code=404, detail="La categoría no existe o no tienes permisos.")
         
-    # 🔒 Blindaje: Evitar borrar categorías globales
     if categoria.user_id is None:
         raise HTTPException(status_code=403, detail="No se pueden eliminar las categorías base del sistema.")
     
-    # 🔒 Verificar si tiene transacciones asociadas
     tiene_transacciones = db.query(models.Transaction).filter(models.Transaction.category_id == category_id).first()
     if tiene_transacciones:
         raise HTTPException(
@@ -96,4 +80,4 @@ def eliminar_categoria(
         
     db.delete(categoria)
     db.commit()
-    return {"estado": "OK", "mensaje": f"Categoría con ID {category_id} eliminada exitosamente."}
+    return {"estado": "OK", "mensaje": "Categoría eliminada exitosamente."}

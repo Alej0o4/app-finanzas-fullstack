@@ -2,81 +2,72 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
-# Importamos nuestras piezas
 from app.core.database import get_db
 from app.models import models
 from app.schemas import schemas
 
-# Inicializamos nuestro "Tablero Secundario"
+# 🔒 Importamos a nuestro Guardia de Seguridad
+from app.core.security import get_current_user
+
 router = APIRouter()
 
-# Definimos la ruta POST para CREAR una transacción
-# Nota cómo le decimos a FastAPI que use el filtro de salida: response_model=schemas.TransactionResponse
+# --- RUTA PROTEGIDA ---
 @router.post("/", response_model=schemas.TransactionResponse)
 def crear_transaccion(
-    transaccion: schemas.TransactionCreate, # 1. El JSON entrante pasa por el filtro Pydantic
-    db: Session = Depends(get_db)           # 2. Inyección de Dependencia: Nos abre una conexión a la BD
+    transaccion: schemas.TransactionCreate, 
+    db: Session = Depends(get_db),
+    # 🔒 El Guardia entra en acción: Extrae al usuario dueño del token invisible
+    current_user: models.User = Depends(get_current_user) 
 ):
-    # Paso A: Convertimos el JSON validado (Schema) en un objeto físico de la BD (Modelo)
-    # El **transaccion.dict() desempaqueta los datos automáticamente
-    nueva_transaccion = models.Transaction(**transaccion.dict())
+    # Ya no tomamos el user_id del JSON (porque lo borramos del schema). 
+    # Lo inyectamos directamente nosotros desde el servidor. Es infalsificable.
+    nueva_transaccion = models.Transaction(
+        **transaccion.dict(),
+        user_id=current_user.id  
+    )
     
-    # Paso B: Preparamos la pieza en la memoria temporal (RAM)
     db.add(nueva_transaccion)
-    
-    # Paso C: ¡El gatillo! Guardamos los datos físicamente en el disco duro (.db)
     db.commit()
-    
-    # Paso D: Actualizamos nuestro objeto en Python para que la BD le inyecte el 'id' y la 'fecha' que acaba de generar
     db.refresh(nueva_transaccion)
-    
-    # Paso E: Devolvemos el objeto. FastAPI lo pasará por el filtro de salida (TransactionResponse) automáticamente
     return nueva_transaccion
 
-# Añade esto debajo de tu función POST
 
-# 1. Definimos la ruta GET. 
-# Nota clave: La respuesta ya no es un solo Schema, sino una Lista de ellos.
+# --- RUTA PROTEGIDA ---
 @router.get("/", response_model=List[schemas.TransactionResponse])
 def obtener_transacciones(
-    # 2. Parámetros de consulta (Query Parameters) para la Paginación
     skip: int = 0, 
     limit: int = 100, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    # 🔒 El Guardia protege la lectura
+    current_user: models.User = Depends(get_current_user)
 ):
-    # Paso A: Le pedimos a SQLAlchemy que busque en el modelo Transaction
-    # Paso B: Aplicamos el salto (offset) y el límite, y traemos todos (.all())
-    transacciones = db.query(models.Transaction).offset(skip).limit(limit).all()
-    
-    # Paso C: Devolvemos la lista. FastAPI y Pydantic filtrarán CADA elemento de la lista automáticamente.
+    # Aislamiento de Datos forzado. El usuario solo puede ver lo suyo.
+    # Fíjate que ya no le pedimos el user_id en la URL, el servidor lo sabe automáticamente.
+    transacciones = db.query(models.Transaction)\
+        .filter(models.Transaction.user_id == current_user.id)\
+        .offset(skip).limit(limit).all()
+        
     return transacciones
 
-# Añade esto al final de app/api/transactions.py
 
+# --- RUTA PROTEGIDA ---
 @router.delete("/{transaction_id}")
 def eliminar_transaccion(
-    transaction_id: int,                  # Recibimos el ID desde la URL
-    db: Session = Depends(get_db)
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    # 🔒 El Guardia protege la eliminación
+    current_user: models.User = Depends(get_current_user)
 ):
-    # Paso A: Buscamos la transacción en la base de datos por su ID
-    transaccion_existente = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
+    transaccion = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
     
-    # Paso B: Control de calidad / Programación Defensiva
-    # Si el usuario nos pide borrar un ID que no existe (ej. el 999), detenemos la máquina
-    if not transaccion_existente:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Error: La transacción con ID {transaction_id} no existe en la base de datos."
-        )
+    if not transaccion:
+        raise HTTPException(status_code=404, detail="La transacción no existe.")
+        
+    # 🔒 Programación Defensiva Crítica:
+    # Verificamos que el usuario que intenta borrar la transacción, SEA el dueño real.
+    if transaccion.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No tienes permisos para eliminar esta transacción.")
     
-    # Paso C: Si existe, le decimos al ORM que la remueva de la memoria
-    db.delete(transaccion_existente)
-    
-    # Paso D: Confirmamos los cambios en el disco duro (.db)
+    db.delete(transaccion)
     db.commit()
-    
-    # Paso E: Devolvemos un mensaje de éxito
-    return {
-        "estado": "OK",
-        "mensaje": f"Transacción con ID {transaction_id} eliminada exitosamente de la base de datos."
-    }
+    return {"estado": "OK", "mensaje": "Transacción eliminada."}
