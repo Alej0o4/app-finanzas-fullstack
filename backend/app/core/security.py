@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv # Importamos la herramienta
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt, JWTError
@@ -6,14 +8,19 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-# Importamos nuestra conexión a BD y modelos
 from app.core.database import get_db
 from app.models import models
 
-# 1. VARIABLES DE ENTORNO
-SECRET_KEY = "llave_super_secreta_de_desarrollo_cambiar_en_produccion" 
+# 1. VARIABLES DE ENTORNO (Actualizado)
+load_dotenv() # Esto lee el archivo .env automáticamente
+
+# Extraemos la llave. Si por algún error el archivo .env no existe, lanzará un error para protegerte.
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("¡Error Crítico! No se encontró la SECRET_KEY en el archivo .env")
+
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 # 2. CONFIGURACIONES DE SEGURIDAD
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

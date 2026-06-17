@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 from enum import Enum
+from pydantic import BaseModel, Field
 
 # --- USUARIOS ---
 class UserBase(BaseModel):
@@ -16,15 +17,19 @@ class UserResponse(UserBase):
         from_attributes = True
 
 # --- TRANSACCIONES ---
+class TransactionType(str, Enum):
+    income = "income"
+    expense = "expense"
+
 class TransactionBase(BaseModel):
-    amount: float
-    type: str
+    amount: float = Field(..., gt=0, description="El monto debe ser mayor a cero")
+    type: TransactionType  # 🔒 ¡Ya no es un texto libre (str)! Ahora está blindado.
     description: Optional[str] = None
     account_id: int
     category_id: int
 
 class TransactionCreate(TransactionBase):
-    pass # Eliminado user_id
+    pass 
 
 class TransactionResponse(TransactionBase):
     id: int
@@ -73,8 +78,9 @@ class CategoryResponse(CategoryBase):
 
 # --- PRESUPUESTOS ---
 class BudgetBase(BaseModel):
-    amount_limit: float
-    month: int
+    # 🔒 Blindaje: El límite también debe ser mayor a 0
+    amount_limit: float = Field(..., gt=0, description="El presupuesto debe ser mayor a cero")
+    month: int = Field(..., ge=1, le=12, description="Mes válido entre 1 y 12")
     year: int
     category_id: int
 
@@ -86,3 +92,16 @@ class BudgetResponse(BudgetBase):
     user_id: int
     class Config:
         from_attributes = True
+
+# --- DASHBOARD ---
+class DashboardSummary(BaseModel):
+    total_balance: float
+    monthly_income: float
+    monthly_expense: float
+
+class BudgetProgress(BaseModel):
+    budget_id: int
+    category_name: str
+    amount_limit: float
+    spent: float
+    percentage: float

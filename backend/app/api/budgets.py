@@ -67,3 +67,34 @@ def eliminar_presupuesto(
     db.delete(presupuesto)
     db.commit()
     return {"estado": "OK", "mensaje": "Presupuesto eliminado exitosamente."}
+
+@router.put("/{budget_id}", response_model=schemas.BudgetResponse)
+def actualizar_presupuesto(
+    budget_id: int,
+    presupuesto_actualizado: schemas.BudgetBase,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+) -> models.Budget:
+    
+    presupuesto_db = db.query(models.Budget).filter(
+        models.Budget.id == budget_id,
+        models.Budget.user_id == current_user.id
+    ).first()
+    
+    if not presupuesto_db:
+        raise HTTPException(status_code=404, detail="Presupuesto no encontrado.")
+
+    # Validamos que la nueva categoría exista
+    categoria = db.query(models.Category).filter(models.Category.id == presupuesto_actualizado.category_id).first()
+    if not categoria:
+        raise HTTPException(status_code=404, detail="La nueva categoría asignada no existe.")
+
+    # Actualizamos los datos
+    presupuesto_db.amount_limit = presupuesto_actualizado.amount_limit
+    presupuesto_db.month = presupuesto_actualizado.month
+    presupuesto_db.year = presupuesto_actualizado.year
+    presupuesto_db.category_id = presupuesto_actualizado.category_id
+
+    db.commit()
+    db.refresh(presupuesto_db)
+    return presupuesto_db

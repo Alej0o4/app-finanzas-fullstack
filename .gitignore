@@ -4,3 +4,6 @@ backend/venv/
 # Ignorar archivos compilados temporales de Python
 backend/__pycache__/
 *.pyc
+
+# Ignorar el archivo de las variables de entorno
+backend/.env

@@ -16,20 +16,36 @@ router = APIRouter()
 def crear_transaccion(
     transaccion: schemas.TransactionCreate, 
     db: Session = Depends(get_db),
-    # 🔒 El Guardia entra en acción: Extrae al usuario dueño del token invisible
     current_user: models.User = Depends(get_current_user) 
 ):
-    # Ya no tomamos el user_id del JSON (porque lo borramos del schema). 
-    # Lo inyectamos directamente nosotros desde el servidor. Es infalsificable.
-    nueva_transaccion = models.Transaction(
-        **transaccion.dict(),
-        user_id=current_user.id  
-    )
+    # 🔒 1. Verificar que la cuenta de destino exista y PERTENEZCA al usuario
+    cuenta = db.query(models.Account).filter(
+        models.Account.id == transaccion.account_id,
+        models.Account.user_id == current_user.id
+    ).first()
     
-    db.add(nueva_transaccion)
-    db.commit()
-    db.refresh(nueva_transaccion)
-    return nueva_transaccion
+    if not cuenta:
+        raise HTTPException(status_code=404, detail="La cuenta especificada no existe o no te pertenece.")
+        
+    # 2. Ensamblar la transacción
+    nueva_transaccion = models.Transaction(**transaccion.dict(), user_id=current_user.id)
+    
+    # 🧮 3. Lógica Contable: Actualizar el saldo de la cuenta en la RAM
+    if transaccion.type == "income":
+        cuenta.balance += transaccion.amount
+    elif transaccion.type == "expense":
+        cuenta.balance -= transaccion.amount
+        
+    try:
+        # 4. Intentamos guardar ambas cosas en el disco duro al mismo tiempo
+        db.add(nueva_transaccion)
+        db.commit() # ¡El gatillo atómico! Guarda transacción y actualiza cuenta
+        db.refresh(nueva_transaccion)
+        return nueva_transaccion
+    except Exception as e:
+        # 🛡️ 5. Si algo explota (ej. caída de red), revertimos todo para no corromper los saldos
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Error interno al procesar la transacción contable.")
 
 
 # --- RUTA PROTEGIDA ---
@@ -55,19 +71,84 @@ def obtener_transacciones(
 def eliminar_transaccion(
     transaction_id: int,
     db: Session = Depends(get_db),
-    # 🔒 El Guardia protege la eliminación
     current_user: models.User = Depends(get_current_user)
 ):
     transaccion = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
     
-    if not transaccion:
-        raise HTTPException(status_code=404, detail="La transacción no existe.")
+    if not transaccion or transaccion.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="La transacción no existe o no tienes permisos.")
         
-    # 🔒 Programación Defensiva Crítica:
-    # Verificamos que el usuario que intenta borrar la transacción, SEA el dueño real.
-    if transaccion.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="No tienes permisos para eliminar esta transacción.")
+    # 1. Obtener la cuenta asociada a esta transacción
+    cuenta = db.query(models.Account).filter(models.Account.id == transaccion.account_id).first()
     
-    db.delete(transaccion)
-    db.commit()
-    return {"estado": "OK", "mensaje": "Transacción eliminada."}
+    # 🧮 2. Lógica Contable Inversa: Revertimos el impacto del saldo en la RAM
+    if cuenta:
+        if transaccion.type == "income":
+            cuenta.balance -= transaccion.amount # Si era ingreso y lo borro, pierdo plata
+        elif transaccion.type == "expense":
+            cuenta.balance += transaccion.amount # Si era gasto y lo borro, recupero plata
+            
+    try:
+        # 3. Ejecutamos el borrado y la actualización de saldo en un solo movimiento
+        db.delete(transaccion)
+        db.commit()
+        return {"estado": "OK", "mensaje": "Transacción eliminada y saldo de cuenta revertido exitosamente."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Error al intentar eliminar y revertir saldos.")
+
+@router.put("/{transaction_id}", response_model=schemas.TransactionResponse)
+def actualizar_transaccion(
+    transaction_id: int,
+    transaccion_actualizada: schemas.TransactionBase,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+) -> models.Transaction:
+    
+    # 1. Buscamos la transacción original
+    transaccion_db = db.query(models.Transaction).filter(
+        models.Transaction.id == transaction_id,
+        models.Transaction.user_id == current_user.id
+    ).first()
+    
+    if not transaccion_db:
+        raise HTTPException(status_code=404, detail="Transacción no encontrada.")
+
+    # 2. Buscamos las cuentas (la vieja y la nueva, por si el usuario movió el gasto a otra cuenta)
+    cuenta_vieja = db.query(models.Account).filter(models.Account.id == transaccion_db.account_id).first()
+    cuenta_nueva = db.query(models.Account).filter(
+        models.Account.id == transaccion_actualizada.account_id,
+        models.Account.user_id == current_user.id
+    ).first()
+    
+    if not cuenta_nueva:
+        raise HTTPException(status_code=404, detail="La nueva cuenta asignada no existe o no te pertenece.")
+
+    try:
+        # 🧮 A. Revertimos el impacto de la transacción VIEJA en la cuenta VIEJA
+        if transaccion_db.type == "income":
+            cuenta_vieja.balance -= transaccion_db.amount
+        elif transaccion_db.type == "expense":
+            cuenta_vieja.balance += transaccion_db.amount
+
+        # 🧮 B. Aplicamos el impacto de la transacción NUEVA en la cuenta NUEVA
+        if transaccion_actualizada.type == "income":
+            cuenta_nueva.balance += transaccion_actualizada.amount
+        elif transaccion_actualizada.type == "expense":
+            cuenta_nueva.balance -= transaccion_actualizada.amount
+
+        # C. Actualizamos los datos físicos de la transacción
+        transaccion_db.amount = transaccion_actualizada.amount
+        transaccion_db.type = transaccion_actualizada.type
+        transaccion_db.description = transaccion_actualizada.description
+        transaccion_db.account_id = transaccion_actualizada.account_id
+        transaccion_db.category_id = transaccion_actualizada.category_id
+
+        # D. Guardamos todo de forma Atómica
+        db.commit()
+        db.refresh(transaccion_db)
+        return transaccion_db
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Error al recalcular saldos en la actualización.")
