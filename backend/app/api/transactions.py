@@ -8,6 +8,7 @@ from app.schemas import schemas
 
 # 🔒 Importamos a nuestro Guardia de Seguridad
 from app.core.security import get_current_user
+from sqlalchemy import or_
 
 router = APIRouter()
 
@@ -26,6 +27,14 @@ def crear_transaccion(
     
     if not cuenta:
         raise HTTPException(status_code=404, detail="La cuenta especificada no existe o no te pertenece.")
+    
+    categoria = db.query(models.Category).filter(
+        models.Category.id == transaccion.category_id,
+        or_(models.Category.user_id == None, models.Category.user_id == current_user.id)
+    ).first()
+    
+    if not categoria:
+        raise HTTPException(status_code=404, detail="La categoría especificada no existe o no tienes permisos para usarla.")
         
     # 2. Ensamblar la transacción
     nueva_transaccion = models.Transaction(**transaccion.dict(), user_id=current_user.id)
@@ -123,6 +132,14 @@ def actualizar_transaccion(
     
     if not cuenta_nueva:
         raise HTTPException(status_code=404, detail="La nueva cuenta asignada no existe o no te pertenece.")
+    
+    categoria = db.query(models.Category).filter(
+        models.Category.id == transaccion_actualizada.category_id,
+        or_(models.Category.user_id == None, models.Category.user_id == current_user.id)
+    ).first()
+    
+    if not categoria:
+        raise HTTPException(status_code=404, detail="La categoría especificada no existe o no tienes permisos para usarla.")
 
     try:
         # 🧮 A. Revertimos el impacto de la transacción VIEJA en la cuenta VIEJA

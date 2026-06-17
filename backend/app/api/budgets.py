@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.models import models
 from app.schemas import schemas
 from app.core.security import get_current_user
+from sqlalchemy import or_
 
 router = APIRouter()
 
@@ -15,7 +16,10 @@ def crear_presupuesto(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    categoria = db.query(models.Category).filter(models.Category.id == presupuesto.category_id).first()
+    categoria = db.query(models.Category).filter(
+        models.Category.id == presupuesto.category_id,
+        or_(models.Category.user_id == None, models.Category.user_id == current_user.id)
+    ).first()
     if not categoria:
         raise HTTPException(status_code=404, detail="La categoría asignada no existe.")
 
@@ -85,7 +89,10 @@ def actualizar_presupuesto(
         raise HTTPException(status_code=404, detail="Presupuesto no encontrado.")
 
     # Validamos que la nueva categoría exista
-    categoria = db.query(models.Category).filter(models.Category.id == presupuesto_actualizado.category_id).first()
+    categoria = db.query(models.Category).filter(
+        models.Category.id == presupuesto.category_id,
+        or_(models.Category.user_id == None, models.Category.user_id == current_user.id)
+    ).first()
     if not categoria:
         raise HTTPException(status_code=404, detail="La nueva categoría asignada no existe.")
 

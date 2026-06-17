@@ -77,6 +77,13 @@ def eliminar_categoria(
             status_code=400, 
             detail="No se puede eliminar la categoría porque tiene transacciones asociadas."
         )
+    
+    tiene_presupuestos = db.query(models.Budget).filter(models.Budget.category_id == category_id).first()
+    if tiene_presupuestos:
+        raise HTTPException(
+            status_code=400, 
+            detail="No se puede eliminar la categoría porque tiene presupuestos activos. Elimínalos primero."
+        )
         
     db.delete(categoria)
     db.commit()

@@ -47,14 +47,19 @@ class AccountType(str, Enum):
 class AccountBase(BaseModel):
     name: str
     type: AccountType 
-    balance: float = 0.0
 
+# En la creación SÍ permitimos un balance inicial (ej. saldo con el que abro la app)
 class AccountCreate(AccountBase):
-    pass # Eliminado user_id
+    balance: float = Field(0.0, ge=0, description="Saldo inicial")
+
+# 🔒 NUEVO: Molde estricto para editar. NO tiene la variable 'balance'
+class AccountUpdate(AccountBase):
+    pass 
 
 class AccountResponse(AccountBase):
     id: int
     user_id: int
+    balance: float # 🔒 El balance ahora es solo de lectura (salida)
     class Config:
         from_attributes = True
 

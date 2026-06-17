@@ -34,7 +34,7 @@ def obtener_cuentas(
 @router.put("/{account_id}", response_model=schemas.AccountResponse)
 def actualizar_cuenta(
     account_id: int,
-    cuenta_actualizada: schemas.AccountBase,
+    cuenta_actualizada: schemas.AccountUpdate, # 🔒 Usamos el nuevo molde restrictivo
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ) -> models.Account:
@@ -44,7 +44,6 @@ def actualizar_cuenta(
     
     cuenta.name = cuenta_actualizada.name
     cuenta.type = cuenta_actualizada.type
-    cuenta.balance = cuenta_actualizada.balance
     
     db.commit()
     db.refresh(cuenta)
