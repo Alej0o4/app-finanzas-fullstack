@@ -7,3 +7,7 @@ backend/__pycache__/
 
 # Ignorar el archivo de las variables de entorno
 backend/.env
+
+.vscode/
+.idea/
+.DS_Store

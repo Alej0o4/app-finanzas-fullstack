@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  /* Paleta Minimalista Orgánica (Modo Oscuro) */
+  --color-background: #151515;
+  --color-surface: #1A1A1A;
+  
+  --color-primary: #D8E3D6;
+  --color-primary-dark: #B8C4B6;
+  
+  --color-text: #E5E5E5;
+  --color-text-muted: #8A8A8A;
+  
+  --color-danger: #EF4444;
+
+  /* Asignamos la variable de nuestra tipografía a la familia sans por defecto */
+  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Aplicar el fondo oscuro y texto claro por defecto a toda la app */
+@layer base {
+  body {
+    @apply bg-background text-text antialiased;
+  }
+}
