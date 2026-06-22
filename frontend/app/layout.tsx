@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import QueryProvider from "@/components/QueryProvider";
 
-// Configuración de la fuente con números tabulares
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   variable: "--font-plus-jakarta",
@@ -10,7 +10,7 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Finanzas Personales",
+  title: "Oikos | Finanzas Personales",
   description: "Dashboard financiero minimalista y orgánico",
 };
 
@@ -22,7 +22,10 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${plusJakarta.variable}`}>
       <body>
-        {children}
+        {/* Envolvemos toda la app con el proveedor de datos */}
+        <QueryProvider>
+          {children}
+        </QueryProvider>
       </body>
     </html>
   );
