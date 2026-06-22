@@ -3,22 +3,26 @@ import { AlertCircle } from "lucide-react";
 
 interface BudgetRingProps {
   categoryName: string;
-  budgetAmount: number; // El límite (amount_limit en backend)
-  spentAmount: number;  // Lo que se ha gastado
+  budgetAmount: number; 
+  spentAmount: number;  
 }
 
 export default function BudgetRing({ categoryName, budgetAmount, spentAmount }: BudgetRingProps) {
-  // Evitamos división por cero y limitamos el porcentaje máximo visual al 100%
-  const safeBudget = budgetAmount > 0 ? budgetAmount : 1;
-  const rawPercentage = (spentAmount / safeBudget) * 100;
+  // PROGRAMACIÓN DEFENSIVA: Si el valor es undefined, usamos 0.
+  const safeSpent = Number(spentAmount) || 0;
+  const safeBudget = Number(budgetAmount) > 0 ? Number(budgetAmount) : 1; 
+
+  const rawPercentage = (safeSpent / safeBudget) * 100;
   const percentage = Math.min(Math.max(rawPercentage, 0), 100);
 
   // Matemáticas orgánicas del SVG
   const radius = 45;
   const circumference = 2 * Math.PI * radius;
+  
+  // Ahora estamos 100% seguros de que percentage es un número válido
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
-  // Lógica de colores semánticos
+  // ... (el resto del código se mantiene igual desde la línea de colores semánticos hacia abajo)
   const isDanger = percentage >= 90;
   const isWarning = percentage >= 75 && percentage < 90;
   
@@ -31,16 +35,13 @@ export default function BudgetRing({ categoryName, budgetAmount, spentAmount }: 
   return (
     <div className="bg-surface border border-neutral-800/60 rounded-2xl p-6 flex flex-col items-center justify-center relative group hover:border-neutral-700 transition-colors">
       
-      {/* Icono de alerta si se superó el presupuesto */}
       {rawPercentage > 100 && (
         <div className="absolute top-4 right-4 text-danger animate-pulse" title="Presupuesto excedido">
           <AlertCircle size={18} />
         </div>
       )}
 
-      {/* El Anillo SVG */}
       <div className="relative w-32 h-32 flex items-center justify-center">
-        {/* Texto central */}
         <div className="absolute flex flex-col items-center justify-center text-center">
           <span className={`text-xl font-bold font-sans ${ringColorClass}`}>
             {percentage.toFixed(0)}%
@@ -49,7 +50,6 @@ export default function BudgetRing({ categoryName, budgetAmount, spentAmount }: 
         </div>
 
         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-          {/* Pista de fondo (El límite total) */}
           <circle
             cx="50"
             cy="50"
@@ -59,7 +59,6 @@ export default function BudgetRing({ categoryName, budgetAmount, spentAmount }: 
             stroke="currentColor"
             fill="transparent"
           />
-          {/* Línea de progreso (Lo gastado) */}
           <circle
             cx="50"
             cy="50"
@@ -75,13 +74,12 @@ export default function BudgetRing({ categoryName, budgetAmount, spentAmount }: 
         </svg>
       </div>
 
-      {/* Información inferior */}
       <div className="mt-4 w-full text-center">
-        <h3 className="font-medium text-text text-sm truncate">{categoryName}</h3>
+        <h3 className="font-medium text-text text-sm truncate">{categoryName || "Sin Nombre"}</h3>
         <div className="flex justify-between items-center mt-2 text-xs">
-          <span className="text-text-muted">{formatCurrency(spentAmount)}</span>
+          <span className="text-text-muted">{formatCurrency(safeSpent)}</span>
           <span className="text-text-muted/50">/</span>
-          <span className="text-text">{formatCurrency(budgetAmount)}</span>
+          <span className="text-text">{formatCurrency(safeBudget === 1 && budgetAmount === 0 ? 0 : safeBudget)}</span>
         </div>
       </div>
     </div>
