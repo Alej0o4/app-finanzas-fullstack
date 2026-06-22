@@ -90,7 +90,7 @@ def actualizar_presupuesto(
 
     # Validamos que la nueva categoría exista
     categoria = db.query(models.Category).filter(
-        models.Category.id == presupuesto.category_id,
+        models.Category.id == presupuesto_actualizado.category_id,
         or_(models.Category.user_id == None, models.Category.user_id == current_user.id)
     ).first()
     if not categoria:
