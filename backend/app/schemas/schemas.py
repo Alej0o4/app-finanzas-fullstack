@@ -1,8 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 from enum import Enum
-from pydantic import BaseModel, Field
 
 # --- USUARIOS ---
 class UserBase(BaseModel):
@@ -22,8 +22,8 @@ class TransactionType(str, Enum):
     expense = "expense"
 
 class TransactionBase(BaseModel):
-    amount: float = Field(..., gt=0, description="El monto debe ser mayor a cero")
-    type: TransactionType  # 🔒 ¡Ya no es un texto libre (str)! Ahora está blindado.
+    amount: Decimal = Field(..., gt=0, decimal_places=2, description="El monto debe ser mayor a cero")  # 🔁 antes: float
+    type: TransactionType
     description: Optional[str] = None
     account_id: int
     category_id: int
@@ -48,22 +48,20 @@ class AccountBase(BaseModel):
     name: str
     type: AccountType 
 
-# En la creación SÍ permitimos un balance inicial (ej. saldo con el que abro la app)
 class AccountCreate(AccountBase):
-    balance: float = Field(0.0, ge=0, description="Saldo inicial")
+    balance: Decimal = Field(0, ge=0, decimal_places=2, description="Saldo inicial")  # 🔁 antes: float
 
-# 🔒 NUEVO: Molde estricto para editar. NO tiene la variable 'balance'
 class AccountUpdate(AccountBase):
     pass 
 
 class AccountResponse(AccountBase):
     id: int
     user_id: int
-    balance: float # 🔒 El balance ahora es solo de lectura (salida)
+    balance: Decimal  # 🔁 antes: float
     class Config:
         from_attributes = True
 
-# --- CATEGORÍAS ---
+# --- CATEGORÍAS --- (sin cambios, no maneja dinero)
 class CategoryType(str, Enum):
     income = "income"   
     expense = "expense" 
@@ -73,7 +71,7 @@ class CategoryBase(BaseModel):
     type: CategoryType  
 
 class CategoryCreate(CategoryBase):
-    pass # Eliminado user_id para que el sistema asigne automáticamente o quede como None global
+    pass
 
 class CategoryResponse(CategoryBase):
     id: int
@@ -83,14 +81,13 @@ class CategoryResponse(CategoryBase):
 
 # --- PRESUPUESTOS ---
 class BudgetBase(BaseModel):
-    # 🔒 Blindaje: El límite también debe ser mayor a 0
-    amount_limit: float = Field(..., gt=0, description="El presupuesto debe ser mayor a cero")
+    amount_limit: Decimal = Field(..., gt=0, decimal_places=2, description="El presupuesto debe ser mayor a cero")  # 🔁 antes: float
     month: int = Field(..., ge=1, le=12, description="Mes válido entre 1 y 12")
     year: int
     category_id: int
 
 class BudgetCreate(BudgetBase):
-    pass # Eliminado user_id
+    pass
 
 class BudgetResponse(BudgetBase):
     id: int
@@ -100,13 +97,13 @@ class BudgetResponse(BudgetBase):
 
 # --- DASHBOARD ---
 class DashboardSummary(BaseModel):
-    total_balance: float
-    monthly_income: float
-    monthly_expense: float
+    total_balance: Decimal      # 🔁 antes: float
+    monthly_income: Decimal     # 🔁 antes: float
+    monthly_expense: Decimal    # 🔁 antes: float
 
 class BudgetProgress(BaseModel):
     budget_id: int
     category_name: str
-    amount_limit: float
-    spent: float
-    percentage: float
+    amount_limit: Decimal   # 🔁 antes: float
+    spent: Decimal          # 🔁 antes: float
+    percentage: float       # ✅ se queda float, es un porcentaje calculado, no dinero
