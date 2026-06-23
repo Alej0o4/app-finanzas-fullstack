@@ -31,6 +31,20 @@ def obtener_cuentas(
     cuentas = db.query(models.Account).filter(models.Account.user_id == current_user.id).offset(skip).limit(limit).all()
     return cuentas
 
+@router.get("/{account_id}", response_model=schemas.AccountResponse)
+def obtener_cuenta(
+    account_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    cuenta = db.query(models.Account).filter(models.Account.id == account_id).first()
+    
+    # Usamos tu misma lógica de validación para mantener coherencia
+    if not cuenta or cuenta.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+    
+    return cuenta
+
 @router.put("/{account_id}", response_model=schemas.AccountResponse)
 def actualizar_cuenta(
     account_id: int,

@@ -35,6 +35,20 @@ def obtener_categorias(
     ).all()
     return list(categorias)
 
+@router.get("/{category_id}", response_model=schemas.CategoryResponse)
+def obtener_categoria(
+    category_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    categoria = db.query(models.Category).filter(models.Category.id == category_id).first()
+    
+    # Usamos tu misma lógica de validación para mantener coherencia
+    if not categoria or categoria.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="La categoría no existe o no tienes permisos.")
+    
+    return categoria
+
 @router.put("/{category_id}", response_model=schemas.CategoryResponse)
 def actualizar_categoria(
     category_id: int,

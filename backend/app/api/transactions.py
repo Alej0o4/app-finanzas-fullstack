@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app.core.database import get_db
 from app.models import models
@@ -62,16 +62,21 @@ def crear_transaccion(
 def obtener_transacciones(
     skip: int = 0, 
     limit: int = 100, 
+    account_id: Optional[int] = None,   # <-- 1. Parámetro opcional
+    category_id: Optional[int] = None,  # <-- 2. Parámetro opcional
     db: Session = Depends(get_db),
-    # 🔒 El Guardia protege la lectura
     current_user: models.User = Depends(get_current_user)
 ):
-    # Aislamiento de Datos forzado. El usuario solo puede ver lo suyo.
-    # Fíjate que ya no le pedimos el user_id en la URL, el servidor lo sabe automáticamente.
-    transacciones = db.query(models.Transaction)\
-        .filter(models.Transaction.user_id == current_user.id)\
-        .offset(skip).limit(limit).all()
+    query = db.query(models.Transaction).filter(models.Transaction.user_id == current_user.id)
+    
+    if account_id is not None:
+        query = query.filter(models.Transaction.account_id == account_id)
         
+    if category_id is not None:
+        query = query.filter(models.Transaction.category_id == category_id)
+        
+    transacciones = query.offset(skip).limit(limit).all()
+    
     return transacciones
 
 

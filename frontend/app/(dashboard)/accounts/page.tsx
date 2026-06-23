@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Wallet, Loader2, Edit2, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
+import Link from "next/link";
 
 interface Account {
   id: number;
@@ -143,44 +144,57 @@ export default function AccountsPage() {
       {/* Grid de Cuentas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {accounts?.map((account) => (
-          <div key={account.id} className="bg-surface border border-neutral-800/60 rounded-2xl p-5 hover:border-primary/30 transition-colors group">
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-background rounded-lg text-primary">
-                  <Wallet size={20} />
-                </div>
-                <div>
-                  <h3 className="font-medium text-text">{account.name}</h3>
-                  <p className="text-xs text-text-muted">
-                    {accountTypeTranslations[account.type] || account.type}
-                  </p>
+          <div key={account.id} className="bg-surface border border-neutral-800/60 rounded-2xl p-5 hover:border-primary/30 transition-colors group relative">
+            
+            {/* 1. Área clickeable para navegar al detalle de la cuenta */}
+            <Link href={`/accounts/${account.id}`} className="block cursor-pointer">
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-background rounded-lg text-primary">
+                    <Wallet size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-text">{account.name}</h3>
+                    <p className="text-xs text-text-muted">
+                      {accountTypeTranslations[account.type] || account.type}
+                    </p>
+                  </div>
                 </div>
               </div>
               
-              {/* Acciones de Edición y Eliminación (Aparecen al pasar el mouse) */}
-              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button 
-                  onClick={() => openEditModal(account)}
-                  className="text-text-muted hover:text-primary p-1 transition-colors"
-                  title="Editar cuenta"
-                >
-                  <Edit2 size={16} />
-                </button>
-                <button 
-                  onClick={() => handleDelete(account.id, account.name)}
-                  className="text-text-muted hover:text-danger p-1 transition-colors"
-                  title="Eliminar cuenta"
-                >
-                  <Trash2 size={16} />
-                </button>
+              <div className="mt-4 pt-4 border-t border-neutral-800/40">
+                <p className="text-2xl font-semibold font-sans text-text">
+                  {formatCurrency(account.balance)}
+                </p>
               </div>
+            </Link>
 
+            {/* 2. Botones de acción flotantes (Con stopPropagation para no navegar al editar) */}
+            <div className="absolute top-5 right-5 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface pl-2 rounded-lg">
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openEditModal(account);
+                }}
+                className="text-text-muted hover:text-primary p-1 transition-colors"
+                title="Editar cuenta"
+              >
+                <Edit2 size={16} />
+              </button>
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleDelete(account.id, account.name);
+                }}
+                className="text-text-muted hover:text-danger p-1 transition-colors"
+                title="Eliminar cuenta"
+              >
+                <Trash2 size={16} />
+              </button>
             </div>
-            <div className="mt-4 pt-4 border-t border-neutral-800/40">
-              <p className="text-2xl font-semibold font-sans text-text">
-                {formatCurrency(account.balance)}
-              </p>
-            </div>
+
           </div>
         ))}
       </div>

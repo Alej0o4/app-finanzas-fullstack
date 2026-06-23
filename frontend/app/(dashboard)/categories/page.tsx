@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Tags, Loader2, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Lock } from "lucide-react";
 import { api } from "@/lib/api";
+import Link from "next/link";
 
 // 1. Definición del Schema (OJO al user_id)
 interface Category {
@@ -130,41 +131,62 @@ export default function CategoriesPage() {
       {/* Grid de Categorías */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {categories?.map((category) => {
-          // Lógica estricta de tu backend:
           const isSystemCategory = category.user_id === null;
           const isExpense = category.type === "expense";
 
           return (
-            <div key={category.id} className="bg-surface border border-neutral-800/60 rounded-2xl p-4 hover:border-neutral-700 transition-colors group flex flex-col justify-between h-32">
+            <div key={category.id} className="bg-surface border border-neutral-800/60 rounded-2xl p-4 hover:border-neutral-700 transition-colors group relative flex flex-col justify-between h-32">
               
-              <div className="flex justify-between items-start">
-                <div className={`p-2 rounded-xl bg-background border border-neutral-800/50 ${isExpense ? 'text-text-muted' : 'text-primary'}`}>
-                  {isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
+              {/* 1. Área interactiva para navegar al detalle de la categoría */}
+              <Link href={`/categories/${category.id}`} className="block h-full w-full flex flex-col justify-between cursor-pointer">
+                <div className="flex justify-between items-start">
+                  <div className={`p-2 rounded-xl bg-background border border-neutral-800/50 ${isExpense ? 'text-text-muted' : 'text-primary'}`}>
+                    {isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
+                  </div>
                 </div>
 
-                {/* Si es del sistema, mostramos un candado. Si es del usuario, los controles (ocultos hasta el hover) */}
+                <div>
+                  {/* Agregamos un ligero padding-right (pr-16) para que el texto largo no se solape con los botones flotantes */}
+                  <h3 className="font-medium text-text text-sm truncate pr-16">{category.name}</h3>
+                  <p className="text-xs text-text-muted mt-0.5">
+                    {categoryTypeTranslations[category.type] || category.type}
+                  </p>
+                </div>
+              </Link>
+
+              {/* 2. Controles absolutos en la esquina superior derecha (Evitan la propagación del Link) */}
+              <div className="absolute top-4 right-4 z-10 flex items-center">
                 {isSystemCategory ? (
                   <div className="flex items-center space-x-1 text-xs text-text-muted bg-background px-2 py-1 rounded-md border border-neutral-800/40">
                     <Lock size={12} />
                     <span>Sistema</span>
                   </div>
                 ) : (
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => openEditModal(category)} className="text-text-muted hover:text-primary p-1 transition-colors">
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface pl-2 rounded-lg">
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openEditModal(category);
+                      }} 
+                      className="text-text-muted hover:text-primary p-1 transition-colors"
+                      title="Editar categoría"
+                    >
                       <Edit2 size={16} />
                     </button>
-                    <button onClick={() => handleDelete(category.id, category.name)} className="text-text-muted hover:text-danger p-1 transition-colors">
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDelete(category.id, category.name);
+                      }} 
+                      className="text-text-muted hover:text-danger p-1 transition-colors"
+                      title="Eliminar categoría"
+                    >
                       <Trash2 size={16} />
                     </button>
                   </div>
                 )}
-              </div>
-
-              <div>
-                <h3 className="font-medium text-text text-sm truncate">{category.name}</h3>
-                <p className="text-xs text-text-muted mt-0.5">
-                  {categoryTypeTranslations[category.type] || category.type}
-                </p>
               </div>
 
             </div>
