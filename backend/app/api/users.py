@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models import models
 from app.schemas import schemas
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, get_current_user
 
 router = APIRouter()
 
@@ -13,23 +13,26 @@ def crear_usuario(
     usuario: schemas.UserCreate, 
     db: Session = Depends(get_db)
 ):
-    # Programación Defensiva (Evitar duplicados)
     usuario_existente = db.query(models.User).filter(models.User.email == usuario.email).first()
     if usuario_existente:
         raise HTTPException(status_code=400, detail="Error: Este correo electrónico ya está registrado.")
     
-    # 🔒 Criptografía Aplicada: Trituramos la contraseña real
     hashed_password = get_password_hash(usuario.password)
     
-    # Ensamblaje de la pieza con la contraseña segura
     nuevo_usuario = models.User(
         email=usuario.email,
-        password_hash=hashed_password # Guardamos el texto ininteligible, NUNCA la original
+        full_name=usuario.full_name,
+        password_hash=hashed_password
     )
     
-    # Guardado físico en el disco
     db.add(nuevo_usuario)
     db.commit()
     db.refresh(nuevo_usuario)
     
     return nuevo_usuario
+
+@router.get("/me", response_model=schemas.UserResponse)  # 🆕 nuevo endpoint
+def obtener_usuario_actual(
+    current_user: models.User = Depends(get_current_user)
+):
+    return current_user

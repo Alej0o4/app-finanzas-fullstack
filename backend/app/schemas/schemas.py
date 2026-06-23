@@ -7,6 +7,7 @@ from enum import Enum
 # --- USUARIOS ---
 class UserBase(BaseModel):
     email: str
+    full_name: str
 
 class UserCreate(UserBase):
     password: str 

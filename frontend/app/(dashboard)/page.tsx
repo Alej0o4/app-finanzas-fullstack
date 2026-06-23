@@ -4,13 +4,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, RefreshCw, PieChart } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
+import { useCurrentUser } from "@/lib/hooks/useCurrentUser";
 import { useState } from "react";
 import BudgetRing from "@/components/charts/BudgetRing";
 
 interface DashboardSummary {
   total_balance: number;
-  monthly_budget: number;
-  monthly_expenses: number;
+  monthly_income: number;
+  monthly_expense: number;
 }
 
 // Adaptaremos esta interfaz a lo que devuelva tu backend
@@ -22,6 +23,7 @@ interface BudgetProgress {
 }
 
 export default function DashboardPage() {
+  const { data: user } = useCurrentUser();
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -63,7 +65,7 @@ export default function DashboardPage() {
       {/* Encabezado */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight font-sans">Buenas tardes, Alejandro</h1>
+          <h1 className="text-3xl font-bold tracking-tight font-sans">Buenas tardes, {user?.full_name?.split(" ")[0] || "de nuevo"}</h1>
           <p className="text-text-muted text-sm mt-1">Aquí tienes el estado actual de tus finanzas orgánicas.</p>
         </div>
         
@@ -86,15 +88,15 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="p-6 bg-surface border border-neutral-800/40 rounded-2xl shadow-sm transition-transform hover:scale-[1.02] duration-300">
-          <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Presupuesto Mensual</p>
+          <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Ingresos del Mes</p>
           <p className="text-3xl font-semibold text-primary mt-2 font-sans">
-            {formatCurrency(summary?.monthly_budget || 0)}
+            {formatCurrency(summary?.monthly_income || 0)}
           </p>
         </div>
         <div className="p-6 bg-surface border border-neutral-800/40 rounded-2xl shadow-sm transition-transform hover:scale-[1.02] duration-300">
           <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Gastos del Mes</p>
           <p className="text-3xl font-semibold text-text mt-2 font-sans">
-            {formatCurrency(summary?.monthly_expenses || 0)}
+            {formatCurrency(summary?.monthly_expense || 0)}
           </p>
         </div>
       </div>
@@ -112,12 +114,16 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {budgetsProgress.map((budget) => (
+            {/* Agregamos el "index" como segundo parámetro del map */}
+            {budgetsProgress.map((budget, index) => (
               <BudgetRing 
-                key={budget.category_id}
+                // PLAN B PARA EL KEY: Si category_id no existe, usa el índice del array
+                key={budget.category_id || `budget-ring-${index}`}
+                
                 categoryName={budget.category_name}
-                budgetAmount={budget.amount_limit}
-                spentAmount={budget.spent}
+                // FORZAMOS LA CONVERSIÓN: Por si el Decimal de Python llega como String ("50.00")
+                budgetAmount={Number(budget.amount_limit)} 
+                spentAmount={Number(budget.spent)}
               />
             ))}
           </div>
