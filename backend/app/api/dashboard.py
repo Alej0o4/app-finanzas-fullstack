@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime
-from decimal import Decimal  # 🔁 nuevo import
+from decimal import Decimal
 import calendar
 from typing import List
+from collections import defaultdict
 
 from app.core.database import get_db
 from app.models import models
@@ -87,3 +88,90 @@ def obtener_progreso_presupuestos(
         })
 
     return progreso_lista
+
+@router.get("/cashflow-series", response_model=List[schemas.CashflowData])
+def obtener_serie_flujo_caja(
+    start_date: datetime,
+    end_date: datetime,
+    period: str = Query("day", pattern="^(day|month)$", description="Agrupar por 'day' o 'month'"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    # 1. Consulta SQL simplificada (Sin CAST ni agrupaciones problemáticas)
+    # Extraemos solo los datos crudos del usuario en el rango de fechas
+    resultados = db.query(
+        models.Transaction.date,
+        models.Transaction.type,
+        models.Transaction.amount
+    ).filter(
+        models.Transaction.user_id == current_user.id,
+        models.Transaction.date >= start_date,
+        models.Transaction.date <= end_date
+    ).all()
+
+    # 2. Agrupación 100% en memoria (Agnóstica al motor de Base de Datos)
+    agrupacion = defaultdict(lambda: {"income": Decimal("0.00"), "expense": Decimal("0.00")})
+
+    for fecha, tipo_tx, amount in resultados:
+        if period == "month":
+            label = f"{fecha.year}-{fecha.month:02d}"
+        else:
+            # fecha ya es un objeto datetime de Python aquí
+            label = fecha.strftime("%Y-%m-%d")
+
+        # Aseguramos la conversión a Decimal por si SQLite lo devuelve como float
+        valor_decimal = Decimal(str(amount)) if amount else Decimal("0.00")
+        agrupacion[label][tipo_tx] += valor_decimal
+
+    # 3. Serialización ordenada cronológicamente
+    serie_tiempo = [
+        {
+            "date_label": key,
+            "income": values["income"],
+            "expense": values["expense"]
+        }
+        for key, values in sorted(agrupacion.items())
+    ]
+
+    return serie_tiempo
+
+
+@router.get("/category-distribution", response_model=List[schemas.CategoryDistributionData])
+def obtener_distribucion_categorias(
+    start_date: datetime,
+    end_date: datetime,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    resultados = db.query(
+        models.Transaction.category_id,
+        models.Category.name,
+        models.Transaction.amount
+    ).join(
+        models.Category, models.Category.id == models.Transaction.category_id
+    ).filter(
+        models.Transaction.user_id == current_user.id,
+        models.Transaction.type == "expense",
+        models.Transaction.date >= start_date,
+        models.Transaction.date <= end_date
+    ).all()
+
+    agrupacion = defaultdict(lambda: {"category_name": "Desconocida", "total": Decimal("0.00")})
+
+    for category_id, category_name, amount in resultados:
+        valor_decimal = Decimal(str(amount)) if amount else Decimal("0.00")
+        agrupacion[category_id]["category_name"] = category_name or "Desconocida"
+        agrupacion[category_id]["total"] += valor_decimal
+
+    return [
+        {
+            "category_id": category_id,
+            "category_name": values["category_name"],
+            "total": values["total"]
+        }
+        for category_id, values in sorted(
+            agrupacion.items(),
+            key=lambda item: item[1]["total"],
+            reverse=True
+        )
+    ]

@@ -28,6 +28,7 @@ class TransactionBase(BaseModel):
     description: Optional[str] = None
     account_id: int
     category_id: int
+    date: Optional[datetime] = None
 
 class TransactionCreate(TransactionBase):
     pass 
@@ -108,3 +109,21 @@ class BudgetProgress(BaseModel):
     amount_limit: Decimal   # 🔁 antes: float
     spent: Decimal          # 🔁 antes: float
     percentage: float       # ✅ se queda float, es un porcentaje calculado, no dinero
+
+
+class CashflowData(BaseModel):
+    date_label: str
+    income: Decimal
+    expense: Decimal
+
+    class Config:
+        from_attributes = True
+
+
+class CategoryDistributionData(BaseModel):
+    category_id: int
+    category_name: str
+    total: Decimal
+
+    class Config:
+        from_attributes = True

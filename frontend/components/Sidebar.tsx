@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useUiStore } from "@/store/useUiStore";
 import { 
   LayoutDashboard, 
+  TrendingUp, // <- Icono importado para Analítica
   Wallet, 
   ArrowLeftRight, 
   PieChart, 
@@ -21,6 +22,7 @@ export default function Sidebar() {
   // Enlaces basados estrictamente en tus contratos del backend
   const navItems = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Analítica", href: "/analytics", icon: TrendingUp }, // <- Nueva ruta agregada
     { name: "Cuentas", href: "/accounts", icon: Wallet },
     { name: "Transacciones", href: "/transactions", icon: ArrowLeftRight },
     { name: "Presupuestos", href: "/budgets", icon: PieChart },

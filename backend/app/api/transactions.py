@@ -37,7 +37,7 @@ def crear_transaccion(
         raise HTTPException(status_code=404, detail="La categoría especificada no existe o no tienes permisos para usarla.")
         
     # 2. Ensamblar la transacción
-    nueva_transaccion = models.Transaction(**transaccion.dict(), user_id=current_user.id)
+    nueva_transaccion = models.Transaction(**transaccion.dict(exclude_none=True), user_id=current_user.id)
     
     # 🧮 3. Lógica Contable: Actualizar el saldo de la cuenta en la RAM
     if transaccion.type == "income":
@@ -165,6 +165,8 @@ def actualizar_transaccion(
         transaccion_db.description = transaccion_actualizada.description
         transaccion_db.account_id = transaccion_actualizada.account_id
         transaccion_db.category_id = transaccion_actualizada.category_id
+        if transaccion_actualizada.date is not None:
+            transaccion_db.date = transaccion_actualizada.date
 
         # D. Guardamos todo de forma Atómica
         db.commit()
