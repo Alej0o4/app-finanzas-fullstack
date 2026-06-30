@@ -1,17 +1,33 @@
 @import "tailwindcss";
 
 @theme {
-  /* Paleta Minimalista Orgánica (Modo Oscuro) */
-  --color-background: #151515;
-  --color-surface: #1A1A1A;
+  /* Paleta fintech sobria (modo oscuro) */
+  --color-background: #0b1220;
+  --color-surface: #111b2e;
+  --color-surface-elevated: #162338;
+  --color-border: #24314a;
   
-  --color-primary: #D8E3D6;
-  --color-primary-dark: #B8C4B6;
+  --color-primary: #7dd3fc;
+  --color-primary-dark: #38bdf8;
+  --color-success: #34d399;
+  --color-warning: #f59e0b;
+  --color-danger: #fb7185;
+  --color-info: #60a5fa;
   
-  --color-text: #E5E5E5;
-  --color-text-muted: #8A8A8A;
-  
-  --color-danger: #EF4444;
+  --color-text: #eef4ff;
+  --color-text-muted: #9aa7bd;
+  --color-text-soft: #c7d2e5;
+
+  --color-chart-1: #38bdf8;
+  --color-chart-2: #0ea5e9;
+  --color-chart-3: #2563eb;
+  --color-chart-4: #4f46e5;
+  --color-chart-5: #7c3aed;
+  --color-chart-6: #db2777;
+  --color-chart-7: #10b981;
+  --color-chart-8: #14b8a6;
+  --color-chart-9: #f97316;
+  --color-chart-10: #8b5cf6;
 
   /* Asignamos la variable de nuestra tipografía a la familia sans por defecto */
   --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;

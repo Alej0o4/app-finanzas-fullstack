@@ -136,7 +136,7 @@ export default function BudgetsPage() {
       {/* Grid de Presupuestos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {(!budgets || budgets.length === 0) ? (
-          <div className="col-span-full p-12 text-center flex flex-col items-center text-text-muted bg-surface border border-neutral-800/60 rounded-3xl">
+          <div className="col-span-full p-12 text-center flex flex-col items-center text-text-muted bg-surface border border-border/70 rounded-3xl">
             <PieChart size={48} className="mb-4 opacity-20" />
             <p>No has definido ningún límite para este mes.</p>
           </div>
@@ -144,7 +144,7 @@ export default function BudgetsPage() {
           budgets.map((budget) => {
             const category = categories?.find(c => c.id === budget.category_id);
             return (
-              <div key={budget.id} className="bg-surface border border-neutral-800/60 rounded-2xl p-5 hover:border-primary/30 transition-colors group">
+              <div key={budget.id} className="bg-surface border border-border/70 rounded-2xl p-5 hover:border-primary/30 transition-colors group">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-background rounded-lg text-primary">
@@ -170,7 +170,7 @@ export default function BudgetsPage() {
                     </button>
                   </div>
                 </div>
-                <div className="mt-4 pt-4 border-t border-neutral-800/40">
+                <div className="mt-4 pt-4 border-t border-border/40">
                   <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Límite mensual</p>
                   <p className="text-2xl font-semibold font-sans text-text">
                     {formatCurrency(budget.amount_limit)}
@@ -185,7 +185,7 @@ export default function BudgetsPage() {
       {/* Modal UNIFICADO (Crear/Editar) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface border border-neutral-800/60 rounded-3xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-surface border border-border/70 rounded-3xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold mb-4 font-sans text-text">
               {editingBudget ? "Editar Presupuesto" : "Definir Presupuesto"}
             </h2>
@@ -193,7 +193,7 @@ export default function BudgetsPage() {
               
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Categoría a limitar</label>
-                <select required value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none">
+                <select required value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none">
                   <option value="" disabled>Selecciona un gasto...</option>
                   {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -201,7 +201,7 @@ export default function BudgetsPage() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Monto Máximo</label>
-                <input type="number" required value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all" placeholder="0" />
+                <input type="number" required value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all" placeholder="0" />
               </div>
 
               <div className="space-y-1.5">
@@ -211,12 +211,12 @@ export default function BudgetsPage() {
                   required 
                   value={monthYear} 
                   onChange={(e) => setMonthYear(e.target.value)} 
-                  className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all style-color-scheme-dark" 
+                  className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all style-color-scheme-dark" 
                 />
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={closeModal} className="flex-1 px-4 py-2.5 rounded-xl border border-neutral-800/60 text-text-muted hover:text-text hover:bg-neutral-800 transition-colors text-sm font-medium">Cancelar</button>
+                <button type="button" onClick={closeModal} className="flex-1 px-4 py-2.5 rounded-xl border border-border/70 text-text-muted hover:text-text hover:bg-surface-elevated transition-colors text-sm font-medium">Cancelar</button>
                 <button type="submit" disabled={saveMutation.isPending} className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-background transition-colors text-sm font-medium flex justify-center items-center cursor-pointer">
                   {saveMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : "Guardar"}
                 </button>

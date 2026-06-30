@@ -31,18 +31,18 @@ export default function Sidebar() {
 
   return (
     <aside 
-      className={`fixed top-0 left-0 h-screen bg-surface border-r border-neutral-800/40 flex flex-col justify-between transition-all duration-300 ease-in-out z-40
+      className={`fixed top-0 left-0 h-screen bg-surface border-r border-border/70 flex flex-col justify-between transition-all duration-300 ease-in-out z-40
         ${isSidebarOpen ? "w-64" : "w-20"}`}
     >
       {/* Parte Superior: Logo / Nombre */}
       <div>
-        <div className="h-20 flex items-center justify-between px-6 border-b border-neutral-800/20">
+        <div className="h-20 flex items-center justify-between px-6 border-b border-border/40">
           <span className={`font-semibold tracking-wider text-primary transition-opacity duration-200 ${isSidebarOpen ? "opacity-100" : "opacity-0 hidden"}`}>
             OIKOS .
           </span>
           <button 
             onClick={toggleSidebar}
-            className="p-1.5 rounded-lg bg-background hover:bg-neutral-800 border border-neutral-800/50 text-text-muted hover:text-text transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg bg-background hover:bg-surface-elevated border border-border/70 text-text-muted hover:text-text transition-colors cursor-pointer"
           >
             {isSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
           </button>
@@ -61,7 +61,7 @@ export default function Sidebar() {
                 className={`flex items-center space-x-3 px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200 group relative
                   ${isActive 
                     ? "bg-primary text-background font-semibold shadow-lg shadow-primary/10" 
-                    : "text-text-muted hover:text-text hover:bg-neutral-800/40"
+                    : "text-text-muted hover:text-text hover:bg-surface-elevated"
                   }`}
               >
                 <Icon size={20} className={isActive ? "text-background" : "text-text-muted group-hover:text-primary transition-colors"} />
@@ -71,7 +71,7 @@ export default function Sidebar() {
 
                 {/* Tooltip flotante si el sidebar está colapsado */}
                 {!isSidebarOpen && (
-                  <div className="absolute left-24 scale-0 group-hover:scale-100 bg-neutral-900 text-text text-xs px-2.5 py-1.5 rounded-md border border-neutral-800 transition-all origin-left shadow-xl duration-150 font-sans z-50">
+                  <div className="absolute left-24 scale-0 group-hover:scale-100 bg-surface-elevated text-text text-xs px-2.5 py-1.5 rounded-md border border-border transition-all origin-left shadow-xl duration-150 font-sans z-50">
                     {item.name}
                   </div>
                 )}
@@ -82,10 +82,10 @@ export default function Sidebar() {
       </div>
 
       {/* Parte Inferior: Perfil / Cerrar Sesión */}
-      <div className="p-3 border-t border-neutral-800/20">
-        <div className={`flex items-center justify-between p-2 rounded-xl bg-background/40 border border-neutral-800/30 ${isSidebarOpen ? "px-3" : "justify-center"}`}>
+      <div className="p-3 border-t border-border/40">
+        <div className={`flex items-center justify-between p-2 rounded-xl bg-background/40 border border-border/40 ${isSidebarOpen ? "px-3" : "justify-center"}`}>
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-xs font-semibold text-primary">
+            <div className="w-8 h-8 rounded-full bg-surface-elevated border border-border flex items-center justify-center text-xs font-semibold text-primary">
               AM
             </div>
             <div className={`flex flex-col ${isSidebarOpen ? "block" : "hidden"}`}>

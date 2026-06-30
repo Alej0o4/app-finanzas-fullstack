@@ -137,7 +137,7 @@ export default function CategoryDetailPage() {
       <div className="flex items-center space-x-4">
         <button 
           onClick={() => router.back()}
-          className="p-2 bg-surface hover:bg-neutral-800 border border-neutral-800/60 text-text-muted hover:text-text rounded-xl transition-colors cursor-pointer"
+          className="p-2 bg-surface hover:bg-surface-elevated border border-border/70 text-text-muted hover:text-text rounded-xl transition-colors cursor-pointer"
         >
           <ArrowLeft size={18} />
         </button>
@@ -154,20 +154,20 @@ export default function CategoryDetailPage() {
       <div className="space-y-4">
         <h2 className="text-lg font-bold font-sans text-text">Movimientos asociados</h2>
         
-        <div className="bg-surface border border-neutral-800/60 rounded-3xl overflow-hidden shadow-sm">
+        <div className="bg-surface border border-border/70 rounded-3xl overflow-hidden shadow-sm">
           {(!transactions || transactions.length === 0) ? (
             <div className="p-12 text-center text-text-muted text-sm">
               No hay movimientos clasificados en esta categoría aún.
             </div>
           ) : (
-            <div className="divide-y divide-neutral-800/40">
+            <div className="divide-y divide-border/40">
               {transactions.map((tx) => {
                 const account = accounts?.find(a => a.id === tx.account_id);
 
                 return (
-                  <div key={tx.id} className="group p-4 sm:px-6 hover:bg-neutral-800/20 transition-colors flex items-center justify-between gap-4">
+                  <div key={tx.id} className="group p-4 sm:px-6 hover:bg-surface-elevated transition-colors flex items-center justify-between gap-4">
                     <div className="flex items-center space-x-4">
-                      <div className={`p-2.5 rounded-full bg-background border border-neutral-800/50 ${isExpense ? 'text-text-muted' : 'text-primary'}`}>
+                      <div className={`p-2.5 rounded-full bg-background border border-border/60 ${isExpense ? 'text-text-muted' : 'text-primary'}`}>
                         {isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
                       </div>
                       <div>
@@ -185,13 +185,13 @@ export default function CategoryDetailPage() {
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => openEditModal(tx)}
-                          className="p-2 rounded-lg text-text-muted hover:text-text hover:bg-neutral-800 transition-colors"
+                          className="p-2 rounded-lg text-text-muted hover:text-text hover:bg-surface-elevated transition-colors"
                         >
                           <Pencil size={16} />
                         </button>
                         <button
                           onClick={() => window.confirm("¿Borrar esta transacción?") && deleteMutation.mutate(tx.id)}
-                          className="p-2 rounded-lg text-text-muted hover:text-danger hover:bg-neutral-800 transition-colors"
+                          className="p-2 rounded-lg text-text-muted hover:text-danger hover:bg-surface-elevated transition-colors"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -207,35 +207,35 @@ export default function CategoryDetailPage() {
 
       {isModalOpen && selectedTransaction && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface border border-neutral-800/60 rounded-3xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-surface border border-border/70 rounded-3xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold mb-4 font-sans text-text">Editar movimiento</h2>
             <form onSubmit={handleUpdate} className="space-y-4">
               <div className="flex gap-4">
-                <button type="button" onClick={() => setType("expense")} className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors border ${type === "expense" ? "bg-background border-neutral-700 text-text" : "border-transparent text-text-muted hover:text-text"}`}>Gasto</button>
+                <button type="button" onClick={() => setType("expense")} className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors border ${type === "expense" ? "bg-background border-border text-text" : "border-transparent text-text-muted hover:text-text"}`}>Gasto</button>
                 <button type="button" onClick={() => setType("income")} className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors border ${type === "income" ? "bg-primary/10 border-primary/20 text-primary" : "border-transparent text-text-muted hover:text-text"}`}>Ingreso</button>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Valor</label>
-                <input type="number" required value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
+                <input type="number" required value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Descripción</label>
-                <input required value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
+                <input required value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Cuenta</label>
-                  <select required value={accountId} onChange={(e) => setAccountId(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none">
+                  <select required value={accountId} onChange={(e) => setAccountId(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none">
                     <option value="" disabled>Selecciona...</option>
                     {accounts?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Categoría</label>
-                  <select required value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none">
+                  <select required value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none">
                     <option value="" disabled>Selecciona...</option>
                     {filteredCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
@@ -244,11 +244,11 @@ export default function CategoryDetailPage() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Fecha</label>
-                <input type="date" required value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
+                <input type="date" required value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-neutral-800/60 text-text-muted hover:text-text hover:bg-neutral-800 transition-colors text-sm font-medium">Cancelar</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border/70 text-text-muted hover:text-text hover:bg-surface-elevated transition-colors text-sm font-medium">Cancelar</button>
                 <button type="submit" disabled={updateMutation.isPending} className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-background transition-colors text-sm font-medium flex justify-center items-center cursor-pointer">
                   {updateMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : "Guardar"}
                 </button>

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from sqlalchemy import or_, desc
 
 from app.core.database import get_db
 from app.models import models
@@ -8,7 +9,6 @@ from app.schemas import schemas
 
 # 🔒 Importamos a nuestro Guardia de Seguridad
 from app.core.security import get_current_user
-from sqlalchemy import or_
 
 router = APIRouter()
 
@@ -75,7 +75,10 @@ def obtener_transacciones(
     if category_id is not None:
         query = query.filter(models.Transaction.category_id == category_id)
         
-    transacciones = query.offset(skip).limit(limit).all()
+    transacciones = query.order_by(
+        desc(models.Transaction.date),
+        desc(models.Transaction.id)
+    ).offset(skip).limit(limit).all()
     
     return transacciones
 

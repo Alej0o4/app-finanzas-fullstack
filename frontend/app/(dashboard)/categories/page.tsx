@@ -135,12 +135,12 @@ export default function CategoriesPage() {
           const isExpense = category.type === "expense";
 
           return (
-            <div key={category.id} className="bg-surface border border-neutral-800/60 rounded-2xl p-4 hover:border-neutral-700 transition-colors group relative flex flex-col justify-between h-32">
+            <div key={category.id} className="bg-surface border border-border/70 rounded-2xl p-4 hover:border-border transition-colors group relative flex flex-col justify-between h-32">
               
               {/* 1. Área interactiva para navegar al detalle de la categoría */}
               <Link href={`/categories/${category.id}`} className="block h-full w-full flex flex-col justify-between cursor-pointer">
                 <div className="flex justify-between items-start">
-                  <div className={`p-2 rounded-xl bg-background border border-neutral-800/50 ${isExpense ? 'text-text-muted' : 'text-primary'}`}>
+                  <div className={`p-2 rounded-xl bg-background border border-border/60 ${isExpense ? 'text-text-muted' : 'text-primary'}`}>
                     {isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
                   </div>
                 </div>
@@ -157,7 +157,7 @@ export default function CategoriesPage() {
               {/* 2. Controles absolutos en la esquina superior derecha (Evitan la propagación del Link) */}
               <div className="absolute top-4 right-4 z-10 flex items-center">
                 {isSystemCategory ? (
-                  <div className="flex items-center space-x-1 text-xs text-text-muted bg-background px-2 py-1 rounded-md border border-neutral-800/40">
+                  <div className="flex items-center space-x-1 text-xs text-text-muted bg-background px-2 py-1 rounded-md border border-border/50">
                     <Lock size={12} />
                     <span>Sistema</span>
                   </div>
@@ -197,24 +197,24 @@ export default function CategoriesPage() {
       {/* Modal CREAR */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface border border-neutral-800/60 rounded-3xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-surface border border-border/70 rounded-3xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold mb-4 font-sans text-text">Nueva Categoría</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Nombre</label>
-                <input required value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" placeholder="Ej. Suscripciones" />
+                <input required value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" placeholder="Ej. Suscripciones" />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Naturaleza</label>
-                <select value={newCategoryType} onChange={(e) => setNewCategoryType(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
+                <select value={newCategoryType} onChange={(e) => setNewCategoryType(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
                   <option value="expense">Gasto</option>
                   <option value="income">Ingreso</option>
                 </select>
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-neutral-800/60 text-text-muted hover:text-text hover:bg-neutral-800 transition-colors text-sm font-medium">Cancelar</button>
+                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border/70 text-text-muted hover:text-text hover:bg-surface-elevated transition-colors text-sm font-medium">Cancelar</button>
                 <button type="submit" disabled={createCategoryMutation.isPending} className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-background transition-colors text-sm font-medium flex justify-center items-center cursor-pointer">
                   {createCategoryMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : "Guardar"}
                 </button>
@@ -227,24 +227,24 @@ export default function CategoriesPage() {
       {/* Modal EDITAR */}
       {editingCategory && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface border border-neutral-800/60 rounded-3xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-surface border border-border/70 rounded-3xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold mb-4 font-sans text-text">Editar Categoría</h2>
             <form onSubmit={handleUpdate} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Nombre</label>
-                <input required value={editCategoryName} onChange={(e) => setEditCategoryName(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
+                <input required value={editCategoryName} onChange={(e) => setEditCategoryName(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Naturaleza</label>
-                <select value={editCategoryType} onChange={(e) => setEditCategoryType(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
+                <select value={editCategoryType} onChange={(e) => setEditCategoryType(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
                   <option value="expense">Gasto</option>
                   <option value="income">Ingreso</option>
                 </select>
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setEditingCategory(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-neutral-800/60 text-text-muted hover:text-text hover:bg-neutral-800 transition-colors text-sm font-medium">Cancelar</button>
+                <button type="button" onClick={() => setEditingCategory(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-border/70 text-text-muted hover:text-text hover:bg-surface-elevated transition-colors text-sm font-medium">Cancelar</button>
                 <button type="submit" disabled={updateCategoryMutation.isPending} className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-background transition-colors text-sm font-medium flex justify-center items-center cursor-pointer">
                   {updateCategoryMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : "Actualizar"}
                 </button>

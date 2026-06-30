@@ -10,31 +10,85 @@ import { api } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 import { useState, useMemo } from "react";
 
-const COLORS = ["#166534", "#22c55e", "#4ade80", "#bbf7d0", "#064e3b"];
+type AnalyticsPeriod = "day" | "month";
+type AnalyticsSeries = "both" | "income" | "expense";
 
-// Función auxiliar para formatear fechas al estándar requerido por el backend
+// Función auxiliar para formatear fechas en hora local al estándar requerido por el backend
 const formatISOForBackend = (date: Date) => {
-  return date.toISOString().split('.')[0]; // Retorna YYYY-MM-DDTHH:MM:SS
+  const pad = (value: number) => String(value).padStart(2, "0");
+
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate())
+  ].join("-") + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+
+const CATEGORY_COLORS = [
+  "#38bdf8",
+  "#0ea5e9",
+  "#2563eb",
+  "#4f46e5",
+  "#7c3aed",
+  "#db2777",
+  "#10b981",
+  "#14b8a6",
+  "#f97316",
+  "#8b5cf6",
+  "#22c55e",
+  "#06b6d4",
+];
+
+const buildDateRange = (period: AnalyticsPeriod) => {
+  const now = new Date();
+
+  if (period === "month") {
+    return {
+      start_date: formatISOForBackend(new Date(now.getFullYear(), 0, 1, 0, 0, 0)),
+      end_date: formatISOForBackend(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)),
+      period,
+    };
+  }
+
+  return {
+    start_date: formatISOForBackend(new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0)),
+    end_date: formatISOForBackend(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)),
+    period,
+  };
+};
+
+const getCategoryColor = (item: any, index: number) => {
+  const seed = Number(item.category_id ?? index);
+
+  return CATEGORY_COLORS[Math.abs(seed) % CATEGORY_COLORS.length];
+};
+
+const formatXAxisLabel = (label: string, period: AnalyticsPeriod) => {
+  if (period === "month") {
+    const [year, month] = label.split("-");
+    const parsedDate = new Date(Number(year), Number(month) - 1, 1);
+
+    return new Intl.DateTimeFormat("es-ES", {
+      month: "short",
+      year: "numeric",
+    }).format(parsedDate);
+  }
+
+  return label.split("-").pop() || label;
 };
 
 export default function AnalyticsPage() {
-  // Estado para controlar el rango de fechas (por defecto: mes actual)
-  const [dateRange, setDateRange] = useState(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    
-    return {
-      start_date: formatISOForBackend(start),
-      end_date: formatISOForBackend(end),
-      period: "day" // o "month" si quieres una vista anual
-    };
-  });
+  // Estado para controlar la granularidad y el tipo de serie visible
+  const [period, setPeriod] = useState<AnalyticsPeriod>("day");
+  const [seriesMode, setSeriesMode] = useState<AnalyticsSeries>("both");
+
+  const dateRange = useMemo(() => buildDateRange(period), [period]);
 
   // 1. Consulta del Flujo de Caja (Cashflow Series)
   const { data: trendData, isLoading: loadingTrends } = useQuery({
-    // Incluimos dateRange en la queryKey para que React Query haga refetch si cambiamos las fechas
-    queryKey: ["analytics-cashflow", dateRange], 
+    // Forzamos refetch al montar Analytics para no depender de la caché entre entradas a la ruta
+    queryKey: ["analytics-cashflow", dateRange.start_date, dateRange.end_date, dateRange.period], 
+    refetchOnMount: "always",
     queryFn: async () => {
       const res = await api.get("/api/dashboard/cashflow-series", {
         params: {
@@ -49,7 +103,8 @@ export default function AnalyticsPage() {
 
   // 2. Consulta de Categorías (Asumiendo que también recibe fechas, ajusta si es necesario)
   const { data: categoryData, isLoading: loadingCategories, isError: categoryError } = useQuery({
-    queryKey: ["analytics-categories", dateRange],
+    queryKey: ["analytics-categories", dateRange.start_date, dateRange.end_date],
+    refetchOnMount: "always",
     queryFn: async () => {
       const res = await api.get("/api/dashboard/category-distribution", {
         params: {
@@ -72,6 +127,14 @@ export default function AnalyticsPage() {
     })) || [];
   }, [trendData]);
 
+  const visibleTrendData = useMemo(() => {
+    return parsedTrendData.map((item: any) => ({
+      ...item,
+      income: seriesMode === "expense" ? 0 : item.income,
+      expense: seriesMode === "income" ? 0 : item.expense,
+    }));
+  }, [parsedTrendData, seriesMode]);
+
   const parsedCategoryData = useMemo(() => {
     const items = categoryData?.map((item: any) => ({
       ...item,
@@ -87,55 +150,110 @@ export default function AnalyticsPage() {
   }, [categoryData]);
 
   const yAxisWidth = useMemo(() => {
-    if (parsedTrendData.length === 0) {
+    if (visibleTrendData.length === 0) {
       return 84;
     }
 
     const maxValue = Math.max(
-      ...parsedTrendData.flatMap((item: any) => [Number(item.income), Number(item.expense)]),
+      ...visibleTrendData.flatMap((item: any) => [Number(item.income), Number(item.expense)]),
       0
     );
     const labelLength = formatCurrency(maxValue).length;
 
     return Math.min(Math.max(labelLength * 8 + 25, 84), 160);
-  }, [parsedTrendData]);
+  }, [visibleTrendData]);
+
+  const visibleSeriesLabel = seriesMode === "both"
+    ? "Ingresos y gastos"
+    : seriesMode === "income"
+      ? "Solo ingresos"
+      : "Solo gastos";
+
+  const periodLabel = period === "day" ? "Diario (mes actual)" : "Mensual (año actual)";
 
   if (loadingTrends || loadingCategories) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-green-700" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#60a5fa]" />
       </div>
     );
   }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-2xl font-semibold text-zinc-100">Analítica Financiera</h1>
-        <p className="text-zinc-400 text-sm mt-1">
-          Visualiza el flujo de tu dinero y la distribución de tus gastos.
-        </p>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-text">Analítica Financiera</h1>
+          <p className="text-text-muted text-sm mt-1">
+            Visualiza el flujo de tu dinero y la distribución de tus gastos.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-surface-elevated/80 p-1">
+            {([
+              { value: "day", label: "Diario" },
+              { value: "month", label: "Mensual" },
+            ] as const).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setPeriod(option.value)}
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  period === option.value
+                    ? "bg-primary text-background"
+                    : "text-text-muted hover:text-text"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-surface-elevated/80 p-1">
+            {([
+              { value: "both", label: "Ambos" },
+              { value: "income", label: "Ingresos" },
+              { value: "expense", label: "Gastos" },
+            ] as const).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setSeriesMode(option.value)}
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  seriesMode === option.value
+                    ? "bg-surface-elevated text-text"
+                    : "text-text-muted hover:text-text"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Gráfico de Barras: Flujo de Caja */}
-        <div className="bg-zinc-900/50 border border-zinc-800/50 p-6 rounded-2xl shadow-sm backdrop-blur-sm">
-          <h2 className="text-lg font-medium text-zinc-200 mb-6">Flujo de Caja ({dateRange.period === 'day' ? 'Diario' : 'Mensual'})</h2>
+        <div className="bg-surface/80 border border-border/70 p-6 rounded-2xl shadow-sm backdrop-blur-sm">
+          <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-lg font-medium text-text-soft">Flujo de Caja ({periodLabel})</h2>
+            <span className="text-xs uppercase tracking-[0.2em] text-text-muted">{visibleSeriesLabel}</span>
+          </div>
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={parsedTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+              <BarChart data={visibleTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#24314a" vertical={false} />
                 <XAxis 
                   dataKey="date_label" // <- ACTULIZADO según la spec
-                  stroke="#a1a1aa" 
+                  stroke="#9aa7bd" 
                   fontSize={12} 
                   tickLine={false} 
                   axisLine={false} 
-                  // Formateador simple para mostrar solo el día si es formato YYYY-MM-DD
-                  tickFormatter={(val) => val.split('-').pop() || val}
+                  tickFormatter={(val) => formatXAxisLabel(String(val), period)}
                 />
                 <YAxis 
-                  stroke="#a1a1aa" 
+                  stroke="#9aa7bd" 
                   fontSize={12} 
                   tickLine={false} 
                   axisLine={false}
@@ -144,23 +262,27 @@ export default function AnalyticsPage() {
                   tickFormatter={(value) => formatCurrency(Number(value))} 
                 />
                 <Tooltip 
-                  cursor={{ fill: '#27272a', opacity: 0.4 }}
-                  contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px', color: '#f4f4f5' }}
+                  cursor={{ fill: '#24314a', opacity: 0.35 }}
+                  contentStyle={{ backgroundColor: '#162338', borderColor: '#24314a', borderRadius: '8px', color: '#eef4ff' }}
                   formatter={(value: any) => [formatCurrency(Number(value)), ""]}
                   labelFormatter={(label) => `Fecha: ${label}`}
                 />
-                <Bar dataKey="income" name="Ingresos" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                <Bar dataKey="expense" name="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={40} /> {/* <- ACTUALIZADO a expense singular */}
+                {seriesMode !== "expense" && (
+                  <Bar dataKey="income" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                )}
+                {seriesMode !== "income" && (
+                  <Bar dataKey="expense" name="Gastos" fill="#fb7185" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                )}
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Gráfico de Dona: Distribución por Categorías */}
-        <div className="bg-zinc-900/50 border border-zinc-800/50 p-6 rounded-2xl shadow-sm backdrop-blur-sm">
-          <h2 className="text-lg font-medium text-zinc-200 mb-6">Distribución por Categorías</h2>
+        <div className="bg-surface/80 border border-border/70 p-6 rounded-2xl shadow-sm backdrop-blur-sm">
+          <h2 className="text-lg font-medium text-text-soft mb-6">Distribución por Categorías</h2>
           {categoryError ? (
-            <div className="h-72 flex items-center justify-center rounded-xl border border-dashed border-zinc-800 text-sm text-zinc-500">
+            <div className="h-72 flex items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
               No se pudieron cargar las categorías.
             </div>
           ) : (
@@ -179,7 +301,7 @@ export default function AnalyticsPage() {
                       stroke="none"
                     >
                       {parsedCategoryData.map((_entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        <Cell key={`cell-${index}`} fill={getCategoryColor(_entry, index)} />
                       ))}
                     </Pie>
                     <Tooltip 
@@ -191,10 +313,10 @@ export default function AnalyticsPage() {
                         }
 
                         return (
-                          <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm shadow-lg">
-                            <p className="font-medium text-zinc-100">{item.category_name}</p>
-                            <p className="mt-1 text-zinc-300">Total: {formatCurrency(Number(item.value))}</p>
-                            <p className="text-zinc-400">{item.percentage.toFixed(1)}% del total</p>
+                          <div className="rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm shadow-lg">
+                            <p className="font-medium text-text">{item.category_name}</p>
+                            <p className="mt-1 text-text-soft">Total: {formatCurrency(Number(item.value))}</p>
+                            <p className="text-text-muted">{item.percentage.toFixed(1)}% del total</p>
                           </div>
                         );
                       }}
@@ -209,13 +331,13 @@ export default function AnalyticsPage() {
                       <div className="flex items-center gap-2 min-w-0">
                         <span
                           className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                          style={{ backgroundColor: getCategoryColor(item, index) }}
                         />
-                        <span className="truncate text-zinc-300">
-                          {item.category_name} <span className="text-zinc-500">({item.percentage.toFixed(1)}%)</span>
+                        <span className="truncate text-text-soft">
+                          {item.category_name} <span className="text-text-muted">({item.percentage.toFixed(1)}%)</span>
                         </span>
                       </div>
-                      <span className="shrink-0 text-zinc-500">{formatCurrency(Number(item.value))}</span>
+                      <span className="shrink-0 text-text-muted">{formatCurrency(Number(item.value))}</span>
                     </div>
                   ))}
                 </div>

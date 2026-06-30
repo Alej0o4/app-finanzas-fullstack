@@ -144,7 +144,7 @@ export default function AccountsPage() {
       {/* Grid de Cuentas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {accounts?.map((account) => (
-          <div key={account.id} className="bg-surface border border-neutral-800/60 rounded-2xl p-5 hover:border-primary/30 transition-colors group relative">
+          <div key={account.id} className="bg-surface border border-border/70 rounded-2xl p-5 hover:border-primary/30 transition-colors group relative">
             
             {/* 1. Área clickeable para navegar al detalle de la cuenta */}
             <Link href={`/accounts/${account.id}`} className="block cursor-pointer">
@@ -162,7 +162,7 @@ export default function AccountsPage() {
                 </div>
               </div>
               
-              <div className="mt-4 pt-4 border-t border-neutral-800/40">
+              <div className="mt-4 pt-4 border-t border-border/40">
                 <p className="text-2xl font-semibold font-sans text-text">
                   {formatCurrency(account.balance)}
                 </p>
@@ -202,18 +202,18 @@ export default function AccountsPage() {
       {/* Modal para CREAR */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface border border-neutral-800/60 rounded-3xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-surface border border-border/70 rounded-3xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold mb-4 font-sans text-text">Añadir nueva cuenta</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Nombre</label>
-                <input required value={newAccountName} onChange={(e) => setNewAccountName(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
+                <input required value={newAccountName} onChange={(e) => setNewAccountName(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Tipo</label>
-                <select value={newAccountType} onChange={(e) => setNewAccountType(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
+                <select value={newAccountType} onChange={(e) => setNewAccountType(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
                   <option value="cash">Efectivo</option>
                   <option value="debit">Débito</option>
                   <option value="credit">Crédito</option>
@@ -222,11 +222,11 @@ export default function AccountsPage() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Saldo Inicial</label>
-                <input type="number" required value={initialBalance} onChange={(e) => setInitialBalance(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" placeholder="0" />
+                <input type="number" required value={initialBalance} onChange={(e) => setInitialBalance(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" placeholder="0" />
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-neutral-800/60 text-text-muted hover:text-text hover:bg-neutral-800 transition-colors text-sm font-medium">Cancelar</button>
+                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border/70 text-text-muted hover:text-text hover:bg-surface-elevated transition-colors text-sm font-medium">Cancelar</button>
                 <button type="submit" disabled={createAccountMutation.isPending} className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-background transition-colors text-sm font-medium flex justify-center items-center cursor-pointer disabled:opacity-70">
                   {createAccountMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : "Guardar"}
                 </button>
@@ -239,18 +239,18 @@ export default function AccountsPage() {
       {/* Modal para EDITAR */}
       {editingAccount && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface border border-neutral-800/60 rounded-3xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-surface border border-border/70 rounded-3xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold mb-4 font-sans text-text">Editar cuenta</h2>
             <form onSubmit={handleUpdate} className="space-y-4">
               
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Nombre</label>
-                <input required value={editAccountName} onChange={(e) => setEditAccountName(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
+                <input required value={editAccountName} onChange={(e) => setEditAccountName(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Tipo</label>
-                <select value={editAccountType} onChange={(e) => setEditAccountType(e.target.value)} className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
+                <select value={editAccountType} onChange={(e) => setEditAccountType(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
                   <option value="cash">Efectivo</option>
                   <option value="debit">Débito</option>
                   <option value="credit">Crédito</option>
@@ -258,12 +258,12 @@ export default function AccountsPage() {
               </div>
 
               {/* Fíjate cómo NO existe el campo de saldo aquí */}
-              <div className="p-3 bg-neutral-800/30 rounded-xl border border-neutral-800/50 mt-4">
+              <div className="p-3 bg-surface-elevated/70 rounded-xl border border-border/50 mt-4">
                 <p className="text-xs text-text-muted text-center">El saldo no se puede editar manualmente. Modifícalo a través de las transacciones.</p>
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setEditingAccount(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-neutral-800/60 text-text-muted hover:text-text hover:bg-neutral-800 transition-colors text-sm font-medium">Cancelar</button>
+                <button type="button" onClick={() => setEditingAccount(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-border/70 text-text-muted hover:text-text hover:bg-surface-elevated transition-colors text-sm font-medium">Cancelar</button>
                 <button type="submit" disabled={updateAccountMutation.isPending} className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-background transition-colors text-sm font-medium flex justify-center items-center cursor-pointer disabled:opacity-70">
                   {updateAccountMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : "Actualizar"}
                 </button>

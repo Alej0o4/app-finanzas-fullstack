@@ -50,7 +50,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="w-full max-w-md bg-surface border border-neutral-800/40 rounded-3xl p-8 shadow-2xl">
+    <div className="w-full max-w-md bg-surface border border-border/70 rounded-3xl p-8 shadow-2xl">
       {/* Cabecera */}
       <div className="flex flex-col items-center mb-8">
         <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 text-primary">
@@ -80,7 +80,7 @@ export default function LoginPage() {
             required
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-3 text-sm text-text placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+            className="w-full bg-background border border-border/70 rounded-xl px-4 py-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
             placeholder="alejandro@ejemplo.com"
           />
         </div>
@@ -94,7 +94,7 @@ export default function LoginPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-background border border-neutral-800/60 rounded-xl px-4 py-3 text-sm text-text placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+            className="w-full bg-background border border-border/70 rounded-xl px-4 py-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
             placeholder="••••••••"
           />
         </div>

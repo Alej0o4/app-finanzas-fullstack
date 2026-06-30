@@ -29,11 +29,11 @@ export default function BudgetRing({ categoryName, budgetAmount, spentAmount }: 
   const ringColorClass = isDanger 
     ? "text-danger" 
     : isWarning 
-      ? "text-amber-500" 
+      ? "text-warning" 
       : "text-primary";
 
   return (
-    <div className="bg-surface border border-neutral-800/60 rounded-2xl p-6 flex flex-col items-center justify-center relative group hover:border-neutral-700 transition-colors">
+    <div className="bg-surface border border-border/70 rounded-2xl p-6 flex flex-col items-center justify-center relative group hover:border-text-muted/30 transition-colors">
       
       {rawPercentage > 100 && (
         <div className="absolute top-4 right-4 text-danger animate-pulse" title="Presupuesto excedido">
@@ -54,7 +54,7 @@ export default function BudgetRing({ categoryName, budgetAmount, spentAmount }: 
             cx="50"
             cy="50"
             r={radius}
-            className="text-neutral-800/50"
+            className="text-border/80"
             strokeWidth="6"
             stroke="currentColor"
             fill="transparent"
@@ -78,7 +78,7 @@ export default function BudgetRing({ categoryName, budgetAmount, spentAmount }: 
         <h3 className="font-medium text-text text-sm truncate">{categoryName || "Sin Nombre"}</h3>
         <div className="flex justify-between items-center mt-2 text-xs">
           <span className="text-text-muted">{formatCurrency(safeSpent)}</span>
-          <span className="text-text-muted/50">/</span>
+          <span className="text-text-muted/60">/</span>
           <span className="text-text">{formatCurrency(safeBudget === 1 && budgetAmount === 0 ? 0 : safeBudget)}</span>
         </div>
       </div>
