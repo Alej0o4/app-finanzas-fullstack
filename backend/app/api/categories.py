@@ -43,8 +43,8 @@ def obtener_categoria(
 ):
     categoria = db.query(models.Category).filter(models.Category.id == category_id).first()
     
-    # Usamos tu misma lógica de validación para mantener coherencia
-    if not categoria or categoria.user_id != current_user.id:
+    # Las categorías del sistema tienen user_id NULL y deben ser visibles para todos.
+    if not categoria or (categoria.user_id is not None and categoria.user_id != current_user.id):
         raise HTTPException(status_code=404, detail="La categoría no existe o no tienes permisos.")
     
     return categoria

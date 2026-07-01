@@ -160,7 +160,7 @@ export default function AnalyticsPage() {
     );
     const labelLength = formatCurrency(maxValue).length;
 
-    return Math.min(Math.max(labelLength * 8 + 25, 84), 160);
+    return Math.min(Math.max(labelLength * 8 + 30, 84), 160);
   }, [visibleTrendData]);
 
   const visibleSeriesLabel = seriesMode === "both"

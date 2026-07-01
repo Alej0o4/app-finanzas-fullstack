@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import or_, desc
+from datetime import datetime
 
 from app.core.database import get_db
 from app.models import models
@@ -64,9 +65,14 @@ def obtener_transacciones(
     limit: int = 100, 
     account_id: Optional[int] = None,   # <-- 1. Parámetro opcional
     category_id: Optional[int] = None,  # <-- 2. Parámetro opcional
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=400, detail="La fecha inicial no puede ser mayor que la fecha final.")
+
     query = db.query(models.Transaction).filter(models.Transaction.user_id == current_user.id)
     
     if account_id is not None:
@@ -74,6 +80,12 @@ def obtener_transacciones(
         
     if category_id is not None:
         query = query.filter(models.Transaction.category_id == category_id)
+
+    if start_date is not None:
+        query = query.filter(models.Transaction.date >= start_date)
+
+    if end_date is not None:
+        query = query.filter(models.Transaction.date <= end_date)
         
     transacciones = query.order_by(
         desc(models.Transaction.date),
