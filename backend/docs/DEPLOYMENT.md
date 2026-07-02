@@ -14,7 +14,7 @@
 
 ## Riesgos operativos actuales
 
-- Uso de `float` para montos.
+- Precisión monetaria basada en `Decimal`/`Numeric` que debe mantenerse consistente entre backend y frontend.
 - Falta de observabilidad estructurada.
 - Falta de rate limiting.
 - Falta de logging centralizado.

@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Frontend de Finanzas Personales
 
-## Getting Started
+Interfaz web para Oikos, construida con Next.js App Router, React, TypeScript, TanStack Query y Tailwind CSS.
 
-First, run the development server:
+## Alcance funcional
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Autenticación con JWT contra el backend FastAPI.
+- Dashboard con métricas agregadas, gráfico de flujo y resumen visual.
+- Gestión de cuentas, categorías, presupuestos y transacciones.
+- Detalles por cuenta y categoría con historial asociado.
+- Filtros de feed, modales reutilizables y componentes compartidos.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Next.js 16
+- React 19
+- TypeScript
+- TanStack Query
+- Axios
+- Zustand
+- Recharts
+- Tailwind CSS 4
+- lucide-react
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Estructura principal
 
-## Learn More
+- `app/`: rutas y layouts por dominio.
+- `components/`: componentes reutilizables, gráficos y modales.
+- `lib/`: cliente HTTP, utilidades y hooks compartidos.
+- `store/`: estado UI global con Zustand.
+- `public/`: assets estáticos.
 
-To learn more about Next.js, take a look at the following resources:
+## Puntos de entrada
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Auth: `app/(auth)/login/page.tsx`
+- Dashboard: `app/(dashboard)/page.tsx`
+- Transacciones: `app/(dashboard)/transactions/page.tsx`
+- Cuentas: `app/(dashboard)/accounts/page.tsx`
+- Categorías: `app/(dashboard)/categories/page.tsx`
+- Presupuestos: `app/(dashboard)/budgets/page.tsx`
+- Analítica: `app/(dashboard)/analytics/page.tsx`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Arranque local
 
-## Deploy on Vercel
+1. Instalar dependencias con `pnpm install`.
+2. Definir `NEXT_PUBLIC_API_URL` apuntando al backend, por ejemplo `http://localhost:8000`.
+3. Ejecutar `pnpm dev`.
+4. Abrir `http://localhost:3000`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `pnpm dev`: desarrollo.
+- `pnpm build`: build de producción.
+- `pnpm start`: servidor de producción.
+- `pnpm lint`: lint del frontend.
+
+## Integración con backend
+
+- El token JWT se lee desde `localStorage` y se envía como `Authorization: Bearer <token>`.
+- El frontend no recalcula saldos, progreso de presupuestos ni totales del dashboard.
+- Las categorías con `user_id = null` son compartidas del sistema.
+- Las transacciones y sus detalles se consumen desde el backend como fuente de verdad.
+
+## Documentación relacionada
+
+- Arquitectura del frontend: `docs/ARCHITECTURE.md`
+- Contrato de API: `docs/API_CONTRACT.md`
+- Sistema UI: `docs/UI_SYSTEM.md`
+- Estado y fetching: `docs/STATE_AND_FETCHING.md`
+- Despliegue: `docs/DEPLOYMENT.md`

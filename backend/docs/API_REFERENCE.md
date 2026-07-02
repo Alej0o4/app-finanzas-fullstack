@@ -34,17 +34,29 @@ Crea un usuario nuevo.
 
 Entrada:
 
+- `full_name`
 - `email`
 - `password`
 
 Salida:
 
 - `id`
+- `full_name`
 - `email`
 
 Errores esperados:
 
 - `400` si el correo ya existe.
+
+### `GET /api/users/me`
+
+Devuelve el usuario autenticado actual.
+
+Salida:
+
+- `id`
+- `full_name`
+- `email`
 
 ## Cuentas
 
@@ -65,6 +77,10 @@ Salida:
 - `type`
 - `balance`
 - `user_id`
+
+### `GET /api/accounts/{account_id}`
+
+Devuelve una cuenta del usuario autenticado.
 
 ### `GET /api/accounts/`
 
@@ -119,6 +135,15 @@ Entrada:
 
 Lista transacciones del usuario autenticado.
 
+Filtros opcionales:
+
+- `skip`
+- `limit`
+- `account_id`
+- `category_id`
+- `start_date`
+- `end_date`
+
 ### `PUT /api/transactions/{transaction_id}`
 
 Actualiza una transacción y recalcula saldos de forma inversa y luego aplicada.
@@ -143,6 +168,11 @@ Entrada:
 ### `GET /api/budgets/`
 
 Lista presupuestos del usuario autenticado, con filtros opcionales por mes y año.
+
+Filtros opcionales:
+
+- `month`
+- `year`
 
 ### `PUT /api/budgets/{budget_id}`
 
@@ -171,3 +201,34 @@ Devuelve progreso de presupuestos del mes actual con:
 - `amount_limit`
 - `spent`
 - `percentage`
+
+### `GET /api/dashboard/cashflow-series`
+
+Devuelve una serie temporal de flujo de caja agrupada por día o por mes.
+
+Parámetros:
+
+- `start_date`
+- `end_date`
+- `period`: `day | month`
+
+Salida:
+
+- `date_label`
+- `income`
+- `expense`
+
+### `GET /api/dashboard/category-distribution`
+
+Devuelve la distribución de gastos por categoría en un rango de fechas.
+
+Parámetros:
+
+- `start_date`
+- `end_date`
+
+Salida:
+
+- `category_id`
+- `category_name`
+- `total`

@@ -24,6 +24,8 @@ La aplicación sigue una arquitectura simple por capas:
 - La base de datos de desarrollo es SQLite.
 - El backend hace validación y reglas de negocio en servidor, no en Frontend.
 - El dashboard devuelve agregados ya calculados para evitar lógica duplicada en el cliente.
+- Los montos se modelan como `Decimal` en contratos y `Numeric(14, 2)` en persistencia para evitar precisión flotante.
+- Las categorías base del sistema se siembran al arrancar la aplicación.
 
 ## Limitaciones conocidas
 
@@ -31,4 +33,4 @@ La aplicación sigue una arquitectura simple por capas:
 - No hay sistema de roles o permisos avanzados.
 - No hay migraciones automáticas con Alembic.
 - No hay logging estructurado ni observabilidad avanzada.
-- Los montos siguen modelados como `float`.
+- Las rutas agregadas del dashboard incluyen resumen, progreso de presupuestos, serie temporal de flujo de caja y distribución por categoría.

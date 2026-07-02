@@ -30,4 +30,4 @@ Backend para un MVP de finanzas personales construido con FastAPI, SQLAlchemy y 
 
 - El backend usa SQLite en desarrollo.
 - El secret de JWT debe venir desde variables de entorno.
-- Los montos se validan en el backend, pero en una etapa posterior conviene migrar a tipos monetarios más estrictos que `float`.
+- Los montos se validan en el backend con tipos decimales; conviene mantener ese criterio en contratos y persistencia.
