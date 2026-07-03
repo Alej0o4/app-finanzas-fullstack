@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useUiStore } from "@/store/useUiStore";
+import { useCurrentUser } from "@/lib/hooks/useCurrentUser";
+import { useQueryClient } from "@tanstack/react-query";
 import { 
   LayoutDashboard, 
   TrendingUp, // <- Icono importado para Analítica
@@ -17,7 +19,16 @@ import {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { isSidebarOpen, toggleSidebar } = useUiStore();
+  const { data: user } = useCurrentUser();
+  const queryClient = useQueryClient();
+
+  const handleLogout = () => {
+    localStorage.removeItem("jwt_token");
+    queryClient.clear();
+    router.push("/login");
+  };
 
   // Enlaces basados estrictamente en tus contratos del backend
   const navItems = [
@@ -85,15 +96,16 @@ export default function Sidebar() {
       <div className="p-3 border-t border-border/40">
         <div className={`flex items-center justify-between p-2 rounded-xl bg-background/40 border border-border/40 ${isSidebarOpen ? "px-3" : "justify-center"}`}>
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-full bg-surface-elevated border border-border flex items-center justify-center text-xs font-semibold text-primary">
-              AM
+            <div className="w-8 h-8 rounded-full bg-surface-elevated border border-border flex items-center justify-center text-xs font-semibold text-primary uppercase">
+              {user?.full_name?.split(" ").map((n: string) => n[0]).join("") || "U"}
             </div>
             <div className={`flex flex-col ${isSidebarOpen ? "block" : "hidden"}`}>
-              <span className="text-xs font-medium text-text">Alejandro M.</span>
-              <span className="text-[10px] text-text-muted">Usuario Senior</span>
+              <span className="text-xs font-medium text-text">{user?.full_name || "Usuario"}</span>
+              <span className="text-[10px] text-text-muted capitalize">{user?.email || ""}</span>
             </div>
           </div>
-          <button 
+          <button
+            onClick={handleLogout}
             className={`text-text-muted hover:text-danger p-1.5 rounded-lg transition-colors cursor-pointer ${isSidebarOpen ? "block" : "hidden"}`}
             title="Cerrar sesión"
           >

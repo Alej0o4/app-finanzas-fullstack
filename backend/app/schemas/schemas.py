@@ -51,7 +51,7 @@ class AccountBase(BaseModel):
     type: AccountType 
 
 class AccountCreate(AccountBase):
-    balance: Decimal = Field(0, ge=0, decimal_places=2, description="Saldo inicial")  # 🔁 antes: float
+    balance: Decimal = Field(0, decimal_places=2, description="Saldo inicial")  # 🔁 antes: float
 
 class AccountUpdate(AccountBase):
     pass 

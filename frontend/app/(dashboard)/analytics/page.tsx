@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList,
   PieChart, Pie, Cell
 } from "recharts";
 import { formatCurrency } from "@/lib/utils";
@@ -242,7 +242,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={visibleTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={visibleTrendData} margin={{ top: 24, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#24314a" vertical={false} />
                 <XAxis 
                   dataKey="date_label" // <- ACTULIZADO según la spec
@@ -268,10 +268,14 @@ export default function AnalyticsPage() {
                   labelFormatter={(label) => `Fecha: ${label}`}
                 />
                 {seriesMode !== "expense" && (
-                  <Bar dataKey="income" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="income" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                    {period === "month" && <LabelList dataKey="income" position="top" formatter={(v) => formatCurrency(Number(v))} style={{ fill: '#9aa7bd', fontSize: 11 }} />}
+                  </Bar>
                 )}
                 {seriesMode !== "income" && (
-                  <Bar dataKey="expense" name="Gastos" fill="#fb7185" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="expense" name="Gastos" fill="#fb7185" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                    {period === "month" && <LabelList dataKey="expense" position="top" formatter={(v) => formatCurrency(Number(v))} style={{ fill: '#9aa7bd', fontSize: 11 }} />}
+                  </Bar>
                 )}
               </BarChart>
             </ResponsiveContainer>

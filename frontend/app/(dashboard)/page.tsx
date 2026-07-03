@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, RefreshCw, PieChart } from "lucide-react";
+import { Loader2, PieChart } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useCurrentUser } from "@/lib/hooks/useCurrentUser";
@@ -36,7 +36,6 @@ interface RecentTransaction {
 export default function DashboardPage() {
   const { data: user } = useCurrentUser();
   const queryClient = useQueryClient();
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
 
   // 1. Petición del Resumen General
@@ -55,16 +54,6 @@ export default function DashboardPage() {
     queryKey: ["recent-transactions", 5],
     queryFn: async () => (await api.get("/api/transactions/", { params: { limit: 5 } })).data,
   });
-
-  const handleManualRefresh = async () => {
-    setIsRefreshing(true);
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["dashboardSummary"] }),
-      queryClient.invalidateQueries({ queryKey: ["budgets-progress"] }),
-      queryClient.invalidateQueries({ queryKey: ["recent-transactions"] }),
-    ]);
-    setIsRefreshing(false);
-  };
 
   const isLoading = loadingSummary || loadingBudgets;
   const isRecentLoading = loadingRecentTransactions;
@@ -89,14 +78,6 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button 
-            onClick={handleManualRefresh}
-            disabled={isRefreshing}
-            className="flex items-center space-x-2 bg-surface hover:bg-surface-elevated border border-border/70 px-4 py-2 rounded-xl text-sm font-medium text-text-muted hover:text-primary transition-colors disabled:opacity-50 cursor-pointer"
-          >
-            <RefreshCw size={16} className={isRefreshing ? "animate-spin text-primary" : ""} />
-            <span>{isRefreshing ? "Actualizando..." : "Sincronizar"}</span>
-          </button>
           <button
             onClick={() => setIsTransactionModalOpen(true)}
             className="flex items-center space-x-2 bg-primary hover:bg-primary-dark text-background px-4 py-2 rounded-xl text-sm font-medium transition-colors cursor-pointer"

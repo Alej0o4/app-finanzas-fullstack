@@ -31,8 +31,11 @@ export default function BudgetsPage() {
   
   const [categoryId, setCategoryId] = useState("");
   const [amount, setAmount] = useState("");
-  // Inicializamos con el mes actual usando el formato YYYY-MM que exige el input type="month"
-  const [monthYear, setMonthYear] = useState("2026-06"); 
+  const getCurrentMonthYear = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  };
+  const [monthYear, setMonthYear] = useState(getCurrentMonthYear);
 
   // 2. Traer datos
   const { data: budgets, isLoading: loadingBudgets } = useQuery<Budget[]>({
@@ -96,7 +99,7 @@ export default function BudgetsPage() {
     setEditingBudget(null);
     setCategoryId("");
     setAmount("");
-    setMonthYear("2026-06");
+    setMonthYear(getCurrentMonthYear());
     setIsModalOpen(true);
   };
 
