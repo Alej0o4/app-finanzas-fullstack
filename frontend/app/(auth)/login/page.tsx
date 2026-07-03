@@ -40,9 +40,9 @@ function LoginForm() {
       // Redirigimos al Dashboard (la fuente de verdad)
       router.push("/");
       
-    } catch (err: any) {
-      // Manejo de errores basado en tus reglas de backend
-      if (err.response?.status === 401 || err.response?.status === 403) {
+    } catch (err: unknown) {
+      const error = err as { response?: { status?: number } };
+      if (error.response?.status === 401 || error.response?.status === 403) {
         setError("Credenciales inválidas. Por favor verifica tus datos.");
       } else {
         setError("Error de conexión. Inténtalo más tarde.");

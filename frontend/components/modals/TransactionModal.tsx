@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -43,19 +43,6 @@ export default function TransactionModal({
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState("");
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    setType(defaultType);
-    setDate(todayAsInputValue());
-    setDescription("");
-    setAmount("");
-    setAccountId("");
-    setCategoryId("");
-  }, [defaultType, isOpen]);
-
   const { data: accounts } = useQuery<Account[]>({
     queryKey: ["accounts"],
     queryFn: async () => (await api.get("/api/accounts/")).data,
@@ -73,8 +60,17 @@ export default function TransactionModal({
     [categories, type]
   );
 
+  interface CreateTransactionPayload {
+    description: string;
+    amount: number;
+    type: string;
+    date: string;
+    account_id: number;
+    category_id: number;
+  }
+
   const createMutation = useMutation({
-    mutationFn: async (newTx: any) => {
+    mutationFn: async (newTx: CreateTransactionPayload) => {
       const response = await api.post("/api/transactions/", newTx);
       return response.data;
     },
@@ -90,7 +86,10 @@ export default function TransactionModal({
       onSuccess?.();
       onClose();
     },
-    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al registrar transacción"),
+    onError: (error: unknown) => {
+      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      toast.error(detail || "Error al registrar transacción");
+    },
   });
 
   const handleSubmit = (event: React.FormEvent) => {

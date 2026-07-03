@@ -40,9 +40,10 @@ export default function RegisterPage() {
       });
 
       router.push("/login?registered=true");
-    } catch (err: any) {
-      if (err.response?.status === 400) {
-        setError(err.response?.data?.detail || "El correo electrónico ya está registrado.");
+    } catch (err: unknown) {
+      const error = err as { response?: { status?: number; data?: { detail?: string } } };
+      if (error.response?.status === 400) {
+        setError(error.response?.data?.detail || "El correo electrónico ya está registrado.");
       } else {
         setError("Error de conexión. Inténtalo más tarde.");
       }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Tags, Loader2, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Lock } from "lucide-react";
+import { Plus, Loader2, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import Link from "next/link";
@@ -56,7 +56,10 @@ export default function CategoriesPage() {
       setNewCategoryName("");
       setNewCategoryType("expense");
     },
-    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al crear la categoría")
+    onError: (error: unknown) => {
+      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      toast.error(detail || "Error al crear la categoría");
+    }
   });
 
   // PUT: Editar categoría
@@ -69,7 +72,10 @@ export default function CategoriesPage() {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       setEditingCategory(null);
     },
-    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al actualizar")
+    onError: (error: unknown) => {
+      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      toast.error(detail || "Error al actualizar");
+    }
   });
 
   // DELETE: Eliminar categoría
@@ -81,7 +87,10 @@ export default function CategoriesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
     },
-    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al eliminar. Puede que tenga transacciones asociadas.")
+    onError: (error: unknown) => {
+      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      toast.error(detail || "Error al eliminar. Puede que tenga transacciones asociadas.");
+    }
   });
 
   // Handlers

@@ -15,6 +15,19 @@ type DonutPeriod = "month" | "3months" | "year";
 type AnalyticsSeries = "both" | "income" | "expense";
 type CategoryType = "expense" | "income";
 
+interface CashflowItem {
+  date_label: string;
+  expense: number;
+  income: number;
+}
+
+interface CategoryDistributionItem {
+  category_id: number;
+  category_name: string;
+  total: number;
+  percentage?: number;
+}
+
 // Función auxiliar para formatear fechas en hora local al estándar requerido por el backend
 const formatISOForBackend = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -81,7 +94,7 @@ const buildDonutDateRange = (period: DonutPeriod) => {
   };
 };
 
-const getCategoryColor = (item: any, index: number) => {
+const getCategoryColor = (item: { category_id?: number }, index: number) => {
   const seed = Number(item.category_id ?? index);
 
   return CATEGORY_COLORS[Math.abs(seed) % CATEGORY_COLORS.length];
@@ -143,17 +156,15 @@ export default function AnalyticsPage() {
 
   // Transformación de datos respetando la regla estricta de casteo a Number
   const parsedTrendData = useMemo(() => {
-    return trendData?.map((item: any) => ({
+    return (trendData as CashflowItem[])?.map((item) => ({
       ...item,
-      // Aplicamos casting por seguridad, aunque vengan como JSON numbers, 
-      // esto nos protege si FastAPI envía Decimals como strings
-      expense: Number(item.expense), 
+      expense: Number(item.expense),
       income: Number(item.income)
     })) || [];
   }, [trendData]);
 
   const visibleTrendData = useMemo(() => {
-    return parsedTrendData.map((item: any) => ({
+    return parsedTrendData.map((item) => ({
       ...item,
       income: seriesMode === "expense" ? 0 : item.income,
       expense: seriesMode === "income" ? 0 : item.expense,
@@ -161,14 +172,14 @@ export default function AnalyticsPage() {
   }, [parsedTrendData, seriesMode]);
 
   const originalCategoryData = useMemo(() => {
-    const items = categoryData?.map((item: any) => ({
+    const items = (categoryData as CategoryDistributionItem[])?.map((item) => ({
       ...item,
       value: Number(item.total),
     })) || [];
 
-    const totalAmount = items.reduce((sum: number, item: any) => sum + item.value, 0);
+    const totalAmount = items.reduce((sum, item) => sum + item.value, 0);
 
-    return items.map((item: any) => ({
+    return items.map((item) => ({
       ...item,
       percentage: totalAmount > 0 ? (item.value / totalAmount) * 100 : 0,
     }));
@@ -176,12 +187,12 @@ export default function AnalyticsPage() {
 
   const visibleCategoryData = useMemo(() => {
     const items = originalCategoryData.filter(
-      (item: any) => !hiddenCategories.has(String(item.category_id))
+      (item) => !hiddenCategories.has(String(item.category_id))
     );
 
-    const totalAmount = items.reduce((sum: number, item: any) => sum + item.value, 0);
+    const totalAmount = items.reduce((sum, item) => sum + item.value, 0);
 
-    return items.map((item: any) => ({
+    return items.map((item) => ({
       ...item,
       percentage: totalAmount > 0 ? (item.value / totalAmount) * 100 : 0,
     }));
@@ -193,7 +204,7 @@ export default function AnalyticsPage() {
     }
 
     const maxValue = Math.max(
-      ...visibleTrendData.flatMap((item: any) => [Number(item.income), Number(item.expense)]),
+      ...visibleTrendData.flatMap((item) => [Number(item.income), Number(item.expense)]),
       0
     );
     const labelLength = formatCurrency(maxValue).length;
@@ -295,7 +306,7 @@ export default function AnalyticsPage() {
                   <Tooltip 
                     cursor={{ fill: '#24314a', opacity: 0.35 }}
                     contentStyle={{ backgroundColor: '#162338', borderColor: '#24314a', borderRadius: '8px', color: '#eef4ff' }}
-                    formatter={(value: any) => [formatCurrency(Number(value)), ""]}
+                    formatter={(value: number) => [formatCurrency(Number(value)), ""]}
                     labelFormatter={(label) => `Fecha: ${label}`}
                   />
                   {seriesMode !== "expense" && (
@@ -384,7 +395,7 @@ export default function AnalyticsPage() {
                         dataKey="value"
                         stroke="none"
                       >
-                        {visibleCategoryData.map((_entry: any, index: number) => (
+                        {visibleCategoryData.map((_entry, index: number) => (
                           <Cell key={`cell-${index}`} fill={getCategoryColor(_entry, index)} />
                         ))}
                       </Pie>
@@ -415,10 +426,10 @@ export default function AnalyticsPage() {
               </div>
               {originalCategoryData.length > 0 && (
                 <div className="mt-5 space-y-2">
-                  {originalCategoryData.map((item: any, index: number) => {
+                  {originalCategoryData.map((item, index: number) => {
                     const isHidden = hiddenCategories.has(String(item.category_id));
                     const visibleItem = visibleCategoryData.find(
-                      (d: any) => String(d.category_id) === String(item.category_id)
+                      (d) => String(d.category_id) === String(item.category_id)
                     );
                     const displayPercentage = visibleItem ? visibleItem.percentage : item.percentage;
                     return (

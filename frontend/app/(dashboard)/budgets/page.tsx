@@ -54,8 +54,15 @@ export default function BudgetsPage() {
   const expenseCategories = categories?.filter(c => c.type === "expense") || [];
 
   // 3. Mutaciones
+  interface BudgetPayload {
+    category_id: number;
+    amount_limit: number;
+    month: number;
+    year: number;
+  }
+
   const saveMutation = useMutation({
-    mutationFn: async (budgetData: any) => {
+    mutationFn: async (budgetData: BudgetPayload) => {
       if (editingBudget) {
         return (await api.put(`/api/budgets/${editingBudget.id}`, budgetData)).data;
       } else {
@@ -69,7 +76,10 @@ export default function BudgetsPage() {
       queryClient.invalidateQueries({ queryKey: ["budgets-progress"] });
       closeModal();
     },
-    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al guardar el presupuesto")
+    onError: (error: unknown) => {
+      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      toast.error(detail || "Error al guardar el presupuesto");
+    }
   });
 
   const deleteMutation = useMutation({

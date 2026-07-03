@@ -60,7 +60,10 @@ export default function AccountsPage() {
       setNewAccountType("cash");
       setInitialBalance("");
     },
-    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al crear la cuenta")
+    onError: (error: unknown) => {
+      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      toast.error(detail || "Error al crear la cuenta");
+    }
   });
 
   // PUT: Editar cuenta (¡SIN ENVIAR BALANCE!)
@@ -73,7 +76,10 @@ export default function AccountsPage() {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       setEditingAccount(null); // Cierra el modal
     },
-    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al actualizar")
+    onError: (error: unknown) => {
+      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      toast.error(detail || "Error al actualizar");
+    }
   });
 
   // DELETE: Eliminar cuenta
@@ -86,8 +92,9 @@ export default function AccountsPage() {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["dashboardSummary"] });
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || "No se puede eliminar esta cuenta. Verifica que no tenga transacciones asociadas.");
+    onError: (error: unknown) => {
+      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      toast.error(detail || "No se puede eliminar esta cuenta. Verifica que no tenga transacciones asociadas.");
     }
   });
 

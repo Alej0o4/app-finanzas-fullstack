@@ -3,7 +3,6 @@
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Tag, Loader2, ArrowDownRight, ArrowUpRight, Pencil, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -69,8 +68,18 @@ export default function CategoryDetailPage() {
 
   const filteredCategories = categories?.filter(c => c.type === type) || [];
 
+  interface UpdateTransactionPayload {
+    id: number;
+    description: string;
+    amount: number;
+    type: string;
+    date: string;
+    account_id: number;
+    category_id: number;
+  }
+
   const updateMutation = useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: UpdateTransactionPayload) => {
       const response = await api.put(`/api/transactions/${payload.id}`, payload);
       return response.data;
     },
