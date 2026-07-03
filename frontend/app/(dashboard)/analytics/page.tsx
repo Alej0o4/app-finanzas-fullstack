@@ -106,6 +106,7 @@ export default function AnalyticsPage() {
   const [seriesMode, setSeriesMode] = useState<AnalyticsSeries>("both");
   const [donutPeriod, setDonutPeriod] = useState<DonutPeriod>("month");
   const [categoryType, setCategoryType] = useState<CategoryType>("expense");
+  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
 
   const barDateRange = useMemo(() => buildBarDateRange(barPeriod), [barPeriod]);
   const donutDateRange = useMemo(() => buildDonutDateRange(donutPeriod), [donutPeriod]);
@@ -159,10 +160,10 @@ export default function AnalyticsPage() {
     }));
   }, [parsedTrendData, seriesMode]);
 
-  const parsedCategoryData = useMemo(() => {
+  const originalCategoryData = useMemo(() => {
     const items = categoryData?.map((item: any) => ({
       ...item,
-      value: Number(item.total), // Ajusta 'total' según la respuesta real de este endpoint
+      value: Number(item.total),
     })) || [];
 
     const totalAmount = items.reduce((sum: number, item: any) => sum + item.value, 0);
@@ -172,6 +173,19 @@ export default function AnalyticsPage() {
       percentage: totalAmount > 0 ? (item.value / totalAmount) * 100 : 0,
     }));
   }, [categoryData]);
+
+  const visibleCategoryData = useMemo(() => {
+    const items = originalCategoryData.filter(
+      (item: any) => !hiddenCategories.has(String(item.category_id))
+    );
+
+    const totalAmount = items.reduce((sum: number, item: any) => sum + item.value, 0);
+
+    return items.map((item: any) => ({
+      ...item,
+      percentage: totalAmount > 0 ? (item.value / totalAmount) * 100 : 0,
+    }));
+  }, [originalCategoryData, hiddenCategories]);
 
   const yAxisWidth = useMemo(() => {
     if (visibleTrendData.length === 0) {
@@ -350,70 +364,90 @@ export default function AnalyticsPage() {
             <div className="h-72 flex items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
               No se pudieron cargar las categorías.
             </div>
-          ) : fetchingCategories && parsedCategoryData.length === 0 ? (
+          ) : fetchingCategories && originalCategoryData.length === 0 ? (
             <div className="h-72 flex items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-[#60a5fa]" />
             </div>
           ) : (
             <>
               <div className="h-72 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={parsedCategoryData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={80}
-                      outerRadius={110}
-                      paddingAngle={2}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {parsedCategoryData.map((_entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={getCategoryColor(_entry, index)} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      content={({ active, payload }) => {
-                        const item = payload?.[0]?.payload;
+                {visibleCategoryData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={visibleCategoryData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={80}
+                        outerRadius={110}
+                        paddingAngle={2}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {visibleCategoryData.map((_entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={getCategoryColor(_entry, index)} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        content={({ active, payload }) => {
+                          const item = payload?.[0]?.payload;
 
-                        if (!active || !item) {
-                          return null;
-                        }
+                          if (!active || !item) {
+                            return null;
+                          }
 
-                        return (
-                          <div className="rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm shadow-lg">
-                            <p className="font-medium text-text">{item.category_name}</p>
-                            <p className="mt-1 text-text-soft">Total: {formatCurrency(Number(item.value))}</p>
-                            <p className="text-text-muted">{item.percentage.toFixed(1)}% del total</p>
-                          </div>
-                        );
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                          return (
+                            <div className="rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm shadow-lg">
+                              <p className="font-medium text-text">{item.category_name}</p>
+                              <p className="mt-1 text-text-soft">Total: {formatCurrency(Number(item.value))}</p>
+                              <p className="text-text-muted">{item.percentage.toFixed(1)}% del subtotal</p>
+                            </div>
+                          );
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-72 flex items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
+                    No hay datos para este período.
+                  </div>
+                )}
               </div>
-              {parsedCategoryData.length > 0 && (
+              {originalCategoryData.length > 0 && (
                 <div className="mt-5 space-y-2">
-                  {parsedCategoryData.map((item: any, index: number) => (
-                    <div key={`${item.category_id ?? index}-legend`} className="flex items-center justify-between gap-3 text-sm">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: getCategoryColor(item, index) }}
-                        />
-                        <span className="truncate text-text-soft">
-                          {item.category_name} <span className="text-text-muted">({item.percentage.toFixed(1)}%)</span>
-                        </span>
+                  {originalCategoryData.map((item: any, index: number) => {
+                    const isHidden = hiddenCategories.has(String(item.category_id));
+                    const visibleItem = visibleCategoryData.find(
+                      (d: any) => String(d.category_id) === String(item.category_id)
+                    );
+                    const displayPercentage = visibleItem ? visibleItem.percentage : item.percentage;
+                    return (
+                      <div
+                        key={`${item.category_id ?? index}-legend`}
+                        className={`flex items-center justify-between gap-3 text-sm cursor-pointer transition-opacity hover:opacity-80 ${isHidden ? 'opacity-30' : ''}`}
+                        onClick={() => {
+                          const id = String(item.category_id);
+                          setHiddenCategories((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(id)) next.delete(id);
+                            else next.add(id);
+                            return next;
+                          });
+                        }}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: getCategoryColor(item, index) }}
+                          />
+                          <span className={`truncate ${isHidden ? 'line-through text-text-muted' : 'text-text-soft'}`}>
+                            {item.category_name}{!isHidden && <span className="text-text-muted"> ({displayPercentage.toFixed(1)}%)</span>}
+                          </span>
+                        </div>
+                        <span className="shrink-0 text-text-muted">{formatCurrency(Number(item.value))}</span>
                       </div>
-                      <span className="shrink-0 text-text-muted">{formatCurrency(Number(item.value))}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {parsedCategoryData.length === 0 && (
-                <div className="h-72 flex items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
-                  No hay datos para este período.
+                    );
+                  })}
                 </div>
               )}
             </>
