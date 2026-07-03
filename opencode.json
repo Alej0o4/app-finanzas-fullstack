@@ -1,0 +1,66 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/big-pickle",
+  "small_model": "opencode/north-mini-code-free",
+
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 8000
+  },
+
+  "instructions": ["AGENTS.md"],
+
+  "permission": {
+    "edit": "allow",
+    "bash": "allow"
+  },
+
+  "mcp": {
+    "sqlite": {
+      "type": "local",
+      "command": ["npx", "-y", "@anthropic/sqlite-mcp", "/home/alejo/proyecto-finanzas/backend/finanzas.db"],
+      "enabled": true
+    }
+  },
+
+  "agent": {
+    "build": {
+      "permission": {
+        "task": { "*": "allow" }
+      }
+    },
+    "plan": {
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "data-explorer": {
+      "description": "Explora esquemas y datos en SQLite sin editar código",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "bash": { "*": "deny", "sqlite3 *": "allow" }
+      }
+    }
+  },
+
+  "command": {
+    "lint-frontend": {
+      "template": "Corre el linter del frontend y dime los errores. Si no hay errores, solo di 'Sin errores'.\n\n!`cd frontend && pnpm lint 2>&1`",
+      "description": "Lint del frontend con ESLint",
+      "subtask": true
+    },
+    "db-schema": {
+      "template": "Usa el MCP de sqlite para listar todas las tablas, sus columnas y tipos. Responde solo el esquema, sin explicación.",
+      "description": "Esquema completo de la base de datos SQLite",
+      "subtask": true
+    },
+    "tech-debt": {
+      "template": "Revisa TODO_TECH_DEBT.md y responde qué items de deuda técnica impactan la tarea actual. Si no hay relación, solo di 'Sin impacto'.",
+      "description": "Revisa deuda técnica relevante",
+      "subtask": true
+    }
+  }
+}
