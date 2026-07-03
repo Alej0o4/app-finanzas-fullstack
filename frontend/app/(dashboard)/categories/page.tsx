@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Tags, Loader2, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Lock } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import Link from "next/link";
+import { useConfirmStore } from "@/store/useConfirmStore";
 
 // 1. Definición del Schema (OJO al user_id)
 interface Category {
@@ -54,7 +56,7 @@ export default function CategoriesPage() {
       setNewCategoryName("");
       setNewCategoryType("expense");
     },
-    onError: (error: any) => alert(error.response?.data?.detail || "Error al crear la categoría")
+    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al crear la categoría")
   });
 
   // PUT: Editar categoría
@@ -67,7 +69,7 @@ export default function CategoriesPage() {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       setEditingCategory(null);
     },
-    onError: (error: any) => alert(error.response?.data?.detail || "Error al actualizar")
+    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al actualizar")
   });
 
   // DELETE: Eliminar categoría
@@ -79,7 +81,7 @@ export default function CategoriesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
     },
-    onError: (error: any) => alert(error.response?.data?.detail || "Error al eliminar. Puede que tenga transacciones asociadas.")
+    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al eliminar. Puede que tenga transacciones asociadas.")
   });
 
   // Handlers
@@ -98,9 +100,10 @@ export default function CategoriesPage() {
   };
 
   const handleDelete = (id: number, name: string) => {
-    if (window.confirm(`¿Estás seguro de que deseas eliminar la categoría "${name}"?`)) {
-      deleteCategoryMutation.mutate(id);
-    }
+    useConfirmStore.getState().confirm(
+      `¿Estás seguro de que deseas eliminar la categoría "${name}"?`,
+      () => deleteCategoryMutation.mutate(id)
+    );
   };
 
   const openEditModal = (category: Category) => {

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import QueryProvider from "@/components/QueryProvider";
+import { Toaster } from "sonner";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -25,6 +26,7 @@ export default function RootLayout({
         {/* Envolvemos toda la app con el proveedor de datos */}
         <QueryProvider>
           {children}
+          <Toaster richColors position="top-right" closeButton />
         </QueryProvider>
       </body>
     </html>

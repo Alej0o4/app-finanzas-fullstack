@@ -220,12 +220,13 @@ Salida:
 
 ### `GET /api/dashboard/category-distribution`
 
-Devuelve la distribución de gastos por categoría en un rango de fechas.
+Devuelve la distribución por categoría en un rango de fechas.
 
 Parámetros:
 
 - `start_date`
 - `end_date`
+- `type` (opcional, default `"expense"`): `income | expense`
 
 Salida:
 

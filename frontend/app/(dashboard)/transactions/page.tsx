@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, ArrowRightLeft, ArrowDownRight, ArrowUpRight, Loader2, Trash2, FilterX } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import TransactionModal from "@/components/modals/TransactionModal";
 
 // 1. Interfaces
@@ -292,7 +294,7 @@ export default function TransactionsPage() {
                       <p className="text-xs text-text-muted capitalize">{formatDate(tx.date)}</p>
                     </div>
                     <button 
-                      onClick={() => window.confirm("¿Borrar esta transacción?") && deleteMutation.mutate(tx.id)}
+                      onClick={() => useConfirmStore.getState().confirm("¿Borrar esta transacción?", () => deleteMutation.mutate(tx.id))}
                       className="text-text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity p-1"
                     >
                       <Trash2 size={16} />

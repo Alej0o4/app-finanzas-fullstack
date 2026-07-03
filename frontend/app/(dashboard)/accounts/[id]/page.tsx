@@ -3,8 +3,10 @@
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Wallet, Loader2, ArrowDownRight, ArrowUpRight, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import { useState } from "react";
 
 interface Account {
@@ -200,7 +202,7 @@ export default function AccountDetailPage() {
                           <Pencil size={16} />
                         </button>
                         <button
-                          onClick={() => window.confirm("¿Borrar esta transacción?") && deleteMutation.mutate(tx.id)}
+                          onClick={() => useConfirmStore.getState().confirm("¿Borrar esta transacción?", () => deleteMutation.mutate(tx.id))}
                           className="p-2 rounded-lg text-text-muted hover:text-danger hover:bg-surface-elevated transition-colors"
                         >
                           <Trash2 size={16} />

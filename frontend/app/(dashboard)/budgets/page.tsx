@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, PieChart, Loader2, Edit2, Trash2, CalendarDays } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
+import { useConfirmStore } from "@/store/useConfirmStore";
 
 // 1. Interfaces
 interface Category { id: number; name: string; type: string; }
@@ -67,7 +69,7 @@ export default function BudgetsPage() {
       queryClient.invalidateQueries({ queryKey: ["budgets-progress"] });
       closeModal();
     },
-    onError: (error: any) => alert(error.response?.data?.detail || "Error al guardar el presupuesto")
+    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al guardar el presupuesto")
   });
 
   const deleteMutation = useMutation({
@@ -166,7 +168,7 @@ export default function BudgetsPage() {
                       <Edit2 size={16} />
                     </button>
                     <button 
-                      onClick={() => window.confirm("¿Eliminar este presupuesto?") && deleteMutation.mutate(budget.id)} 
+                      onClick={() => useConfirmStore.getState().confirm("¿Eliminar este presupuesto?", () => deleteMutation.mutate(budget.id))} 
                       className="text-text-muted hover:text-danger p-1 transition-colors"
                     >
                       <Trash2 size={16} />

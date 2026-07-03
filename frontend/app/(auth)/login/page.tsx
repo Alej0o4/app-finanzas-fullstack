@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ArrowRight, Loader2, Wallet } from "lucide-react";
 import { api } from "@/lib/api";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const registered = searchParams.get("registered");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -62,6 +65,13 @@ export default function LoginPage() {
         </p>
       </div>
 
+      {/* Mensaje de éxito post-registro */}
+      {registered === "true" && (
+        <div className="mb-6 p-3 rounded-xl bg-success/10 border border-success/20 text-success text-sm text-center">
+          Cuenta creada exitosamente. Ahora puedes iniciar sesión.
+        </div>
+      )}
+
       {/* Mensaje de Error */}
       {error && (
         <div className="mb-6 p-3 rounded-xl bg-danger/10 border border-danger/20 text-danger text-sm text-center">
@@ -113,7 +123,22 @@ export default function LoginPage() {
             </>
           )}
         </button>
-      </form>
-    </div>
-  );
-}
+        </form>
+
+        <p className="text-center text-sm text-text-muted mt-6">
+          ¿No tienes cuenta?{" "}
+          <Link href="/register" className="text-primary hover:text-primary-dark font-medium transition-colors">
+            Regístrate
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
+  export default function LoginPage() {
+    return (
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
+    );
+  }

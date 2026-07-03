@@ -10,8 +10,10 @@ import { api } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 import { useState, useMemo } from "react";
 
-type AnalyticsPeriod = "day" | "month";
+type BarPeriod = "7d" | "30d" | "12m";
+type DonutPeriod = "month" | "3months" | "year";
 type AnalyticsSeries = "both" | "income" | "expense";
+type CategoryType = "expense" | "income";
 
 // Función auxiliar para formatear fechas en hora local al estándar requerido por el backend
 const formatISOForBackend = (date: Date) => {
@@ -39,21 +41,43 @@ const CATEGORY_COLORS = [
   "#06b6d4",
 ];
 
-const buildDateRange = (period: AnalyticsPeriod) => {
+const buildBarDateRange = (period: BarPeriod) => {
+  const now = new Date();
+  const start = new Date(now);
+
+  if (period === "7d") start.setDate(now.getDate() - 7);
+  else if (period === "30d") start.setDate(now.getDate() - 30);
+  else start.setFullYear(now.getFullYear() - 1);
+
+  return {
+    start_date: formatISOForBackend(start),
+    end_date: formatISOForBackend(now),
+    period: period === "12m" ? "month" as const : "day" as const,
+  };
+};
+
+const buildDonutDateRange = (period: DonutPeriod) => {
   const now = new Date();
 
-  if (period === "month") {
+  if (period === "3months") {
+    const start = new Date(now);
+    start.setMonth(now.getMonth() - 3);
     return {
-      start_date: formatISOForBackend(new Date(now.getFullYear(), 0, 1, 0, 0, 0)),
-      end_date: formatISOForBackend(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)),
-      period,
+      start_date: formatISOForBackend(start),
+      end_date: formatISOForBackend(now),
+    };
+  }
+
+  if (period === "year") {
+    return {
+      start_date: formatISOForBackend(new Date(now.getFullYear(), 0, 1)),
+      end_date: formatISOForBackend(now),
     };
   }
 
   return {
-    start_date: formatISOForBackend(new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0)),
-    end_date: formatISOForBackend(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)),
-    period,
+    start_date: formatISOForBackend(new Date(now.getFullYear(), now.getMonth(), 1)),
+    end_date: formatISOForBackend(now),
   };
 };
 
@@ -63,7 +87,7 @@ const getCategoryColor = (item: any, index: number) => {
   return CATEGORY_COLORS[Math.abs(seed) % CATEGORY_COLORS.length];
 };
 
-const formatXAxisLabel = (label: string, period: AnalyticsPeriod) => {
+const formatXAxisLabel = (label: string, period: "day" | "month") => {
   if (period === "month") {
     const [year, month] = label.split("-");
     const parsedDate = new Date(Number(year), Number(month) - 1, 1);
@@ -78,38 +102,38 @@ const formatXAxisLabel = (label: string, period: AnalyticsPeriod) => {
 };
 
 export default function AnalyticsPage() {
-  // Estado para controlar la granularidad y el tipo de serie visible
-  const [period, setPeriod] = useState<AnalyticsPeriod>("day");
+  const [barPeriod, setBarPeriod] = useState<BarPeriod>("30d");
   const [seriesMode, setSeriesMode] = useState<AnalyticsSeries>("both");
+  const [donutPeriod, setDonutPeriod] = useState<DonutPeriod>("month");
+  const [categoryType, setCategoryType] = useState<CategoryType>("expense");
 
-  const dateRange = useMemo(() => buildDateRange(period), [period]);
+  const barDateRange = useMemo(() => buildBarDateRange(barPeriod), [barPeriod]);
+  const donutDateRange = useMemo(() => buildDonutDateRange(donutPeriod), [donutPeriod]);
 
-  // 1. Consulta del Flujo de Caja (Cashflow Series)
   const { data: trendData, isLoading: loadingTrends } = useQuery({
-    // Forzamos refetch al montar Analytics para no depender de la caché entre entradas a la ruta
-    queryKey: ["analytics-cashflow", dateRange.start_date, dateRange.end_date, dateRange.period], 
+    queryKey: ["analytics-cashflow", barDateRange.start_date, barDateRange.end_date, barDateRange.period],
     refetchOnMount: "always",
     queryFn: async () => {
       const res = await api.get("/api/dashboard/cashflow-series", {
         params: {
-          start_date: dateRange.start_date,
-          end_date: dateRange.end_date,
-          period: dateRange.period
+          start_date: barDateRange.start_date,
+          end_date: barDateRange.end_date,
+          period: barDateRange.period
         }
       });
-      return res.data; 
+      return res.data;
     }
   });
 
-  // 2. Consulta de Categorías (Asumiendo que también recibe fechas, ajusta si es necesario)
-  const { data: categoryData, isLoading: loadingCategories, isError: categoryError } = useQuery({
-    queryKey: ["analytics-categories", dateRange.start_date, dateRange.end_date],
+  const { data: categoryData, isLoading: loadingCategories, isFetching: fetchingCategories, isError: categoryError } = useQuery({
+    queryKey: ["analytics-categories", donutDateRange.start_date, donutDateRange.end_date, categoryType],
     refetchOnMount: "always",
     queryFn: async () => {
       const res = await api.get("/api/dashboard/category-distribution", {
         params: {
-          start_date: dateRange.start_date,
-          end_date: dateRange.end_date
+          start_date: donutDateRange.start_date,
+          end_date: donutDateRange.end_date,
+          type: categoryType
         }
       });
       return res.data;
@@ -163,15 +187,7 @@ export default function AnalyticsPage() {
     return Math.min(Math.max(labelLength * 8 + 30, 84), 160);
   }, [visibleTrendData]);
 
-  const visibleSeriesLabel = seriesMode === "both"
-    ? "Ingresos y gastos"
-    : seriesMode === "income"
-      ? "Solo ingresos"
-      : "Solo gastos";
-
-  const periodLabel = period === "day" ? "Diario (mes actual)" : "Mensual (año actual)";
-
-  if (loadingTrends || loadingCategories) {
+  if (loadingTrends && loadingCategories) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-[#60a5fa]" />
@@ -181,113 +197,162 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-text">Analítica Financiera</h1>
-          <p className="text-text-muted text-sm mt-1">
-            Visualiza el flujo de tu dinero y la distribución de tus gastos.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-surface-elevated/80 p-1">
-            {([
-              { value: "day", label: "Diario" },
-              { value: "month", label: "Mensual" },
-            ] as const).map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setPeriod(option.value)}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  period === option.value
-                    ? "bg-primary text-background"
-                    : "text-text-muted hover:text-text"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-surface-elevated/80 p-1">
-            {([
-              { value: "both", label: "Ambos" },
-              { value: "income", label: "Ingresos" },
-              { value: "expense", label: "Gastos" },
-            ] as const).map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setSeriesMode(option.value)}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  seriesMode === option.value
-                    ? "bg-surface-elevated text-text"
-                    : "text-text-muted hover:text-text"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold text-text">Analítica Financiera</h1>
+        <p className="text-text-muted text-sm mt-1">
+          Visualiza el flujo de tu dinero y la distribución de tus finanzas.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Gráfico de Barras: Flujo de Caja */}
         <div className="bg-surface/80 border border-border/70 p-6 rounded-2xl shadow-sm backdrop-blur-sm">
-          <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-lg font-medium text-text-soft">Flujo de Caja ({periodLabel})</h2>
-            <span className="text-xs uppercase tracking-[0.2em] text-text-muted">{visibleSeriesLabel}</span>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-lg font-medium text-text-soft">Flujo de Caja</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/40 p-0.5">
+                {([
+                  { value: "7d", label: "7 días" },
+                  { value: "30d", label: "30 días" },
+                  { value: "12m", label: "12 meses" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setBarPeriod(option.value)}
+                    className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                      barPeriod === option.value
+                        ? "bg-primary text-background"
+                        : "text-text-muted hover:text-text"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/40 p-0.5">
+                {([
+                  { value: "both", label: "Ambos" },
+                  { value: "income", label: "Ingresos" },
+                  { value: "expense", label: "Gastos" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setSeriesMode(option.value)}
+                    className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                      seriesMode === option.value
+                        ? "bg-surface-elevated text-text"
+                        : "text-text-muted hover:text-text"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={visibleTrendData} margin={{ top: 24, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#24314a" vertical={false} />
-                <XAxis 
-                  dataKey="date_label" // <- ACTULIZADO según la spec
-                  stroke="#9aa7bd" 
-                  fontSize={12} 
-                  tickLine={false} 
-                  axisLine={false} 
-                  tickFormatter={(val) => formatXAxisLabel(String(val), period)}
-                />
-                <YAxis 
-                  stroke="#9aa7bd" 
-                  fontSize={12} 
-                  tickLine={false} 
-                  axisLine={false}
-                  width={yAxisWidth}
-                  tickMargin={10}
-                  tickFormatter={(value) => formatCurrency(Number(value))} 
-                />
-                <Tooltip 
-                  cursor={{ fill: '#24314a', opacity: 0.35 }}
-                  contentStyle={{ backgroundColor: '#162338', borderColor: '#24314a', borderRadius: '8px', color: '#eef4ff' }}
-                  formatter={(value: any) => [formatCurrency(Number(value)), ""]}
-                  labelFormatter={(label) => `Fecha: ${label}`}
-                />
-                {seriesMode !== "expense" && (
-                  <Bar dataKey="income" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                    {period === "month" && <LabelList dataKey="income" position="top" formatter={(v) => formatCurrency(Number(v))} style={{ fill: '#9aa7bd', fontSize: 11 }} />}
-                  </Bar>
-                )}
-                {seriesMode !== "income" && (
-                  <Bar dataKey="expense" name="Gastos" fill="#fb7185" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                    {period === "month" && <LabelList dataKey="expense" position="top" formatter={(v) => formatCurrency(Number(v))} style={{ fill: '#9aa7bd', fontSize: 11 }} />}
-                  </Bar>
-                )}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {loadingTrends ? (
+            <div className="h-72 flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-[#60a5fa]" />
+            </div>
+          ) : (
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={visibleTrendData} margin={{ top: 24, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#24314a" vertical={false} />
+                  <XAxis 
+                    dataKey="date_label"
+                    stroke="#9aa7bd" 
+                    fontSize={12} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    tickFormatter={(val) => formatXAxisLabel(String(val), barPeriod === "12m" ? "month" : "day")}
+                  />
+                  <YAxis 
+                    stroke="#9aa7bd" 
+                    fontSize={12} 
+                    tickLine={false} 
+                    axisLine={false}
+                    width={yAxisWidth}
+                    tickMargin={10}
+                    tickFormatter={(value) => formatCurrency(Number(value))} 
+                  />
+                  <Tooltip 
+                    cursor={{ fill: '#24314a', opacity: 0.35 }}
+                    contentStyle={{ backgroundColor: '#162338', borderColor: '#24314a', borderRadius: '8px', color: '#eef4ff' }}
+                    formatter={(value: any) => [formatCurrency(Number(value)), ""]}
+                    labelFormatter={(label) => `Fecha: ${label}`}
+                  />
+                  {seriesMode !== "expense" && (
+                    <Bar dataKey="income" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                      {barPeriod === "12m" && <LabelList dataKey="income" position="top" formatter={(v) => formatCurrency(Number(v))} style={{ fill: '#9aa7bd', fontSize: 11 }} />}
+                    </Bar>
+                  )}
+                  {seriesMode !== "income" && (
+                    <Bar dataKey="expense" name="Gastos" fill="#fb7185" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                      {barPeriod === "12m" && <LabelList dataKey="expense" position="top" formatter={(v) => formatCurrency(Number(v))} style={{ fill: '#9aa7bd', fontSize: 11 }} />}
+                    </Bar>
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
 
         {/* Gráfico de Dona: Distribución por Categorías */}
         <div className="bg-surface/80 border border-border/70 p-6 rounded-2xl shadow-sm backdrop-blur-sm">
-          <h2 className="text-lg font-medium text-text-soft mb-6">Distribución por Categorías</h2>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-lg font-medium text-text-soft">Distribución por Categorías</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/40 p-0.5">
+                {([
+                  { value: "month", label: "Este mes" },
+                  { value: "3months", label: "3 meses" },
+                  { value: "year", label: "Este año" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setDonutPeriod(option.value)}
+                    className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                      donutPeriod === option.value
+                        ? "bg-primary text-background"
+                        : "text-text-muted hover:text-text"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/40 p-0.5">
+                {([
+                  { value: "expense", label: "Gastos" },
+                  { value: "income", label: "Ingresos" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setCategoryType(option.value)}
+                    className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                      categoryType === option.value
+                        ? "bg-surface-elevated text-text"
+                        : "text-text-muted hover:text-text"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
           {categoryError ? (
             <div className="h-72 flex items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
               No se pudieron cargar las categorías.
+            </div>
+          ) : fetchingCategories && parsedCategoryData.length === 0 ? (
+            <div className="h-72 flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-[#60a5fa]" />
             </div>
           ) : (
             <>
@@ -344,6 +409,11 @@ export default function AnalyticsPage() {
                       <span className="shrink-0 text-text-muted">{formatCurrency(Number(item.value))}</span>
                     </div>
                   ))}
+                </div>
+              )}
+              {parsedCategoryData.length === 0 && (
+                <div className="h-72 flex items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
+                  No hay datos para este período.
                 </div>
               )}
             </>

@@ -140,6 +140,7 @@ def obtener_serie_flujo_caja(
 def obtener_distribucion_categorias(
     start_date: datetime,
     end_date: datetime,
+    type: str = Query("expense", pattern="^(income|expense)$", description="Filtrar por tipo de transacción"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -151,7 +152,7 @@ def obtener_distribucion_categorias(
         models.Category, models.Category.id == models.Transaction.category_id
     ).filter(
         models.Transaction.user_id == current_user.id,
-        models.Transaction.type == "expense",
+        models.Transaction.type == type,
         models.Transaction.date >= start_date,
         models.Transaction.date <= end_date
     ).all()

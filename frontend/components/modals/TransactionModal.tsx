@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -89,7 +90,7 @@ export default function TransactionModal({
       onSuccess?.();
       onClose();
     },
-    onError: (error: any) => alert(error.response?.data?.detail || "Error al registrar transacción"),
+    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al registrar transacción"),
   });
 
   const handleSubmit = (event: React.FormEvent) => {

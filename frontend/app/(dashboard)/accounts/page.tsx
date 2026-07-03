@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 // Importamos los nuevos iconos (Edit2 y Trash2)
 import { Plus, Wallet, Loader2, Edit2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import Link from "next/link";
 
 interface Account {
@@ -58,7 +60,7 @@ export default function AccountsPage() {
       setNewAccountType("cash");
       setInitialBalance("");
     },
-    onError: (error: any) => alert(error.response?.data?.detail || "Error al crear la cuenta")
+    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al crear la cuenta")
   });
 
   // PUT: Editar cuenta (¡SIN ENVIAR BALANCE!)
@@ -71,7 +73,7 @@ export default function AccountsPage() {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       setEditingAccount(null); // Cierra el modal
     },
-    onError: (error: any) => alert(error.response?.data?.detail || "Error al actualizar")
+    onError: (error: any) => toast.error(error.response?.data?.detail || "Error al actualizar")
   });
 
   // DELETE: Eliminar cuenta
@@ -85,8 +87,7 @@ export default function AccountsPage() {
       queryClient.invalidateQueries({ queryKey: ["dashboardSummary"] });
     },
     onError: (error: any) => {
-      // Manejo del error 400 por relaciones bloqueadas
-      alert(error.response?.data?.detail || "No se puede eliminar esta cuenta. Verifica que no tenga transacciones asociadas.");
+      toast.error(error.response?.data?.detail || "No se puede eliminar esta cuenta. Verifica que no tenga transacciones asociadas.");
     }
   });
 
@@ -110,10 +111,10 @@ export default function AccountsPage() {
   };
 
   const handleDelete = (id: number, name: string) => {
-    // Para no borrar accidentalmente, usamos el confirm nativo del navegador por ahora
-    if (window.confirm(`¿Estás seguro de que deseas eliminar la cuenta "${name}"? Esta acción no se puede deshacer.`)) {
-      deleteAccountMutation.mutate(id);
-    }
+    useConfirmStore.getState().confirm(
+      `¿Estás seguro de que deseas eliminar la cuenta "${name}"? Esta acción no se puede deshacer.`,
+      () => deleteAccountMutation.mutate(id)
+    );
   };
 
   const openEditModal = (account: Account) => {
