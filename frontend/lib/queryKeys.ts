@@ -24,6 +24,6 @@ export const queryKeys = {
   },
   analytics: {
     cashflow: (start: string, end: string, period: string) => ["analytics-cashflow", start, end, period] as const,
-    categories: (start: string, end: string, type: string) => ["analytics-categories", start, end, type] as const,
+    categories: (start: string, end: string, type: string, neto?: boolean) => ["analytics-categories", start, end, type, neto] as const,
   },
 };

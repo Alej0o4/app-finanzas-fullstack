@@ -174,7 +174,7 @@ Consecuencias para el estado:
 ### Analytics
 
 - Cashflow: `analytics-cashflow`
-- Categorías: `analytics-categories`
+- Categorías: `analytics-categories` (incluye `neto` como cuarto segmento de la key)
 
 ### Transacciones
 

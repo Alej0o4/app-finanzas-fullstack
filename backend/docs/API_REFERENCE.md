@@ -227,9 +227,10 @@ Parámetros:
 - `start_date`
 - `end_date`
 - `type` (opcional, default `"expense"`): `income | expense`
+- `neto` (opcional, default `false`): si es `true`, calcula gasto neto (`SUM(expense) - SUM(income)`) por categoría. Ignora el parámetro `type`. Solo devuelve categorías con neto positivo.
 
 Salida:
 
 - `category_id`
 - `category_name`
-- `total`
+- `total` — cuando `neto=true`, representa el gasto neto

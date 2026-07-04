@@ -21,9 +21,8 @@ DEFAULT_CATEGORIES = [
     {"name": "Ocio", "type": "expense"},
     {"name": "Cuidado personal", "type": "expense"},
     {"name": "Suscripción", "type": "expense"},
-    {"name": "Otro (Gasto)", "type": "expense"},
+    {"name": "Otro", "type": "expense"},
     {"name": "Salario", "type": "income"},
-    {"name": "Otro (Ingreso)", "type": "income"},
 ]
 
 LEGACY_DEFAULT_CATEGORY_NAMES = {
@@ -35,6 +34,40 @@ LEGACY_DEFAULT_CATEGORY_NAMES = {
 def seed_default_categories() -> None:
     db = SessionLocal()
     try:
+        # Migración: renombrar todo Otro (Gasto) → Otro (sistema + usuarios)
+        otros_gasto = db.query(models.Category).filter(
+            models.Category.name == "Otro (Gasto)",
+            models.Category.type == "expense",
+        ).all()
+        for cat in otros_gasto:
+            cat.name = "Otro"
+
+        # Migración: eliminar todo Otro (Ingreso), migrando transacciones a Otro
+        otros_ingreso = db.query(models.Category).filter(
+            models.Category.name == "Otro (Ingreso)",
+            models.Category.type == "income",
+        ).all()
+        for cat in otros_ingreso:
+            otro = db.query(models.Category).filter(
+                models.Category.name == "Otro",
+                models.Category.type == "expense",
+                models.Category.user_id == cat.user_id,
+            ).first()
+            if otro is None and cat.user_id is not None:
+                otro = db.query(models.Category).filter(
+                    models.Category.name == "Otro",
+                    models.Category.type == "expense",
+                    models.Category.user_id.is_(None),
+                ).first()
+            if otro is not None:
+                db.query(models.Transaction).filter(
+                    models.Transaction.category_id == cat.id,
+                ).update({"category_id": otro.id})
+                db.query(models.Budget).filter(
+                    models.Budget.category_id == cat.id,
+                ).update({"category_id": otro.id})
+                db.delete(cat)
+
         for category_data in DEFAULT_CATEGORIES:
             existing_category = db.query(models.Category).filter(
                 models.Category.user_id.is_(None),

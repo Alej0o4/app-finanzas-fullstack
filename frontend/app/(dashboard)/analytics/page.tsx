@@ -108,6 +108,7 @@ export default function AnalyticsPage() {
   const [seriesMode, setSeriesMode] = useState<AnalyticsSeries>("both");
   const [donutPeriod, setDonutPeriod] = useState<DonutPeriod>("month");
   const [categoryType, setCategoryType] = useState<CategoryType>("expense");
+  const [netMode, setNetMode] = useState(false);
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
 
   const barDateRange = useMemo(() => buildBarDateRange(barPeriod), [barPeriod]);
@@ -128,13 +129,14 @@ export default function AnalyticsPage() {
   });
 
   const { data: categoryData, isLoading: loadingCategories, isFetching: fetchingCategories, isError: categoryError } = useQuery({
-    queryKey: queryKeys.analytics.categories(donutDateRange.start_date, donutDateRange.end_date, categoryType),
+    queryKey: queryKeys.analytics.categories(donutDateRange.start_date, donutDateRange.end_date, categoryType, netMode),
     queryFn: async () => {
       const res = await api.get("/api/dashboard/category-distribution", {
         params: {
           start_date: donutDateRange.start_date,
           end_date: donutDateRange.end_date,
-          type: categoryType
+          type: netMode ? "expense" : categoryType,
+          neto: netMode || undefined,
         }
       });
       return res.data;
@@ -315,7 +317,7 @@ export default function AnalyticsPage() {
         {/* Gráfico de Dona: Distribución por Categorías */}
         <div className="bg-surface/80 border border-border/70 p-6 rounded-2xl shadow-sm backdrop-blur-sm">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-lg font-medium text-text-soft">Distribución por Categorías</h2>
+            <h2 className="text-lg font-medium text-text-soft">{netMode ? "Distribución Neta por Categoría" : "Distribución por Categorías"}</h2>
             <div className="flex items-center gap-2 flex-wrap">
               <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/40 p-0.5">
                 {([
@@ -337,7 +339,7 @@ export default function AnalyticsPage() {
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/40 p-0.5">
+              <div className={`flex items-center gap-1 rounded-lg border border-border/70 bg-background/40 p-0.5 ${netMode ? "opacity-40 pointer-events-none" : ""}`}>
                 {([
                   { value: "expense", label: "Gastos" },
                   { value: "income", label: "Ingresos" },
@@ -348,6 +350,28 @@ export default function AnalyticsPage() {
                     onClick={() => setCategoryType(option.value)}
                     className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
                       categoryType === option.value
+                        ? "bg-surface-elevated text-text"
+                        : "text-text-muted hover:text-text"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/40 p-0.5">
+                {([
+                  { value: false, label: "Bruto" },
+                  { value: true, label: "Neto" },
+                ] as const).map((option) => (
+                  <button
+                    key={String(option.value)}
+                    type="button"
+                    onClick={() => {
+                      setNetMode(option.value);
+                      if (!option.value) setHiddenCategories(new Set());
+                    }}
+                    className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                      netMode === option.value
                         ? "bg-surface-elevated text-text"
                         : "text-text-muted hover:text-text"
                     }`}
@@ -397,7 +421,7 @@ export default function AnalyticsPage() {
                           return (
                             <div className="rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm shadow-lg">
                               <p className="font-medium text-text">{item.category_name}</p>
-                              <p className="mt-1 text-text-soft">Total: {formatCurrency(Number(item.value))}</p>
+                              <p className="mt-1 text-text-soft">{netMode ? "Gasto neto:" : "Total:"} {formatCurrency(Number(item.value))}</p>
                               <p className="text-text-muted">{item.percentage.toFixed(1)}% del subtotal</p>
                             </div>
                           );

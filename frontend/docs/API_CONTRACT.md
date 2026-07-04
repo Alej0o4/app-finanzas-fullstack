@@ -66,7 +66,7 @@ Filtros soportados por el feed:
 - `GET /api/dashboard/summary`
 - `GET /api/dashboard/budgets-progress`
 - `GET /api/dashboard/cashflow-series`
-- `GET /api/dashboard/category-distribution`
+- `GET /api/dashboard/category-distribution` (soporta `neto=true` para calcular gasto neto por categoría)
 
 ## Contratos de datos importantes
 

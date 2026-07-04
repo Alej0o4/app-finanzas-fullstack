@@ -130,24 +130,45 @@ def obtener_distribucion_categorias(
     start_date: datetime,
     end_date: datetime,
     type: str = Query("expense", pattern="^(income|expense)$", description="Filtrar por tipo de transacción"),
+    neto: bool = Query(False, description="Si es True, calcula gasto neto (expense - income) por categoría"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    rows = db.query(
-        models.Transaction.category_id,
-        models.Category.name,
-        func.sum(models.Transaction.amount).label("total"),
-    ).join(
-        models.Category, models.Category.id == models.Transaction.category_id
-    ).filter(
-        models.Transaction.user_id == current_user.id,
-        models.Transaction.type == type,
-        models.Transaction.date >= start_date,
-        models.Transaction.date <= end_date,
-    ).group_by(
-        models.Transaction.category_id,
-        models.Category.name,
-    ).order_by(func.sum(models.Transaction.amount).desc()).all()
+    if neto:
+        sum_expense = func.sum(case((models.Transaction.type == "expense", models.Transaction.amount), else_=0))
+        sum_income = func.sum(case((models.Transaction.type == "income", models.Transaction.amount), else_=0))
+        net_total = sum_expense - sum_income
+
+        rows = db.query(
+            models.Transaction.category_id,
+            models.Category.name,
+            net_total.label("total"),
+        ).join(
+            models.Category, models.Category.id == models.Transaction.category_id
+        ).filter(
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.date >= start_date,
+            models.Transaction.date <= end_date,
+        ).group_by(
+            models.Transaction.category_id,
+            models.Category.name,
+        ).having(net_total > 0).order_by(net_total.desc()).all()
+    else:
+        rows = db.query(
+            models.Transaction.category_id,
+            models.Category.name,
+            func.sum(models.Transaction.amount).label("total"),
+        ).join(
+            models.Category, models.Category.id == models.Transaction.category_id
+        ).filter(
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.type == type,
+            models.Transaction.date >= start_date,
+            models.Transaction.date <= end_date,
+        ).group_by(
+            models.Transaction.category_id,
+            models.Category.name,
+        ).order_by(func.sum(models.Transaction.amount).desc()).all()
 
     return [
         {"category_id": r.category_id, "category_name": r.name, "total": r.total}

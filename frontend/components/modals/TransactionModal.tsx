@@ -35,6 +35,7 @@ export default function TransactionModal({
   const [date, setDate] = useState(todayAsInputValue());
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   const { data: accounts } = useQuery<Account[]>({
     queryKey: queryKeys.accounts.all(),
@@ -48,9 +49,12 @@ export default function TransactionModal({
     enabled: isOpen,
   });
 
-  const filteredCategories = useMemo(
-    () => categories?.filter((category) => category.type === type) || [],
-    [categories, type]
+  const displayedCategories = useMemo(
+    () => {
+      if (showAllCategories) return categories || [];
+      return categories?.filter((category) => category.type === type) || [];
+    },
+    [categories, type, showAllCategories]
   );
 
   const createMutation = useMutation({
@@ -164,10 +168,19 @@ export default function TransactionModal({
               className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none"
             >
               <option value="" disabled>Selecciona...</option>
-              {filteredCategories.map((category) => (
-                <option key={category.id} value={category.id}>{category.name}</option>
+              {displayedCategories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}{showAllCategories ? ` (${category.type === "income" ? "Ingreso" : "Gasto"})` : ""}
+                </option>
               ))}
             </select>
+            <button
+              type="button"
+              onClick={() => setShowAllCategories(!showAllCategories)}
+              className="text-xs text-primary/70 hover:text-primary mt-1 transition-colors"
+            >
+              {showAllCategories ? "← Solo del tipo" : "+ Mostrar todas las categorías"}
+            </button>
           </div>
         </div>
 
