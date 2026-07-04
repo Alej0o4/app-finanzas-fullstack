@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from datetime import datetime
 from decimal import Decimal
 import calendar
 from typing import List
-from collections import defaultdict
 
 from app.core.database import get_db
 from app.models import models
@@ -55,36 +54,46 @@ def obtener_progreso_presupuestos(
     current_user: models.User = Depends(get_current_user)
 ):
     hoy = datetime.utcnow()
-    
+    primer_dia = datetime(hoy.year, hoy.month, 1)
+    ultimo_dia = datetime(hoy.year, hoy.month, calendar.monthrange(hoy.year, hoy.month)[1], 23, 59, 59)
+
     presupuestos = db.query(models.Budget).filter(
         models.Budget.user_id == current_user.id,
         models.Budget.month == hoy.month,
         models.Budget.year == hoy.year
     ).all()
 
+    if not presupuestos:
+        return []
+
+    category_ids = [p.category_id for p in presupuestos]
+
+    spent_rows = db.query(
+        models.Transaction.category_id,
+        func.sum(models.Transaction.amount).label("spent"),
+    ).filter(
+        models.Transaction.user_id == current_user.id,
+        models.Transaction.type == "expense",
+        models.Transaction.category_id.in_(category_ids),
+        models.Transaction.date >= primer_dia,
+        models.Transaction.date <= ultimo_dia,
+    ).group_by(models.Transaction.category_id).all()
+
+    spent_map: dict[int, Decimal] = {r.category_id: r.spent for r in spent_rows}
+
+    categorias = db.query(models.Category).filter(models.Category.id.in_(category_ids)).all()
+    cat_name_map: dict[int, str] = {c.id: c.name for c in categorias}
+
     progreso_lista = []
-
     for presupuesto in presupuestos:
-        gastado = db.query(func.sum(models.Transaction.amount)).filter(
-            models.Transaction.user_id == current_user.id,
-            models.Transaction.category_id == presupuesto.category_id,
-            models.Transaction.type == "expense",
-            models.Transaction.date >= datetime(hoy.year, hoy.month, 1),
-            models.Transaction.date <= datetime(hoy.year, hoy.month, calendar.monthrange(hoy.year, hoy.month)[1], 23, 59, 59)
-        ).scalar() or Decimal("0.00")  # 🔁 antes: 0.0
-
-        # 🔁 percentage sigue siendo float — es un cálculo de presentación, no un monto acumulable
+        gastado = spent_map.get(presupuesto.category_id, Decimal("0.00"))
         porcentaje = float(gastado / presupuesto.amount_limit) * 100 if presupuesto.amount_limit > 0 else 0
-
-        categoria = db.query(models.Category).filter(models.Category.id == presupuesto.category_id).first()
-        nombre_cat = categoria.name if categoria else "Desconocida"
-
         progreso_lista.append({
             "budget_id": presupuesto.id,
-            "category_name": nombre_cat,
+            "category_name": cat_name_map.get(presupuesto.category_id, "Desconocida"),
             "amount_limit": presupuesto.amount_limit,
             "spent": gastado,
-            "percentage": round(porcentaje, 2)
+            "percentage": round(porcentaje, 2),
         })
 
     return progreso_lista
@@ -97,43 +106,23 @@ def obtener_serie_flujo_caja(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    # 1. Consulta SQL simplificada (Sin CAST ni agrupaciones problemáticas)
-    # Extraemos solo los datos crudos del usuario en el rango de fechas
-    resultados = db.query(
-        models.Transaction.date,
-        models.Transaction.type,
-        models.Transaction.amount
+    fmt = "%Y-%m" if period == "month" else "%Y-%m-%d"
+    date_label = func.strftime(fmt, models.Transaction.date).label("date_label")
+
+    rows = db.query(
+        date_label,
+        func.sum(case((models.Transaction.type == "income", models.Transaction.amount), else_=0)).label("income"),
+        func.sum(case((models.Transaction.type == "expense", models.Transaction.amount), else_=0)).label("expense"),
     ).filter(
         models.Transaction.user_id == current_user.id,
         models.Transaction.date >= start_date,
-        models.Transaction.date <= end_date
-    ).all()
+        models.Transaction.date <= end_date,
+    ).group_by(date_label).order_by(date_label).all()
 
-    # 2. Agrupación 100% en memoria (Agnóstica al motor de Base de Datos)
-    agrupacion = defaultdict(lambda: {"income": Decimal("0.00"), "expense": Decimal("0.00")})
-
-    for fecha, tipo_tx, amount in resultados:
-        if period == "month":
-            label = f"{fecha.year}-{fecha.month:02d}"
-        else:
-            # fecha ya es un objeto datetime de Python aquí
-            label = fecha.strftime("%Y-%m-%d")
-
-        # Aseguramos la conversión a Decimal por si SQLite lo devuelve como float
-        valor_decimal = Decimal(str(amount)) if amount else Decimal("0.00")
-        agrupacion[label][tipo_tx] += valor_decimal
-
-    # 3. Serialización ordenada cronológicamente
-    serie_tiempo = [
-        {
-            "date_label": key,
-            "income": values["income"],
-            "expense": values["expense"]
-        }
-        for key, values in sorted(agrupacion.items())
+    return [
+        {"date_label": r.date_label, "income": r.income, "expense": r.expense}
+        for r in rows
     ]
-
-    return serie_tiempo
 
 
 @router.get("/category-distribution", response_model=List[schemas.CategoryDistributionData])
@@ -144,35 +133,23 @@ def obtener_distribucion_categorias(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    resultados = db.query(
+    rows = db.query(
         models.Transaction.category_id,
         models.Category.name,
-        models.Transaction.amount
+        func.sum(models.Transaction.amount).label("total"),
     ).join(
         models.Category, models.Category.id == models.Transaction.category_id
     ).filter(
         models.Transaction.user_id == current_user.id,
         models.Transaction.type == type,
         models.Transaction.date >= start_date,
-        models.Transaction.date <= end_date
-    ).all()
-
-    agrupacion = defaultdict(lambda: {"category_name": "Desconocida", "total": Decimal("0.00")})
-
-    for category_id, category_name, amount in resultados:
-        valor_decimal = Decimal(str(amount)) if amount else Decimal("0.00")
-        agrupacion[category_id]["category_name"] = category_name or "Desconocida"
-        agrupacion[category_id]["total"] += valor_decimal
+        models.Transaction.date <= end_date,
+    ).group_by(
+        models.Transaction.category_id,
+        models.Category.name,
+    ).order_by(func.sum(models.Transaction.amount).desc()).all()
 
     return [
-        {
-            "category_id": category_id,
-            "category_name": values["category_name"],
-            "total": values["total"]
-        }
-        for category_id, values in sorted(
-            agrupacion.items(),
-            key=lambda item: item[1]["total"],
-            reverse=True
-        )
+        {"category_id": r.category_id, "category_name": r.name, "total": r.total}
+        for r in rows
     ]

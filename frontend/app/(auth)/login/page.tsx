@@ -33,9 +33,10 @@ function LoginForm() {
         },
       });
 
-      // Guardamos el token en localStorage
-      const { access_token } = response.data;
+      // Guardamos los tokens en localStorage
+      const { access_token, refresh_token } = response.data;
       localStorage.setItem("jwt_token", access_token);
+      localStorage.setItem("refresh_token", refresh_token);
 
       // Redirigimos al Dashboard (la fuente de verdad)
       router.push("/");

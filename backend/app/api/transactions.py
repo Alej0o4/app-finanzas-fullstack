@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from sqlalchemy import or_, desc
+from sqlalchemy import or_, desc, update
 from datetime import datetime
 
 from app.core.database import get_db
@@ -40,20 +40,20 @@ def crear_transaccion(
     # 2. Ensamblar la transacción
     nueva_transaccion = models.Transaction(**transaccion.dict(exclude_none=True), user_id=current_user.id)
     
-    # 🧮 3. Lógica Contable: Actualizar el saldo de la cuenta en la RAM
-    if transaccion.type == "income":
-        cuenta.balance += transaccion.amount
-    elif transaccion.type == "expense":
-        cuenta.balance -= transaccion.amount
-        
+    # 🧮 3. Lógica Contable: Actualizar saldo de forma atómica en SQL
+    delta = transaccion.amount if transaccion.type == "income" else -transaccion.amount
+
     try:
-        # 4. Intentamos guardar ambas cosas en el disco duro al mismo tiempo
         db.add(nueva_transaccion)
-        db.commit() # ¡El gatillo atómico! Guarda transacción y actualiza cuenta
+        db.execute(
+            update(models.Account)
+            .where(models.Account.id == transaccion.account_id)
+            .values(balance=models.Account.balance + delta)
+        )
+        db.commit()
         db.refresh(nueva_transaccion)
         return nueva_transaccion
-    except Exception as e:
-        # 🛡️ 5. Si algo explota (ej. caída de red), revertimos todo para no corromper los saldos
+    except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Error interno al procesar la transacción contable.")
 
@@ -110,19 +110,20 @@ def eliminar_transaccion(
     # 1. Obtener la cuenta asociada a esta transacción
     cuenta = db.query(models.Account).filter(models.Account.id == transaccion.account_id).first()
     
-    # 🧮 2. Lógica Contable Inversa: Revertimos el impacto del saldo en la RAM
+    # 🧮 2. Lógica Contable Inversa: Revertir el impacto de forma atómica
     if cuenta:
-        if transaccion.type == "income":
-            cuenta.balance -= transaccion.amount # Si era ingreso y lo borro, pierdo plata
-        elif transaccion.type == "expense":
-            cuenta.balance += transaccion.amount # Si era gasto y lo borro, recupero plata
-            
+        delta = -transaccion.amount if transaccion.type == "income" else transaccion.amount
+        db.execute(
+            update(models.Account)
+            .where(models.Account.id == transaccion.account_id)
+            .values(balance=models.Account.balance + delta)
+        )
+
     try:
-        # 3. Ejecutamos el borrado y la actualización de saldo en un solo movimiento
         db.delete(transaccion)
         db.commit()
         return {"estado": "OK", "mensaje": "Transacción eliminada y saldo de cuenta revertido exitosamente."}
-    except Exception as e:
+    except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Error al intentar eliminar y revertir saldos.")
 
@@ -161,20 +162,29 @@ def actualizar_transaccion(
     if not categoria:
         raise HTTPException(status_code=404, detail="La categoría especificada no existe o no tienes permisos para usarla.")
 
+    old_delta = transaccion_db.amount if transaccion_db.type == "income" else -transaccion_db.amount
+    new_delta = transaccion_actualizada.amount if transaccion_actualizada.type == "income" else -transaccion_actualizada.amount
+
     try:
-        # 🧮 A. Revertimos el impacto de la transacción VIEJA en la cuenta VIEJA
-        if transaccion_db.type == "income":
-            cuenta_vieja.balance -= transaccion_db.amount
-        elif transaccion_db.type == "expense":
-            cuenta_vieja.balance += transaccion_db.amount
+        if cuenta_vieja.id == cuenta_nueva.id:
+            net_delta = new_delta - old_delta
+            db.execute(
+                update(models.Account)
+                .where(models.Account.id == cuenta_vieja.id)
+                .values(balance=models.Account.balance + net_delta)
+            )
+        else:
+            db.execute(
+                update(models.Account)
+                .where(models.Account.id == cuenta_vieja.id)
+                .values(balance=models.Account.balance - old_delta)
+            )
+            db.execute(
+                update(models.Account)
+                .where(models.Account.id == cuenta_nueva.id)
+                .values(balance=models.Account.balance + new_delta)
+            )
 
-        # 🧮 B. Aplicamos el impacto de la transacción NUEVA en la cuenta NUEVA
-        if transaccion_actualizada.type == "income":
-            cuenta_nueva.balance += transaccion_actualizada.amount
-        elif transaccion_actualizada.type == "expense":
-            cuenta_nueva.balance -= transaccion_actualizada.amount
-
-        # C. Actualizamos los datos físicos de la transacción
         transaccion_db.amount = transaccion_actualizada.amount
         transaccion_db.type = transaccion_actualizada.type
         transaccion_db.description = transaccion_actualizada.description
@@ -183,11 +193,10 @@ def actualizar_transaccion(
         if transaccion_actualizada.date is not None:
             transaccion_db.date = transaccion_actualizada.date
 
-        # D. Guardamos todo de forma Atómica
         db.commit()
         db.refresh(transaccion_db)
         return transaccion_db
 
-    except Exception as e:
+    except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Error al recalcular saldos en la actualización.")

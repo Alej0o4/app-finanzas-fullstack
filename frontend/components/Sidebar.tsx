@@ -5,9 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { useUiStore } from "@/store/useUiStore";
 import { useCurrentUser } from "@/lib/hooks/useCurrentUser";
 import { useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { 
   LayoutDashboard, 
-  TrendingUp, // <- Icono importado para Analítica
+  TrendingUp,
   Wallet, 
   ArrowLeftRight, 
   PieChart, 
@@ -24,8 +25,17 @@ export default function Sidebar() {
   const { data: user } = useCurrentUser();
   const queryClient = useQueryClient();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const refreshToken = localStorage.getItem("refresh_token");
+    if (refreshToken) {
+      try {
+        await api.post("/api/auth/logout", { refresh_token: refreshToken });
+      } catch {
+        // Si falla la revocación, el token expirará solo
+      }
+    }
     localStorage.removeItem("jwt_token");
+    localStorage.removeItem("refresh_token");
     queryClient.clear();
     router.push("/login");
   };

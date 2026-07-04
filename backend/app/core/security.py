@@ -1,5 +1,7 @@
+import hashlib
 import os
-from dotenv import load_dotenv # Importamos la herramienta
+import secrets
+from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt, JWTError
@@ -20,7 +22,8 @@ if not SECRET_KEY:
     raise ValueError("¡Error Crítico! No se encontró la SECRET_KEY en el archivo .env")
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
+REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 # 2. CONFIGURACIONES DE SEGURIDAD
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -41,11 +44,23 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    to_encode.update({"exp": expire})
+    to_encode.update({
+        "exp": expire,
+        "iat": datetime.utcnow(),
+        "jti": secrets.token_urlsafe(16),
+    })
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-# 5. EL GUARDIA DE SEGURIDAD (Dependencia para las rutas protegidas)
+
+# 5. FUNCIONES PARA REFRESH TOKENS
+def generate_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+# 6. EL GUARDIA DE SEGURIDAD (Dependencia para las rutas protegidas)
 def get_current_user(
     token: str = Depends(oauth2_scheme), 
     db: Session = Depends(get_db)

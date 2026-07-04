@@ -6,11 +6,11 @@ from enum import Enum
 
 # --- USUARIOS ---
 class UserBase(BaseModel):
-    email: str
-    full_name: str
+    email: str = Field(..., max_length=255)
+    full_name: str = Field(..., min_length=1, max_length=150)
 
 class UserCreate(UserBase):
-    password: str 
+    password: str = Field(..., min_length=8)
 
 class UserResponse(UserBase):
     id: int
@@ -23,9 +23,9 @@ class TransactionType(str, Enum):
     expense = "expense"
 
 class TransactionBase(BaseModel):
-    amount: Decimal = Field(..., gt=0, decimal_places=2, description="El monto debe ser mayor a cero")  # 🔁 antes: float
+    amount: Decimal = Field(..., gt=0, decimal_places=2, description="El monto debe ser mayor a cero")
     type: TransactionType
-    description: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=500)
     account_id: int
     category_id: int
     date: Optional[datetime] = None
@@ -47,11 +47,11 @@ class AccountType(str, Enum):
     credit = "credit"
 
 class AccountBase(BaseModel):
-    name: str
-    type: AccountType 
+    name: str = Field(..., min_length=1, max_length=100)
+    type: AccountType
 
 class AccountCreate(AccountBase):
-    balance: Decimal = Field(0, decimal_places=2, description="Saldo inicial")  # 🔁 antes: float
+    balance: Decimal = Field(0, ge=0, decimal_places=2, description="Saldo inicial")
 
 class AccountUpdate(AccountBase):
     pass 
@@ -69,8 +69,8 @@ class CategoryType(str, Enum):
     expense = "expense" 
 
 class CategoryBase(BaseModel):
-    name: str
-    type: CategoryType  
+    name: str = Field(..., min_length=1, max_length=100)
+    type: CategoryType
 
 class CategoryCreate(CategoryBase):
     pass
@@ -83,9 +83,9 @@ class CategoryResponse(CategoryBase):
 
 # --- PRESUPUESTOS ---
 class BudgetBase(BaseModel):
-    amount_limit: Decimal = Field(..., gt=0, decimal_places=2, description="El presupuesto debe ser mayor a cero")  # 🔁 antes: float
+    amount_limit: Decimal = Field(..., gt=0, decimal_places=2, description="El presupuesto debe ser mayor a cero")
     month: int = Field(..., ge=1, le=12, description="Mes válido entre 1 y 12")
-    year: int
+    year: int = Field(..., ge=2020, le=2100)
     category_id: int
 
 class BudgetCreate(BudgetBase):
@@ -109,6 +109,19 @@ class BudgetProgress(BaseModel):
     amount_limit: Decimal   # 🔁 antes: float
     spent: Decimal          # 🔁 antes: float
     percentage: float       # ✅ se queda float, es un porcentaje calculado, no dinero
+
+
+# --- AUTENTICACIÓN ---
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
 
 
 class CashflowData(BaseModel):

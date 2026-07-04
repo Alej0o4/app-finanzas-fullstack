@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Loader2, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Lock } from "lucide-react";
+import { Plus, Loader2, Edit2, Trash2, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { getApiError } from "@/lib/utils";
@@ -151,39 +151,32 @@ export default function CategoriesPage() {
                 </div>
               </Link>
 
-              <div className="absolute top-4 right-4 z-10 flex items-center">
-                {isSystemCategory ? (
-                  <div className="flex items-center space-x-1 text-xs text-text-muted bg-background px-2 py-1 rounded-md border border-border/50">
-                    <Lock size={12} />
-                    <span>Sistema</span>
-                  </div>
-                ) : (
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface pl-2 rounded-lg">
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openEditModal(category);
-                      }}
-                      className="text-text-muted hover:text-primary p-1 transition-colors"
-                      title="Editar categoría"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleDelete(category.id, category.name);
-                      }}
-                      className="text-text-muted hover:text-danger p-1 transition-colors"
-                      title="Eliminar categoría"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                )}
-              </div>
+              {!isSystemCategory && (
+                <div className="absolute top-4 right-4 z-10 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface pl-2 rounded-lg">
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openEditModal(category);
+                    }}
+                    className="text-text-muted hover:text-primary p-1 transition-colors"
+                    title="Editar categoría"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDelete(category.id, category.name);
+                    }}
+                    className="text-text-muted hover:text-danger p-1 transition-colors"
+                    title="Eliminar categoría"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              )}
 
             </div>
           );

@@ -1,6 +1,9 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware # 1. Importamos el Middleware
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from app.core.database import engine, Base, SessionLocal
+from app.core.rate_limit import limiter
 from app.models import models
 
 from app.api import transactions, users, accounts, categories, budgets, auth, dashboard
@@ -72,9 +75,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origenes_permitidos,
     allow_credentials=True,
-    allow_methods=["*"], # Permitimos GET, POST, PUT, DELETE...
-    allow_headers=["*"], # Permitimos todos los encabezados (incluyendo los Tokens)
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # 3. Conexión de Enrutadores
 app.include_router(auth.router, prefix="/api/auth", tags=["Autenticación"])
