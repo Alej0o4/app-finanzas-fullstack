@@ -133,16 +133,23 @@ Entrada:
 
 ### `GET /api/transactions/`
 
-Lista transacciones del usuario autenticado.
+Lista transacciones del usuario autenticado con paginación.
 
 Filtros opcionales:
 
-- `skip`
-- `limit`
+- `skip` (default: 0)
+- `limit` (default: 100, usado internamente: 50)
 - `account_id`
 - `category_id`
 - `start_date`
 - `end_date`
+
+Salida paginada:
+
+- `items`: `Transaction[]` — transacciones de la página solicitada
+- `total`: `int` — total de transacciones que coinciden con los filtros
+- `page`: `int` — página actual (calculada como `skip/limit + 1`)
+- `page_size`: `int` — número de items por página (`limit`)
 
 ### `PUT /api/transactions/{transaction_id}`
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from sqlalchemy import or_, desc, update
+from typing import Optional
+from sqlalchemy import or_, desc, update, func
 from datetime import datetime
 
 from app.core.database import get_db
@@ -59,12 +59,12 @@ def crear_transaccion(
 
 
 # --- RUTA PROTEGIDA ---
-@router.get("/", response_model=List[schemas.TransactionResponse])
+@router.get("/", response_model=schemas.PaginatedResponse[schemas.TransactionResponse])
 def obtener_transacciones(
     skip: int = 0, 
     limit: int = 100, 
-    account_id: Optional[int] = None,   # <-- 1. Parámetro opcional
-    category_id: Optional[int] = None,  # <-- 2. Parámetro opcional
+    account_id: Optional[int] = None,
+    category_id: Optional[int] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     db: Session = Depends(get_db),
@@ -86,13 +86,22 @@ def obtener_transacciones(
 
     if end_date is not None:
         query = query.filter(models.Transaction.date <= end_date)
-        
+
+    total = query.with_entities(func.count()).scalar()
+    
     transacciones = query.order_by(
         desc(models.Transaction.date),
         desc(models.Transaction.id)
     ).offset(skip).limit(limit).all()
     
-    return transacciones
+    page = (skip // limit) + 1 if limit > 0 else 1
+
+    return schemas.PaginatedResponse(
+        items=transacciones,
+        total=total,
+        page=page,
+        page_size=limit,
+    )
 
 
 # --- RUTA PROTEGIDA ---

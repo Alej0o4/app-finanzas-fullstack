@@ -47,12 +47,19 @@ Si el backend responde `401`, el cliente limpia el token y redirige a `/login`.
 
 Filtros soportados por el feed:
 
-- `skip`
-- `limit`
+- `skip` (default: 0)
+- `limit` (default: 100, usado internamente: 50)
 - `account_id`
 - `category_id`
 - `start_date`
 - `end_date`
+
+El endpoint devuelve una respuesta paginada:
+
+- `items`: `Transaction[]`
+- `total`: `int` — total de resultados sin paginación
+- `page`: `int` — página actual
+- `page_size`: `int` — items por página
 
 ### Presupuestos
 
@@ -125,6 +132,8 @@ Reglas:
 - El feed principal debe ordenarse por fecha descendente desde el backend.
 - Los detalles por cuenta y categoría reutilizan el mismo contrato.
 - Al crear, editar o borrar una transacción, se deben invalidar las queries relacionadas.
+- El feed usa paginación tipo "load more" con `skip`/`limit=50`; el frontend acumula páginas hasta que `total` coincida.
+- La respuesta se tipa como `PaginatedResponse<Transaction>` en `types/api.ts`.
 
 ### Presupuesto
 
