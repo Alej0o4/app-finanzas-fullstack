@@ -94,24 +94,39 @@ export default function Sidebar() {
 
       {/* Parte Inferior: Perfil / Cerrar Sesión */}
       <div className="p-3 border-t border-border/40">
-        <div className={`flex items-center justify-between p-2 rounded-xl bg-background/40 border border-border/40 ${isSidebarOpen ? "px-3" : "justify-center"}`}>
-          <div className="flex items-center space-x-3">
+        {isSidebarOpen ? (
+          <div className="flex items-center justify-between px-3 p-2 rounded-xl bg-background/40 border border-border/40">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-full bg-surface-elevated border border-border flex items-center justify-center text-xs font-semibold text-primary uppercase">
+                {user?.full_name?.split(" ").map((n: string) => n[0]).join("") || "U"}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-medium text-text">{user?.full_name || "Usuario"}</span>
+                <span className="text-[10px] text-text-muted capitalize">{user?.email || ""}</span>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-text-muted hover:text-danger p-1.5 rounded-lg transition-colors cursor-pointer"
+              title="Cerrar sesión"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-surface-elevated border border-border flex items-center justify-center text-xs font-semibold text-primary uppercase">
               {user?.full_name?.split(" ").map((n: string) => n[0]).join("") || "U"}
             </div>
-            <div className={`flex flex-col ${isSidebarOpen ? "block" : "hidden"}`}>
-              <span className="text-xs font-medium text-text">{user?.full_name || "Usuario"}</span>
-              <span className="text-[10px] text-text-muted capitalize">{user?.email || ""}</span>
-            </div>
+            <button
+              onClick={handleLogout}
+              className="text-text-muted hover:text-danger p-1.5 rounded-lg transition-colors cursor-pointer"
+              title="Cerrar sesión"
+            >
+              <LogOut size={16} />
+            </button>
           </div>
-          <button
-            onClick={handleLogout}
-            className={`text-text-muted hover:text-danger p-1.5 rounded-lg transition-colors cursor-pointer ${isSidebarOpen ? "block" : "hidden"}`}
-            title="Cerrar sesión"
-          >
-            <LogOut size={16} />
-          </button>
-        </div>
+        )}
       </div>
     </aside>
   );

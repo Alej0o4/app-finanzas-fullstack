@@ -1,18 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-
-interface CurrentUser {
-  id: number;
-  email: string;
-  full_name: string;
-}
+import { queryKeys } from "@/lib/queryKeys";
 
 export function useCurrentUser() {
-  return useQuery<CurrentUser>({
-    queryKey: ["currentUser"],
+  return useQuery({
+    queryKey: queryKeys.currentUser(),
     queryFn: async () => {
       const response = await api.get("/api/users/me");
-      return response.data;
+      return response.data as { id: number; email: string; full_name: string };
     },
   });
 }

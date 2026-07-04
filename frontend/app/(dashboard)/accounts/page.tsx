@@ -2,20 +2,16 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-// Importamos los nuevos iconos (Edit2 y Trash2)
 import { Plus, Wallet, Loader2, Edit2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, getApiError } from "@/lib/utils";
 import { useConfirmStore } from "@/store/useConfirmStore";
+import { queryKeys } from "@/lib/queryKeys";
+import ModalShell from "@/components/ui/ModalShell";
+import Button from "@/components/ui/Button";
 import Link from "next/link";
-
-interface Account {
-  id: number;
-  name: string;
-  type: string; 
-  balance: number;
-}
+import type { Account, CreateAccountPayload } from "@/types/api";
 
 const accountTypeTranslations: Record<string, string> = {
   cash: "Efectivo",
@@ -25,85 +21,78 @@ const accountTypeTranslations: Record<string, string> = {
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
-  
-  // Estados para Crear
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountType, setNewAccountType] = useState("cash");
-  const [initialBalance, setInitialBalance] = useState(""); 
+  const [initialBalance, setInitialBalance] = useState("");
 
-  // Estados para Editar
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editAccountName, setEditAccountName] = useState("");
   const [editAccountType, setEditAccountType] = useState("cash");
 
-  // GET: Obtener cuentas
   const { data: accounts, isLoading } = useQuery<Account[]>({
-    queryKey: ["accounts"],
+    queryKey: queryKeys.accounts.all(),
     queryFn: async () => {
       const response = await api.get("/api/accounts/");
       return response.data;
     },
   });
 
-  // POST: Crear cuenta
   const createAccountMutation = useMutation({
-    mutationFn: async (newAccount: { name: string; type: string; balance: number }) => {
+    mutationFn: async (newAccount: CreateAccountPayload) => {
       const response = await api.post("/api/accounts/", newAccount);
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboardSummary"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
+      toast.success("Cuenta creada correctamente");
       setIsCreateModalOpen(false);
       setNewAccountName("");
       setNewAccountType("cash");
       setInitialBalance("");
     },
     onError: (error: unknown) => {
-      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
-      toast.error(detail || "Error al crear la cuenta");
+      toast.error(getApiError(error));
     }
   });
 
-  // PUT: Editar cuenta (¡SIN ENVIAR BALANCE!)
   const updateAccountMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: { name: string; type: string } }) => {
       const response = await api.put(`/api/accounts/${id}`, data);
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      setEditingAccount(null); // Cierra el modal
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
+      toast.success("Cuenta actualizada");
+      setEditingAccount(null);
     },
     onError: (error: unknown) => {
-      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
-      toast.error(detail || "Error al actualizar");
+      toast.error(getApiError(error));
     }
   });
 
-  // DELETE: Eliminar cuenta
   const deleteAccountMutation = useMutation({
     mutationFn: async (id: number) => {
       const response = await api.delete(`/api/accounts/${id}`);
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboardSummary"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
+      toast.success("Cuenta eliminada");
     },
     onError: (error: unknown) => {
-      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
-      toast.error(detail || "No se puede eliminar esta cuenta. Verifica que no tenga transacciones asociadas.");
+      toast.error(getApiError(error));
     }
   });
 
-  // Handlers
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     createAccountMutation.mutate({
       name: newAccountName,
-      type: newAccountType,
+      type: newAccountType as "cash" | "debit" | "credit",
       balance: Number(initialBalance) || 0,
     });
   };
@@ -113,7 +102,7 @@ export default function AccountsPage() {
     if (!editingAccount) return;
     updateAccountMutation.mutate({
       id: editingAccount.id,
-      data: { name: editAccountName, type: editAccountType }, // Estricto: sin balance
+      data: { name: editAccountName, type: editAccountType },
     });
   };
 
@@ -134,13 +123,12 @@ export default function AccountsPage() {
 
   return (
     <div className="space-y-6 relative">
-      {/* Encabezado */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold font-sans text-text">Tus Cuentas</h1>
           <p className="text-sm text-text-muted">Gestiona el origen de tus fondos.</p>
         </div>
-        <button 
+        <button
           onClick={() => setIsCreateModalOpen(true)}
           className="bg-primary hover:bg-primary-dark text-background font-semibold px-4 py-2 rounded-xl flex items-center space-x-2 transition-colors cursor-pointer"
         >
@@ -149,12 +137,10 @@ export default function AccountsPage() {
         </button>
       </div>
 
-      {/* Grid de Cuentas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {accounts?.map((account) => (
           <div key={account.id} className="bg-surface border border-border/70 rounded-2xl p-5 hover:border-primary/30 transition-colors group relative">
-            
-            {/* 1. Área clickeable para navegar al detalle de la cuenta */}
+
             <Link href={`/accounts/${account.id}`} className="block cursor-pointer">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center space-x-3">
@@ -169,7 +155,7 @@ export default function AccountsPage() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="mt-4 pt-4 border-t border-border/40">
                 <p className="text-2xl font-semibold font-sans text-text">
                   {formatCurrency(account.balance)}
@@ -177,9 +163,8 @@ export default function AccountsPage() {
               </div>
             </Link>
 
-            {/* 2. Botones de acción flotantes (Con stopPropagation para no navegar al editar) */}
             <div className="absolute top-5 right-5 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface pl-2 rounded-lg">
-              <button 
+              <button
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -190,7 +175,7 @@ export default function AccountsPage() {
               >
                 <Edit2 size={16} />
               </button>
-              <button 
+              <button
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -207,79 +192,62 @@ export default function AccountsPage() {
         ))}
       </div>
 
-      {/* Modal para CREAR */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface border border-border/70 rounded-3xl p-6 w-full max-w-md shadow-2xl">
-            <h2 className="text-xl font-bold mb-4 font-sans text-text">Añadir nueva cuenta</h2>
-            <form onSubmit={handleCreate} className="space-y-4">
-              
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Nombre</label>
-                <input required value={newAccountName} onChange={(e) => setNewAccountName(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Tipo</label>
-                <select value={newAccountType} onChange={(e) => setNewAccountType(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
-                  <option value="cash">Efectivo</option>
-                  <option value="debit">Débito</option>
-                  <option value="credit">Crédito</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Saldo Inicial</label>
-                <input type="number" required value={initialBalance} onChange={(e) => setInitialBalance(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" placeholder="0" />
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-border/70 text-text-muted hover:text-text hover:bg-surface-elevated transition-colors text-sm font-medium">Cancelar</button>
-                <button type="submit" disabled={createAccountMutation.isPending} className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-background transition-colors text-sm font-medium flex justify-center items-center cursor-pointer disabled:opacity-70">
-                  {createAccountMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : "Guardar"}
-                </button>
-              </div>
-            </form>
+      <ModalShell isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Añadir nueva cuenta">
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Nombre</label>
+            <input required value={newAccountName} onChange={(e) => setNewAccountName(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
           </div>
-        </div>
-      )}
 
-      {/* Modal para EDITAR */}
-      {editingAccount && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface border border-border/70 rounded-3xl p-6 w-full max-w-md shadow-2xl">
-            <h2 className="text-xl font-bold mb-4 font-sans text-text">Editar cuenta</h2>
-            <form onSubmit={handleUpdate} className="space-y-4">
-              
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Nombre</label>
-                <input required value={editAccountName} onChange={(e) => setEditAccountName(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Tipo</label>
-                <select value={editAccountType} onChange={(e) => setEditAccountType(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
-                  <option value="cash">Efectivo</option>
-                  <option value="debit">Débito</option>
-                  <option value="credit">Crédito</option>
-                </select>
-              </div>
-
-              {/* Fíjate cómo NO existe el campo de saldo aquí */}
-              <div className="p-3 bg-surface-elevated/70 rounded-xl border border-border/50 mt-4">
-                <p className="text-xs text-text-muted text-center">El saldo no se puede editar manualmente. Modifícalo a través de las transacciones.</p>
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setEditingAccount(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-border/70 text-text-muted hover:text-text hover:bg-surface-elevated transition-colors text-sm font-medium">Cancelar</button>
-                <button type="submit" disabled={updateAccountMutation.isPending} className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-background transition-colors text-sm font-medium flex justify-center items-center cursor-pointer disabled:opacity-70">
-                  {updateAccountMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : "Actualizar"}
-                </button>
-              </div>
-            </form>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Tipo</label>
+            <select value={newAccountType} onChange={(e) => setNewAccountType(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
+              <option value="cash">Efectivo</option>
+              <option value="debit">Débito</option>
+              <option value="credit">Crédito</option>
+            </select>
           </div>
-        </div>
-      )}
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Saldo Inicial</label>
+            <input type="number" required value={initialBalance} onChange={(e) => setInitialBalance(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" placeholder="0" />
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <Button type="button" variant="ghost" onClick={() => setIsCreateModalOpen(false)} className="flex-1">Cancelar</Button>
+            <Button type="submit" variant="primary" loading={createAccountMutation.isPending} className="flex-1">Guardar</Button>
+          </div>
+        </form>
+      </ModalShell>
+
+      <ModalShell isOpen={!!editingAccount} onClose={() => setEditingAccount(null)} title="Editar cuenta">
+        {editingAccount && (
+          <form onSubmit={handleUpdate} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Nombre</label>
+              <input required value={editAccountName} onChange={(e) => setEditAccountName(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Tipo</label>
+              <select value={editAccountType} onChange={(e) => setEditAccountType(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
+                <option value="cash">Efectivo</option>
+                <option value="debit">Débito</option>
+                <option value="credit">Crédito</option>
+              </select>
+            </div>
+
+            <div className="p-3 bg-surface-elevated/70 rounded-xl border border-border/50 mt-4">
+              <p className="text-xs text-text-muted text-center">El saldo no se puede editar manualmente. Modifícalo a través de las transacciones.</p>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <Button type="button" variant="ghost" onClick={() => setEditingAccount(null)} className="flex-1">Cancelar</Button>
+              <Button type="submit" variant="primary" loading={updateAccountMutation.isPending} className="flex-1">Actualizar</Button>
+            </div>
+          </form>
+        )}
+      </ModalShell>
     </div>
   );
 }

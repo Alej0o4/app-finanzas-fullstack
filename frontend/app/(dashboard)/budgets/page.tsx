@@ -5,20 +5,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, PieChart, Loader2, Edit2, Trash2, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, getApiError } from "@/lib/utils";
+import { queryKeys } from "@/lib/queryKeys";
+import ModalShell from "@/components/ui/ModalShell";
+import Button from "@/components/ui/Button";
+import EmptyState from "@/components/ui/EmptyState";
 import { useConfirmStore } from "@/store/useConfirmStore";
+import type { Category, Budget, BudgetPayload } from "@/types/api";
 
-// 1. Interfaces
-interface Category { id: number; name: string; type: string; }
-interface Budget {
-  id: number;
-  category_id: number;
-  amount_limit: number;
-  month: number;
-  year: number;
-}
-
-// Utilidad para mostrar el mes en texto (ej. "Junio 2026")
 const getMonthName = (month: number, year: number) => {
   const date = new Date(year, month - 1);
   return new Intl.DateTimeFormat('es-CO', { month: 'long', year: 'numeric' }).format(date);
@@ -26,11 +20,10 @@ const getMonthName = (month: number, year: number) => {
 
 export default function BudgetsPage() {
   const queryClient = useQueryClient();
-  
-  // Estados para Crear/Editar
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
-  
+
   const [categoryId, setCategoryId] = useState("");
   const [amount, setAmount] = useState("");
   const getCurrentMonthYear = () => {
@@ -39,27 +32,17 @@ export default function BudgetsPage() {
   };
   const [monthYear, setMonthYear] = useState(getCurrentMonthYear);
 
-  // 2. Traer datos
   const { data: budgets, isLoading: loadingBudgets } = useQuery<Budget[]>({
-    queryKey: ["budgets"],
+    queryKey: queryKeys.budgets.all(),
     queryFn: async () => (await api.get("/api/budgets/")).data,
   });
 
   const { data: categories } = useQuery<Category[]>({
-    queryKey: ["categories"],
+    queryKey: queryKeys.categories.all(),
     queryFn: async () => (await api.get("/api/categories/")).data,
   });
 
-  // Filtramos solo categorías de gasto para los presupuestos
   const expenseCategories = categories?.filter(c => c.type === "expense") || [];
-
-  // 3. Mutaciones
-  interface BudgetPayload {
-    category_id: number;
-    amount_limit: number;
-    month: number;
-    year: number;
-  }
 
   const saveMutation = useMutation({
     mutationFn: async (budgetData: BudgetPayload) => {
@@ -70,15 +53,14 @@ export default function BudgetsPage() {
       }
     },
     onSuccess: () => {
-      // Invalidamos presupuestos y el dashboard donde mostraremos el progreso
-      queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboardSummary"] });
-      queryClient.invalidateQueries({ queryKey: ["budgets-progress"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.budgets.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() });
+      toast.success("Presupuesto guardado");
       closeModal();
     },
     onError: (error: unknown) => {
-      const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
-      toast.error(detail || "Error al guardar el presupuesto");
+      toast.error(getApiError(error));
     }
   });
 
@@ -87,18 +69,20 @@ export default function BudgetsPage() {
       await api.delete(`/api/budgets/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboardSummary"] });
-      queryClient.invalidateQueries({ queryKey: ["budgets-progress"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.budgets.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() });
+      toast.success("Presupuesto eliminado");
+    },
+    onError: (error: unknown) => {
+      toast.error(getApiError(error));
     }
   });
 
-  // Handlers
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Extraemos el año y el mes del input "YYYY-MM"
     const [yearStr, monthStr] = monthYear.split("-");
-    
+
     saveMutation.mutate({
       category_id: Number(categoryId),
       amount_limit: Number(amount),
@@ -119,7 +103,6 @@ export default function BudgetsPage() {
     setEditingBudget(budget);
     setCategoryId(budget.category_id.toString());
     setAmount(budget.amount_limit.toString());
-    // Formateamos para el input type="month" (añadimos 0 al mes si es menor a 10)
     const formattedMonth = budget.month < 10 ? `0${budget.month}` : budget.month;
     setMonthYear(`${budget.year}-${formattedMonth}`);
     setIsModalOpen(true);
@@ -139,7 +122,7 @@ export default function BudgetsPage() {
           <h1 className="text-2xl font-bold font-sans text-text">Tus Presupuestos</h1>
           <p className="text-sm text-text-muted">Establece límites y controla tus gastos mensuales.</p>
         </div>
-        <button 
+        <button
           onClick={openCreateModal}
           className="bg-primary hover:bg-primary-dark text-background font-semibold px-4 py-2 rounded-xl flex items-center space-x-2 transition-colors cursor-pointer"
         >
@@ -148,12 +131,13 @@ export default function BudgetsPage() {
         </button>
       </div>
 
-      {/* Grid de Presupuestos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {(!budgets || budgets.length === 0) ? (
-          <div className="col-span-full p-12 text-center flex flex-col items-center text-text-muted bg-surface border border-border/70 rounded-3xl">
-            <PieChart size={48} className="mb-4 opacity-20" />
-            <p>No has definido ningún límite para este mes.</p>
+          <div className="col-span-full">
+            <EmptyState
+              icon={<PieChart size={48} className="opacity-20" />}
+              message="No has definido ningún límite para este mes."
+            />
           </div>
         ) : (
           budgets.map((budget) => {
@@ -177,8 +161,8 @@ export default function BudgetsPage() {
                     <button onClick={() => openEditModal(budget)} className="text-text-muted hover:text-primary p-1 transition-colors">
                       <Edit2 size={16} />
                     </button>
-                    <button 
-                      onClick={() => useConfirmStore.getState().confirm("¿Eliminar este presupuesto?", () => deleteMutation.mutate(budget.id))} 
+                    <button
+                      onClick={() => useConfirmStore.getState().confirm("¿Eliminar este presupuesto?", () => deleteMutation.mutate(budget.id))}
                       className="text-text-muted hover:text-danger p-1 transition-colors"
                     >
                       <Trash2 size={16} />
@@ -197,49 +181,38 @@ export default function BudgetsPage() {
         )}
       </div>
 
-      {/* Modal UNIFICADO (Crear/Editar) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface border border-border/70 rounded-3xl p-6 w-full max-w-md shadow-2xl">
-            <h2 className="text-xl font-bold mb-4 font-sans text-text">
-              {editingBudget ? "Editar Presupuesto" : "Definir Presupuesto"}
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Categoría a limitar</label>
-                <select required value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none">
-                  <option value="" disabled>Selecciona un gasto...</option>
-                  {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Monto Máximo</label>
-                <input type="number" required value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all" placeholder="0" />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Mes y Año</label>
-                <input 
-                  type="month" 
-                  required 
-                  value={monthYear} 
-                  onChange={(e) => setMonthYear(e.target.value)} 
-                  className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all style-color-scheme-dark" 
-                />
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button type="button" onClick={closeModal} className="flex-1 px-4 py-2.5 rounded-xl border border-border/70 text-text-muted hover:text-text hover:bg-surface-elevated transition-colors text-sm font-medium">Cancelar</button>
-                <button type="submit" disabled={saveMutation.isPending} className="flex-1 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-background transition-colors text-sm font-medium flex justify-center items-center cursor-pointer">
-                  {saveMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : "Guardar"}
-                </button>
-              </div>
-            </form>
+      <ModalShell isOpen={isModalOpen} onClose={closeModal} title={editingBudget ? "Editar Presupuesto" : "Definir Presupuesto"}>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Categoría a limitar</label>
+            <select required value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none">
+              <option value="" disabled>Selecciona un gasto...</option>
+              {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
           </div>
-        </div>
-      )}
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Monto Máximo</label>
+            <input type="number" required value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all" placeholder="0" />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Mes y Año</label>
+            <input
+              type="month"
+              required
+              value={monthYear}
+              onChange={(e) => setMonthYear(e.target.value)}
+              className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all style-color-scheme-dark"
+            />
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <Button type="button" variant="ghost" onClick={closeModal} className="flex-1">Cancelar</Button>
+            <Button type="submit" variant="primary" loading={saveMutation.isPending} className="flex-1">Guardar</Button>
+          </div>
+        </form>
+      </ModalShell>
     </div>
   );
 }

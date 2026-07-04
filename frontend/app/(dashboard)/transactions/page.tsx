@@ -3,23 +3,15 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, ArrowRightLeft, ArrowDownRight, ArrowUpRight, Loader2, Trash2, FilterX } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, getApiError } from "@/lib/utils";
+import { queryKeys } from "@/lib/queryKeys";
+import EmptyState from "@/components/ui/EmptyState";
+import Button from "@/components/ui/Button";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import TransactionModal from "@/components/modals/TransactionModal";
-
-// 1. Interfaces
-interface Account { id: number; name: string; }
-interface Category { id: number; name: string; type: string; }
-interface Transaction {
-  id: number;
-  description: string;
-  amount: number;
-  type: string; // "income" o "expense"
-  date: string;
-  account_id: number;
-  category_id: number;
-}
+import type { Account, Category, Transaction } from "@/types/api";
 
 type DatePreset = "all" | "7d" | "month" | "year" | "custom";
 
@@ -72,9 +64,8 @@ export default function TransactionsPage() {
   const startDateParam = formatDateBoundaryForBackend(startDate, "start");
   const endDateParam = formatDateBoundaryForBackend(endDate, "end");
 
-  // 2. Traer TODA la información necesaria en paralelo
   const { data: transactions, isLoading: loadingTx } = useQuery<Transaction[]>({
-    queryKey: ["transactions", { startDate: startDateParam, endDate: endDateParam, categoryFilter, accountFilter }],
+    queryKey: queryKeys.transactions.filtered({ startDate: startDateParam, endDate: endDateParam, categoryFilter, accountFilter }),
     queryFn: async () => {
       const params: Record<string, string | number> = {};
 
@@ -99,12 +90,12 @@ export default function TransactionsPage() {
   });
 
   const { data: accounts } = useQuery<Account[]>({
-    queryKey: ["accounts"],
+    queryKey: queryKeys.accounts.all(),
     queryFn: async () => (await api.get("/api/accounts/")).data,
   });
 
   const { data: categories } = useQuery<Category[]>({
-    queryKey: ["categories"],
+    queryKey: queryKeys.categories.all(),
     queryFn: async () => (await api.get("/api/categories/")).data,
   });
 
@@ -123,17 +114,19 @@ export default function TransactionsPage() {
     setDatePreset("all");
   };
 
-  // 4. DELETE: Eliminar Transacción
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       await api.delete(`/api/transactions/${id}`);
     },
     onSuccess: () => {
-      // Al borrar, también los saldos cambian, así que invalidamos todo
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboardSummary"] });
-      queryClient.invalidateQueries({ queryKey: ["budgets-progress"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() });
+      toast.success("Transacción eliminada");
+    },
+    onError: (error: unknown) => {
+      toast.error(getApiError(error));
     }
   });
 
@@ -146,7 +139,7 @@ export default function TransactionsPage() {
           <h1 className="text-2xl font-bold font-sans text-text">Transacciones</h1>
           <p className="text-sm text-text-muted">El registro histórico de tus movimientos.</p>
         </div>
-        <button 
+        <button
           onClick={() => setIsModalOpen(true)}
           className="bg-primary hover:bg-primary-dark text-background font-semibold px-4 py-2 rounded-xl flex items-center space-x-2 transition-colors cursor-pointer"
         >
@@ -255,13 +248,12 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Lista de Transacciones */}
       <div className="bg-surface border border-border/70 rounded-3xl overflow-hidden shadow-sm">
         {(!transactions || transactions.length === 0) ? (
-          <div className="p-12 text-center flex flex-col items-center text-text-muted">
-            <ArrowRightLeft size={48} className="mb-4 opacity-20" />
-            <p>Aún no tienes movimientos registrados.</p>
-          </div>
+          <EmptyState
+            icon={<ArrowRightLeft size={48} className="opacity-20" />}
+            message="Aún no tienes movimientos registrados."
+          />
         ) : (
           <div className="divide-y divide-border/40">
             {transactions.map((tx) => {
@@ -292,7 +284,7 @@ export default function TransactionsPage() {
                       </p>
                       <p className="text-xs text-text-muted capitalize">{formatDate(tx.date)}</p>
                     </div>
-                    <button 
+                    <button
                       onClick={() => useConfirmStore.getState().confirm("¿Borrar esta transacción?", () => deleteMutation.mutate(tx.id))}
                       className="text-text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity p-1"
                     >
@@ -309,7 +301,7 @@ export default function TransactionsPage() {
       <TransactionModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["transactions"] })}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() })}
         title="Registrar movimiento"
         defaultType="expense"
       />

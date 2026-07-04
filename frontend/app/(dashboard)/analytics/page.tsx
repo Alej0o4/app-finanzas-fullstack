@@ -6,6 +6,8 @@ import {
   PieChart, Pie, Cell
 } from "recharts";
 import { formatCurrency } from "@/lib/utils";
+import { queryKeys } from "@/lib/queryKeys";
+import type { CashflowItem, CategoryDistributionItem } from "@/types/api";
 import { api } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 import { useState, useMemo } from "react";
@@ -14,19 +16,6 @@ type BarPeriod = "7d" | "30d" | "12m";
 type DonutPeriod = "month" | "3months" | "year";
 type AnalyticsSeries = "both" | "income" | "expense";
 type CategoryType = "expense" | "income";
-
-interface CashflowItem {
-  date_label: string;
-  expense: number;
-  income: number;
-}
-
-interface CategoryDistributionItem {
-  category_id: number;
-  category_name: string;
-  total: number;
-  percentage?: number;
-}
 
 // Función auxiliar para formatear fechas en hora local al estándar requerido por el backend
 const formatISOForBackend = (date: Date) => {
@@ -125,8 +114,7 @@ export default function AnalyticsPage() {
   const donutDateRange = useMemo(() => buildDonutDateRange(donutPeriod), [donutPeriod]);
 
   const { data: trendData, isLoading: loadingTrends } = useQuery({
-    queryKey: ["analytics-cashflow", barDateRange.start_date, barDateRange.end_date, barDateRange.period],
-    refetchOnMount: "always",
+    queryKey: queryKeys.analytics.cashflow(barDateRange.start_date, barDateRange.end_date, barDateRange.period),
     queryFn: async () => {
       const res = await api.get("/api/dashboard/cashflow-series", {
         params: {
@@ -140,8 +128,7 @@ export default function AnalyticsPage() {
   });
 
   const { data: categoryData, isLoading: loadingCategories, isFetching: fetchingCategories, isError: categoryError } = useQuery({
-    queryKey: ["analytics-categories", donutDateRange.start_date, donutDateRange.end_date, categoryType],
-    refetchOnMount: "always",
+    queryKey: queryKeys.analytics.categories(donutDateRange.start_date, donutDateRange.end_date, categoryType),
     queryFn: async () => {
       const res = await api.get("/api/dashboard/category-distribution", {
         params: {
@@ -306,7 +293,7 @@ export default function AnalyticsPage() {
                   <Tooltip 
                     cursor={{ fill: '#24314a', opacity: 0.35 }}
                     contentStyle={{ backgroundColor: '#162338', borderColor: '#24314a', borderRadius: '8px', color: '#eef4ff' }}
-                    formatter={(value: number) => [formatCurrency(Number(value)), ""]}
+                    formatter={(value) => [formatCurrency(Number(value) || 0), ""]}
                     labelFormatter={(label) => `Fecha: ${label}`}
                   />
                   {seriesMode !== "expense" && (

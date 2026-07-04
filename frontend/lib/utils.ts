@@ -1,3 +1,8 @@
+export function getApiError(error: unknown): string {
+  const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+  return detail || "Ocurrió un error inesperado";
+}
+
 export const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
