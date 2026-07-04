@@ -11,7 +11,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import ModalShell from "@/components/ui/ModalShell";
 import Button from "@/components/ui/Button";
 import { useState } from "react";
-import type { Account, Transaction, Category, UpdateTransactionPayload } from "@/types/api";
+import type { Account, Transaction, Category, UpdateTransactionPayload, PaginatedResponse } from "@/types/api";
 
 export default function AccountDetailPage() {
   const { id } = useParams();
@@ -32,10 +32,12 @@ export default function AccountDetailPage() {
     queryFn: async () => (await api.get(`/api/accounts/${id}`)).data,
   });
 
-  const { data: transactions, isLoading: loadingTx } = useQuery<Transaction[]>({
+  const { data: transactionsData, isLoading: loadingTx } = useQuery<PaginatedResponse<Transaction>>({
     queryKey: queryKeys.transactions.byAccount(id as string),
-    queryFn: async () => (await api.get(`/api/transactions/?account_id=${id}`)).data,
+    queryFn: async () => (await api.get(`/api/transactions/`, { params: { account_id: Number(id) } })).data,
   });
+
+  const transactions = transactionsData?.items;
 
   const { data: categories } = useQuery<Category[]>({
     queryKey: queryKeys.categories.all(),

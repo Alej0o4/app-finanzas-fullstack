@@ -12,7 +12,7 @@ import SummaryCard from "@/components/ui/SummaryCard";
 import EmptyState from "@/components/ui/EmptyState";
 import Skeleton from "@/components/ui/Skeleton";
 import { queryKeys } from "@/lib/queryKeys";
-import type { DashboardSummary, BudgetProgress, Transaction } from "@/types/api";
+import type { DashboardSummary, BudgetProgress, Transaction, PaginatedResponse } from "@/types/api";
 
 export default function DashboardPage() {
   const { data: user } = useCurrentUser();
@@ -29,10 +29,12 @@ export default function DashboardPage() {
     queryFn: async () => (await api.get("/api/dashboard/budgets-progress")).data,
   });
 
-  const { data: recentTransactions, isLoading: loadingRecentTransactions } = useQuery<Transaction[]>({
+  const { data: recentTransactionsData, isLoading: loadingRecentTransactions } = useQuery<PaginatedResponse<Transaction>>({
     queryKey: queryKeys.dashboard.recentTransactions(),
     queryFn: async () => (await api.get("/api/transactions/", { params: { limit: 5 } })).data,
   });
+
+  const recentTransactions = recentTransactionsData?.items;
 
   const isLoading = loadingSummary || loadingBudgets;
   const isRecentLoading = loadingRecentTransactions;

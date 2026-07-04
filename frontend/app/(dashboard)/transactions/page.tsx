@@ -67,6 +67,12 @@ export default function TransactionsPage() {
   const [allItems, setAllItems] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
 
+  const resetPagination = () => {
+    setSkip(0);
+    setAllItems([]);
+    setTotal(0);
+  };
+
   const startDateParam = formatDateBoundaryForBackend(startDate, "start");
   const endDateParam = formatDateBoundaryForBackend(endDate, "end");
 
@@ -104,12 +110,6 @@ export default function TransactionsPage() {
     setAllItems((prev) => (skip === 0 ? data.items : [...prev, ...data.items]));
   }, [data]);
 
-  // Reinicia paginación cuando cambian los filtros
-  useEffect(() => {
-    setSkip(0);
-    setAllItems([]);
-    setTotal(0);
-  }, [startDateParam, endDateParam, categoryFilter, accountFilter]);
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   const hasMore = total > allItems.length;
@@ -118,12 +118,14 @@ export default function TransactionsPage() {
 
   const applyPreset = (preset: Exclude<DatePreset, "custom">) => {
     const nextDates = getPresetDates(preset);
+    resetPagination();
     setStartDate(nextDates.startDate);
     setEndDate(nextDates.endDate);
     setDatePreset(preset);
   };
 
   const clearFilters = () => {
+    resetPagination();
     setStartDate("");
     setEndDate("");
     setCategoryFilter("all");
@@ -220,6 +222,7 @@ export default function TransactionsPage() {
                 type="date"
                 value={startDate}
                 onChange={(event) => {
+                  resetPagination();
                   setStartDate(event.target.value);
                   setDatePreset("custom");
                 }}
@@ -233,6 +236,7 @@ export default function TransactionsPage() {
                 type="date"
                 value={endDate}
                 onChange={(event) => {
+                  resetPagination();
                   setEndDate(event.target.value);
                   setDatePreset("custom");
                 }}
@@ -244,7 +248,10 @@ export default function TransactionsPage() {
               Cuenta
               <select
                 value={accountFilter}
-                onChange={(event) => setAccountFilter(event.target.value)}
+                onChange={(event) => {
+                  resetPagination();
+                  setAccountFilter(event.target.value);
+                }}
                 className="rounded-xl border border-border/70 bg-background px-3 py-2 text-text outline-none transition-colors focus:border-primary"
               >
                 <option value="all">Todas las cuentas</option>
@@ -260,7 +267,10 @@ export default function TransactionsPage() {
               Categoría
               <select
                 value={categoryFilter}
-                onChange={(event) => setCategoryFilter(event.target.value)}
+                onChange={(event) => {
+                  resetPagination();
+                  setCategoryFilter(event.target.value);
+                }}
                 className="rounded-xl border border-border/70 bg-background px-3 py-2 text-text outline-none transition-colors focus:border-primary"
               >
                 <option value="all">Todas las categorías</option>
