@@ -1,19 +1,20 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @theme {
-  /* Paleta fintech sobria (modo oscuro) */
   --color-background: #0b1220;
   --color-surface: #111b2e;
   --color-surface-elevated: #162338;
   --color-border: #24314a;
-  
+
   --color-primary: #7dd3fc;
   --color-primary-dark: #38bdf8;
   --color-success: #34d399;
   --color-warning: #f59e0b;
   --color-danger: #fb7185;
   --color-info: #60a5fa;
-  
+
   --color-text: #eef4ff;
   --color-text-muted: #9aa7bd;
   --color-text-soft: #c7d2e5;
@@ -29,11 +30,38 @@
   --color-chart-9: #f97316;
   --color-chart-10: #8b5cf6;
 
-  /* Asignamos la variable de nuestra tipografía a la familia sans por defecto */
   --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Aplicar el fondo oscuro y texto claro por defecto a toda la app */
+[data-theme="light"] {
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #f1f5f9;
+  --color-border: #e2e8f0;
+
+  --color-primary: #0284c7;
+  --color-primary-dark: #0369a1;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
+
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+  --color-text-soft: #334155;
+
+  --color-chart-1: #0284c7;
+  --color-chart-2: #0369a1;
+  --color-chart-3: #1d4ed8;
+  --color-chart-4: #4338ca;
+  --color-chart-5: #6d28d9;
+  --color-chart-6: #be185d;
+  --color-chart-7: #047857;
+  --color-chart-8: #0d9488;
+  --color-chart-9: #ea580c;
+  --color-chart-10: #7c3aed;
+}
+
 @layer base {
   body {
     @apply bg-background text-text antialiased;
