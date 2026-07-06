@@ -111,23 +111,23 @@ export default function CashflowChart({
       </div>
       {isLoading ? (
         <div className="h-72 flex items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-[#60a5fa]" />
+          <Loader2 className="h-6 w-6 animate-spin text-info" />
         </div>
       ) : (
         <div className="h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 24, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#24314a" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
               <XAxis
                 dataKey="date_label"
-                stroke="#9aa7bd"
+                stroke="var(--color-text-muted)"
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(val) => formatXAxisLabel(String(val), periodType)}
               />
               <YAxis
-                stroke="#9aa7bd"
+                stroke="var(--color-text-muted)"
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
@@ -136,36 +136,36 @@ export default function CashflowChart({
                 tickFormatter={(value) => formatCurrency(Number(value), config.currency)}
               />
               <Tooltip
-                cursor={{ fill: "#24314a", opacity: 0.35 }}
+                cursor={{ fill: "var(--color-border)", opacity: 0.35 }}
                 contentStyle={{
-                  backgroundColor: "#162338",
-                  borderColor: "#24314a",
+                  backgroundColor: "var(--color-surface-elevated)",
+                  borderColor: "var(--color-border)",
                   borderRadius: "8px",
-                  color: "#eef4ff",
+                  color: "var(--color-text)",
                 }}
                 formatter={(value) => [formatCurrency(Number(value) || 0, config.currency), ""]}
                 labelFormatter={(label) => `Fecha: ${label}`}
               />
               {seriesMode !== "expense" && (
-                <Bar dataKey="income" name="Ingresos" fill="#34d399" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                <Bar dataKey="income" name="Ingresos" fill="var(--color-success)" radius={[4, 4, 0, 0]} maxBarSize={40}>
                   {periodType === "month" && (
                     <LabelList
                       dataKey="income"
                       position="top"
                       formatter={(v) => formatCurrency(Number(v), config.currency)}
-                      style={{ fill: "#9aa7bd", fontSize: 11 }}
+                      style={{ fill: "var(--color-text-muted)", fontSize: 11 }}
                     />
                   )}
                 </Bar>
               )}
               {seriesMode !== "income" && (
-                <Bar dataKey="expense" name="Gastos" fill="#fb7185" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                <Bar dataKey="expense" name="Gastos" fill="var(--color-danger)" radius={[4, 4, 0, 0]} maxBarSize={40}>
                   {periodType === "month" && (
                     <LabelList
                       dataKey="expense"
                       position="top"
                       formatter={(v) => formatCurrency(Number(v), config.currency)}
-                      style={{ fill: "#9aa7bd", fontSize: 11 }}
+                      style={{ fill: "var(--color-text-muted)", fontSize: 11 }}
                     />
                   )}
                 </Bar>
