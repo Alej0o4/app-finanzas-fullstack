@@ -10,6 +10,8 @@ class User(Base):
     full_name = Column(String, nullable=False)  # 🆕 nuevo campo
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
+    preferred_currency = Column(String(3), default="COP")
+    preferred_locale = Column(String(10), default="es-CO")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     accounts = relationship("Account", back_populates="owner")

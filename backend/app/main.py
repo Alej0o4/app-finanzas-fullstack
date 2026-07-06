@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import inspect
+
 from app.core.database import engine, Base, SessionLocal
 from app.core.rate_limit import limiter
 from app.models import models
@@ -97,6 +99,18 @@ def seed_default_categories() -> None:
     finally:
         db.close()
 
+
+def _ensure_user_preference_columns() -> None:
+    inspector = inspect(engine)
+    columns = {c["name"] for c in inspector.get_columns("users")}
+    with engine.connect() as conn:
+        if "preferred_currency" not in columns:
+            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN preferred_currency VARCHAR(3) DEFAULT 'COP'")
+        if "preferred_locale" not in columns:
+            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN preferred_locale VARCHAR(10) DEFAULT 'es-CO'")
+        conn.commit()
+
+
 # 2. CONFIGURACIÓN CORS (Bloqueo de Fronteras)
 # Leer orígenes permitidos desde variable de entorno
 cors_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173")
@@ -125,6 +139,7 @@ app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"]
 
 @app.on_event("startup")
 def initialize_shared_data():
+    _ensure_user_preference_columns()
     seed_default_categories()
 
 @app.get("/")

@@ -22,6 +22,8 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     id: int
+    preferred_currency: str = "COP"
+    preferred_locale: str = "es-CO"
     class Config:
         from_attributes = True
 
