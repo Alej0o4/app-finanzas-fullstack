@@ -17,6 +17,7 @@ import {
   ChevronRight,
   LogOut
 } from "lucide-react";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -115,19 +116,23 @@ export default function Sidebar() {
                 <span className="text-[10px] text-text-muted capitalize">{user?.email || ""}</span>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="text-text-muted hover:text-danger p-1.5 rounded-lg transition-colors cursor-pointer"
-              title="Cerrar sesión"
-            >
-              <LogOut size={16} />
-            </button>
+            <div className="flex items-center gap-1">
+              <ThemeToggle />
+              <button
+                onClick={handleLogout}
+                className="text-text-muted hover:text-danger p-1.5 rounded-lg transition-colors cursor-pointer"
+                title="Cerrar sesión"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-surface-elevated border border-border flex items-center justify-center text-xs font-semibold text-primary uppercase">
               {user?.full_name?.split(" ").map((n: string) => n[0]).join("") || "U"}
             </div>
+            <ThemeToggle />
             <button
               onClick={handleLogout}
               className="text-text-muted hover:text-danger p-1.5 rounded-lg transition-colors cursor-pointer"
