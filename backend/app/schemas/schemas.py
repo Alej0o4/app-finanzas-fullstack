@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Generic, TypeVar
@@ -14,7 +14,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 # --- USUARIOS ---
 class UserBase(BaseModel):
-    email: str = Field(..., max_length=255)
+    email: EmailStr
     full_name: str = Field(..., min_length=1, max_length=150)
 
 class UserCreate(UserBase):
