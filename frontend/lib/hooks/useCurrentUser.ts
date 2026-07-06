@@ -7,7 +7,7 @@ export function useCurrentUser() {
     queryKey: queryKeys.currentUser(),
     queryFn: async () => {
       const response = await api.get("/api/users/me");
-      return response.data as { id: number; email: string; full_name: string };
+      return response.data as { id: number; email: string; full_name: string; preferred_currency: string; preferred_locale: string };
     },
   });
 }

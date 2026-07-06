@@ -59,6 +59,12 @@ export interface CategoryDistributionItem {
   total: number;
 }
 
+export interface UserPreferences {
+  preferred_currency: string;
+  preferred_locale: string;
+  theme: string;
+}
+
 export interface CreateTransactionPayload {
   description: string;
   amount: number;
