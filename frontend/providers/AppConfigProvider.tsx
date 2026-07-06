@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, type ReactNode } from "react";
+import React, { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 
 interface AppConfig {
   currency: string;
@@ -36,9 +36,9 @@ export function AppConfigProvider({
     ...initialPreferences,
   });
 
-  const updateConfig = (partial: Partial<AppConfig>) => {
+  const updateConfig = useCallback((partial: Partial<AppConfig>) => {
     setConfig((prev) => ({ ...prev, ...partial }));
-  };
+  }, []);
 
   return (
     <AppConfigContext.Provider value={{ config, updateConfig }}>

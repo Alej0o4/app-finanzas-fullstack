@@ -1,5 +1,6 @@
 export const queryKeys = {
   currentUser: () => ["currentUser"] as const,
+  userPreferences: () => ["userPreferences"] as const,
   accounts: {
     all: () => ["accounts"] as const,
     byId: (id: string | number) => ["account", id] as const,

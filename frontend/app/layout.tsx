@@ -29,9 +29,9 @@ export default function RootLayout({
           {/* Envolvemos toda la app con el proveedor de datos */}
           <QueryProvider>
             {children}
+            <UserPreferencesSync />
             <Toaster richColors position="top-right" closeButton />
           </QueryProvider>
-          <UserPreferencesSync />
         </AppConfigProvider>
       </body>
     </html>

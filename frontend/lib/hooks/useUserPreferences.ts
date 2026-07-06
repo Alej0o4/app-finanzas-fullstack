@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { queryKeys } from "@/lib/queryKeys";
 import { useAppConfig } from "@/providers/AppConfigProvider";
+import { useEffect } from "react";
 
 interface UserPreferences {
   preferred_currency: string;
@@ -10,34 +12,30 @@ interface UserPreferences {
   theme: string;
 }
 
-const TOKEN_KEY = "jwt_token";
-
 export function useUserPreferences() {
   const { updateConfig } = useAppConfig();
-  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
-  const [error, setError] = useState<unknown>(null);
 
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+  const hasToken =
+    typeof window !== "undefined" && !!localStorage.getItem("jwt_token");
+
+  const query = useQuery({
+    queryKey: queryKeys.userPreferences(),
+    queryFn: async () => {
+      const res = await api.get("/api/users/me/preferences");
+      return res.data as UserPreferences;
+    },
+    enabled: hasToken,
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
-    if (!token) return;
-
-    api
-      .get("/api/users/me/preferences")
-      .then((res) => {
-        const data = res.data as UserPreferences;
-        setPreferences(data);
-        updateConfig({
-          currency: data.preferred_currency,
-          locale: data.preferred_locale,
-          theme: data.theme,
-        });
-      })
-      .catch((err) => {
-        setError(err);
+    if (query.data) {
+      updateConfig({
+        currency: query.data.preferred_currency,
+        locale: query.data.preferred_locale,
       });
-  }, [updateConfig, token]);
+    }
+  }, [query.data, updateConfig]);
 
-  return { preferences, isLoading: !!token, error };
+  return { preferences: query.data, isLoading: query.isLoading, error: query.error };
 }
