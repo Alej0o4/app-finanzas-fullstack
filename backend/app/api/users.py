@@ -13,14 +13,15 @@ def crear_usuario(
     usuario: schemas.UserCreate, 
     db: Session = Depends(get_db)
 ):
-    usuario_existente = db.query(models.User).filter(models.User.email == usuario.email).first()
+    normalized_email = usuario.email.lower().strip()
+    usuario_existente = db.query(models.User).filter(models.User.email == normalized_email).first()
     if usuario_existente:
         raise HTTPException(status_code=400, detail="Error: Este correo electrónico ya está registrado.")
     
     hashed_password = get_password_hash(usuario.password)
     
     nuevo_usuario = models.User(
-        email=usuario.email,
+        email=normalized_email,
         full_name=usuario.full_name,
         password_hash=hashed_password
     )
