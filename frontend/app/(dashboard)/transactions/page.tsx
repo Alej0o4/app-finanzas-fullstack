@@ -322,7 +322,7 @@ export default function TransactionsPage() {
                         <p className={`font-semibold font-sans ${isExpense ? 'text-text' : 'text-primary'}`}>
                           {isExpense ? "-" : "+"}{formatCurrency(tx.amount, config.currency)}
                         </p>
-                        <p className="text-xs text-text-muted capitalize">{formatDate(tx.date)}</p>
+                        <p className="text-xs text-text-muted capitalize">{formatDate(tx.date, config.locale)}</p>
                       </div>
                       <button
                         onClick={() => useConfirmStore.getState().confirm("¿Borrar esta transacción?", () => deleteMutation.mutate(tx.id))}

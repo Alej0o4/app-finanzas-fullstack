@@ -154,7 +154,7 @@ export default function DashboardPage() {
                   <div key={tx.id} className="p-4 sm:px-6 hover:bg-surface-elevated transition-colors flex items-center justify-between gap-4">
                     <div>
                       <p className="font-medium text-text text-sm">{tx.description}</p>
-                      <p className="text-xs text-text-muted capitalize mt-0.5">{formatDate(tx.date)}</p>
+                      <p className="text-xs text-text-muted capitalize mt-0.5">{formatDate(tx.date, config.locale)}</p>
                     </div>
                     <p className={`font-semibold font-sans ${isExpense ? "text-text" : "text-primary"}`}>
                       {isExpense ? "-" : "+"}{formatCurrency(tx.amount, config.currency)}

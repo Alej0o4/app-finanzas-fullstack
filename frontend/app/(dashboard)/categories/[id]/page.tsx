@@ -172,7 +172,7 @@ export default function CategoryDetailPage() {
                         <p className={`font-semibold font-sans ${isExpense ? 'text-text' : 'text-primary'}`}>
                           {isExpense ? "-" : "+"}{formatCurrency(tx.amount, config.currency)}
                         </p>
-                        <p className="text-[11px] text-text-muted capitalize">{formatDate(tx.date)}</p>
+                        <p className="text-[11px] text-text-muted capitalize">{formatDate(tx.date, config.locale)}</p>
                       </div>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
