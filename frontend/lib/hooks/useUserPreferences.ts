@@ -10,20 +10,18 @@ interface UserPreferences {
   theme: string;
 }
 
+const TOKEN_KEY = "jwt_token";
+
 export function useUserPreferences() {
   const { updateConfig } = useAppConfig();
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
 
-  useEffect(() => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("jwt_token") : null;
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
 
-    if (!token) {
-      setIsLoading(false);
-      return;
-    }
+  useEffect(() => {
+    if (!token) return;
 
     api
       .get("/api/users/me/preferences")
@@ -38,11 +36,8 @@ export function useUserPreferences() {
       })
       .catch((err) => {
         setError(err);
-      })
-      .finally(() => {
-        setIsLoading(false);
       });
-  }, [updateConfig]);
+  }, [updateConfig, token]);
 
-  return { preferences, isLoading, error };
+  return { preferences, isLoading: !!token, error };
 }

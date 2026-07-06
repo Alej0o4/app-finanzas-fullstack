@@ -63,7 +63,7 @@ export default function CashflowChart({
     );
     const labelLength = formatCurrency(maxValue, config.currency).length;
     return Math.min(Math.max(labelLength * 8 + 30, 84), 160);
-  }, [data]);
+  }, [data, config.currency]);
 
   return (
     <div className="bg-surface/80 border border-border/70 p-6 rounded-2xl shadow-sm backdrop-blur-sm">
