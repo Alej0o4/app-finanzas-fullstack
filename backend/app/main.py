@@ -10,7 +10,7 @@ from app.core.database import engine, Base, SessionLocal
 from app.core.rate_limit import limiter
 from app.models import models
 
-from app.api import transactions, users, accounts, categories, budgets, auth, dashboard
+from app.api import transactions, users, accounts, categories, budgets, auth, dashboard, preferences
 
 Base.metadata.create_all(bind=engine)
 
@@ -135,6 +135,7 @@ app.include_router(accounts.router, prefix="/api/accounts", tags=["Cuentas"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categorías"])
 app.include_router(budgets.router, prefix="/api/budgets", tags=["Presupuestos"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
+app.include_router(preferences.router, prefix="/api/users", tags=["Preferencias"])
 
 
 @app.on_event("startup")
