@@ -23,9 +23,11 @@ const TYPE_OPTIONS: { value: CategoryType; label: string }[] = [
 ];
 
 const CATEGORY_COLORS = [
-  "#38bdf8", "#0ea5e9", "#2563eb", "#4f46e5", "#7c3aed",
-  "#db2777", "#10b981", "#14b8a6", "#f97316", "#8b5cf6",
-  "#22c55e", "#06b6d4",
+  "var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)",
+  "var(--color-chart-4)", "var(--color-chart-5)", "var(--color-chart-6)",
+  "var(--color-chart-7)", "var(--color-chart-8)", "var(--color-chart-9)",
+  "var(--color-chart-10)",
+  "var(--color-chart-1)", "var(--color-chart-2)",
 ];
 
 const getCategoryColor = (item: { category_id?: number }, index: number) => {
@@ -171,7 +173,7 @@ export default function CategoryDonutChart({
         </div>
       ) : isFetching && originalCategoryData.length === 0 ? (
         <div className="h-72 flex items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-[#60a5fa]" />
+          <Loader2 className="h-6 w-6 animate-spin text-info" />
         </div>
       ) : (
         <>
