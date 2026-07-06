@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -96,13 +98,9 @@ def seed_default_categories() -> None:
         db.close()
 
 # 2. CONFIGURACIÓN CORS (Bloqueo de Fronteras)
-# Aquí ponemos la URL donde vivirá nuestro Frontend en desarrollo
-origenes_permitidos = [
-    "http://localhost:3000", # Puerto clásico de React
-    "http://localhost:5173", # Puerto clásico de Vite (React moderno)
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-]
+# Leer orígenes permitidos desde variable de entorno
+cors_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173")
+origenes_permitidos = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 
 app.add_middleware(
     CORSMiddleware,
