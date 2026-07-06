@@ -6,6 +6,7 @@ import { ArrowLeft, Tag, Loader2, ArrowDownRight, ArrowUpRight, Pencil, Trash2 }
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency, formatDate, getApiError } from "@/lib/utils";
+import { useAppConfig } from "@/providers/AppConfigProvider";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { queryKeys } from "@/lib/queryKeys";
 import ModalShell from "@/components/ui/ModalShell";
@@ -14,6 +15,7 @@ import { useState } from "react";
 import type { Category, Transaction, Account, UpdateTransactionPayload, PaginatedResponse } from "@/types/api";
 
 export default function CategoryDetailPage() {
+  const { config } = useAppConfig();
   const { id } = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -168,7 +170,7 @@ export default function CategoryDetailPage() {
                     <div className="flex items-center gap-3">
                       <div className="text-right">
                         <p className={`font-semibold font-sans ${isExpense ? 'text-text' : 'text-primary'}`}>
-                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount)}
+                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount, config.currency)}
                         </p>
                         <p className="text-[11px] text-text-muted capitalize">{formatDate(tx.date)}</p>
                       </div>

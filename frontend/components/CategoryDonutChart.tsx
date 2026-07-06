@@ -5,6 +5,7 @@ import { formatCurrency } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import { useMemo } from "react";
 import ChartControlsPopover from "@/components/ChartControlsPopover";
+import { useAppConfig } from "@/providers/AppConfigProvider";
 import type { CategoryDistributionItem } from "@/types/api";
 
 export type DonutPeriod = "month" | "3months" | "year";
@@ -59,6 +60,7 @@ export default function CategoryDonutChart({
   hiddenCategories,
   onHiddenCategoriesChange,
 }: CategoryDonutChartProps) {
+  const { config } = useAppConfig();
   const originalCategoryData = useMemo(() => {
     const items = (data as CategoryDistributionItem[])?.map((item) => ({
       ...item,
@@ -199,7 +201,7 @@ export default function CategoryDonutChart({
                         <div className="rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm shadow-lg">
                           <p className="font-medium text-text">{item.category_name}</p>
                           <p className="mt-1 text-text-soft">
-                            {netMode ? "Gasto neto:" : "Total:"} {formatCurrency(Number(item.value))}
+                            {netMode ? "Gasto neto:" : "Total:"} {formatCurrency(Number(item.value), config.currency)}
                           </p>
                           <p className="text-text-muted">{item.percentage.toFixed(1)}% del subtotal</p>
                         </div>
@@ -240,7 +242,7 @@ export default function CategoryDonutChart({
                         )}
                       </span>
                     </div>
-                    <span className="shrink-0 text-text-muted">{formatCurrency(Number(item.value))}</span>
+                    <span className="shrink-0 text-text-muted">{formatCurrency(Number(item.value), config.currency)}</span>
                   </div>
                 );
               })}

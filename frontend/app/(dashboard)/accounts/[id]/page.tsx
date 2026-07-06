@@ -6,6 +6,7 @@ import { ArrowLeft, Wallet, Loader2, ArrowDownRight, ArrowUpRight, Pencil, Trash
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency, formatDate, getApiError } from "@/lib/utils";
+import { useAppConfig } from "@/providers/AppConfigProvider";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { queryKeys } from "@/lib/queryKeys";
 import ModalShell from "@/components/ui/ModalShell";
@@ -14,6 +15,7 @@ import { useState } from "react";
 import type { Account, Transaction, Category, UpdateTransactionPayload, PaginatedResponse } from "@/types/api";
 
 export default function AccountDetailPage() {
+  const { config } = useAppConfig();
   const { id } = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -143,7 +145,7 @@ export default function AccountDetailPage() {
       <div className="p-6 bg-surface border border-border/70 rounded-3xl max-w-sm">
         <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Saldo disponible</p>
         <p className="text-4xl font-bold text-text mt-2 font-sans">
-          {formatCurrency(account.balance)}
+          {formatCurrency(account.balance, config.currency)}
         </p>
       </div>
 
@@ -175,7 +177,7 @@ export default function AccountDetailPage() {
                     <div className="flex items-center gap-3">
                       <div className="text-right">
                         <p className={`font-semibold font-sans ${isExpense ? 'text-text' : 'text-primary'}`}>
-                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount)}
+                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount, config.currency)}
                         </p>
                         <p className="text-[11px] text-text-muted capitalize">{formatDate(tx.date)}</p>
                       </div>

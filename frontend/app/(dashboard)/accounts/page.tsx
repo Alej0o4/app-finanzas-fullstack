@@ -6,6 +6,7 @@ import { Plus, Wallet, Loader2, Edit2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency, getApiError } from "@/lib/utils";
+import { useAppConfig } from "@/providers/AppConfigProvider";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { queryKeys } from "@/lib/queryKeys";
 import ModalShell from "@/components/ui/ModalShell";
@@ -20,6 +21,7 @@ const accountTypeTranslations: Record<string, string> = {
 };
 
 export default function AccountsPage() {
+  const { config } = useAppConfig();
   const queryClient = useQueryClient();
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -158,7 +160,7 @@ export default function AccountsPage() {
 
               <div className="mt-4 pt-4 border-t border-border/40">
                 <p className="text-2xl font-semibold font-sans text-text">
-                  {formatCurrency(account.balance)}
+                  {formatCurrency(account.balance, config.currency)}
                 </p>
               </div>
             </Link>

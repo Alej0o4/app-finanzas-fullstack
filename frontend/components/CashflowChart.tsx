@@ -5,6 +5,7 @@ import { formatCurrency } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import { useMemo } from "react";
 import ChartControlsPopover from "@/components/ChartControlsPopover";
+import { useAppConfig } from "@/providers/AppConfigProvider";
 import type { CashflowItem } from "@/types/api";
 
 export type BarPeriod = "7d" | "30d" | "12m";
@@ -53,13 +54,14 @@ export default function CashflowChart({
   onSeriesModeChange,
   periodType,
 }: CashflowChartProps) {
+  const { config } = useAppConfig();
   const yAxisWidth = useMemo(() => {
     if (data.length === 0) return 84;
     const maxValue = Math.max(
       ...data.flatMap((item) => [Number(item.income), Number(item.expense)]),
       0
     );
-    const labelLength = formatCurrency(maxValue).length;
+    const labelLength = formatCurrency(maxValue, config.currency).length;
     return Math.min(Math.max(labelLength * 8 + 30, 84), 160);
   }, [data]);
 
@@ -131,7 +133,7 @@ export default function CashflowChart({
                 axisLine={false}
                 width={yAxisWidth}
                 tickMargin={10}
-                tickFormatter={(value) => formatCurrency(Number(value))}
+                tickFormatter={(value) => formatCurrency(Number(value), config.currency)}
               />
               <Tooltip
                 cursor={{ fill: "#24314a", opacity: 0.35 }}
@@ -141,7 +143,7 @@ export default function CashflowChart({
                   borderRadius: "8px",
                   color: "#eef4ff",
                 }}
-                formatter={(value) => [formatCurrency(Number(value) || 0), ""]}
+                formatter={(value) => [formatCurrency(Number(value) || 0, config.currency), ""]}
                 labelFormatter={(label) => `Fecha: ${label}`}
               />
               {seriesMode !== "expense" && (
@@ -150,7 +152,7 @@ export default function CashflowChart({
                     <LabelList
                       dataKey="income"
                       position="top"
-                      formatter={(v) => formatCurrency(Number(v))}
+                      formatter={(v) => formatCurrency(Number(v), config.currency)}
                       style={{ fill: "#9aa7bd", fontSize: 11 }}
                     />
                   )}
@@ -162,7 +164,7 @@ export default function CashflowChart({
                     <LabelList
                       dataKey="expense"
                       position="top"
-                      formatter={(v) => formatCurrency(Number(v))}
+                      formatter={(v) => formatCurrency(Number(v), config.currency)}
                       style={{ fill: "#9aa7bd", fontSize: 11 }}
                     />
                   )}

@@ -5,6 +5,7 @@ import { PieChart } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useCurrentUser } from "@/lib/hooks/useCurrentUser";
+import { useAppConfig } from "@/providers/AppConfigProvider";
 import { useState } from "react";
 import BudgetRing from "@/components/charts/BudgetRing";
 import TransactionModal from "@/components/modals/TransactionModal";
@@ -15,6 +16,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import type { DashboardSummary, BudgetProgress, Transaction, PaginatedResponse } from "@/types/api";
 
 export default function DashboardPage() {
+  const { config } = useAppConfig();
   const { data: user } = useCurrentUser();
   const queryClient = useQueryClient();
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
@@ -69,9 +71,9 @@ export default function DashboardPage() {
           </>
         ) : (
           <>
-            <SummaryCard label="Balance Total" value={formatCurrency(summary?.total_balance || 0)} />
-            <SummaryCard label="Ingresos del Mes" value={formatCurrency(summary?.monthly_income || 0)} trend="up" color="#34d399" />
-            <SummaryCard label="Gastos del Mes" value={formatCurrency(summary?.monthly_expense || 0)} trend="down" color="#fb7185" />
+            <SummaryCard label="Balance Total" value={formatCurrency(summary?.total_balance || 0, config.currency)} />
+            <SummaryCard label="Ingresos del Mes" value={formatCurrency(summary?.monthly_income || 0, config.currency)} trend="up" color="#34d399" />
+            <SummaryCard label="Gastos del Mes" value={formatCurrency(summary?.monthly_expense || 0, config.currency)} trend="down" color="#fb7185" />
           </>
         )}
       </div>
@@ -155,7 +157,7 @@ export default function DashboardPage() {
                       <p className="text-xs text-text-muted capitalize mt-0.5">{formatDate(tx.date)}</p>
                     </div>
                     <p className={`font-semibold font-sans ${isExpense ? "text-text" : "text-primary"}`}>
-                      {isExpense ? "-" : "+"}{formatCurrency(tx.amount)}
+                      {isExpense ? "-" : "+"}{formatCurrency(tx.amount, config.currency)}
                     </p>
                   </div>
                 );

@@ -1,4 +1,7 @@
+"use client";
+
 import { formatCurrency } from "@/lib/utils";
+import { useAppConfig } from "@/providers/AppConfigProvider";
 import { AlertCircle } from "lucide-react";
 
 interface BudgetRingProps {
@@ -8,6 +11,7 @@ interface BudgetRingProps {
 }
 
 export default function BudgetRing({ categoryName, budgetAmount, spentAmount }: BudgetRingProps) {
+  const { config } = useAppConfig();
   // PROGRAMACIÓN DEFENSIVA: Si el valor es undefined, usamos 0.
   const safeSpent = Number(spentAmount) || 0;
   const safeBudget = Number(budgetAmount) > 0 ? Number(budgetAmount) : 1; 
@@ -77,9 +81,9 @@ export default function BudgetRing({ categoryName, budgetAmount, spentAmount }: 
       <div className="mt-4 w-full text-center">
         <h3 className="font-medium text-text text-sm truncate">{categoryName || "Sin Nombre"}</h3>
         <div className="flex justify-between items-center mt-2 text-xs">
-          <span className="text-text-muted">{formatCurrency(safeSpent)}</span>
+          <span className="text-text-muted">{formatCurrency(safeSpent, config.currency)}</span>
           <span className="text-text-muted/60">/</span>
-          <span className="text-text">{formatCurrency(safeBudget === 1 && budgetAmount === 0 ? 0 : safeBudget)}</span>
+          <span className="text-text">{formatCurrency(safeBudget === 1 && budgetAmount === 0 ? 0 : safeBudget, config.currency)}</span>
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { Plus, ArrowRightLeft, ArrowDownRight, ArrowUpRight, Loader2, Trash2, Fi
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency, formatDate, getApiError } from "@/lib/utils";
+import { useAppConfig } from "@/providers/AppConfigProvider";
 import { queryKeys } from "@/lib/queryKeys";
 import EmptyState from "@/components/ui/EmptyState";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -54,6 +55,7 @@ const getPresetDates = (preset: Exclude<DatePreset, "custom">) => {
 };
 
 export default function TransactionsPage() {
+  const { config } = useAppConfig();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [startDate, setStartDate] = useState("");
@@ -318,7 +320,7 @@ export default function TransactionsPage() {
                     <div className="flex items-center space-x-6">
                       <div className="text-right">
                         <p className={`font-semibold font-sans ${isExpense ? 'text-text' : 'text-primary'}`}>
-                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount)}
+                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount, config.currency)}
                         </p>
                         <p className="text-xs text-text-muted capitalize">{formatDate(tx.date)}</p>
                       </div>
