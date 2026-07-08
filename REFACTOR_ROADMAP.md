@@ -279,6 +279,65 @@
 
 ---
 
+## Fase 4 — Self-Hosting con Docker + Acceso Remoto
+
+**Objetivo:** Poder acceder a Oikos desde cualquier dispositivo (celular, laptop)
+de forma segura sin depender de localhost, sentando las bases para migrar a
+Raspberry Pi en el futuro.
+
+### Migrar backend a PostgreSQL
+
+- [ ] **Agregar `psycopg2-binary` a `requirements.txt`** para conectar a PostgreSQL.
+- [ ] **Actualizar `app/core/database.py`** para leer `DATABASE_URL` de variable de entorno
+      con fallback a SQLite (`sqlite:///./finanzas.db`).
+- [ ] **Agregar servicio `postgres`** en docker-compose con imagen `postgres:16-alpine`,
+      volumen persistente y credenciales vía variables de entorno.
+- [ ] **Crear script `docker/init.sql`** para crear la base de datos inicial (opcional,
+      porque `Base.metadata.create_all()` ya existe).
+- [ ] **Verificar** que el backend arranque correctamente apuntando a PostgreSQL.
+
+### Dockerizar la aplicación
+
+- [ ] **Crear `backend/Dockerfile`** con `python:3.12-slim`:
+  - Copiar `requirements.txt`, instalar dependencias.
+  - Exponer puerto `8000`.
+  - Comando: `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+- [ ] **Crear `frontend/Dockerfile`** con `node:22-alpine` (multi-stage):
+  - Build stage: copiar código, `pnpm install`, `pnpm build`.
+  - Production stage: copiar `.next/standalone`, expone `3000`.
+  - Variable de build: `NEXT_PUBLIC_API_URL`.
+- [ ] **Crear `docker-compose.yml`** en la raíz con 3 servicios:
+  - `postgres` — imagen externa, volumen persistente.
+  - `backend` — build local, depende de `postgres`.
+  - `frontend` — build local, depende de `backend`.
+- [ ] **Agregar `.dockerignore`** para backend y frontend (node_modules, venv, __pycache__,
+      .db, .env).
+- [ ] **Verificar** que `docker compose up --build` funcione de cero en PC.
+- [ ] **Verificar compatibilidad ARM64** (`docker compose build` en Raspberry Pi OS).
+
+### Acceso remoto con Tailscale
+
+- [ ] **Instalar Tailscale** en la máquina host:
+  ```bash
+  curl -fsSL https://tailscale.com/install.sh | sh
+  sudo tailscale up
+  ```
+- [ ] **Instalar Tailscale** en cada dispositivo cliente (celular Android/iOS, laptop).
+- [ ] **Acceder** desde cualquier dispositivo por `http://<tailscale-ip>:3000`.
+- [ ] **Verificar** que login, JWT y funcionalidad completa funcionen por Tailscale.
+- [ ] **Opcional:** Configurar MagicDNS de Tailscale para acceder por nombre
+      (`http://oikos:3000`) en vez de IP.
+
+### Calidad de vida
+
+- [ ] **Healthchecks** en docker-compose para los 3 servicios.
+- [ ] **Script `scripts/deploy.sh`** que automatice: git pull → docker compose up --build -d.
+- [ ] **Documentar** en `README.md` sección de self-hosting con Docker + Tailscale.
+- [ ] **Nota futura:** Migrar a Raspberry Pi solo requiere instalar Docker + Tailscale
+      en la Pi, clonar el repo y ejecutar `docker compose up -d`.
+
+---
+
 ## Historial de resolución
 
 | Fecha | Item |
@@ -292,3 +351,4 @@
 | 2026-07-08 | Post-auditoría: eliminación de hex hardcodeados (#34d399/#fb7185) en AnalyticsSummary y dashboard |
 | 2026-07-08 | Post-auditoría: corrección `categories/[id]/page.tsx` para usar `tx.currency` |
 | 2026-07-08 | Post-auditoría: creación de interfaz `UserResponse` canónica en `api.ts` |
+| 2026-07-08 | Fase 4 agregada: plan de self-hosting Docker + PostgreSQL + Tailscale |
