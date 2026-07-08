@@ -16,7 +16,7 @@ def crear_categoria(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    nueva_categoria = models.Category(**categoria.dict(), user_id=current_user.id)
+    nueva_categoria = models.Category(**categoria.model_dump(), user_id=current_user.id)
     db.add(nueva_categoria)
     db.commit()
     db.refresh(nueva_categoria)

@@ -27,6 +27,8 @@
 - [x] **Migrar `transaccion.dict()` → `transaccion.model_dump()`** (Pydantic v2 compat). (2026-07-06)
   Archivo: `backend/app/api/transactions.py` (línea 41)
 
+  > **Hallazgo post-auditoría (2026-07-08):** `accounts.py:18`, `categories.py:19`, `budgets.py:39` aún usan `.dict()`. Se migran en esta iteración.
+
 - [x] **Mover CORS a variable de entorno `ALLOWED_ORIGINS`.** (2026-07-06)
   Archivos: `backend/app/main.py`, `backend/.env`
   - Default: `"http://localhost:3000,http://localhost:5173"`
@@ -94,6 +96,7 @@
   Archivos a tocar (~5 ocurrencias).
 
 - [x] **Actualizar `types/api.ts`** para incluir `preferred_currency` y `preferred_locale` en `UserResponse`. (2026-07-06)
+  > **Hallazgo post-auditoría (2026-07-08):** Se creó `UserPreferences` como interfaz separada, pero no existe `UserResponse` canónica. Se agrega interfaz en esta iteración.
 
 ---
 
@@ -144,6 +147,10 @@
   - Reemplazar `text-[#60a5fa]` (spinner) → `text-info`.
   - Tooltip ya usaba clases Tailwind — sin cambios necesarios.
   - CATEGORY_COLORS migrado a `var(--color-chart-1..10)`.
+
+- [x] **Eliminar hex hardcodeados en SummaryCard/AnalyticsSummary.** (2026-07-08)
+  - `AnalyticsSummary.tsx:18-20` y `dashboard/page.tsx:75-76` aún pasaban `#34d399` / `#fb7185`.
+  - Reemplazado por `var(--color-success)` y `var(--color-danger)`.
 
 ### UI — ThemeToggle
 
@@ -210,6 +217,9 @@
 
 - [x] **Mostrar moneda en cada transacción de la lista.** (2026-07-08)
   Archivo: `frontend/app/(dashboard)/transactions/page.tsx`
+
+- [x] **Usar `tx.currency` en categorías** en vez de `config.currency`. (2026-07-08)
+  - `categories/[id]/page.tsx:173` usaba `config.currency`, corregido a `tx.currency`.
 
 ---
 
@@ -278,3 +288,7 @@
 | 2026-07-06 | Fase 2 completa: Tokenización tema CSS (light/dark), ThemeToggle, Sidebar integration, hardcoded colors eliminados de gráficos |
 | 2026-07-08 | Fase 3 completa: Columna currency en modelos Account/Transaction/Budget, schemas, types, UI selector + display multi-moneda |
 | 2026-07-08 | Seed data: Script `backend/app/core/seed.py` con usuario test, 3 cuentas multi-moneda, 45 transacciones (3 meses), 6 presupuestos |
+| 2026-07-08 | Post-auditoría: migración `.dict()` restantes → `model_dump()` en accounts, categories, budgets |
+| 2026-07-08 | Post-auditoría: eliminación de hex hardcodeados (#34d399/#fb7185) en AnalyticsSummary y dashboard |
+| 2026-07-08 | Post-auditoría: corrección `categories/[id]/page.tsx` para usar `tx.currency` |
+| 2026-07-08 | Post-auditoría: creación de interfaz `UserResponse` canónica en `api.ts` |

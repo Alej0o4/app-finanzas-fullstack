@@ -15,9 +15,9 @@ export default function AnalyticsSummary({ totalIncome, totalExpense }: Analytic
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <SummaryCard label="Ingresos" value={formatCurrency(totalIncome, config.currency)} trend="up" color="#34d399" />
-      <SummaryCard label="Gastos" value={formatCurrency(totalExpense, config.currency)} trend="down" color="#fb7185" />
-      <SummaryCard label="Balance Neto" value={formatCurrency(total, config.currency)} color={total >= 0 ? "#34d399" : "#fb7185"} />
+      <SummaryCard label="Ingresos" value={formatCurrency(totalIncome, config.currency)} trend="up" color="var(--color-success)" />
+      <SummaryCard label="Gastos" value={formatCurrency(totalExpense, config.currency)} trend="down" color="var(--color-danger)" />
+      <SummaryCard label="Balance Neto" value={formatCurrency(total, config.currency)} color={total >= 0 ? "var(--color-success)" : "var(--color-danger)"} />
     </div>
   );
 }

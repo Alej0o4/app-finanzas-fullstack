@@ -36,7 +36,7 @@ def crear_presupuesto(
             detail="Ya existe un presupuesto para esta categoría en este mes y año."
         )
 
-    nuevo_presupuesto = models.Budget(**presupuesto.dict(), user_id=current_user.id)
+    nuevo_presupuesto = models.Budget(**presupuesto.model_dump(), user_id=current_user.id)
     db.add(nuevo_presupuesto)
     db.commit()
     db.refresh(nuevo_presupuesto)

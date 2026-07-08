@@ -15,7 +15,7 @@ def crear_cuenta(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    nueva_cuenta = models.Account(**cuenta.dict(), user_id=current_user.id)
+    nueva_cuenta = models.Account(**cuenta.model_dump(), user_id=current_user.id)
     db.add(nueva_cuenta)
     db.commit()
     db.refresh(nueva_cuenta)

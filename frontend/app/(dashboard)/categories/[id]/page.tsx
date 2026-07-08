@@ -170,7 +170,7 @@ export default function CategoryDetailPage() {
                     <div className="flex items-center gap-3">
                       <div className="text-right">
                         <p className={`font-semibold font-sans ${isExpense ? 'text-text' : 'text-primary'}`}>
-                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount, config.currency)}
+                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount, tx.currency)}
                         </p>
                         <p className="text-[11px] text-text-muted capitalize">{formatDate(tx.date, config.locale)}</p>
                       </div>

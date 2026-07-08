@@ -63,6 +63,14 @@ export interface CategoryDistributionItem {
   total: number;
 }
 
+export interface UserResponse {
+  id: number;
+  email: string;
+  full_name: string;
+  preferred_currency: string;
+  preferred_locale: string;
+}
+
 export interface UserPreferences {
   preferred_currency: string;
   preferred_locale: string;

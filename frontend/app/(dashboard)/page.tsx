@@ -72,8 +72,8 @@ export default function DashboardPage() {
         ) : (
           <>
             <SummaryCard label="Balance Total" value={formatCurrency(summary?.total_balance || 0, config.currency)} />
-            <SummaryCard label="Ingresos del Mes" value={formatCurrency(summary?.monthly_income || 0, config.currency)} trend="up" color="#34d399" />
-            <SummaryCard label="Gastos del Mes" value={formatCurrency(summary?.monthly_expense || 0, config.currency)} trend="down" color="#fb7185" />
+            <SummaryCard label="Ingresos del Mes" value={formatCurrency(summary?.monthly_income || 0, config.currency)} trend="up" color="var(--color-success)" />
+            <SummaryCard label="Gastos del Mes" value={formatCurrency(summary?.monthly_expense || 0, config.currency)} trend="down" color="var(--color-danger)" />
           </>
         )}
       </div>
