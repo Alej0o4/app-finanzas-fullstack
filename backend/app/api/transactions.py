@@ -39,6 +39,7 @@ def crear_transaccion(
         
     # 2. Ensamblar la transacción
     nueva_transaccion = models.Transaction(**transaccion.model_dump(exclude_none=True), user_id=current_user.id)
+    nueva_transaccion.currency = cuenta.currency  # hereda la moneda de la cuenta
     
     # 🧮 3. Lógica Contable: Actualizar saldo de forma atómica en SQL
     delta = transaccion.amount if transaccion.type == "income" else -transaccion.amount

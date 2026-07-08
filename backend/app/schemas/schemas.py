@@ -34,6 +34,7 @@ class TransactionType(str, Enum):
 
 class TransactionBase(BaseModel):
     amount: Decimal = Field(..., gt=0, decimal_places=2, description="El monto debe ser mayor a cero")
+    currency: str = "COP"
     type: TransactionType
     description: Optional[str] = Field(None, max_length=500)
     account_id: int
@@ -59,6 +60,7 @@ class AccountType(str, Enum):
 class AccountBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     type: AccountType
+    currency: str = "COP"
 
 class AccountCreate(AccountBase):
     balance: Decimal = Field(0, ge=0, decimal_places=2, description="Saldo inicial")
@@ -94,6 +96,7 @@ class CategoryResponse(CategoryBase):
 # --- PRESUPUESTOS ---
 class BudgetBase(BaseModel):
     amount_limit: Decimal = Field(..., gt=0, decimal_places=2, description="El presupuesto debe ser mayor a cero")
+    currency: str = "COP"
     month: int = Field(..., ge=1, le=12, description="Mes válido entre 1 y 12")
     year: int = Field(..., ge=2020, le=2100)
     category_id: int
@@ -112,6 +115,7 @@ class DashboardSummary(BaseModel):
     total_balance: Decimal      # 🔁 antes: float
     monthly_income: Decimal     # 🔁 antes: float
     monthly_expense: Decimal    # 🔁 antes: float
+    currency: str = "COP"
 
 class BudgetProgress(BaseModel):
     budget_id: int

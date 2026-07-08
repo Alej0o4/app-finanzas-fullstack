@@ -26,6 +26,7 @@ class Account(Base):
     name = Column(String, index=True)
     type = Column(String)
     balance = Column(Numeric(14, 2), default=0)  # 🔁 antes: Float
+    currency = Column(String(3), default="COP", nullable=False)
 
     user_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="accounts")
@@ -48,6 +49,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(Integer, primary_key=True, index=True)
     amount = Column(Numeric(14, 2), nullable=False)  # 🔁 antes: Float
+    currency = Column(String(3), default="COP", nullable=False)
     type = Column(String)
     date = Column(DateTime, default=datetime.datetime.utcnow)
     description = Column(String, nullable=True)
@@ -65,6 +67,7 @@ class Budget(Base):
     __tablename__ = "budgets"
     id = Column(Integer, primary_key=True, index=True)
     amount_limit = Column(Numeric(14, 2), nullable=False)  # 🔁 antes: Float
+    currency = Column(String(3), default="COP", nullable=False)
     month = Column(Integer, nullable=False)
     year = Column(Integer, nullable=False)
 
