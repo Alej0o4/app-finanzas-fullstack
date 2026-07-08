@@ -3,12 +3,14 @@ export interface Account {
   name: string;
   type: "cash" | "debit" | "credit";
   balance: number;
+  currency: string;
   user_id: number;
 }
 
 export interface Transaction {
   id: number;
   amount: number;
+  currency: string;
   type: "income" | "expense";
   description: string | null;
   date: string;
@@ -28,6 +30,7 @@ export interface Budget {
   id: number;
   category_id: number;
   amount_limit: number;
+  currency: string;
   month: number;
   year: number;
   user_id: number;
@@ -45,6 +48,7 @@ export interface DashboardSummary {
   total_balance: number;
   monthly_income: number;
   monthly_expense: number;
+  currency: string;
 }
 
 export interface CashflowItem {
@@ -72,6 +76,7 @@ export interface CreateTransactionPayload {
   date: string;
   account_id: number;
   category_id: number;
+  currency?: string;
 }
 
 export interface UpdateTransactionPayload {
@@ -88,11 +93,13 @@ export interface CreateAccountPayload {
   name: string;
   type: "cash" | "debit" | "credit";
   balance: number;
+  currency?: string;
 }
 
 export interface BudgetPayload {
   category_id: number;
   amount_limit: number;
+  currency?: string;
   month: number;
   year: number;
 }
