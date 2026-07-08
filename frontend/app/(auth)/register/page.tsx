@@ -26,8 +26,8 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError("La contraseña debe tener al menos 6 caracteres.");
+    if (password.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres.");
       setIsLoading(false);
       return;
     }
@@ -41,9 +41,14 @@ export default function RegisterPage() {
 
       router.push("/login?registered=true");
     } catch (err: unknown) {
-      const error = err as { response?: { status?: number; data?: { detail?: string } } };
+      const error = err as { response?: { status?: number; data?: { detail?: string | { msg: string }[] } } };
       if (error.response?.status === 400) {
-        setError(error.response?.data?.detail || "El correo electrónico ya está registrado.");
+        const detail = error.response?.data?.detail;
+        setError(typeof detail === "string" ? detail : "El correo electrónico ya está registrado.");
+      } else if (error.response?.status === 422) {
+        const detail = error.response?.data?.detail;
+        const msg = Array.isArray(detail) ? detail[0]?.msg || "Datos inválidos." : "Datos inválidos.";
+        setError(msg);
       } else {
         setError("Error de conexión. Inténtalo más tarde.");
       }
@@ -106,7 +111,7 @@ export default function RegisterPage() {
           <input
             type="password"
             required
-            minLength={6}
+            minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full bg-background border border-border/70 rounded-xl px-4 py-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
