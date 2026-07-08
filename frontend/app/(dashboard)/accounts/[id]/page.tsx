@@ -145,7 +145,7 @@ export default function AccountDetailPage() {
       <div className="p-6 bg-surface border border-border/70 rounded-3xl max-w-sm">
         <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Saldo disponible</p>
         <p className="text-4xl font-bold text-text mt-2 font-sans">
-          {formatCurrency(account.balance, config.currency)}
+          {formatCurrency(account.balance, account.currency)}
         </p>
       </div>
 
@@ -177,7 +177,7 @@ export default function AccountDetailPage() {
                     <div className="flex items-center gap-3">
                       <div className="text-right">
                         <p className={`font-semibold font-sans ${isExpense ? 'text-text' : 'text-primary'}`}>
-                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount, config.currency)}
+                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount, tx.currency)}
                         </p>
                         <p className="text-[11px] text-text-muted capitalize">{formatDate(tx.date, config.locale)}</p>
                       </div>

@@ -6,7 +6,6 @@ import { Plus, PieChart, Loader2, Edit2, Trash2, CalendarDays } from "lucide-rea
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency, getApiError } from "@/lib/utils";
-import { useAppConfig } from "@/providers/AppConfigProvider";
 import { queryKeys } from "@/lib/queryKeys";
 import ModalShell from "@/components/ui/ModalShell";
 import Button from "@/components/ui/Button";
@@ -20,7 +19,6 @@ const getMonthName = (month: number, year: number) => {
 };
 
 export default function BudgetsPage() {
-  const { config } = useAppConfig();
   const queryClient = useQueryClient();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -174,7 +172,7 @@ export default function BudgetsPage() {
                 <div className="mt-4 pt-4 border-t border-border/40">
                   <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Límite mensual</p>
                   <p className="text-2xl font-semibold font-sans text-text">
-                    {formatCurrency(budget.amount_limit, config.currency)}
+                    {formatCurrency(budget.amount_limit, budget.currency)}
                   </p>
                 </div>
               </div>

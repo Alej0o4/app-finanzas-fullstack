@@ -320,7 +320,7 @@ export default function TransactionsPage() {
                     <div className="flex items-center space-x-6">
                       <div className="text-right">
                         <p className={`font-semibold font-sans ${isExpense ? 'text-text' : 'text-primary'}`}>
-                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount, config.currency)}
+                          {isExpense ? "-" : "+"}{formatCurrency(tx.amount, tx.currency)}
                         </p>
                         <p className="text-xs text-text-muted capitalize">{formatDate(tx.date, config.locale)}</p>
                       </div>

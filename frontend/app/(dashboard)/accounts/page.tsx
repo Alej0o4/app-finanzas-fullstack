@@ -6,7 +6,6 @@ import { Plus, Wallet, Loader2, Edit2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency, getApiError } from "@/lib/utils";
-import { useAppConfig } from "@/providers/AppConfigProvider";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { queryKeys } from "@/lib/queryKeys";
 import ModalShell from "@/components/ui/ModalShell";
@@ -21,12 +20,12 @@ const accountTypeTranslations: Record<string, string> = {
 };
 
 export default function AccountsPage() {
-  const { config } = useAppConfig();
   const queryClient = useQueryClient();
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountType, setNewAccountType] = useState("cash");
+  const [newAccountCurrency, setNewAccountCurrency] = useState("COP");
   const [initialBalance, setInitialBalance] = useState("");
 
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -53,6 +52,7 @@ export default function AccountsPage() {
       setIsCreateModalOpen(false);
       setNewAccountName("");
       setNewAccountType("cash");
+      setNewAccountCurrency("COP");
       setInitialBalance("");
     },
     onError: (error: unknown) => {
@@ -96,6 +96,7 @@ export default function AccountsPage() {
       name: newAccountName,
       type: newAccountType as "cash" | "debit" | "credit",
       balance: Number(initialBalance) || 0,
+      currency: newAccountCurrency,
     });
   };
 
@@ -144,25 +145,25 @@ export default function AccountsPage() {
           <div key={account.id} className="bg-surface border border-border/70 rounded-2xl p-5 hover:border-primary/30 transition-colors group relative">
 
             <Link href={`/accounts/${account.id}`} className="block cursor-pointer">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-background rounded-lg text-primary">
-                    <Wallet size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-medium text-text">{account.name}</h3>
-                    <p className="text-xs text-text-muted">
-                      {accountTypeTranslations[account.type] || account.type}
-                    </p>
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-background rounded-lg text-primary">
+                      <Wallet size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-text">{account.name}</h3>
+                      <p className="text-xs text-text-muted">
+                        {accountTypeTranslations[account.type] || account.type}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="mt-4 pt-4 border-t border-border/40">
-                <p className="text-2xl font-semibold font-sans text-text">
-                  {formatCurrency(account.balance, config.currency)}
-                </p>
-              </div>
+                <div className="mt-4 pt-4 border-t border-border/40">
+                  <p className="text-2xl font-semibold font-sans text-text">
+                    {formatCurrency(account.balance, account.currency)}
+                  </p>
+                </div>
             </Link>
 
             <div className="absolute top-5 right-5 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface pl-2 rounded-lg">
@@ -207,6 +208,15 @@ export default function AccountsPage() {
               <option value="cash">Efectivo</option>
               <option value="debit">Débito</option>
               <option value="credit">Crédito</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">Moneda</label>
+            <select value={newAccountCurrency} onChange={(e) => setNewAccountCurrency(e.target.value)} className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none">
+              <option value="COP">COP</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
             </select>
           </div>
 
