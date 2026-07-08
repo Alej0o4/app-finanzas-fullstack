@@ -165,18 +165,18 @@
 
 ### Backend — Modelos
 
-- [ ] **Agregar `currency = Column(String(3), default="COP")` a modelo `Account`.**
+- [x] **Agregar `currency = Column(String(3), default="COP")` a modelo `Account`.** (2026-07-08)
   Archivo: `backend/app/models/models.py`
 
-- [ ] **Agregar `currency = Column(String(3), default="COP")` a modelo `Transaction`.**
+- [x] **Agregar `currency = Column(String(3), default="COP")` a modelo `Transaction`.** (2026-07-08)
   - Heredar de la cuenta al crear transacción.
 
-- [ ] **Agregar `currency = Column(String(3), default="COP")` a modelo `Budget`.**
-  - Heredar de la categoría o usar la preferencia del usuario.
+- [x] **Agregar `currency = Column(String(3), default="COP")` a modelo `Budget`.** (2026-07-08)
+  - Moneda propia, no hereda de categoría.
 
 ### Backend — Schemas
 
-- [ ] **Agregar `currency: str = "COP"` a schemas:**
+- [x] **Agregar `currency: str = "COP"` a schemas:** (2026-07-08)
   - `AccountResponse`
   - `TransactionResponse` / `TransactionBase`
   - `BudgetResponse` / `BudgetBase`
@@ -184,31 +184,31 @@
 
 ### Backend — Lógica
 
-- [ ] **Al crear transacción: heredar `currency` de la `Account` asociada.**
+- [x] **Al crear transacción: heredar `currency` de la `Account` asociada.** (2026-07-08)
   Archivo: `backend/app/api/transactions.py`
   - `nueva_transaccion.currency = cuenta.currency`
 
-- [ ] **Al crear cuenta: asignar `currency` del payload (default "COP" si no se envía).**
+- [x] **Al crear cuenta: asignar `currency` del payload (default "COP" si no se envía).** (2026-07-08)
   Archivo: `backend/app/api/accounts.py`
 
-- [ ] **Al crear presupuesto: asignar `currency` del payload o heredar de categoría.**
+- [x] **Al crear presupuesto: asignar `currency` del payload (default "COP" si no se envía).** (2026-07-08)
   Archivo: `backend/app/api/budgets.py`
 
 ### Frontend — Tipos
 
-- [ ] **Agregar `currency: string` a interfaces en `types/api.ts`:**
+- [x] **Agregar `currency: string` a interfaces en `types/api.ts`:** (2026-07-08)
   - `Account`, `Transaction`, `Budget`, `DashboardSummary`
   - Opcional: `CreateAccountPayload`, `CreateTransactionPayload`, `BudgetPayload`
 
 ### Frontend — UI
 
-- [ ] **Agregar selector de moneda en formulario de crear cuenta** (dropdown con COP, USD, EUR).
+- [x] **Agregar selector de moneda en formulario de crear cuenta** (dropdown con COP, USD, EUR). (2026-07-08)
   Archivo: `frontend/app/(dashboard)/accounts/page.tsx`
 
-- [ ] **Agregar indicador de moneda en tarjetas de cuenta** (ej. "COP" junto al saldo).
+- [x] **Agregar indicador de moneda en tarjetas de cuenta** (ej. "COP" junto al saldo). (2026-07-08)
   Archivo: `frontend/app/(dashboard)/accounts/page.tsx`
 
-- [ ] **Mostrar moneda en cada transacción de la lista.**
+- [x] **Mostrar moneda en cada transacción de la lista.** (2026-07-08)
   Archivo: `frontend/app/(dashboard)/transactions/page.tsx`
 
 ---
@@ -276,3 +276,5 @@
 | 2026-07-06 | Fase 0 completa: SECRET_KEY, EmailStr, email normalization, model_dump(), CORS env var |
 | 2026-07-06 | Fase 1 completa: columnas preferred_currency/locale, endpoint preferences, formatters.ts, AppConfigProvider, useUserPreferences, migración formatCurrency/formatDate |
 | 2026-07-06 | Fase 2 completa: Tokenización tema CSS (light/dark), ThemeToggle, Sidebar integration, hardcoded colors eliminados de gráficos |
+| 2026-07-08 | Fase 3 completa: Columna currency en modelos Account/Transaction/Budget, schemas, types, UI selector + display multi-moneda |
+| 2026-07-08 | Seed data: Script `backend/app/core/seed.py` con usuario test, 3 cuentas multi-moneda, 45 transacciones (3 meses), 6 presupuestos |
