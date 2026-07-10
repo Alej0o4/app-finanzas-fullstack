@@ -229,12 +229,12 @@
 
 ### Feature: Multi-Tema (Dark / Light / System)
 
-- [ ] **Confirmar que Fase 2 está completa** (no hay colores hardcodeados).
-- [ ] **Persistir preferencia de tema en backend** (`PATCH /api/users/me/preferences`).
-- [ ] **Agregar `preferred_theme` a `AppConfigProvider`** con valor inicial del backend.
-- [ ] **Sincronizar `ThemeToggle` con backend** al cambiar preferencia.
-- [ ] **Probar transición suave** entre temas (CSS `transition` en variables).
-- [ ] **Verificar contraste WCAG AA** en ambos temas (especialmente text-muted sobre surface).
+- [x] **Confirmar que Fase 2 está completa** (no hay colores hardcodeados). (2026-07-09)
+- [x] **Persistir preferencia de tema en backend** (`PATCH /api/users/me/preferences`). (2026-07-09)
+- [x] **Agregar `preferred_theme` a `AppConfigProvider`** con valor inicial del backend. (2026-07-09)
+- [x] **Sincronizar `ThemeToggle` con backend** al cambiar preferencia. (2026-07-09)
+- [x] **Probar transición suave** entre temas (CSS `transition` en variables). (2026-07-09)
+- [x] **Verificar contraste WCAG AA** en ambos temas (especialmente text-muted sobre surface). (2026-07-09)
 
 ### Feature: i18n (Internacionalización)
 
@@ -352,3 +352,4 @@ Raspberry Pi en el futuro.
 | 2026-07-08 | Post-auditoría: corrección `categories/[id]/page.tsx` para usar `tx.currency` |
 | 2026-07-08 | Post-auditoría: creación de interfaz `UserResponse` canónica en `api.ts` |
 | 2026-07-08 | Fase 4 agregada: plan de self-hosting Docker + PostgreSQL + Tailscale |
+| 2026-07-09 | Feature Multi-Tema completo: preferred_theme en modelo/schema/API, PATCH endpoint, ThemeToggle sincronizado con backend, transiciones CSS, WCAG AA verificado |

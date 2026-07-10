@@ -9,7 +9,7 @@ import { useEffect } from "react";
 interface UserPreferences {
   preferred_currency: string;
   preferred_locale: string;
-  theme: string;
+  preferred_theme: string;
 }
 
 export function useUserPreferences() {
@@ -33,6 +33,7 @@ export function useUserPreferences() {
       updateConfig({
         currency: query.data.preferred_currency,
         locale: query.data.preferred_locale,
+        theme: query.data.preferred_theme,
       });
     }
   }, [query.data, updateConfig]);

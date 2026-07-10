@@ -69,6 +69,13 @@ export interface UserResponse {
   full_name: string;
   preferred_currency: string;
   preferred_locale: string;
+  preferred_theme: string;
+}
+
+export interface PreferencesUpdatePayload {
+  preferred_currency?: string;
+  preferred_locale?: string;
+  preferred_theme?: string;
 }
 
 export interface UserPreferences {

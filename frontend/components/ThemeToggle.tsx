@@ -3,6 +3,10 @@
 import { Sun, Moon, Monitor } from "lucide-react";
 import { useAppConfig } from "@/providers/AppConfigProvider";
 import { useEffect, useCallback, useRef } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { queryKeys } from "@/lib/queryKeys";
+import type { PreferencesUpdatePayload } from "@/types/api";
 
 type Theme = "dark" | "light" | "system";
 
@@ -35,6 +39,17 @@ export default function ThemeToggle() {
   const { config, updateConfig } = useAppConfig();
   const theme = (config.theme as Theme) ?? "dark";
   const initialised = useRef(false);
+  const prevTheme = useRef(theme);
+  const queryClient = useQueryClient();
+
+  const patchTheme = useMutation({
+    mutationFn: async (body: PreferencesUpdatePayload) => {
+      await api.patch("/api/users/me/preferences", body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.userPreferences() });
+    },
+  });
 
   const applyTheme = useCallback((t: Theme) => {
     document.documentElement.setAttribute("data-theme", resolveTheme(t));
@@ -45,7 +60,7 @@ export default function ThemeToggle() {
     initialised.current = true;
 
     const saved = localStorage.getItem("oikos_theme") as Theme | null;
-    if (saved && saved !== theme) {
+    if (saved) {
       updateConfig({ theme: saved });
     } else {
       applyTheme(theme);
@@ -70,6 +85,12 @@ export default function ThemeToggle() {
     const idx = THEMES.indexOf(theme);
     const next = THEMES[(idx + 1) % THEMES.length];
     updateConfig({ theme: next });
+    prevTheme.current = next;
+    localStorage.setItem("oikos_theme", next);
+    applyTheme(next);
+    if (typeof window !== "undefined" && localStorage.getItem("jwt_token")) {
+      patchTheme.mutate({ preferred_theme: next });
+    }
   };
 
   const Icon = THEME_ICONS[theme];

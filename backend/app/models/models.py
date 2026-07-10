@@ -12,6 +12,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     preferred_currency = Column(String(3), default="COP")
     preferred_locale = Column(String(10), default="es-CO")
+    preferred_theme = Column(String(10), default="dark")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     accounts = relationship("Account", back_populates="owner")

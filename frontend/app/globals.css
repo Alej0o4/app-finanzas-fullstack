@@ -47,7 +47,7 @@
   --color-info: #2563eb;
 
   --color-text: #0f172a;
-  --color-text-muted: #64748b;
+  --color-text-muted: #5f6f87;
   --color-text-soft: #334155;
 
   --color-chart-1: #0284c7;
@@ -65,5 +65,9 @@
 @layer base {
   body {
     @apply bg-background text-text antialiased;
+  }
+
+  *, *::before, *::after {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
   }
 }

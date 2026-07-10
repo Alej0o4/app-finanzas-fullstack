@@ -24,8 +24,14 @@ class UserResponse(UserBase):
     id: int
     preferred_currency: str = "COP"
     preferred_locale: str = "es-CO"
+    preferred_theme: str = "dark"
     class Config:
         from_attributes = True
+
+class PreferencesUpdate(BaseModel):
+    preferred_currency: Optional[str] = None
+    preferred_locale: Optional[str] = None
+    preferred_theme: Optional[str] = None
 
 # --- TRANSACCIONES ---
 class TransactionType(str, Enum):
