@@ -19,7 +19,7 @@
   "mcp": {
     "sqlite": {
       "type": "local",
-      "command": ["npx", "-y", "@anthropic/sqlite-mcp", "/home/alejo/proyecto-finanzas/backend/finanzas.db"],
+      "command": ["npx", "-y", "mcp-server-sqlite-npx", "/home/alejo/proyecto-finanzas/backend/finanzas.db"],
       "enabled": true
     }
   },

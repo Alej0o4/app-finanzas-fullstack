@@ -11,3 +11,4 @@ backend/.env
 .vscode/
 .idea/
 .DS_Store
+.playwright-mcp/
