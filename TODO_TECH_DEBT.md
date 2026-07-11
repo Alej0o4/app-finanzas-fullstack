@@ -1,9 +1,7 @@
 # Deuda Técnica Consciente — Oikos
 
 > Este archivo documenta atajos tomados a propósito durante la fase de MVP.
-> No se resuelven ahora porque el costo de hacerlo hoy supera el beneficio mientras
-> el proyecto es de un solo usuario, en un solo entorno, y en fase de validar features.
-> Revisar esta lista completa antes de pasar a la fase de "hardening" (seguridad/escalabilidad).
+> Revisar antes de pasar a la fase de "hardening" (seguridad/escalabilidad).
 
 Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
@@ -11,71 +9,85 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🔴 Resolver antes de seguir acumulando datos reales
 
-- [x] **Montos como `float` en vez de `Decimal`/enteros en centavos.** — resuelto, ver Historial.
-  Afecta: `models.py` (Account.balance, Transaction.amount, Budget.amount_limit), `schemas.py`.
-  Riesgo: errores de redondeo acumulativos en saldos y agregados del dashboard.
-  Por qué ahora: mientras menos datos históricos tengas, más fácil es migrar sin script de conversión.
+- [x] **Montos como `float` en vez de `Decimal`/enteros en centavos.** (resuelto 2026-07-08)
+  - Migrado a `Decimal`/`Numeric(14,2)` en models.py, schemas.py y dashboard.py.
 
 - [ ] **Sin backup automático de `finanzas.db`.**
-  Riesgo: perder el historial financiero completo por un bug propio o error humano.
-  Acción mínima: script o cron que copie el archivo SQLite antes de cada sesión de cambios grandes.
+  - Riesgo: perder el historial financiero completo.
+  - Acción: script `scripts/backup.sh` con rotación de 7 días. Ver REFACTOR_ROADMAP Fase 5.
+
+- [ ] **Dashboard suma saldos de diferentes monedas.**
+  - `total_balance` en `dashboard.py` mezcla COP + USD + EUR = número sin sentido.
+  - Ver REFACTOR_ROADMAP Fase 5.
 
 ---
 
-## 🟡 Revisar antes de exponer la app fuera de tu máquina local
+## 🟡 Revisar antes de exponer la app fuera de localhost
 
-- [ ] **JWT guardado en `localStorage` (frontend/lib/api.ts).**
-  Riesgo: robo de token vía XSS. Alternativa: cookie `httpOnly` + `secure` + `sameSite`.
+- [ ] **JWT guardado en `localStorage`** (`frontend/lib/api.ts`).
+  - Riesgo: robo de token vía XSS.
+  - Alternativa: cookie `httpOnly` + `secure` + `sameSite`.
+  - Prioridad baja para uso personal con Tailscale (red privada).
 
-- [ ] **Sin rate limiting en `/api/auth/login`.**
-  Riesgo: fuerza bruta de credenciales. Alternativa: `slowapi` o similar.
+- [x] **CORS hardcodeado → variable de entorno `ALLOWED_ORIGINS`.** (resuelto 2026-07-06)
 
-- [ ] **CORS hardcodeado en `main.py` (`origenes_permitidos`).**
-  Riesgo: desplegar a producción con orígenes de desarrollo si se olvida actualizar el código.
-  Alternativa: mover a variable de entorno `ALLOWED_ORIGINS`.
+- [x] **Sin refresh tokens.** (resuelto 2026-07-08)
+  - Implementado: refresh token rotation con `RefreshToken` model, `/auth/refresh`, `/auth/logout`.
 
-- [ ] **Sin refresh tokens — sesión expira a los 60 min sin renovación.**
-  Para uso personal no importa; sí importa si otras personas empiezan a usar la app.
+- [x] **Sin rate limiting en login.** (resuelto 2026-07-10)
+  - `slowapi` configurado: `Limiter` en `app/core/rate_limit.py`, `@limiter.limit("5/minute")` en `app/api/auth.py:16`, handler registrado en `main.py:128`.
+
+- [ ] **`datetime.utcnow()`** — deprecated en Python 3.12+.
+  - Migrar a `datetime.now(datetime.UTC)` cuando se toque el código relacionado.
 
 ---
 
 ## 🟢 Revisar cuando el código empiece a doler al modificarlo
 
-- [ ] **Lógica de negocio embebida directamente en los routers FastAPI** (ej. `transactions.py::actualizar_transaccion`).
-  No hay capa de servicio separada; los routers hacen de controller + service + repository.
-  Señal de que ya toca resolverlo: cuando quieras testear esta lógica sin levantar FastAPI,
-  o cuando la misma lógica se necesite desde otro lugar (CLI, job batch, etc.).
+- [ ] **Lógica de negocio embebida en routers FastAPI.**
+  - Los routers hacen de controller + service + repository.
+  - Señal: cuando quieras testear sin FastAPI, o reusar desde CLI/job.
 
 - [ ] **`schemas.py` y `models.py` como archivos únicos.**
-  Manejable a 5 entidades; conviene partir por dominio si se agregan 2-3 entidades más.
+  - Manejable a 5 entidades; partir por dominio si se agregan 2-3 más.
 
-- [ ] **Sin capa de excepciones de dominio** — todo `raise HTTPException` vive mezclado con las reglas de negocio.
+- [ ] **Sin capa de excepciones de dominio.**
+  - Todo `raise HTTPException` mezclado con reglas de negocio.
 
-- [ ] **Frontend: lógica de fetching duplicada por página** (`useQuery` + `queryFn` inline repetido en accounts/budgets/transactions).
-  Oportunidad: extraer a hooks compartidos (`useAccounts`, `useCategories`, etc.) y centralizar `queryKey`.
+- [ ] **Frontend: fetching duplicado por página.**
+  - `useQuery` + `queryFn` inline repetido en accounts/budgets/transactions.
+  - Extraer a hooks compartidos (`useAccounts`, `useCategories`, etc.).
 
-- [ ] **Tipos de dominio (`AccountType`, `CategoryType`) no compartidos entre backend (Pydantic enum) y frontend (string suelto en TS).**
-  Riesgo de drift silencioso si el backend agrega un valor nuevo y el frontend no lo sabe.
+- [ ] **Tipos de dominio no compartidos backend→frontend.**
+  - `AccountType`, `CategoryType` son enums en Python pero string unions en TS.
+  - Riesgo de drift silencioso.
+
+- [ ] **Formularios usan `<input>` raw en vez de componentes `Input`/`Select` existentes.**
+  - UI components existen pero están mayormente sin usar.
 
 ---
 
-## 🔵 Solo si el proyecto crece a múltiples entornos/usuarios/consumidores
+## 🔵 Solo si el proyecto crece
 
-- [ ] Migraciones con Alembic (hoy `Base.metadata.create_all()`).
-- [ ] Migración de SQLite a PostgreSQL (ya hay `psycopg2-binary` en requirements, preparado para esto).
-- [ ] Dockerización (backend + frontend + Postgres).
-- [ ] Pipeline CI/CD (lint + test + build en cada cambio).
+- [ ] Migrar `create_all()` → Alembic.
+- [ ] Migrar SQLite → PostgreSQL (ya preparado con `psycopg2-binary`).
+- [ ] CI/CD (lint + test + build en cada cambio).
 - [ ] Testing automatizado (pytest/httpx backend, Vitest/RTL frontend).
 - [ ] Versionado de API (`/api/v1/...`).
-- [ ] Esquema compartido cliente-servidor (OpenAPI codegen o similar) para eliminar drift de tipos de raíz.
+- [ ] OpenAPI codegen para eliminar drift de tipos.
 
 ---
 
-## Historial de resolución
+## Resueltos
 
-- [x] Montos como float → migrado a Decimal/Numeric(14,2) en models.py, schemas.py y dashboard.py.
-  Base de datos recreada desde cero (sin datos previos que migrar).
-
-<!-- Ejemplo de cómo marcar al resolver:
-- [x] Montos como float → migrado a Decimal — 2026-07-03
--->
+| Fecha | Item |
+|-------|------|
+| 2026-07-10 | Rate limiting en login verificado y documentado |
+| 2026-07-10 | CSS bug dashboard corregido (max-w-[1600px] no se aplicaba) |
+| 2026-07-10 | finanzas.db excluido de git (*.db en .gitignore) |
+| 2026-07-08 | Montos float → Decimal/Numeric(14,2) |
+| 2026-07-06 | CORS → variable de entorno ALLOWED_ORIGINS |
+| 2026-07-08 | Refresh tokens implementados |
+| 2026-07-06 | SECRET_KEY regenerada criptográficamente |
+| 2026-07-06 | EmailStr + normalización email |
+| 2026-07-06 | .dict() → model_dump() |

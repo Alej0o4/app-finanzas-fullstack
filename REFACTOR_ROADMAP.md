@@ -1,299 +1,109 @@
-# Roadmap de Refactor — Oikos
+# Roadmap — Oikos
 
-> Checklist estructurado basado en la auditoría integral (Julio 2026).
-> Cada fase es prerrequisito de la siguiente. No saltarse fases sin marcar completas.
+> Plan de desarrollo priorizado por impacto real en uso diario.
+> Cada fase es independiente (salvo que se indique lo contrario).
 >
 > Formato: `[ ]` pendiente · `[x]` resuelto (con fecha).
 
 ---
 
-## Fase 0 — Quick Security Wins (bajo esfuerzo, alto impacto)
+## Historial — Completado
 
-- [x] **Regenerar `SECRET_KEY` criptográficamente segura.** (2026-07-06)
-  ```bash
-  python -c "import secrets; print(secrets.token_urlsafe(48))"
-  ```
-  Reemplazar en `backend/.env`. **No commitear la llave real.**
-
-- [x] **Agregar `EmailStr` a `UserCreate.email`** para validar formato de email. (2026-07-06)
-  Archivos: `backend/app/schemas/schemas.py`
-  - Cambiar `email: str = Field(..., max_length=255)` → `email: EmailStr`
-  - Agregar `from pydantic import EmailStr`
-
-- [x] **Normalizar email a minúsculas en registro y login.** (2026-07-06)
-  Archivos: `backend/app/api/auth.py`, `backend/app/api/users.py`
-  - Hacer `.lower().strip()` antes de guardar y antes de buscar.
-
-- [x] **Migrar `transaccion.dict()` → `transaccion.model_dump()`** (Pydantic v2 compat). (2026-07-06)
-  Archivo: `backend/app/api/transactions.py` (línea 41)
-
-  > **Hallazgo post-auditoría (2026-07-08):** `accounts.py:18`, `categories.py:19`, `budgets.py:39` aún usan `.dict()`. Se migran en esta iteración.
-
-- [x] **Mover CORS a variable de entorno `ALLOWED_ORIGINS`.** (2026-07-06)
-  Archivos: `backend/app/main.py`, `backend/.env`
-  - Default: `"http://localhost:3000,http://localhost:5173"`
+| Fecha | Item |
+|-------|------|
+| 2026-07-06 | **Fase 0** — Security wins: SECRET_KEY regenerada, EmailStr, email normalization, model_dump(), CORS en env var |
+| 2026-07-06 | **Fase 1** — Factoría de formateo + AppConfigProvider: columnas preferred_currency/locale, endpoint preferences, formatters.ts, useUserPreferences, migración formatCurrency/formatDate |
+| 2026-07-06 | **Fase 2** — Tokenización tema CSS: paleta light/dark con custom properties, ThemeToggle, hardcoded colors eliminados de gráficos |
+| 2026-07-08 | **Fase 3** — Columna currency en DB: modelos Account/Transaction/Budget, schemas, types, UI selector + display multi-moneda |
+| 2026-07-08 | Seed data: script `backend/app/core/seed.py` con usuario test, 3 cuentas, 45 transacciones, 6 presupuestos |
+| 2026-07-08 | Post-auditoría: migración `.dict()` → `model_dump()`, eliminación hex hardcodeados, corrección categories |
+| 2026-07-09 | Feature Multi-Tema: preferred_theme en backend, ThemeToggle sincronizado, transiciones CSS, WCAG AA verificado |
+| 2026-07-10 | **Fase 1** — Fixes inmediatos: CSS bug dashboard, finanzas.db excluido de git, rate limiting verificado y documentado |
 
 ---
 
-## Fase 1 — Quick Win #1: Factoría de Formateo + Provider de Configuración
+## Fase 1 — Fixes inmediatos (bugs + seguridad)
 
-**Objetivo:** Eliminar dependencias duras de COP/es-CO/dark en la capa de presentación.
+- [x] **Fix bug CSS dashboard** — `frontend/app/(dashboard)/layout.tsx:33` (2026-07-10)
+  - `lg:p-12max-w-[1600px]` → `lg:p-12 max-w-[1600px]` (falta un espacio)
+  - El `max-w-[1600px]` nunca se aplica actualmente.
 
-### Backend
+- [x] **Excluir `finanzas.db` de git** — agregar a `.gitignore` (2026-07-10)
+  - Riesgo de commitear datos financieros reales por accidente.
 
-- [x] **Crear endpoint `GET /api/users/me/preferences`** que devuelva `{ currency, locale, theme }`. (2026-07-06)
-  - Valores iniciales: `{ currency: "COP", locale: "es-CO", theme: "dark" }`.
-  - Archivo nuevo: `backend/app/api/preferences.py`
-  - Registrar router en `backend/app/main.py`
-
-- [x] **Agregar columna `preferred_currency` al modelo `User`.** (2026-07-06)
-  Archivo: `backend/app/models/models.py`
-  - `preferred_currency = Column(String(3), default="COP")`
-
-- [x] **Agregar columna `preferred_locale` al modelo `User`.** (2026-07-06)
-  - `preferred_locale = Column(String(10), default="es-CO")`
-
-- [x] **Exponer preferencias en `UserResponse` schema.** (2026-07-06)
-  Archivo: `backend/app/schemas/schemas.py`
-
-### Frontend — Core
-
-- [x] **Crear `frontend/lib/formatters.ts`** con funciones parametrizables: (2026-07-06)
-  ```ts
-  export function formatCurrency(amount: number, currency = "COP", locale = "es-CO"): string
-  export function formatDate(isoString: string, locale = "es-CO", options?: Intl.DateTimeFormatOptions): string
-  ```
-  - Migrar implementación desde `lib/utils.ts`.
-
-- [x] **Crear `frontend/providers/AppConfigProvider.tsx`** con React Context: (2026-07-06)
-  - Estado: `{ currency: string; locale: string; theme: string }`
-  - Valores default: `{ currency: "COP"; locale: "es-CO"; theme: "dark" }`
-  - Hook: `useAppConfig()`
-
-- [x] **Crear custom hook `useUserPreferences.ts`** que: (2026-07-06)
-  - Haga fetch a `GET /api/users/me/preferences` (autenticado).
-  - Sincronice el `AppConfigProvider` con los valores del backend.
-  - Haga fallback a defaults si el fetch falla o no hay token.
-
-- [x] **Envolver `frontend/app/layout.tsx`** con `AppConfigProvider`. (2026-07-06)
-
-- [x] **Migrar `formatCurrency(amount)` → `formatCurrency(amount, currency)` en TODOS los usos.** (2026-07-06)
-  Búsqueda: `formatCurrency(` en `*.tsx` y `*.ts`.
-  Archivos a tocar (~15 ocurrencias):
-  - `frontend/lib/utils.ts` (re-export)
-  - `frontend/components/CashflowChart.tsx`
-  - `frontend/components/CategoryDonutChart.tsx`
-  - `frontend/components/charts/BudgetRing.tsx`
-  - `frontend/components/AnalyticsSummary.tsx`
-  - `frontend/app/(dashboard)/page.tsx`
-  - `frontend/app/(dashboard)/transactions/page.tsx`
-  - `frontend/app/(dashboard)/accounts/page.tsx`
-  - `frontend/app/(dashboard)/accounts/[id]/page.tsx`
-  - `frontend/app/(dashboard)/categories/[id]/page.tsx`
-  - `frontend/app/(dashboard)/budgets/page.tsx`
-
-- [x] **Migrar `formatDate(isoString)` → `formatDate(isoString, locale)` en TODOS los usos.** (2026-07-06)
-  Archivos a tocar (~5 ocurrencias).
-
-- [x] **Actualizar `types/api.ts`** para incluir `preferred_currency` y `preferred_locale` en `UserResponse`. (2026-07-06)
-  > **Hallazgo post-auditoría (2026-07-08):** Se creó `UserPreferences` como interfaz separada, pero no existe `UserResponse` canónica. Se agrega interfaz en esta iteración.
+- [x] **Verificar rate limiting en login** — `backend/app/main.py` (2026-07-10)
+  - El `TODO_TECH_DEBT.md` dice "sin rate limiting" pero `slowapi` parece estar configurado.
+  - Confirmar que funciona y documentar el estado real.
 
 ---
 
-## Fase 2 — Quick Win #2: Tokenización de Tema (CSS Custom Properties)
+## Fase 2 — Transacción rápida (FAB)
 
-**Objetivo:** Sistema de estilos que soporte light/dark sin colores hardcodeados en componentes.
+**Objetivo:** Poder registrar un gasto en <5 segundos desde cualquier pantalla. Este es el feature con mayor impacto en que la app se use diariamente.
 
-### CSS
+- [ ] **Crear componente `FloatingActionButton.tsx`**
+  - Botón flotante fijo en esquina inferior derecha del dashboard.
+  - Visible en todas las pantallas del dashboard (no en auth).
+  - Icono: `Plus` de Lucide, fondo `--color-primary`.
+  - Hover: escala + sombra. Z-index por encima de modales.
 
-- [x] **Refactorizar `frontend/app/globals.css`:** (2026-07-06)
-  - Convertir paleta actual en `:root, [data-theme="dark"] { ... }`.
-  - Agregar `[data-theme="light"] { ... }` con paleta clara completa:
+- [ ] **Crear componente `QuickTransactionModal.tsx`**
+  - Modal simplificado (no el `TransactionModal` completo).
+  - Campos:
+    - **Monto** — input numérico, autofocus, formato COP.
+    - **Tipo** — toggle gasto/ingreso (default: gasto).
+    - **Cuenta** — select con cuentas del usuario (default: primera cuenta).
+    - **Categoría** — select con categorías filtradas por tipo (gasto/ingreso).
+    - **Fecha** — input date, default = hoy.
+    - **Descripción** — textarea opcional, una línea.
+  - Botón "Guardar" al fondo.
+  - Al guardar: crear transacción vía `POST /api/transactions/`, invalidar queries de dashboard, transacciones, cuentas, presupuestos.
+  - Cerrar modal y mostrar toast de éxito.
 
-    | Variable | Dark (actual) | Light (nueva) |
-    |---|---|---|
-    | `--color-background` | `#0b1220` | `#f8fafc` |
-    | `--color-surface` | `#111b2e` | `#ffffff` |
-    | `--color-surface-elevated` | `#162338` | `#f1f5f9` |
-    | `--color-border` | `#24314a` | `#e2e8f0` |
-    | `--color-text` | `#eef4ff` | `#0f172a` |
-    | `--color-text-muted` | `#9aa7bd` | `#64748b` |
-    | `--color-text-soft` | `#c7d2e5` | `#334155` |
-    | `--color-primary` | `#7dd3fc` | `#0284c7` |
-    | `--color-primary-dark` | `#38bdf8` | `#0369a1` |
-    | `--color-success` | `#34d399` | `#16a34a` |
-    | `--color-warning` | `#f59e0b` | `#d97706` |
-    | `--color-danger` | `#fb7185` | `#dc2626` |
-    | `--color-info` | `#60a5fa` | `#2563eb` |
-    | Chart tokens (1-10) | existing | versiones claras |
+- [ ] **Integrar FAB en dashboard layout**
+  - `frontend/app/(dashboard)/layout.tsx` — renderizar `FloatingActionButton` junto al contenido.
+  - Al tocar: abrir `QuickTransactionModal`.
 
-  - Agregar `@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *))`.
-
-### Componentes — Eliminar colores hardcodeados
-
-- [x] **`frontend/components/CashflowChart.tsx`:** (2026-07-06)
-  - Reemplazar `text-[#60a5fa]` (spinner) → `text-info` o `fill="var(--color-info)"`.
-  - Reemplazar `fill="#34d399"` → `fill="var(--color-success)"`.
-  - Reemplazar `fill="#fb7185"` → `fill="var(--color-danger)"`.
-  - Reemplazar tooltip inline styles:
-    - `backgroundColor: "#162338"` → `var(--color-surface-elevated)`
-    - `borderColor: "#24314a"` → `var(--color-border)`
-    - `color: "#eef4ff"` → `var(--color-text)`
-  - Reemplazar `stroke="#24314a"` (CartesianGrid) → `var(--color-border)`.
-  - Reemplazar `stroke="#9aa7bd"` (ejes) → `var(--color-text-muted)`.
-  - Reemplazar `fill="#24314a"` (cursor) → `var(--color-border)`.
-
-- [x] **`frontend/components/CategoryDonutChart.tsx`:** (2026-07-06)
-  - Reemplazar `text-[#60a5fa]` (spinner) → `text-info`.
-  - Tooltip ya usaba clases Tailwind — sin cambios necesarios.
-  - CATEGORY_COLORS migrado a `var(--color-chart-1..10)`.
-
-- [x] **Eliminar hex hardcodeados en SummaryCard/AnalyticsSummary.** (2026-07-08)
-  - `AnalyticsSummary.tsx:18-20` y `dashboard/page.tsx:75-76` aún pasaban `#34d399` / `#fb7185`.
-  - Reemplazado por `var(--color-success)` y `var(--color-danger)`.
-
-### UI — ThemeToggle
-
-- [x] **Crear `frontend/components/ThemeToggle.tsx`:** (2026-07-06)
-  - Botón que alterne: `dark` ↔ `light` ↔ `system`.
-  - Escriba `data-theme` en `<html>`.
-  - Escuche `prefers-color-scheme` cuando está en modo `system`.
-  - Persista preferencia en `localStorage` clave `oikos_theme`.
-
-- [x] **Integrar `ThemeToggle` en `Sidebar.tsx`** (footer abierto y colapsado). (2026-07-06)
-
-- [x] **Sincronizar tema con `AppConfigProvider`** (Fase 1) via `updateConfig({ theme })`. (2026-07-06)
+- [ ] **Feedback visual post-guardado**
+  - Toast "Gasto registrado" o "Ingreso registrado" (Sonner).
+  - Cerrar modal automáticamente.
+  - Actualizar datos del dashboard (query invalidation).
 
 ---
 
-## Fase 3 — Quick Win #3: Columna `currency` en DB
+## Fase 3 — Documentación actualizada
 
-**Objetivo:** Almacenar moneda por cuenta/transacción para soporte multi-moneda.
+**Objetivo:** Que la documentación refleje el estado real del código. Acelera desarrollo futuro con agentes IA.
 
-### Backend — Modelos
+- [ ] **Actualizar `backend/docs/API_REFERENCE.md`**
+  - Agregar: refresh tokens, campos currency en accounts/transactions/budgets,
+    preferencias de usuario (GET/PATCH), endpoint `/auth/refresh`, `/auth/logout`.
 
-- [x] **Agregar `currency = Column(String(3), default="COP")` a modelo `Account`.** (2026-07-08)
-  Archivo: `backend/app/models/models.py`
+- [ ] **Actualizar `backend/docs/ARCHITECTURE.md`**
+  - Corregir: "no hay refresh tokens" → documentar refresh token rotation.
+  - Documentar columnas `preferred_currency`, `preferred_locale`, `preferred_theme`.
 
-- [x] **Agregar `currency = Column(String(3), default="COP")` a modelo `Transaction`.** (2026-07-08)
-  - Heredar de la cuenta al crear transacción.
+- [ ] **Actualizar `AGENTS.md`**
+  - Reflejar comandos y arquitectura actuales.
 
-- [x] **Agregar `currency = Column(String(3), default="COP")` a modelo `Budget`.** (2026-07-08)
-  - Moneda propia, no hereda de categoría.
-
-### Backend — Schemas
-
-- [x] **Agregar `currency: str = "COP"` a schemas:** (2026-07-08)
-  - `AccountResponse`
-  - `TransactionResponse` / `TransactionBase`
-  - `BudgetResponse` / `BudgetBase`
-  - `DashboardSummary` (la moneda del resumen puede ser la del usuario)
-
-### Backend — Lógica
-
-- [x] **Al crear transacción: heredar `currency` de la `Account` asociada.** (2026-07-08)
-  Archivo: `backend/app/api/transactions.py`
-  - `nueva_transaccion.currency = cuenta.currency`
-
-- [x] **Al crear cuenta: asignar `currency` del payload (default "COP" si no se envía).** (2026-07-08)
-  Archivo: `backend/app/api/accounts.py`
-
-- [x] **Al crear presupuesto: asignar `currency` del payload (default "COP" si no se envía).** (2026-07-08)
-  Archivo: `backend/app/api/budgets.py`
-
-### Frontend — Tipos
-
-- [x] **Agregar `currency: string` a interfaces en `types/api.ts`:** (2026-07-08)
-  - `Account`, `Transaction`, `Budget`, `DashboardSummary`
-  - Opcional: `CreateAccountPayload`, `CreateTransactionPayload`, `BudgetPayload`
-
-### Frontend — UI
-
-- [x] **Agregar selector de moneda en formulario de crear cuenta** (dropdown con COP, USD, EUR). (2026-07-08)
-  Archivo: `frontend/app/(dashboard)/accounts/page.tsx`
-
-- [x] **Agregar indicador de moneda en tarjetas de cuenta** (ej. "COP" junto al saldo). (2026-07-08)
-  Archivo: `frontend/app/(dashboard)/accounts/page.tsx`
-
-- [x] **Mostrar moneda en cada transacción de la lista.** (2026-07-08)
-  Archivo: `frontend/app/(dashboard)/transactions/page.tsx`
-
-- [x] **Usar `tx.currency` en categorías** en vez de `config.currency`. (2026-07-08)
-  - `categories/[id]/page.tsx:173` usaba `config.currency`, corregido a `tx.currency`.
+- [ ] **Actualizar `TODO_TECH_DEBT.md`**
+  - Marcar como resueltos los items que ya se completaron (rate limiting, CORS, refresh tokens).
+  - Reorganizar prioridades según el nuevo estado.
 
 ---
 
-## Post-Quick-Wins — Implementación de Features
+## Fase 4 — Self-Hosting con Docker + Tailscale
 
-> Completar las 3 fases anteriores antes de comenzar esta sección.
-
-### Feature: Multi-Tema (Dark / Light / System)
-
-- [x] **Confirmar que Fase 2 está completa** (no hay colores hardcodeados). (2026-07-09)
-- [x] **Persistir preferencia de tema en backend** (`PATCH /api/users/me/preferences`). (2026-07-09)
-- [x] **Agregar `preferred_theme` a `AppConfigProvider`** con valor inicial del backend. (2026-07-09)
-- [x] **Sincronizar `ThemeToggle` con backend** al cambiar preferencia. (2026-07-09)
-- [x] **Probar transición suave** entre temas (CSS `transition` en variables). (2026-07-09)
-- [x] **Verificar contraste WCAG AA** en ambos temas (especialmente text-muted sobre surface). (2026-07-09)
-
-### Feature: i18n (Internacionalización)
-
-- [ ] **Crear `frontend/lib/i18n/`** con estructura:
-  - `locales/es.json` — traducciones español
-  - `locales/en.json` — traducciones inglés
-  - `config.ts` — definición de idiomas soportados
-  - `useTranslation.ts` — hook que consume el locale de `AppConfigProvider`
-
-- [ ] **Extraer TODOS los strings de UI** a los archivos JSON:
-  - Navegación (Sidebar)
-  - Formularios (crear/editar cuentas, categorías, transacciones, presupuestos)
-  - Dashboard (títulos, etiquetas, estados vacíos, errores)
-  - Gráficos (tooltips, leyendas, botones de período)
-  - Modales y confirmaciones
-  - Páginas de autenticación
-
-- [ ] **Reemplazar strings inline** por `t("key")` en todos los componentes.
-
-- [ ] **Agregar selector de idioma** en `Sidebar.tsx` o página de preferencias.
-
-- [ ] **Persistir `preferred_locale`** en backend (`PATCH /api/users/me/preferences`).
-
-- [ ] **Actualizar `Intl.DateTimeFormat` y `Intl.NumberFormat`** para usar `locale` dinámico.
-
-### Feature: Multi-Moneda Completo
-
-- [ ] **Confirmar Fase 3 completa** (currency en DB, schemas, types).
-- [ ] **Selector de moneda al crear transacción** (default de la cuenta, overridable).
-- [ ] **Dashboard multi-moneda:**
-  - Mostrar saldo total en la moneda del usuario (COP).
-  - Convertir/agrupar por moneda: tarjeta separada por cada moneda.
-  - O usar tasa de conversión (requiere feature de tasas).
-
-- [ ] **API de tasas de cambio** (endpoint externo o tabla manual):
-  - Endpoint `GET /api/rates` o servicio externo.
-  - Cache de tasas con TTL configurable.
-
-- [ ] **Visualización con código de moneda** en toda la UI:
-  - Formato: `$1,234,567 COP` o `$850.00 USD`.
-  - Usar `Intl.NumberFormat(locale, { style: "currency", currency })`.
-
----
-
-## Fase 4 — Self-Hosting con Docker + Acceso Remoto
-
-**Objetivo:** Poder acceder a Oikos desde cualquier dispositivo (celular, laptop)
-de forma segura sin depender de localhost, sentando las bases para migrar a
-Raspberry Pi en el futuro.
+**Objetivo:** Acceder a Oikos desde celular y cualquier dispositivo, de forma segura.
 
 ### Migrar backend a PostgreSQL
 
-- [ ] **Agregar `psycopg2-binary` a `requirements.txt`** para conectar a PostgreSQL.
 - [ ] **Actualizar `app/core/database.py`** para leer `DATABASE_URL` de variable de entorno
       con fallback a SQLite (`sqlite:///./finanzas.db`).
+
 - [ ] **Agregar servicio `postgres`** en docker-compose con imagen `postgres:16-alpine`,
       volumen persistente y credenciales vía variables de entorno.
-- [ ] **Crear script `docker/init.sql`** para crear la base de datos inicial (opcional,
-      porque `Base.metadata.create_all()` ya existe).
+
 - [ ] **Verificar** que el backend arranque correctamente apuntando a PostgreSQL.
 
 ### Dockerizar la aplicación
@@ -302,54 +112,73 @@ Raspberry Pi en el futuro.
   - Copiar `requirements.txt`, instalar dependencias.
   - Exponer puerto `8000`.
   - Comando: `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+
 - [ ] **Crear `frontend/Dockerfile`** con `node:22-alpine` (multi-stage):
   - Build stage: copiar código, `pnpm install`, `pnpm build`.
   - Production stage: copiar `.next/standalone`, expone `3000`.
   - Variable de build: `NEXT_PUBLIC_API_URL`.
+
 - [ ] **Crear `docker-compose.yml`** en la raíz con 3 servicios:
   - `postgres` — imagen externa, volumen persistente.
   - `backend` — build local, depende de `postgres`.
   - `frontend` — build local, depende de `backend`.
+
 - [ ] **Agregar `.dockerignore`** para backend y frontend (node_modules, venv, __pycache__,
       .db, .env).
-- [ ] **Verificar** que `docker compose up --build` funcione de cero en PC.
-- [ ] **Verificar compatibilidad ARM64** (`docker compose build` en Raspberry Pi OS).
+
+- [ ] **Verificar** que `docker compose up --build` funcione de cero.
 
 ### Acceso remoto con Tailscale
 
-- [ ] **Instalar Tailscale** en la máquina host:
-  ```bash
-  curl -fsSL https://tailscale.com/install.sh | sh
-  sudo tailscale up
-  ```
+- [ ] **Instalar Tailscale** en la máquina host.
+
 - [ ] **Instalar Tailscale** en cada dispositivo cliente (celular Android/iOS, laptop).
+
 - [ ] **Acceder** desde cualquier dispositivo por `http://<tailscale-ip>:3000`.
+
 - [ ] **Verificar** que login, JWT y funcionalidad completa funcionen por Tailscale.
-- [ ] **Opcional:** Configurar MagicDNS de Tailscale para acceder por nombre
-      (`http://oikos:3000`) en vez de IP.
+
+- [ ] **Opcional:** Configurar MagicDNS para acceder por nombre (`http://oikos:3000`).
 
 ### Calidad de vida
 
 - [ ] **Healthchecks** en docker-compose para los 3 servicios.
+
 - [ ] **Script `scripts/deploy.sh`** que automatice: git pull → docker compose up --build -d.
-- [ ] **Documentar** en `README.md` sección de self-hosting con Docker + Tailscale.
-- [ ] **Nota futura:** Migrar a Raspberry Pi solo requiere instalar Docker + Tailscale
-      en la Pi, clonar el repo y ejecutar `docker compose up -d`.
 
 ---
 
-## Historial de resolución
+## Fase 5 — Backup + Multi-moneda simple
 
-| Fecha | Item |
-|-------|------|
-| 2026-07-06 | Fase 0 completa: SECRET_KEY, EmailStr, email normalization, model_dump(), CORS env var |
-| 2026-07-06 | Fase 1 completa: columnas preferred_currency/locale, endpoint preferences, formatters.ts, AppConfigProvider, useUserPreferences, migración formatCurrency/formatDate |
-| 2026-07-06 | Fase 2 completa: Tokenización tema CSS (light/dark), ThemeToggle, Sidebar integration, hardcoded colors eliminados de gráficos |
-| 2026-07-08 | Fase 3 completa: Columna currency en modelos Account/Transaction/Budget, schemas, types, UI selector + display multi-moneda |
-| 2026-07-08 | Seed data: Script `backend/app/core/seed.py` con usuario test, 3 cuentas multi-moneda, 45 transacciones (3 meses), 6 presupuestos |
-| 2026-07-08 | Post-auditoría: migración `.dict()` restantes → `model_dump()` en accounts, categories, budgets |
-| 2026-07-08 | Post-auditoría: eliminación de hex hardcodeados (#34d399/#fb7185) en AnalyticsSummary y dashboard |
-| 2026-07-08 | Post-auditoría: corrección `categories/[id]/page.tsx` para usar `tx.currency` |
-| 2026-07-08 | Post-auditoría: creación de interfaz `UserResponse` canónica en `api.ts` |
-| 2026-07-08 | Fase 4 agregada: plan de self-hosting Docker + PostgreSQL + Tailscale |
-| 2026-07-09 | Feature Multi-Tema completo: preferred_theme en modelo/schema/API, PATCH endpoint, ThemeToggle sincronizado con backend, transiciones CSS, WCAG AA verificado |
+**Objetivo:** Proteger datos y corregir el bug del saldo total multi-moneda.
+
+### Backup
+
+- [ ] **Script `scripts/backup.sh`** — copiar `finanzas.db` a `backups/` con timestamp.
+  - Ejecutar antes de cada sesión de cambios significativos.
+  - Mantener últimos 7 backups (rotación).
+
+### Dashboard multi-moneda (solo agrupación)
+
+- [ ] **Corregir `backend/app/api/dashboard.py`**
+  - El `total_balance` actual suma saldos de COP + USD + EUR = número sin sentido.
+  - Cambiar: agrupar saldos por moneda, devolver `{ balances: [{ currency: "COP", total: 1500000 }, { currency: "USD", total: 850 }] }`.
+
+- [ ] **Actualizar schema `DashboardSummary`**
+  - Nuevo campo `balances_by_currency` (array de `{ currency, total }`).
+  - Mantener `total_balance` como deprecated o eliminarlo.
+
+- [ ] **Actualizar frontend `app/(dashboard)/page.tsx`**
+  - Mostrar tarjeta de saldo por cada moneda (en vez de una sola suma).
+  - Formato: `$1.234.567 COP`, `$850.00 USD`.
+
+---
+
+## Fuera de scope (no hacer)
+
+- ~~**i18n (Internacionalización)**~~ — Innecesario para un solo usuario que habla español.
+- ~~**Multi-Moneda Completo (tasas de cambio)**~~ — Overengineering para gastos personales.
+- ~~**Alembic**~~ — `create_all()` es suficiente para un solo usuario.
+- ~~**CI/CD**~~ — Innecesario para proyecto personal.
+- ~~**Testing automatizado**~~ — Por ahora. Revisar cuando el código crezca.
+- ~~**Service layer backend**~~ — Los routers están delgados; resolver cuando dualen.

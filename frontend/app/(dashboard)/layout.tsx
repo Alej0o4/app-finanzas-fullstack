@@ -30,7 +30,7 @@ export default function DashboardLayout({
         className={`transition-all duration-300 ease-in-out min-h-screen flex flex-col
           ${isSidebarOpen ? "pl-64" : "pl-20"}`}
       >
-        <main className="flex-1 p-8 lg:p-12max-w-[1600px] w-full mx-auto">
+        <main className="flex-1 p-8 lg:p-12 max-w-[1600px] w-full mx-auto">
           {children}
         </main>
       </div>
