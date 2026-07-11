@@ -12,15 +12,20 @@ La regla base es simple: el frontend no recalcula saldos, progreso de presupuest
 - Fallback local: `http://localhost:8000`
 - Autenticación: `Authorization: Bearer <token>`
 - El token se lee desde `localStorage` en `lib/api.ts`
+- El refresh token se almacena en `localStorage` como `refresh_token`
 
-Si el backend responde `401`, el cliente limpia el token y redirige a `/login`.
+Si el backend responde `401`, el frontend intenta renovar el token via `POST /api/auth/refresh` con el `refresh_token`. Si la renovación falla, limpia el token y redirige a `/login`.
 
 ## Endpoints consumidos por el frontend
 
 ### Autenticación
 
-- `POST /api/auth/login`
+- `POST /api/auth/login` → devuelve `access_token` + `refresh_token`
+- `POST /api/auth/refresh` → rota refresh token, devuelve nuevo JWT
+- `POST /api/auth/logout` → revoca refresh token
 - `GET /api/users/me`
+- `GET /api/users/me/preferences`
+- `PATCH /api/users/me/preferences`
 
 ### Cuentas
 
@@ -84,6 +89,19 @@ El endpoint devuelve una respuesta paginada:
 - `id`
 - `email`
 - `full_name`
+- `preferred_currency` (default `"COP"`)
+- `preferred_locale` (default `"es-CO"`)
+- `preferred_theme` (default `"dark"`)
+
+### Preferencias de usuario
+
+`GET /api/users/me/preferences` devuelve:
+
+- `preferred_currency`: string
+- `preferred_locale`: string
+- `preferred_theme`: string
+
+`PATCH /api/users/me/preferences` acepta campos opcionales: `preferred_currency`, `preferred_locale`, `preferred_theme`.
 
 ### Cuenta
 
@@ -93,12 +111,14 @@ El frontend asume:
 - `name`
 - `type`
 - `balance`
+- `currency`
 - `user_id`
 
 Reglas:
 
 - `balance` se muestra, pero no debe recalcularse en cliente.
 - En edición no se envía `balance`.
+- `currency` se hereda al crear transacciones asociadas.
 
 ### Categoría
 
@@ -123,12 +143,14 @@ El frontend asume:
 - `description`
 - `amount`
 - `type`
+- `currency`
 - `date`
 - `account_id`
 - `category_id`
 
 Reglas:
 
+- `currency` se hereda de la cuenta al crear; no se envía en el payload.
 - El feed principal debe ordenarse por fecha descendente desde el backend.
 - Los detalles por cuenta y categoría reutilizan el mismo contrato.
 - Al crear, editar o borrar una transacción, se deben invalidar las queries relacionadas.
@@ -142,6 +164,7 @@ El frontend asume:
 - `id`
 - `category_id`
 - `amount_limit`
+- `currency`
 - `month`
 - `year`
 
@@ -165,10 +188,11 @@ Para el progreso de presupuestos, el backend devuelve valores listos para pintar
 
 ## Errores esperados
 
-- `400`: validación de negocio fallida o dato inválido.
+- `400`: validación de negocio fallida o dato inválido. Ej: cuenta con transacciones, budget duplicado, categoría protegida.
 - `401`: token ausente o inválido.
-- `403`: acción no permitida.
+- `403`: acción no permitida (ej: editar/eliminar categoría base del sistema).
 - `404`: recurso inexistente o fuera de alcance del usuario.
+- `429`: rate limiting excedido (solo en `/api/auth/login`, 5 req/min).
 
 ## Reglas de consumo
 

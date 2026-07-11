@@ -5,26 +5,58 @@
 - Base path: `/api`
 - Autenticación: `Authorization: Bearer <token>` en rutas protegidas.
 - Content type esperado: `application/json`, excepto login, que usa formulario OAuth2.
+- Rate limiting: solo en `/api/auth/login` (5 req/min por IP via `slowapi`).
 
 ## Autenticación
 
 ### `POST /api/auth/login`
 
-Inicia sesión y devuelve un JWT.
+Inicia sesión y devuelve un JWT + refresh token.
 
-Entrada:
+Entrada (form-urlencoded):
 
 - `username`: email del usuario.
 - `password`: contraseña en texto plano.
 
 Salida:
 
-- `access_token`: JWT firmado.
+- `access_token`: JWT firmado (expira en 60 min).
+- `refresh_token`: token opaco para renovar sesión (expira en 30 días).
 - `token_type`: `bearer`.
 
 Errores esperados:
 
 - `403` si las credenciales son inválidas.
+- `429` si se exceden 5 intentos por minuto (rate limiting).
+
+### `POST /api/auth/refresh`
+
+Rota el refresh token y devuelve un nuevo JWT.
+
+Entrada:
+
+- `refresh_token`: el refresh token actual.
+
+Salida:
+
+- `access_token`: nuevo JWT firmado.
+- `refresh_token`: nuevo refresh token (el anterior queda invalidado).
+
+Errores esperados:
+
+- `401` si el refresh token es inválido o expiró.
+
+### `POST /api/auth/logout`
+
+Revoca el refresh token, cerrando la sesión.
+
+Entrada:
+
+- `refresh_token`: el refresh token a revocar.
+
+Salida:
+
+- `{"estado": "OK", "mensaje": "Sesion cerrada exitosamente."}`
 
 ## Usuarios
 
@@ -43,6 +75,9 @@ Salida:
 - `id`
 - `full_name`
 - `email`
+- `preferred_currency` (default: `"COP"`)
+- `preferred_locale` (default: `"es-CO"`)
+- `preferred_theme` (default: `"dark"`)
 
 Errores esperados:
 
@@ -57,6 +92,29 @@ Salida:
 - `id`
 - `full_name`
 - `email`
+- `preferred_currency`
+- `preferred_locale`
+- `preferred_theme`
+
+### `GET /api/users/me/preferences`
+
+Devuelve las preferencias del usuario autenticado.
+
+Salida:
+
+- `preferred_currency`: string (default `"COP"`)
+- `preferred_locale`: string (default `"es-CO"`)
+- `preferred_theme`: string (default `"dark"`)
+
+### `PATCH /api/users/me/preferences`
+
+Actualiza preferencias del usuario autenticado.
+
+Entrada (campos opcionales):
+
+- `preferred_currency`: string
+- `preferred_locale`: string
+- `preferred_theme`: string
 
 ## Cuentas
 
@@ -69,6 +127,7 @@ Entrada:
 - `name`
 - `type`: `cash | debit | credit`
 - `balance`: saldo inicial permitido solo en creación.
+- `currency`: código de moneda (default `"COP"`). Ej: `"COP"`, `"USD"`, `"EUR"`.
 
 Salida:
 
@@ -76,6 +135,7 @@ Salida:
 - `name`
 - `type`
 - `balance`
+- `currency`
 - `user_id`
 
 ### `GET /api/accounts/{account_id}`
@@ -93,6 +153,10 @@ Actualiza nombre y tipo de la cuenta.
 ### `DELETE /api/accounts/{account_id}`
 
 Elimina la cuenta si no tiene transacciones asociadas.
+
+Errores esperados:
+
+- `400` si la cuenta tiene transacciones asociadas.
 
 ## Categorías
 
@@ -128,8 +192,11 @@ Entrada:
 - `amount`: mayor a cero.
 - `type`: `income | expense`
 - `description`: opcional.
+- `date`: fecha de la transación (formato ISO, default: ahora).
 - `account_id`
 - `category_id`
+
+Nota: `currency` se hereda automáticamente de la cuenta asociada.
 
 ### `GET /api/transactions/`
 
@@ -168,9 +235,14 @@ Crea un presupuesto por categoría, mes y año.
 Entrada:
 
 - `amount_limit`: mayor a cero.
+- `currency`: código de moneda (default `"COP"`).
 - `month`: entre 1 y 12.
 - `year`
 - `category_id`
+
+Errores esperados:
+
+- `400` si ya existe un presupuesto para la misma categoría, mes y año.
 
 ### `GET /api/budgets/`
 
@@ -198,6 +270,7 @@ Devuelve:
 - `total_balance`
 - `monthly_income`
 - `monthly_expense`
+- `currency`: moneda del resumen (default `"COP"`)
 
 ### `GET /api/dashboard/budgets-progress`
 

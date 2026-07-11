@@ -18,7 +18,9 @@
 | 2026-07-08 | Seed data: script `backend/app/core/seed.py` con usuario test, 3 cuentas, 45 transacciones, 6 presupuestos |
 | 2026-07-08 | Post-auditoría: migración `.dict()` → `model_dump()`, eliminación hex hardcodeados, corrección categories |
 | 2026-07-09 | Feature Multi-Tema: preferred_theme en backend, ThemeToggle sincronizado, transiciones CSS, WCAG AA verificado |
+| 2026-07-10 | Feature FAB + Transacción Rápida: FloatingActionButton, FabManager, QuickTransactionModal, integrado en dashboard layout |
 | 2026-07-10 | **Fase 1** — Fixes inmediatos: CSS bug dashboard, finanzas.db excluido de git, rate limiting verificado y documentado |
+| 2026-07-10 | **Fase 3** — Documentación actualizada: keys preferencias corregidas, errores API, ARCHITECTURE con RefreshToken y migraciones, AGENTS actualizado, TODO_TECH_DEBT con 3 items nuevos |
 
 ---
 
@@ -39,32 +41,30 @@
 
 ## Fase 2 — Transacción rápida (FAB)
 
-**Objetivo:** Poder registrar un gasto en <5 segundos desde cualquier pantalla. Este es el feature con mayor impacto en que la app se use diariamente.
+**Objetivo:** Poder registrar un gasto en <5 segundos desde cualquier pantalla. Este es el feature con mayor impacto en que la app se use diariamente. (2026-07-10)
 
-- [ ] **Crear componente `FloatingActionButton.tsx`**
+- [x] **Crear componente `FloatingActionButton.tsx`** (2026-07-10)
   - Botón flotante fijo en esquina inferior derecha del dashboard.
   - Visible en todas las pantallas del dashboard (no en auth).
   - Icono: `Plus` de Lucide, fondo `--color-primary`.
-  - Hover: escala + sombra. Z-index por encima de modales.
+  - Menú expandible con 2 opciones: "Gasto rápido" y "Nueva transacción".
+  - Click fuera cierra el menú. Z-index z-30 (debajo de sidebar y modales).
 
-- [ ] **Crear componente `QuickTransactionModal.tsx`**
-  - Modal simplificado (no el `TransactionModal` completo).
-  - Campos:
-    - **Monto** — input numérico, autofocus, formato COP.
-    - **Tipo** — toggle gasto/ingreso (default: gasto).
-    - **Cuenta** — select con cuentas del usuario (default: primera cuenta).
-    - **Categoría** — select con categorías filtradas por tipo (gasto/ingreso).
-    - **Fecha** — input date, default = hoy.
-    - **Descripción** — textarea opcional, una línea.
-  - Botón "Guardar" al fondo.
-  - Al guardar: crear transacción vía `POST /api/transactions/`, invalidar queries de dashboard, transacciones, cuentas, presupuestos.
-  - Cerrar modal y mostrar toast de éxito.
+- [x] **Crear componente `QuickTransactionModal.tsx`** (2026-07-10)
+  - Modal simplificado basado en `ModalShell`.
+  - Campos: monto (autofocus), tipo toggle, cuenta (select), categoría (filtrada por tipo), fecha (default hoy), descripción (opcional).
+  - Cuenta se auto-selecciona (primera cuenta del usuario).
+  - Al guardar: `POST /api/transactions/`, invalidar 5 queries, toast de éxito, cerrar modal.
 
-- [ ] **Integrar FAB en dashboard layout**
-  - `frontend/app/(dashboard)/layout.tsx` — renderizar `FloatingActionButton` junto al contenido.
-  - Al tocar: abrir `QuickTransactionModal`.
+- [x] **Crear componente `FabManager.tsx`** (2026-07-10)
+  - Orquestador que maneja el estado del menú FAB y los dos modales.
+  - "Gasto rápido" → `QuickTransactionModal`.
+  - "Nueva transacción" → `TransactionModal` (existente).
 
-- [ ] **Feedback visual post-guardado**
+- [x] **Integrar FAB en dashboard layout** (2026-07-10)
+  - `frontend/app/(dashboard)/layout.tsx` — `<FabManager />` junto a Sidebar y ConfirmDialog.
+
+- [x] **Feedback visual post-guardado** (2026-07-10)
   - Toast "Gasto registrado" o "Ingreso registrado" (Sonner).
   - Cerrar modal automáticamente.
   - Actualizar datos del dashboard (query invalidation).
@@ -75,18 +75,18 @@
 
 **Objetivo:** Que la documentación refleje el estado real del código. Acelera desarrollo futuro con agentes IA.
 
-- [ ] **Actualizar `backend/docs/API_REFERENCE.md`**
+- [x] **Actualizar `backend/docs/API_REFERENCE.md`** (2026-07-10)
   - Agregar: refresh tokens, campos currency en accounts/transactions/budgets,
     preferencias de usuario (GET/PATCH), endpoint `/auth/refresh`, `/auth/logout`.
 
-- [ ] **Actualizar `backend/docs/ARCHITECTURE.md`**
+- [x] **Actualizar `backend/docs/ARCHITECTURE.md`** (2026-07-10)
   - Corregir: "no hay refresh tokens" → documentar refresh token rotation.
   - Documentar columnas `preferred_currency`, `preferred_locale`, `preferred_theme`.
 
-- [ ] **Actualizar `AGENTS.md`**
+- [x] **Actualizar `AGENTS.md`** (2026-07-10)
   - Reflejar comandos y arquitectura actuales.
 
-- [ ] **Actualizar `TODO_TECH_DEBT.md`**
+- [x] **Actualizar `TODO_TECH_DEBT.md`** (2026-07-10)
   - Marcar como resueltos los items que ya se completaron (rate limiting, CORS, refresh tokens).
   - Reorganizar prioridades según el nuevo estado.
 

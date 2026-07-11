@@ -15,8 +15,10 @@ cd frontend && pnpm dev                          # http://localhost:3000
 ```
 
 - Backend crea tablas al arrancar (`Base.metadata.create_all()`) — sin Alembic.
+- Columnas de preferencias se agregan en runtime si no existen (`ALTER TABLE` incremental).
 - Categorías base del sistema se siembran en startup (`user_id IS NULL`).
 - Token JWT expira a los 60 min; guardado en `localStorage` como `jwt_token`.
+- Refresh token (30 días) para renovar sesión sin re-login; guardado en `localStorage` como `refresh_token`.
 
 ## Comandos
 
@@ -37,8 +39,10 @@ No hay formateador, typecheck ni test configurados en ninguna capa.
 
 - Backend es fuente de verdad para saldos, presupuestos, agregados. **Frontend no recalcula métricas financieras.**
 - State: React Query (servidor, staleTime 1 min, refetchOnWindowFocus=false) + Zustand (solo UI: sidebar) + useState (formularios/modales).
-- Auth: `OAuth2PasswordBearer` → JWT con `sub=user_id`. Login espera `username` (email) + `password`.
-- CORS hardcodeado para `localhost:3000` y `localhost:5173`.
+- Auth: `OAuth2PasswordBearer` → JWT con `sub=user_id`. Login espera `username` (email) + `password`. Refresh token rotation.
+- Preferencias de usuario: `preferred_currency` (COP), `preferred_locale` (es-CO), `preferred_theme` (dark) vía `GET/PATCH /api/users/me/preferences`.
+- CORS configurado vía variable de entorno `ALLOWED_ORIGINS`.
+- Rate limiting en login via `slowapi` (5 req/min).
 - Rutas FastAPI monolíticas (sin capa service); `backend/app/services/` vacío (deuda técnica).
 - DB: SQLite (`backend/finanzas.db`), configurada para cambiar a PostgreSQL vía `psycopg2-binary`.
 - Frontend import alias `@/*` → raíz del proyecto.
@@ -51,6 +55,7 @@ No hay formateador, typecheck ni test configurados en ninguna capa.
 - [Frontend: fetching y estado](frontend/docs/STATE_AND_FETCHING.md) — query keys y patrones de invalidación.
 - [Frontend: componentes](frontend/docs/COMPONENTS_GUIDE.md) — piezas reutilizables.
 - [Deuda técnica](TODO_TECH_DEBT.md) — atajos del MVP.
+- [Roadmap](REFACTOR_ROADMAP.md) — plan de desarrollo priorizado.
 
 ## Convenciones
 

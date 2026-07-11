@@ -40,6 +40,18 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 - [ ] **`datetime.utcnow()`** — deprecated en Python 3.12+.
   - Migrar a `datetime.now(datetime.UTC)` cuando se toque el código relacionado.
 
+- [ ] **`Account PUT` ignora cambios de `currency` silenciosamente.**
+  - `AccountUpdate` hereda `currency` de `AccountBase`, pero `accounts.py` solo actualiza `name` y `type`.
+  - El frontend envía `currency` en PUT pero no tiene efecto. Fix: o actualizar `currency` en el PUT o no aceptar el campo en el schema de update.
+
+- [ ] **Migración runtime de preferencias frágil.**
+  - `_ensure_user_preference_columns()` ejecuta `ALTER TABLE ADD COLUMN` en cada arranque.
+  - Funciona pero es ad-hoc; si se agregan columnas con constraints, puede fallar silenciosamente.
+
+- [ ] **Migración de categorías legacy en cada startup.**
+  - `main.py` renombra "Otro (Gasto)" → "Otro" y migra "Otro (Ingreso)" en cada arranque.
+  - Ejecuta UPDATE/INSERT sin idempotencia robusta; puede fallar si la migración ya corrió.
+
 ---
 
 ## 🟢 Revisar cuando el código empiece a doler al modificarlo
