@@ -21,6 +21,8 @@
 | 2026-07-10 | Feature FAB + Transacción Rápida: FloatingActionButton, FabManager, QuickTransactionModal, integrado en dashboard layout |
 | 2026-07-10 | **Fase 1** — Fixes inmediatos: CSS bug dashboard, finanzas.db excluido de git, rate limiting verificado y documentado |
 | 2026-07-10 | **Fase 3** — Documentación actualizada: keys preferencias corregidas, errores API, ARCHITECTURE con RefreshToken y migraciones, AGENTS actualizado, TODO_TECH_DEBT con 3 items nuevos |
+| 2026-07-11 | **Fase 4A** — Tailscale: CORS regex, uvicorn 0.0.0.0, WSL2 tailscale IP 100.124.221.83, login verificado |
+| 2026-07-11 | **Fase 4B** — Docker: Dockerfiles (backend python:3.12-slim, frontend node:22-alpine multi-stage), docker-compose.yml (postgres + backend + frontend), .dockerignore x2, fix pnpm install (pnpm@9 + --frozen-lockfile + onlyBuiltDependencies en package.json), seed en PostgreSQL |
 
 ---
 
@@ -100,43 +102,51 @@
 
 - [x] **Modificar CORS** para aceptar IPs de Tailscale (100.x.x.x) vía `allow_origin_regex` en `main.py` (2026-07-11)
 - [x] **Modificar uvicorn** para escuchar en `0.0.0.0` en vez de `localhost` (AGENTS.md actualizado) (2026-07-11)
-- [ ] **Instalar Tailscale en Windows** (`winget install Tailscale.Tailscale`), autenticar, obtener IP
-- [ ] **Verificar conectividad** desde WSL2: `ping <tailscale-ip>`
-- [ ] **Iniciar backend** con `uvicorn app.main:app --reload --host 0.0.0.0`
-- [ ] **Instalar Tailscale en celular** (iOS/Android), autenticar con misma cuenta
-- [ ] **Acceder** desde celular a `http://<tailscale-ip>:8000` (API) y `http://localhost:3000` (frontend vía red local)
-- [ ] **Verificar** login, transacciones, dashboard completo por Tailscale
+- [x] **Instalar Tailscale en Windows** (`winget install Tailscale.Tailscale`), autenticar, obtener IP (2026-07-10)
+- [x] **Instalar Tailscale en WSL2** — `curl -fsSL https://tailscale.com/install.sh | sh` + `tailscale up`. IP: `100.124.221.83` (2026-07-11)
+  - WSL2 tiene red aislada (NAT). Tailscale en Windows no es accesible desde WSL2. Solución: instalar Tailscale dentro de WSL2.
+  - Windows Firewall bloquea TCP desde WSL2 al host (ARP funciona pero TCP timeout).
+- [x] **Verificar conectividad** WSL2 ↔ iPhone: ping OK (0% loss, ~100ms) (2026-07-11)
+- [x] **Iniciar backend** con `uvicorn app.main:app --reload --host 0.0.0.0` — accesible vía `http://100.124.221.83:8000` (2026-07-11)
+- [x] **Login verificado** vía Tailscale: `POST /api/auth/login` retorna JWT correctamente (2026-07-11)
+- [ ] **Acceder** desde celular a `http://100.124.221.83:8000` (API)
+- [ ] **Verificar** login, transacciones, dashboard completo por Tailscale desde celular
 
 ### Parte B — Docker + PostgreSQL
 
-- [ ] **Actualizar `app/core/database.py`** para leer `DATABASE_URL` de variable de entorno
-      con fallback a SQLite (`sqlite:///./finanzas.db`).
+- [x] **Actualizar `app/core/database.py`** para leer `DATABASE_URL` de variable de entorno
+      con fallback a SQLite (`sqlite:///./finanzas.db`). (2026-07-11)
 
-- [ ] **Crear `backend/Dockerfile`** con `python:3.12-slim`:
+- [x] **Crear `backend/Dockerfile`** con `python:3.12-slim`:
   - Copiar `requirements.txt`, instalar dependencias.
   - Exponer puerto `8000`.
-  - Comando: `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+  - Comando: `uvicorn app.main:app --host 0.0.0.0 --port 8000`. (2026-07-11)
 
-- [ ] **Crear `frontend/Dockerfile`** con `node:22-alpine` (multi-stage):
+- [x] **Crear `frontend/Dockerfile`** con `node:22-alpine` (multi-stage):
   - Build stage: copiar código, `pnpm install`, `pnpm build`.
   - Production stage: copilar `.next/standalone`, expone `3000`.
   - Variable de build: `NEXT_PUBLIC_API_URL`.
+  - Fix: `pnpm@9` (no `@latest`), `--frozen-lockfile`, `onlyBuiltDependencies` en `package.json` (no workspace yaml). (2026-07-11)
 
-- [ ] **Crear `docker-compose.yml`** en la raíz con 3 servicios:
+- [x] **Crear `docker-compose.yml`** en la raíz con 3 servicios:
   - `postgres` — imagen externa, volumen persistente.
   - `backend` — build local, depende de `postgres`.
-  - `frontend` — build local, depende de `backend`.
+  - `frontend` — build local, depende de `backend`. (2026-07-11)
 
-- [ ] **Agregar `.dockerignore`** para backend y frontend (node_modules, venv, __pycache__,
-      .db, .env).
+- [x] **Agregar `.dockerignore`** para backend y frontend (node_modules, venv, __pycache__,
+      .db, .env). (2026-07-11)
 
-- [ ] **Verificar** que `docker compose up --build` funcione de cero.
+- [x] **Verificar** que `docker compose up --build` funcione de cero. (2026-07-11)
+
+- [ ] **Seed automático** — ejecutar seed en PostgreSQL después del primer startup
+      (alternativa: comando `docker compose exec backend python -c "from app.core.seed import run_seed; run_seed()"`).
 
 - [ ] **Script `scripts/deploy.sh`** que automatice: git pull → docker compose up --build -d.
 
 ### Calidad de vida
 
-- [ ] **Healthchecks** en docker-compose para los 3 servicios.
+- [x] **Healthchecks** en docker-compose para postgres y backend (2026-07-11).
+  - Frontend no tiene healthcheck (Next.js standalone no expone endpoint de salud).
 
 ---
 
