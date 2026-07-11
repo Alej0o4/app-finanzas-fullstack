@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import FabManager from "@/components/FabManager";
 import { useUiStore } from "@/store/useUiStore";
 
 export default function DashboardLayout({
@@ -25,6 +26,7 @@ export default function DashboardLayout({
     <div className="min-h-screen bg-background">
       <Sidebar />
       <ConfirmDialog />
+      <FabManager />
 
       <div 
         className={`transition-all duration-300 ease-in-out min-h-screen flex flex-col
