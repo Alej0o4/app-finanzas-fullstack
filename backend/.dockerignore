@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+finanzas.db
+*.db
+.git
+.gitignore
+.vscode/
+.idea/
+docs/
