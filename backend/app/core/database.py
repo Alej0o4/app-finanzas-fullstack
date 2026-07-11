@@ -1,17 +1,18 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # 1. Definimos la URL de conexión (Credenciales)
-# Formato: postgresql://usuario:contraseña@servidor:puerto/nombre_bd
-# Por ahora usaremos SQLite (un archivo local) para probar la lógica antes de instalar el motor pesado de PostgreSQL.
-SQLALCHEMY_DATABASE_URL = "sqlite:///./finanzas.db"
+# DATABASE_URL puede ser SQLite (local) o PostgreSQL (Docker/producción).
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./finanzas.db")
 
 # 2. Creamos el "Motor" (Engine)
-# Es el objeto central que maneja las conexiones reales a la base de datos.
-# El parámetro connect_args solo es necesario para SQLite en FastAPI.
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
+# connect_args solo es necesario para SQLite.
+_engine_kwargs = {}
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **_engine_kwargs)
 
 # 3. Creamos la Fábrica de Sesiones
 # Una "sesión" es una transacción temporal. Aquí abrimos la conexión, hacemos los cambios y luego cerramos.

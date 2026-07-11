@@ -35,6 +35,7 @@ def run_seed():
             db.query(models.Transaction).filter(models.Transaction.user_id == existing.id).delete()
             db.query(models.Account).filter(models.Account.user_id == existing.id).delete()
             db.query(models.Category).filter(models.Category.user_id == existing.id).delete()
+            db.query(models.RefreshToken).filter(models.RefreshToken.user_id == existing.id).delete()
             db.delete(existing)
             db.flush()
 
