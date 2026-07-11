@@ -8,7 +8,7 @@ Backend primero, frontend después:
 
 ```sh
 # backend — requiere .env con SECRET_KEY (ya existe)
-cd backend && uvicorn app.main:app --reload     # http://localhost:8000
+cd backend && uvicorn app.main:app --reload --host 0.0.0.0  # http://localhost:8000
 
 # frontend
 cd frontend && pnpm dev                          # http://localhost:3000
@@ -27,7 +27,7 @@ cd frontend && pnpm dev                          # http://localhost:3000
 | Dev frontend | `pnpm dev` |
 | Build frontend | `pnpm build` |
 | Lint frontend | `pnpm lint` |
-| Backend (uvicorn) | `uvicorn app.main:app --reload` |
+| Backend (uvicorn) | `uvicorn app.main:app --reload --host 0.0.0.0` |
 | Backend (Python) | `pip install -r requirements.txt` (venv activo) |
 | Seed test data | `python -c "from app.core.seed import run_seed; run_seed()"` (venv activo, desde `backend/`) |
 

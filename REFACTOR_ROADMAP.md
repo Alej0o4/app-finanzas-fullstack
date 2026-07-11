@@ -92,21 +92,25 @@
 
 ---
 
-## Fase 4 — Self-Hosting con Docker + Tailscale
+## Fase 4 — Acceso remoto + Docker
 
-**Objetivo:** Acceder a Oikos desde celular y cualquier dispositivo, de forma segura.
+**Objetivo:** Acceder a Oikos desde el celular y cualquier dispositivo, de forma segura.
 
-### Migrar backend a PostgreSQL
+### Parte A — Tailscale (acceso remoto seguro)
+
+- [x] **Modificar CORS** para aceptar IPs de Tailscale (100.x.x.x) vía `allow_origin_regex` en `main.py` (2026-07-11)
+- [x] **Modificar uvicorn** para escuchar en `0.0.0.0` en vez de `localhost` (AGENTS.md actualizado) (2026-07-11)
+- [ ] **Instalar Tailscale en Windows** (`winget install Tailscale.Tailscale`), autenticar, obtener IP
+- [ ] **Verificar conectividad** desde WSL2: `ping <tailscale-ip>`
+- [ ] **Iniciar backend** con `uvicorn app.main:app --reload --host 0.0.0.0`
+- [ ] **Instalar Tailscale en celular** (iOS/Android), autenticar con misma cuenta
+- [ ] **Acceder** desde celular a `http://<tailscale-ip>:8000` (API) y `http://localhost:3000` (frontend vía red local)
+- [ ] **Verificar** login, transacciones, dashboard completo por Tailscale
+
+### Parte B — Docker + PostgreSQL
 
 - [ ] **Actualizar `app/core/database.py`** para leer `DATABASE_URL` de variable de entorno
       con fallback a SQLite (`sqlite:///./finanzas.db`).
-
-- [ ] **Agregar servicio `postgres`** en docker-compose con imagen `postgres:16-alpine`,
-      volumen persistente y credenciales vía variables de entorno.
-
-- [ ] **Verificar** que el backend arranque correctamente apuntando a PostgreSQL.
-
-### Dockerizar la aplicación
 
 - [ ] **Crear `backend/Dockerfile`** con `python:3.12-slim`:
   - Copiar `requirements.txt`, instalar dependencias.
@@ -115,7 +119,7 @@
 
 - [ ] **Crear `frontend/Dockerfile`** con `node:22-alpine` (multi-stage):
   - Build stage: copiar código, `pnpm install`, `pnpm build`.
-  - Production stage: copiar `.next/standalone`, expone `3000`.
+  - Production stage: copilar `.next/standalone`, expone `3000`.
   - Variable de build: `NEXT_PUBLIC_API_URL`.
 
 - [ ] **Crear `docker-compose.yml`** en la raíz con 3 servicios:
@@ -128,23 +132,11 @@
 
 - [ ] **Verificar** que `docker compose up --build` funcione de cero.
 
-### Acceso remoto con Tailscale
-
-- [ ] **Instalar Tailscale** en la máquina host.
-
-- [ ] **Instalar Tailscale** en cada dispositivo cliente (celular Android/iOS, laptop).
-
-- [ ] **Acceder** desde cualquier dispositivo por `http://<tailscale-ip>:3000`.
-
-- [ ] **Verificar** que login, JWT y funcionalidad completa funcionen por Tailscale.
-
-- [ ] **Opcional:** Configurar MagicDNS para acceder por nombre (`http://oikos:3000`).
+- [ ] **Script `scripts/deploy.sh`** que automatice: git pull → docker compose up --build -d.
 
 ### Calidad de vida
 
 - [ ] **Healthchecks** en docker-compose para los 3 servicios.
-
-- [ ] **Script `scripts/deploy.sh`** que automatice: git pull → docker compose up --build -d.
 
 ---
 

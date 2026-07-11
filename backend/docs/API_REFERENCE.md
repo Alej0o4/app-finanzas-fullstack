@@ -6,6 +6,8 @@
 - Autenticación: `Authorization: Bearer <token>` en rutas protegidas.
 - Content type esperado: `application/json`, excepto login, que usa formulario OAuth2.
 - Rate limiting: solo en `/api/auth/login` (5 req/min por IP via `slowapi`).
+- CORS: orígenes permitidos vía `ALLOWED_ORIGINS` (env) + regex para IPs de Tailscale (100.x.x.x).
+- Uvicorn escucha en `0.0.0.0` para soportar acceso remoto via Tailscale.
 
 ## Autenticación
 

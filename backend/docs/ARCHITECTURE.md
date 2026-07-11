@@ -25,7 +25,7 @@ La aplicación sigue una arquitectura simple por capas:
 
 - La autenticación se basa en JWT bearer token + refresh token rotation.
 - Refresh token: `RefreshToken` model con `token_hash` (SHA-256), `user_id`, `expires_at` (30 días), `revoked_at`. Se almacena hasheado; el token opaco viaja al frontend.
-- CORS configurado vía variable de entorno `ALLOWED_ORIGINS`.
+- CORS configurado vía variable de entorno `ALLOWED_ORIGINS` + regex para IPs de Tailscale (100.x.x.x).
 - Rate limiting en login via `slowapi` (5 req/min). Instancia `Limiter` en `app/core/rate_limit.py`, registrada en `main.py:127`.
 - La base de datos de desarrollo es SQLite, preparada para PostgreSQL.
 - El backend hace validación y reglas de negocio en servidor, no en Frontend.

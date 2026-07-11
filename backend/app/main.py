@@ -113,12 +113,15 @@ def _ensure_user_preference_columns() -> None:
 
 # 2. CONFIGURACIÓN CORS (Bloqueo de Fronteras)
 # Leer orígenes permitidos desde variable de entorno
+# IPs de Tailscale (100.x.x.x) se permiten automáticamente vía regex
+import re
 cors_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173")
 origenes_permitidos = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origenes_permitidos,
+    allow_origin_regex=r"^https?://100\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
