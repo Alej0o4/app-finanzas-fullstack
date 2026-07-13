@@ -8,7 +8,7 @@ from sqlalchemy import or_
 
 def _make_tx(db, user, account, category_name, category_type, amount, description, date):
     category = db.query(models.Category).filter(
-        or_(models.Category.user_id == None, models.Category.user_id == user.id),
+        or_(models.Category.user_id.is_(None), models.Category.user_id == user.id),
         models.Category.name == category_name,
         models.Category.type == category_type,
     ).first()
@@ -146,7 +146,7 @@ def run_seed():
         budgets = []
         for cat_name, amount_limit, month, year in budgets_data:
             category = db.query(models.Category).filter(
-                or_(models.Category.user_id == None, models.Category.user_id == user.id),
+                or_(models.Category.user_id.is_(None), models.Category.user_id == user.id),
                 models.Category.name == cat_name,
                 models.Category.type == "expense",
             ).first()

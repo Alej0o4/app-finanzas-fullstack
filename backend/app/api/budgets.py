@@ -18,7 +18,7 @@ def crear_presupuesto(
 ):
     categoria = db.query(models.Category).filter(
         models.Category.id == presupuesto.category_id,
-        or_(models.Category.user_id == None, models.Category.user_id == current_user.id)
+        or_(models.Category.user_id.is_(None), models.Category.user_id == current_user.id)
     ).first()
     if not categoria:
         raise HTTPException(status_code=404, detail="La categoría asignada no existe.")
@@ -91,7 +91,7 @@ def actualizar_presupuesto(
     # Validamos que la nueva categoría exista
     categoria = db.query(models.Category).filter(
         models.Category.id == presupuesto_actualizado.category_id,
-        or_(models.Category.user_id == None, models.Category.user_id == current_user.id)
+        or_(models.Category.user_id.is_(None), models.Category.user_id == current_user.id)
     ).first()
     if not categoria:
         raise HTTPException(status_code=404, detail="La nueva categoría asignada no existe.")

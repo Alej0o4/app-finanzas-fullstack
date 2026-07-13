@@ -31,7 +31,7 @@ def crear_transaccion(
     
     categoria = db.query(models.Category).filter(
         models.Category.id == transaccion.category_id,
-        or_(models.Category.user_id == None, models.Category.user_id == current_user.id)
+        or_(models.Category.user_id.is_(None), models.Category.user_id == current_user.id)
     ).first()
     
     if not categoria:
@@ -166,7 +166,7 @@ def actualizar_transaccion(
     
     categoria = db.query(models.Category).filter(
         models.Category.id == transaccion_actualizada.category_id,
-        or_(models.Category.user_id == None, models.Category.user_id == current_user.id)
+        or_(models.Category.user_id.is_(None), models.Category.user_id == current_user.id)
     ).first()
     
     if not categoria:

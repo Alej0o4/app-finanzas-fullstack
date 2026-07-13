@@ -29,7 +29,7 @@ def obtener_categorias(
 ):
     categorias = db.query(models.Category).filter(
         or_(
-            models.Category.user_id == None,
+            models.Category.user_id.is_(None),
             models.Category.user_id == current_user.id
         )
     ).all()

@@ -1,6 +1,5 @@
-from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
-import datetime
 
 from app.core.database import Base
 
@@ -13,7 +12,7 @@ class User(Base):
     preferred_currency = Column(String(3), default="COP")
     preferred_locale = Column(String(10), default="es-CO")
     preferred_theme = Column(String(10), default="dark")
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     accounts = relationship("Account", back_populates="owner")
     categories = relationship("Category", back_populates="owner")
@@ -52,7 +51,7 @@ class Transaction(Base):
     amount = Column(Numeric(14, 2), nullable=False)  # 🔁 antes: Float
     currency = Column(String(3), default="COP", nullable=False)
     type = Column(String)
-    date = Column(DateTime, default=datetime.datetime.utcnow)
+    date = Column(DateTime(timezone=True), server_default=func.now())
     description = Column(String, nullable=True)
 
     user_id = Column(Integer, ForeignKey("users.id"))
@@ -86,6 +85,6 @@ class RefreshToken(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     revoked_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("User", backref="refresh_tokens")

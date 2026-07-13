@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 import calendar
 from typing import List
@@ -22,7 +22,7 @@ def obtener_resumen(
         models.Account.user_id == current_user.id
     ).scalar() or Decimal("0.00")  # 🔁 antes: 0.0
 
-    hoy = datetime.utcnow()
+    hoy = datetime.now(timezone.utc)
     primer_dia = datetime(hoy.year, hoy.month, 1)
     ultimo_dia_mes = calendar.monthrange(hoy.year, hoy.month)[1]
     ultimo_dia = datetime(hoy.year, hoy.month, ultimo_dia_mes, 23, 59, 59)
@@ -53,7 +53,7 @@ def obtener_progreso_presupuestos(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    hoy = datetime.utcnow()
+    hoy = datetime.now(timezone.utc)
     primer_dia = datetime(hoy.year, hoy.month, 1)
     ultimo_dia = datetime(hoy.year, hoy.month, calendar.monthrange(hoy.year, hoy.month)[1], 23, 59, 59)
 

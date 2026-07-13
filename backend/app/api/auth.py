@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.core.database import get_db
 from app.core.rate_limit import limiter
@@ -40,7 +40,7 @@ def login(
     db.add(models.RefreshToken(
         token_hash=security.hash_token(raw_refresh),
         user_id=user.id,
-        expires_at=datetime.utcnow() + timedelta(days=security.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=security.REFRESH_TOKEN_EXPIRE_DAYS),
     ))
     db.commit()
 
@@ -60,7 +60,7 @@ def refresh(
     stored = db.query(models.RefreshToken).filter(
         models.RefreshToken.token_hash == token_hash,
         models.RefreshToken.revoked_at.is_(None),
-        models.RefreshToken.expires_at > datetime.utcnow(),
+        models.RefreshToken.expires_at > datetime.now(timezone.utc),
     ).first()
 
     if not stored:
@@ -69,14 +69,14 @@ def refresh(
             detail="Refresh token inválido o expirado",
         )
 
-    stored.revoked_at = datetime.utcnow()
+    stored.revoked_at = datetime.now(timezone.utc)
 
     access_token = security.create_access_token(data={"sub": str(stored.user_id)})
     raw_refresh = security.generate_refresh_token()
     db.add(models.RefreshToken(
         token_hash=security.hash_token(raw_refresh),
         user_id=stored.user_id,
-        expires_at=datetime.utcnow() + timedelta(days=security.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=security.REFRESH_TOKEN_EXPIRE_DAYS),
     ))
     db.commit()
 
@@ -99,7 +99,7 @@ def logout(
     ).first()
 
     if stored:
-        stored.revoked_at = datetime.utcnow()
+        stored.revoked_at = datetime.now(timezone.utc)
         db.commit()
 
     return {"estado": "OK", "mensaje": "Sesión cerrada exitosamente."}
