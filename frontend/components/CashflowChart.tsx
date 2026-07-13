@@ -38,6 +38,7 @@ const formatXAxisLabel = (label: string, period: "day" | "month") => {
 interface CashflowChartProps {
   data: CashflowItem[];
   isLoading: boolean;
+  isError: boolean;
   barPeriod: BarPeriod;
   onBarPeriodChange: (period: BarPeriod) => void;
   seriesMode: AnalyticsSeries;
@@ -48,6 +49,7 @@ interface CashflowChartProps {
 export default function CashflowChart({
   data,
   isLoading,
+  isError,
   barPeriod,
   onBarPeriodChange,
   seriesMode,
@@ -109,7 +111,11 @@ export default function CashflowChart({
           </ChartControlsPopover>
         </div>
       </div>
-      {isLoading ? (
+      {isError ? (
+        <div className="h-72 flex items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
+          No se pudo cargar el flujo de caja.
+        </div>
+      ) : isLoading ? (
         <div className="h-72 flex items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-info" />
         </div>

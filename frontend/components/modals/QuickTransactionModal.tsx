@@ -63,6 +63,8 @@ export default function QuickTransactionModal({
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() }),
+        queryClient.invalidateQueries({ queryKey: ["analytics-cashflow"] }),
+        queryClient.invalidateQueries({ queryKey: ["analytics-categories"] }),
       ]);
 
       toast.success(type === "expense" ? "Gasto registrado" : "Ingreso registrado");

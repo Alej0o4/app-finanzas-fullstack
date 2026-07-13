@@ -66,6 +66,8 @@ export default function AccountDetailPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
       queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() });
+      queryClient.invalidateQueries({ queryKey: ["analytics-cashflow"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics-categories"] });
       toast.success("Transacción actualizada");
       setIsModalOpen(false);
       setSelectedTransaction(null);
@@ -86,6 +88,8 @@ export default function AccountDetailPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
       queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() });
+      queryClient.invalidateQueries({ queryKey: ["analytics-cashflow"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics-categories"] });
       toast.success("Transacción eliminada");
     },
     onError: (error: unknown) => {

@@ -69,6 +69,8 @@ export default function TransactionModal({
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() }),
+        queryClient.invalidateQueries({ queryKey: ["analytics-cashflow"] }),
+        queryClient.invalidateQueries({ queryKey: ["analytics-categories"] }),
       ]);
 
       toast.success("Transacción creada correctamente");

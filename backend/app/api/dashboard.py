@@ -106,23 +106,33 @@ def obtener_serie_flujo_caja(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    fmt = "%Y-%m" if period == "month" else "%Y-%m-%d"
-    date_label = func.strftime(fmt, models.Transaction.date).label("date_label")
+    try:
+        dialect = db.bind.dialect.name
+        if dialect == "postgresql":
+            pg_fmt = "YYYY-MM" if period == "month" else "YYYY-MM-DD"
+            date_label = func.to_char(models.Transaction.date, pg_fmt).label("date_label")
+        else:
+            fmt = "%Y-%m" if period == "month" else "%Y-%m-%d"
+            date_label = func.strftime(fmt, models.Transaction.date).label("date_label")
 
-    rows = db.query(
-        date_label,
-        func.sum(case((models.Transaction.type == "income", models.Transaction.amount), else_=0)).label("income"),
-        func.sum(case((models.Transaction.type == "expense", models.Transaction.amount), else_=0)).label("expense"),
-    ).filter(
-        models.Transaction.user_id == current_user.id,
-        models.Transaction.date >= start_date,
-        models.Transaction.date <= end_date,
-    ).group_by(date_label).order_by(date_label).all()
+        rows = db.query(
+            date_label,
+            func.sum(case((models.Transaction.type == "income", models.Transaction.amount), else_=Decimal("0.00"))).label("income"),
+            func.sum(case((models.Transaction.type == "expense", models.Transaction.amount), else_=Decimal("0.00"))).label("expense"),
+        ).filter(
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.date >= start_date,
+            models.Transaction.date <= end_date,
+        ).group_by(date_label).order_by(date_label).all()
 
-    return [
-        {"date_label": r.date_label, "income": r.income, "expense": r.expense}
-        for r in rows
-    ]
+        return [
+            {"date_label": r.date_label, "income": r.income or Decimal("0.00"), "expense": r.expense or Decimal("0.00")}
+            for r in rows
+        ]
+    except Exception as e:
+        import logging
+        logging.exception("Error in cashflow-series")
+        raise HTTPException(status_code=500, detail=f"Error al obtener serie de flujo de caja: {str(e)}")
 
 
 @router.get("/category-distribution", response_model=List[schemas.CategoryDistributionData])

@@ -72,7 +72,7 @@ export default function AnalyticsPage() {
   const barDateRange = useMemo(() => buildBarDateRange(barPeriod), [barPeriod]);
   const donutDateRange = useMemo(() => buildDonutDateRange(donutPeriod), [donutPeriod]);
 
-  const { data: trendData, isLoading: loadingTrends } = useQuery({
+  const { data: trendData, isLoading: loadingTrends, isError: trendError } = useQuery({
     queryKey: queryKeys.analytics.cashflow(barDateRange.start_date, barDateRange.end_date, barDateRange.period),
     queryFn: async () => {
       const res = await api.get("/api/dashboard/cashflow-series", {
@@ -146,6 +146,7 @@ export default function AnalyticsPage() {
         <CashflowChart
           data={visibleTrendData}
           isLoading={loadingTrends}
+          isError={trendError}
           barPeriod={barPeriod}
           onBarPeriodChange={setBarPeriod}
           seriesMode={seriesMode}
