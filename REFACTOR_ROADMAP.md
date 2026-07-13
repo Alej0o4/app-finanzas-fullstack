@@ -145,8 +145,8 @@
 
 ### Calidad de vida
 
-- [x] **Healthchecks** en docker-compose para postgres y backend (2026-07-11).
-  - Frontend no tiene healthcheck (Next.js standalone no expone endpoint de salud).
+- [x] **Healthchecks** en docker-compose para postgres, backend y frontend (2026-07-11).
+  - Frontend tiene healthcheck en el compose (Next.js dev mode expone `/`).
 
 ---
 
@@ -156,7 +156,7 @@
 
 ### Backup
 
-- [ ] **Script `scripts/backup.sh`** — copiar `finanzas.db` a `backups/` con timestamp.
+- [ ] **Script `scripts/backup.sh`** — hacer `docker compose exec postgres pg_dump -U oikos oikos` y guardar en `backups/` con timestamp.
   - Ejecutar antes de cada sesión de cambios significativos.
   - Mantener últimos 7 backups (rotación).
 

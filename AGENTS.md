@@ -1,10 +1,26 @@
 # AGENTS.md — Oikos
 
-App web de finanzas personales. Backend FastAPI + SQLAlchemy, frontend Next.js App Router + React 19 + TanStack Query + Zustand + Recharts + Tailwind CSS 4. SQLite en desarrollo, sin tests automatizados aún.
+App web de finanzas personales. Backend FastAPI + SQLAlchemy, frontend Next.js App Router + React 19 + TanStack Query + Zustand + Recharts + Tailwind CSS 4. PostgreSQL en Docker, sin tests automatizados aún.
 
 ## Startup
 
-Backend primero, frontend después:
+### Docker (recomendado)
+
+```sh
+# Producción — levantar todo (postgres + backend + frontend)
+docker compose up -d --build
+
+# Desarrollo — hot-reload, sin rebuilds
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+# Ver estado
+docker compose ps
+
+# Logs
+docker compose logs -f backend
+```
+
+### Sin Docker (alternativa)
 
 ```sh
 # backend — requiere .env con SECRET_KEY (ya existe)
@@ -30,6 +46,10 @@ cd frontend && pnpm dev                          # http://localhost:3000
 | Backend (uvicorn) | `uvicorn app.main:app --reload --host 0.0.0.0` |
 | Backend (Python) | `pip install -r requirements.txt` (venv activo) |
 | Seed test data | `python -c "from app.core.seed import run_seed; run_seed()"` (venv activo, desde `backend/`) |
+| Docker up | `docker compose up -d --build` |
+| Docker dev (hot-reload) | `docker compose -f docker-compose.yml -f docker-compose.dev.yml up` |
+| Docker logs | `docker compose logs -f backend` |
+| Docker seed | `docker compose exec backend python -c "from app.core.seed import run_seed; run_seed()"` |
 
 No hay formateador, typecheck ni test configurados en ninguna capa.
 
@@ -44,7 +64,7 @@ No hay formateador, typecheck ni test configurados en ninguna capa.
 - CORS configurado vía variable de entorno `ALLOWED_ORIGINS`.
 - Rate limiting en login via `slowapi` (5 req/min).
 - Rutas FastAPI monolíticas (sin capa service); `backend/app/services/` vacío (deuda técnica).
-- DB: SQLite (`backend/finanzas.db`), configurada para cambiar a PostgreSQL vía `psycopg2-binary`.
+- DB: PostgreSQL en Docker (`postgres:16-alpine`), datos en volumen `pgdata`. Backend lee `DATABASE_URL` de variable de entorno.
 - Frontend import alias `@/*` → raíz del proyecto.
 - `pnpm` (no npm).
 

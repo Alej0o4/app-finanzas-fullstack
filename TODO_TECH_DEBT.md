@@ -12,8 +12,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 - [x] **Montos como `float` en vez de `Decimal`/enteros en centavos.** (resuelto 2026-07-08)
   - Migrado a `Decimal`/`Numeric(14,2)` en models.py, schemas.py y dashboard.py.
 
-- [ ] **Sin backup automático de `finanzas.db`.**
-  - Riesgo: perder el historial financiero completo.
+- [ ] **Sin backup automático de PostgreSQL (volumen Docker `pgdata`).**
+  - Riesgo: perder el historial financiero completo si se elimina el volumen.
   - Acción: script `scripts/backup.sh` con rotación de 7 días. Ver REFACTOR_ROADMAP Fase 5.
 
 - [ ] **Dashboard suma saldos de diferentes monedas.**
@@ -82,7 +82,7 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 ## 🔵 Solo si el proyecto crece
 
 - [ ] Migrar `create_all()` → Alembic.
-- [ ] Migrar SQLite → PostgreSQL (ya preparado con `psycopg2-binary`).
+- [x] Migrar SQLite → PostgreSQL (ya preparado con `psycopg2-binary`). (resuelto 2026-07-11)
 - [ ] CI/CD (lint + test + build en cada cambio).
 - [ ] Testing automatizado (pytest/httpx backend, Vitest/RTL frontend).
 - [ ] Versionado de API (`/api/v1/...`).
@@ -94,6 +94,7 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 | Fecha | Item |
 |-------|------|
+| 2026-07-11 | Migración SQLite → PostgreSQL via Docker |
 | 2026-07-10 | Rate limiting en login verificado y documentado |
 | 2026-07-10 | CSS bug dashboard corregido (max-w-[1600px] no se aplicaba) |
 | 2026-07-10 | finanzas.db excluido de git (*.db en .gitignore) |

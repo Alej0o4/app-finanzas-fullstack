@@ -21,13 +21,25 @@ Backend para un MVP de finanzas personales construido con FastAPI, SQLAlchemy y 
 
 ## Arranque local
 
+### Con Docker (recomendado)
+
+```sh
+# Desde la raíz del proyecto
+docker compose up -d --build
+
+# Logs
+docker compose logs -f backend
+```
+
+### Sin Docker
+
 1. Crear y activar un entorno virtual.
 2. Instalar dependencias con `pip install -r requirements.txt`.
-3. Definir `SECRET_KEY` en el archivo `.env`.
+3. Definir `SECRET_KEY` y `DATABASE_URL` en el archivo `.env`.
 4. Ejecutar la aplicación con Uvicorn apuntando a `app.main:app`.
 
 ## Notas importantes
 
-- El backend usa SQLite en desarrollo.
+- El backend usa PostgreSQL en Docker (`postgres:16-alpine`), con fallback a SQLite en ausencia de `DATABASE_URL`.
 - El secret de JWT debe venir desde variables de entorno.
 - Los montos se validan en el backend con tipos decimales; conviene mantener ese criterio en contratos y persistencia.

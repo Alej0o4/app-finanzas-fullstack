@@ -27,7 +27,7 @@ La aplicación sigue una arquitectura simple por capas:
 - Refresh token: `RefreshToken` model con `token_hash` (SHA-256), `user_id`, `expires_at` (30 días), `revoked_at`. Se almacena hasheado; el token opaco viaja al frontend.
 - CORS configurado vía variable de entorno `ALLOWED_ORIGINS` + regex para IPs de Tailscale (100.x.x.x).
 - Rate limiting en login via `slowapi` (5 req/min). Instancia `Limiter` en `app/core/rate_limit.py`, registrada en `main.py:127`.
-- La base de datos de desarrollo es SQLite, preparada para PostgreSQL.
+- La base de datos es PostgreSQL en Docker (`postgres:16-alpine`), con fallback a SQLite en ausencia de `DATABASE_URL`.
 - El backend hace validación y reglas de negocio en servidor, no en Frontend.
 - El dashboard devuelve agregados ya calculados para evitar lógica duplicada en el cliente.
 - Los montos se modelan como `Decimal` en contratos y `Numeric(14, 2)` en persistencia para evitar precisión flotante.

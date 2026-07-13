@@ -21,6 +21,20 @@ Este archivo resume las variables, comandos y supuestos operativos del frontend 
 
 ## Flujo de despliegue recomendado
 
+### Con Docker (recomendado)
+
+```sh
+# Producción
+docker compose up -d --build
+
+# Desarrollo (hot-reload, sin rebuilds)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+`NEXT_PUBLIC_API_URL` se inyecta como build-time arg en `docker-compose.yml`. Para cambiarla, reconstruir con `--build`.
+
+### Sin Docker
+
 1. Definir la URL del backend en `NEXT_PUBLIC_API_URL`.
 2. Ejecutar `pnpm install`.
 3. Ejecutar `pnpm build` para validar el bundle.
@@ -43,7 +57,6 @@ Este archivo resume las variables, comandos y supuestos operativos del frontend 
 ## Riesgos actuales
 
 - El token vive en `localStorage`.
-- No hay estrategia de refresh token.
 - No hay observabilidad ni logging de frontend centralizado.
 - No hay feature flagging ni despliegue por entornos múltiples.
 
