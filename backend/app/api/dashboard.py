@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
@@ -18,33 +20,45 @@ def obtener_resumen(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    total_balance = db.query(func.sum(models.Account.balance)).filter(
-        models.Account.user_id == current_user.id
-    ).scalar() or Decimal("0.00")  # 🔁 antes: 0.0
+    # Agrupar saldos de cuentas por moneda
+    balances_rows = db.query(
+        models.Account.currency,
+        func.sum(models.Account.balance).label("total"),
+    ).filter(
+        models.Account.user_id == current_user.id,
+    ).group_by(models.Account.currency).all()
 
     hoy = datetime.now(timezone.utc)
     primer_dia = datetime(hoy.year, hoy.month, 1)
     ultimo_dia_mes = calendar.monthrange(hoy.year, hoy.month)[1]
     ultimo_dia = datetime(hoy.year, hoy.month, ultimo_dia_mes, 23, 59, 59)
 
-    ingresos = db.query(func.sum(models.Transaction.amount)).filter(
+    # Ingresos del mes agrupados por moneda
+    income_rows = db.query(
+        models.Transaction.currency,
+        func.sum(models.Transaction.amount).label("total"),
+    ).filter(
         models.Transaction.user_id == current_user.id,
         models.Transaction.type == "income",
         models.Transaction.date >= primer_dia,
-        models.Transaction.date <= ultimo_dia
-    ).scalar() or Decimal("0.00")  # 🔁 antes: 0.0
+        models.Transaction.date <= ultimo_dia,
+    ).group_by(models.Transaction.currency).all()
 
-    gastos = db.query(func.sum(models.Transaction.amount)).filter(
+    # Gastos del mes agrupados por moneda
+    expense_rows = db.query(
+        models.Transaction.currency,
+        func.sum(models.Transaction.amount).label("total"),
+    ).filter(
         models.Transaction.user_id == current_user.id,
         models.Transaction.type == "expense",
         models.Transaction.date >= primer_dia,
-        models.Transaction.date <= ultimo_dia
-    ).scalar() or Decimal("0.00")  # 🔁 antes: 0.0
+        models.Transaction.date <= ultimo_dia,
+    ).group_by(models.Transaction.currency).all()
 
     return {
-        "total_balance": total_balance,
-        "monthly_income": ingresos,
-        "monthly_expense": gastos
+        "balances": [{"currency": r.currency, "total": r.total} for r in balances_rows],
+        "monthly_income_by_currency": [{"currency": r.currency, "total": r.total} for r in income_rows],
+        "monthly_expense_by_currency": [{"currency": r.currency, "total": r.total} for r in expense_rows],
     }
 
 
@@ -129,10 +143,9 @@ def obtener_serie_flujo_caja(
             {"date_label": r.date_label, "income": r.income or Decimal("0.00"), "expense": r.expense or Decimal("0.00")}
             for r in rows
         ]
-    except Exception as e:
-        import logging
+    except Exception:
         logging.exception("Error in cashflow-series")
-        raise HTTPException(status_code=500, detail=f"Error al obtener serie de flujo de caja: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al obtener serie de flujo de caja")
 
 
 @router.get("/category-distribution", response_model=List[schemas.CategoryDistributionData])

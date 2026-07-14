@@ -117,11 +117,14 @@ class BudgetResponse(BudgetBase):
         from_attributes = True
 
 # --- DASHBOARD ---
+class BalanceByCurrency(BaseModel):
+    currency: str
+    total: Decimal
+
 class DashboardSummary(BaseModel):
-    total_balance: Decimal      # 🔁 antes: float
-    monthly_income: Decimal     # 🔁 antes: float
-    monthly_expense: Decimal    # 🔁 antes: float
-    currency: str = "COP"
+    balances: list[BalanceByCurrency]
+    monthly_income_by_currency: list[BalanceByCurrency]
+    monthly_expense_by_currency: list[BalanceByCurrency]
 
 class BudgetProgress(BaseModel):
     budget_id: int

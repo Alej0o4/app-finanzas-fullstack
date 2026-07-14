@@ -44,11 +44,15 @@ export interface BudgetProgress {
   percentage: number;
 }
 
-export interface DashboardSummary {
-  total_balance: number;
-  monthly_income: number;
-  monthly_expense: number;
+export interface BalanceByCurrency {
   currency: string;
+  total: number;
+}
+
+export interface DashboardSummary {
+  balances: BalanceByCurrency[];
+  monthly_income_by_currency: BalanceByCurrency[];
+  monthly_expense_by_currency: BalanceByCurrency[];
 }
 
 export interface CashflowItem {

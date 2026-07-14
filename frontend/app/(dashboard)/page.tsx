@@ -71,9 +71,39 @@ export default function DashboardPage() {
           </>
         ) : (
           <>
-            <SummaryCard label="Balance Total" value={formatCurrency(summary?.total_balance || 0, config.currency)} />
-            <SummaryCard label="Ingresos del Mes" value={formatCurrency(summary?.monthly_income || 0, config.currency)} trend="up" color="var(--color-success)" />
-            <SummaryCard label="Gastos del Mes" value={formatCurrency(summary?.monthly_expense || 0, config.currency)} trend="down" color="var(--color-danger)" />
+            <SummaryCard label="Balance Total">
+              {summary?.balances.length ? (
+                <div className="space-y-1">
+                  {summary.balances.map((b) => (
+                    <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
+                  ))}
+                </div>
+              ) : (
+                <p>{formatCurrency(0, config.currency)}</p>
+              )}
+            </SummaryCard>
+            <SummaryCard label="Ingresos del Mes" trend="up" color="var(--color-success)">
+              {summary?.monthly_income_by_currency.length ? (
+                <div className="space-y-1">
+                  {summary.monthly_income_by_currency.map((b) => (
+                    <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
+                  ))}
+                </div>
+              ) : (
+                <p>{formatCurrency(0, config.currency)}</p>
+              )}
+            </SummaryCard>
+            <SummaryCard label="Gastos del Mes" trend="down" color="var(--color-danger)">
+              {summary?.monthly_expense_by_currency.length ? (
+                <div className="space-y-1">
+                  {summary.monthly_expense_by_currency.map((b) => (
+                    <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
+                  ))}
+                </div>
+              ) : (
+                <p>{formatCurrency(0, config.currency)}</p>
+              )}
+            </SummaryCard>
           </>
         )}
       </div>

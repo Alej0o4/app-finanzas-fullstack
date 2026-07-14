@@ -116,20 +116,18 @@ Mejoras priorizadas por impacto: bug multi-moneda, seguridad, testing, modularid
 
 ### Quick Wins (horas)
 
-- [ ] **Fix bug multi-moneda dashboard** — agrupar saldos por moneda en vez de sumar COP+USD+EUR — 2h
-  - Cambiar `total_balance` por `balances_by_currency` en backend + schema + frontend.
-  - Mostrar tarjeta por moneda: `$1.234.567 COP`, `$850.00 USD`.
-  - *(Ref: Fase 5 — backup y dashboard multi-moneda, ver arriba)*
+- [x] **Fix bug multi-moneda dashboard** — agrupar saldos por moneda en vez de sumar COP+USD+EUR (2026-07-14)
+  - `balances` (array por moneda), `monthly_income_by_currency`, `monthly_expense_by_currency`.
+  - `SummaryCard` refactorizado para aceptar children multi-moneda.
 
-- [ ] **Reemplazar `datetime.utcnow()`** por `datetime.now(timezone.utc)` en `security.py` — 1h
-  - Deprecated en Python 3.12+, generará warnings.
+- [x] **Sanitizar errores en `dashboard.py:cashflow-series`** — `str(e)` reemplazado por mensaje genérico (2026-07-14)
+  - `import logging` movido a cabecera del módulo.
 
-- [ ] **Sanitizar errores en `dashboard.py:cashflow-series`** — no exponer `str(e)` al cliente — 1h
-  - Reemplazar por mensaje genérico en responses de error.
+- [x] **Headers de seguridad** via middleware FastAPI (X-Frame-Options, X-Content-Type-Options, etc.) (2026-07-14)
 
-- [ ] **Headers de seguridad** via middleware FastAPI (CSP, X-Frame-Options, X-Content-Type-Options) — 1h
+- [x] **Crear `README.md`** en raíz del proyecto — entry point de documentación (2026-07-14)
 
-- [ ] **Crear `README.md`** en raíz del proyecto — entry point de documentación — 1h
+- [ ] **Reemplazar `datetime.utcnow()`** — ya resuelto en `security.py`. Archivado.
 
 - [ ] **Fix input raw → componentes UI** — reemplazar `<input>` por `Input`/`Select` existentes en forms de accounts, categories, transactions — 2h
 
