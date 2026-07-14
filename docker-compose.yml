@@ -23,7 +23,7 @@ services:
     environment:
       DATABASE_URL: postgresql://oikos:oikos_secret@postgres:5432/oikos
       SECRET_KEY: ${SECRET_KEY:-changeme_in_production}
-      ALLOWED_ORIGINS: http://localhost:3000,http://100.124.221.83:3000,http://100.68.192.126:3000
+      ALLOWED_ORIGINS: http://localhost:3000,http://100.76.235.30:3000
     ports:
       - "8000:8000"
     healthcheck:
@@ -36,7 +36,7 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: http://100.124.221.83:8000
+        NEXT_PUBLIC_API_URL: http://100.76.235.30:8000
     restart: unless-stopped
     depends_on:
       backend:
