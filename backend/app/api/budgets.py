@@ -1,18 +1,18 @@
+
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.core.database import get_db
+from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
-from app.core.security import get_current_user
-from sqlalchemy import or_
 
 router = APIRouter()
 
 @router.post("/", response_model=schemas.BudgetResponse)
 def crear_presupuesto(
-    presupuesto: schemas.BudgetCreate, 
+    presupuesto: schemas.BudgetCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -29,10 +29,10 @@ def crear_presupuesto(
         models.Budget.month == presupuesto.month,
         models.Budget.year == presupuesto.year
     ).first()
-    
+
     if presupuesto_existente:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail="Ya existe un presupuesto para esta categoría en este mes y año."
         )
 
@@ -42,20 +42,20 @@ def crear_presupuesto(
     db.refresh(nuevo_presupuesto)
     return nuevo_presupuesto
 
-@router.get("/", response_model=List[schemas.BudgetResponse])
+@router.get("/", response_model=list[schemas.BudgetResponse])
 def obtener_presupuestos(
-    month: int = None, 
-    year: int = None,
+    month: int | None = None,
+    year: int | None = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
     query = db.query(models.Budget).filter(models.Budget.user_id == current_user.id)
-    
+
     if month:
         query = query.filter(models.Budget.month == month)
     if year:
         query = query.filter(models.Budget.year == year)
-        
+
     return query.all()
 
 @router.delete("/{budget_id}")
@@ -67,7 +67,7 @@ def eliminar_presupuesto(
     presupuesto = db.query(models.Budget).filter(models.Budget.id == budget_id).first()
     if not presupuesto or presupuesto.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="El presupuesto no existe o no tienes permisos.")
-        
+
     db.delete(presupuesto)
     db.commit()
     return {"estado": "OK", "mensaje": "Presupuesto eliminado exitosamente."}
@@ -79,12 +79,12 @@ def actualizar_presupuesto(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ) -> models.Budget:
-    
+
     presupuesto_db = db.query(models.Budget).filter(
         models.Budget.id == budget_id,
         models.Budget.user_id == current_user.id
     ).first()
-    
+
     if not presupuesto_db:
         raise HTTPException(status_code=404, detail="Presupuesto no encontrado.")
 

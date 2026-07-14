@@ -5,11 +5,14 @@ backend/venv/
 backend/__pycache__/
 *.pyc
 
-# Ignorar el archivo de las variables de entorno
+# Ignorar archivo de las variables de entorno
 backend/.env
 
 # Base de datos SQLite
 *.db
+
+# Imágenes de referencia
+*.png
 
 .vscode/
 .idea/

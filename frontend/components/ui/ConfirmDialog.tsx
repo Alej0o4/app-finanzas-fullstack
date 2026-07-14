@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useConfirmStore } from "@/store/useConfirmStore";
+import { useConfirmStore } from '@/store/useConfirmStore';
 
 export default function ConfirmDialog() {
   const { isOpen, message, onConfirm, cancel } = useConfirmStore();
@@ -9,12 +9,12 @@ export default function ConfirmDialog() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-surface border border-border/70 rounded-2xl p-6 shadow-2xl max-w-sm w-full mx-4">
-        <p className="text-sm text-text font-medium">{message}</p>
-        <div className="flex justify-end gap-3 mt-6">
+      <div className="bg-surface border-border/70 mx-4 w-full max-w-sm rounded-2xl border p-6 shadow-2xl">
+        <p className="text-text text-sm font-medium">{message}</p>
+        <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={cancel}
-            className="px-4 py-2 rounded-xl text-sm font-medium text-text-muted hover:text-text hover:bg-surface-elevated transition-colors cursor-pointer"
+            className="text-text-muted hover:text-text hover:bg-surface-elevated cursor-pointer rounded-xl px-4 py-2 text-sm font-medium transition-colors"
           >
             Cancelar
           </button>
@@ -23,7 +23,7 @@ export default function ConfirmDialog() {
               onConfirm?.();
               cancel();
             }}
-            className="px-4 py-2 rounded-xl text-sm font-semibold bg-danger text-white hover:bg-danger/90 transition-colors cursor-pointer"
+            className="bg-danger hover:bg-danger/90 cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold text-white transition-colors"
           >
             Eliminar
           </button>

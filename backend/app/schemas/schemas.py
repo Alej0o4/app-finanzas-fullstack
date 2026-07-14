@@ -1,12 +1,11 @@
-from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, Generic, TypeVar
 from enum import Enum
 
-T = TypeVar("T")
+from pydantic import BaseModel, EmailStr, Field
 
-class PaginatedResponse(BaseModel, Generic[T]):
+
+class PaginatedResponse[T](BaseModel):
     items: list[T]
     total: int
     page: int
@@ -29,9 +28,9 @@ class UserResponse(UserBase):
         from_attributes = True
 
 class PreferencesUpdate(BaseModel):
-    preferred_currency: Optional[str] = None
-    preferred_locale: Optional[str] = None
-    preferred_theme: Optional[str] = None
+    preferred_currency: str | None = None
+    preferred_locale: str | None = None
+    preferred_theme: str | None = None
 
 # --- TRANSACCIONES ---
 class TransactionType(str, Enum):
@@ -42,18 +41,18 @@ class TransactionBase(BaseModel):
     amount: Decimal = Field(..., gt=0, decimal_places=2, description="El monto debe ser mayor a cero")
     currency: str = "COP"
     type: TransactionType
-    description: Optional[str] = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=500)
     account_id: int
     category_id: int
-    date: Optional[datetime] = None
+    date: datetime | None = None
 
 class TransactionCreate(TransactionBase):
-    pass 
+    pass
 
 class TransactionResponse(TransactionBase):
     id: int
     date: datetime
-    user_id: int 
+    user_id: int
     class Config:
         from_attributes = True
 
@@ -72,7 +71,7 @@ class AccountCreate(AccountBase):
     balance: Decimal = Field(0, ge=0, decimal_places=2, description="Saldo inicial")
 
 class AccountUpdate(AccountBase):
-    pass 
+    pass
 
 class AccountResponse(AccountBase):
     id: int
@@ -83,8 +82,8 @@ class AccountResponse(AccountBase):
 
 # --- CATEGORÍAS --- (sin cambios, no maneja dinero)
 class CategoryType(str, Enum):
-    income = "income"   
-    expense = "expense" 
+    income = "income"
+    expense = "expense"
 
 class CategoryBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -95,7 +94,8 @@ class CategoryCreate(CategoryBase):
 
 class CategoryResponse(CategoryBase):
     id: int
-    user_id: Optional[int] = None
+    user_id: int | None = None
+    icon: str | None = None
     class Config:
         from_attributes = True
 
@@ -129,6 +129,7 @@ class DashboardSummary(BaseModel):
 class BudgetProgress(BaseModel):
     budget_id: int
     category_name: str
+    category_icon: str | None = None
     amount_limit: Decimal   # 🔁 antes: float
     spent: Decimal          # 🔁 antes: float
     percentage: float       # ✅ se queda float, es un porcentaje calculado, no dinero

@@ -127,13 +127,31 @@ Mejoras priorizadas por impacto: bug multi-moneda, seguridad, testing, modularid
 
 - [x] **Crear `README.md`** en raíz del proyecto — entry point de documentación (2026-07-14)
 
-- [ ] **Reemplazar `datetime.utcnow()`** — ya resuelto en `security.py`. Archivado.
+- [x] **Reemplazar `datetime.utcnow()`** — ya resuelto en `security.py`. Verificado: cero ocurrencias. (2026-07-14)
 
-- [ ] **Fix input raw → componentes UI** — reemplazar `<input>` por `Input`/`Select` existentes en forms de accounts, categories, transactions — 2h
+- [x] **Editar transacciones en página de transacciones** — botón Pencil + modal editable como en cuentas/categorías — 2h (2026-07-14)
 
-- [ ] **Agregar `ruff`** (linter/formatter Python) al backend — 1h
+- [ ] **Cuentas destacadas (star) para dashboard** — columna `highlighted` en Account, dashboard suma solo destacadas (A) + orden consistente por moneda preferida (C) — 3h
+  - Backend: ALTER TABLE, schema, filtrar en dashboard endpoint.
+  - Frontend: star toggle en página cuentas, orden balances por moneda preferida.
 
-- [ ] **Agregar `prettier`** al frontend — 1h
+- [x] **Iconos predefinidos para categorías default** — columna `icon` en Category, Lucide icons para Alimentación/Transporte/Ocio/etc. — 2h
+  - Backend: ALTER TABLE, asignar en seed_default_categories, devolver en response.
+  - Frontend: renderizar icono en listas/cards/selects de categorías. (2026-07-14, ya implementado)
+
+- [x] **Fix input raw → componentes UI** — reemplazar `<input>` por `Input`/`Select` existentes en forms de accounts, categories, transactions — 2h (2026-07-14)
+
+- [x] **Agregar `ruff`** (linter/formatter Python) al backend — 1h (2026-07-14)
+
+- [x] **Agregar `prettier`** al frontend — 1h (2026-07-14)
+
+### Responsive / UX (horas)
+
+- [ ] **Dashboard responsive en iPhone 15 Pro** — grid de SummaryCards, BudgetRings y transacciones recientes adaptados a < 640px — 2h
+
+- [ ] **Listados responsive** — transacciones, cuentas, categorías: padding reducido, fuente ajustable en móvil — 2h
+
+- [ ] **Formularios y modales responsive** — inputs, selects, botones adaptados a pantalla pequeña — 1h
 
 ### Testing (días)
 

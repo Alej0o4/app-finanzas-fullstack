@@ -1,7 +1,7 @@
 export interface Account {
   id: number;
   name: string;
-  type: "cash" | "debit" | "credit";
+  type: 'cash' | 'debit' | 'credit';
   balance: number;
   currency: string;
   user_id: number;
@@ -11,7 +11,7 @@ export interface Transaction {
   id: number;
   amount: number;
   currency: string;
-  type: "income" | "expense";
+  type: 'income' | 'expense';
   description: string | null;
   date: string;
   account_id: number;
@@ -22,8 +22,9 @@ export interface Transaction {
 export interface Category {
   id: number;
   name: string;
-  type: "income" | "expense";
+  type: 'income' | 'expense';
   user_id: number | null;
+  icon?: string;
 }
 
 export interface Budget {
@@ -39,6 +40,7 @@ export interface Budget {
 export interface BudgetProgress {
   budget_id: number;
   category_name: string;
+  category_icon?: string;
   amount_limit: number;
   spent: number;
   percentage: number;
@@ -91,7 +93,7 @@ export interface UserPreferences {
 export interface CreateTransactionPayload {
   description: string;
   amount: number;
-  type: "income" | "expense";
+  type: 'income' | 'expense';
   date: string;
   account_id: number;
   category_id: number;
@@ -102,7 +104,7 @@ export interface UpdateTransactionPayload {
   id: number;
   description: string;
   amount: number;
-  type: "income" | "expense";
+  type: 'income' | 'expense';
   date: string;
   account_id: number;
   category_id: number;
@@ -110,7 +112,7 @@ export interface UpdateTransactionPayload {
 
 export interface CreateAccountPayload {
   name: string;
-  type: "cash" | "debit" | "credit";
+  type: 'cash' | 'debit' | 'credit';
   balance: number;
   currency?: string;
 }

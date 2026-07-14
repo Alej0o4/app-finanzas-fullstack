@@ -43,6 +43,9 @@ cd frontend && pnpm dev                          # http://localhost:3000
 | Dev frontend | `pnpm dev` |
 | Build frontend | `pnpm build` |
 | Lint frontend | `pnpm lint` |
+| Format frontend | `pnpm format` |
+| Lint backend | `ruff check .` (desde `backend/`) |
+| Format backend | `ruff format .` (desde `backend/`) |
 | Backend (uvicorn) | `uvicorn app.main:app --reload --host 0.0.0.0` |
 | Backend (Python) | `pip install -r requirements.txt` (venv activo) |
 | Seed test data | `python -c "from app.core.seed import run_seed; run_seed()"` (venv activo, desde `backend/`) |
@@ -51,7 +54,7 @@ cd frontend && pnpm dev                          # http://localhost:3000
 | Docker logs | `docker compose logs -f backend` |
 | Docker seed | `docker compose exec backend python -c "from app.core.seed import run_seed; run_seed()"` |
 
-No hay formateador, typecheck ni test configurados en ninguna capa.
+No hay typecheck ni test configurados. Formateadores: `ruff` (backend) + `prettier` (frontend).
 
 > Para cargar datos de prueba multi-moneda con 3 cuentas y 45 transacciones, ejecuta el comando Seed. Credenciales: `test@test.com` / `testpass123`. Ver skill `seed-data`.
 

@@ -2,18 +2,17 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import inspect
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
-from app.core.database import engine, Base, SessionLocal
+from app.api import accounts, auth, budgets, categories, dashboard, preferences, transactions, users
+from app.core.database import Base, SessionLocal, engine
 from app.core.rate_limit import limiter
 from app.models import models
-
-from app.api import transactions, users, accounts, categories, budgets, auth, dashboard, preferences
 
 Base.metadata.create_all(bind=engine)
 
@@ -23,13 +22,13 @@ app = FastAPI(
 )
 
 DEFAULT_CATEGORIES = [
-    {"name": "Alimentación", "type": "expense"},
-    {"name": "Transporte", "type": "expense"},
-    {"name": "Ocio", "type": "expense"},
-    {"name": "Cuidado personal", "type": "expense"},
-    {"name": "Suscripción", "type": "expense"},
-    {"name": "Otro", "type": "expense"},
-    {"name": "Salario", "type": "income"},
+    {"name": "Alimentación", "type": "expense", "icon": "UtensilsCrossed"},
+    {"name": "Transporte", "type": "expense", "icon": "Car"},
+    {"name": "Ocio", "type": "expense", "icon": "Gamepad2"},
+    {"name": "Cuidado personal", "type": "expense", "icon": "Heart"},
+    {"name": "Suscripción", "type": "expense", "icon": "Radio"},
+    {"name": "Otro", "type": "expense", "icon": "CircleEllipsis"},
+    {"name": "Salario", "type": "income", "icon": "Wallet"},
 ]
 
 LEGACY_DEFAULT_CATEGORY_NAMES = {
@@ -93,9 +92,11 @@ def seed_default_categories() -> None:
 
                     if existing_category is not None:
                         existing_category.name = category_data["name"]
-                        continue
 
-            if existing_category is None:
+            if existing_category is not None:
+                if existing_category.icon != category_data.get("icon"):
+                    existing_category.icon = category_data.get("icon")
+            else:
                 db.add(models.Category(**category_data, user_id=None))
 
         db.commit()
@@ -113,6 +114,14 @@ def _ensure_user_preference_columns() -> None:
             conn.exec_driver_sql("ALTER TABLE users ADD COLUMN preferred_locale VARCHAR(10) DEFAULT 'es-CO'")
         conn.commit()
 
+def _ensure_category_icon_column() -> None:
+    inspector = inspect(engine)
+    columns = {c["name"] for c in inspector.get_columns("categories")}
+    if "icon" not in columns:
+        with engine.connect() as conn:
+            conn.exec_driver_sql("ALTER TABLE categories ADD COLUMN icon VARCHAR")
+            conn.commit()
+
 
 async def security_headers_middleware(request: Request, call_next):
     response: Response = await call_next(request)
@@ -127,7 +136,6 @@ async def security_headers_middleware(request: Request, call_next):
 # 2. CONFIGURACIÓN CORS (Bloqueo de Fronteras)
 # Leer orígenes permitidos desde variable de entorno
 # IPs de Tailscale (100.x.x.x) se permiten automáticamente vía regex
-import re
 cors_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173")
 origenes_permitidos = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 
@@ -162,6 +170,7 @@ app.include_router(preferences.router, prefix="/api/users", tags=["Preferencias"
 @app.on_event("startup")
 def initialize_shared_data():
     _ensure_user_preference_columns()
+    _ensure_category_icon_column()
     seed_default_categories()
 
 @app.get("/")

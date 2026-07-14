@@ -37,8 +37,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 - [x] **Sin rate limiting en login.** (resuelto 2026-07-10)
   - `slowapi` configurado: `Limiter` en `app/core/rate_limit.py`, `@limiter.limit("5/minute")` en `app/api/auth.py:16`, handler registrado en `main.py:128`.
 
-- [ ] **`datetime.utcnow()`** — deprecated en Python 3.12+.
-  - Migrar a `datetime.now(datetime.UTC)` cuando se toque el código relacionado.
+- [x] **`datetime.utcnow()`** — deprecated en Python 3.12+.
+  - Migrado a `datetime.now(timezone.utc)` en todo el backend. Verificado: cero ocurrencias. (resuelto 2026-07-14)
 
 - [ ] **`Account PUT` ignora cambios de `currency` silenciosamente.**
   - `AccountUpdate` hereda `currency` de `AccountBase`, pero `accounts.py` solo actualiza `name` y `type`.
@@ -74,8 +74,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   - `AccountType`, `CategoryType` son enums en Python pero string unions en TS.
   - Riesgo de drift silencioso.
 
-- [ ] **Formularios usan `<input>` raw en vez de componentes `Input`/`Select` existentes.**
-  - UI components existen pero están mayormente sin usar.
+- [x] **Formularios usan `<input>` raw en vez de componentes `Input`/`Select` existentes.**
+  - UI components existen pero están mayormente sin usar. (resuelto 2026-07-14)
 
 ---
 
@@ -94,6 +94,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 | Fecha | Item |
 |-------|------|
+| 2026-07-14 | datetime.utcnow() migrado a datetime.now(timezone.utc) |
+| 2026-07-14 | Formularios migrados de raw input/select a componentes UI |
 | 2026-07-11 | Migración SQLite → PostgreSQL via Docker |
 | 2026-07-10 | Rate limiting en login verificado y documentado |
 | 2026-07-10 | CSS bug dashboard corregido (max-w-[1600px] no se aplicaba) |

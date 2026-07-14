@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { queryKeys } from "@/lib/queryKeys";
-import { useAppConfig } from "@/providers/AppConfigProvider";
-import { useEffect } from "react";
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { queryKeys } from '@/lib/queryKeys';
+import { useAppConfig } from '@/providers/AppConfigProvider';
+import { useEffect } from 'react';
 
 interface UserPreferences {
   preferred_currency: string;
@@ -15,13 +15,12 @@ interface UserPreferences {
 export function useUserPreferences() {
   const { updateConfig } = useAppConfig();
 
-  const hasToken =
-    typeof window !== "undefined" && !!localStorage.getItem("jwt_token");
+  const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('jwt_token');
 
   const query = useQuery({
     queryKey: queryKeys.userPreferences(),
     queryFn: async () => {
-      const res = await api.get("/api/users/me/preferences");
+      const res = await api.get('/api/users/me/preferences');
       return res.data as UserPreferences;
     },
     enabled: hasToken,

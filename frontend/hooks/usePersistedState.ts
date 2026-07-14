@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 
 export function usePersistedState<T>(
   key: string,
   defaultValue: T
 ): [T, React.Dispatch<React.SetStateAction<T>>] {
   const [state, setState] = useState<T>(() => {
-    if (typeof window === "undefined") return defaultValue;
+    if (typeof window === 'undefined') return defaultValue;
     try {
       const stored = localStorage.getItem(key);
       return stored !== null ? (JSON.parse(stored) as T) : defaultValue;

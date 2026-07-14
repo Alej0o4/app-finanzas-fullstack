@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useUserPreferences } from "@/lib/hooks/useUserPreferences";
+import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 
 export function UserPreferencesSync() {
   useUserPreferences();

@@ -1,17 +1,16 @@
+import calendar
 import logging
+from datetime import UTC, datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case
-from datetime import datetime, timezone
-from decimal import Decimal
-import calendar
-from typing import List
 
 from app.core.database import get_db
+from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
-from app.core.security import get_current_user
 
 router = APIRouter()
 
@@ -28,7 +27,7 @@ def obtener_resumen(
         models.Account.user_id == current_user.id,
     ).group_by(models.Account.currency).all()
 
-    hoy = datetime.now(timezone.utc)
+    hoy = datetime.now(UTC)
     primer_dia = datetime(hoy.year, hoy.month, 1)
     ultimo_dia_mes = calendar.monthrange(hoy.year, hoy.month)[1]
     ultimo_dia = datetime(hoy.year, hoy.month, ultimo_dia_mes, 23, 59, 59)
@@ -62,12 +61,12 @@ def obtener_resumen(
     }
 
 
-@router.get("/budgets-progress", response_model=List[schemas.BudgetProgress])
+@router.get("/budgets-progress", response_model=list[schemas.BudgetProgress])
 def obtener_progreso_presupuestos(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    hoy = datetime.now(timezone.utc)
+    hoy = datetime.now(UTC)
     primer_dia = datetime(hoy.year, hoy.month, 1)
     ultimo_dia = datetime(hoy.year, hoy.month, calendar.monthrange(hoy.year, hoy.month)[1], 23, 59, 59)
 
@@ -96,15 +95,17 @@ def obtener_progreso_presupuestos(
     spent_map: dict[int, Decimal] = {r.category_id: r.spent for r in spent_rows}
 
     categorias = db.query(models.Category).filter(models.Category.id.in_(category_ids)).all()
-    cat_name_map: dict[int, str] = {c.id: c.name for c in categorias}
+    cat_info_map: dict[int, tuple[str, str | None]] = {c.id: (c.name, c.icon) for c in categorias}
 
     progreso_lista = []
     for presupuesto in presupuestos:
         gastado = spent_map.get(presupuesto.category_id, Decimal("0.00"))
         porcentaje = float(gastado / presupuesto.amount_limit) * 100 if presupuesto.amount_limit > 0 else 0
+        cat_name, cat_icon = cat_info_map.get(presupuesto.category_id, ("Desconocida", None))
         progreso_lista.append({
             "budget_id": presupuesto.id,
-            "category_name": cat_name_map.get(presupuesto.category_id, "Desconocida"),
+            "category_name": cat_name,
+            "category_icon": cat_icon,
             "amount_limit": presupuesto.amount_limit,
             "spent": gastado,
             "percentage": round(porcentaje, 2),
@@ -112,7 +113,7 @@ def obtener_progreso_presupuestos(
 
     return progreso_lista
 
-@router.get("/cashflow-series", response_model=List[schemas.CashflowData])
+@router.get("/cashflow-series", response_model=list[schemas.CashflowData])
 def obtener_serie_flujo_caja(
     start_date: datetime,
     end_date: datetime,
@@ -145,10 +146,10 @@ def obtener_serie_flujo_caja(
         ]
     except Exception:
         logging.exception("Error in cashflow-series")
-        raise HTTPException(status_code=500, detail="Error al obtener serie de flujo de caja")
+        raise HTTPException(status_code=500, detail="Error al obtener serie de flujo de caja") from None
 
 
-@router.get("/category-distribution", response_model=List[schemas.CategoryDistributionData])
+@router.get("/category-distribution", response_model=list[schemas.CategoryDistributionData])
 def obtener_distribucion_categorias(
     start_date: datetime,
     end_date: datetime,

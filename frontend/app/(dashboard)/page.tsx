@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { PieChart } from "lucide-react";
-import { api } from "@/lib/api";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import { useCurrentUser } from "@/lib/hooks/useCurrentUser";
-import { useAppConfig } from "@/providers/AppConfigProvider";
-import { useState } from "react";
-import BudgetRing from "@/components/charts/BudgetRing";
-import TransactionModal from "@/components/modals/TransactionModal";
-import SummaryCard from "@/components/ui/SummaryCard";
-import EmptyState from "@/components/ui/EmptyState";
-import Skeleton from "@/components/ui/Skeleton";
-import { queryKeys } from "@/lib/queryKeys";
-import type { DashboardSummary, BudgetProgress, Transaction, PaginatedResponse } from "@/types/api";
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { PieChart } from 'lucide-react';
+import { api } from '@/lib/api';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
+import { useAppConfig } from '@/providers/AppConfigProvider';
+import { useState } from 'react';
+import BudgetRing from '@/components/charts/BudgetRing';
+import TransactionModal from '@/components/modals/TransactionModal';
+import SummaryCard from '@/components/ui/SummaryCard';
+import EmptyState from '@/components/ui/EmptyState';
+import Skeleton from '@/components/ui/Skeleton';
+import { queryKeys } from '@/lib/queryKeys';
+import type { DashboardSummary, BudgetProgress, Transaction, PaginatedResponse } from '@/types/api';
 
 export default function DashboardPage() {
   const { config } = useAppConfig();
@@ -23,17 +23,19 @@ export default function DashboardPage() {
 
   const { data: summary, isLoading: loadingSummary } = useQuery<DashboardSummary>({
     queryKey: queryKeys.dashboard.summary(),
-    queryFn: async () => (await api.get("/api/dashboard/summary")).data,
+    queryFn: async () => (await api.get('/api/dashboard/summary')).data,
   });
 
   const { data: budgetsProgress, isLoading: loadingBudgets } = useQuery<BudgetProgress[]>({
     queryKey: queryKeys.budgets.progress(),
-    queryFn: async () => (await api.get("/api/dashboard/budgets-progress")).data,
+    queryFn: async () => (await api.get('/api/dashboard/budgets-progress')).data,
   });
 
-  const { data: recentTransactionsData, isLoading: loadingRecentTransactions } = useQuery<PaginatedResponse<Transaction>>({
+  const { data: recentTransactionsData, isLoading: loadingRecentTransactions } = useQuery<
+    PaginatedResponse<Transaction>
+  >({
     queryKey: queryKeys.dashboard.recentTransactions(),
-    queryFn: async () => (await api.get("/api/transactions/", { params: { limit: 5 } })).data,
+    queryFn: async () => (await api.get('/api/transactions/', { params: { limit: 5 } })).data,
   });
 
   const recentTransactions = recentTransactionsData?.items;
@@ -43,18 +45,21 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-10 pb-10">
-
       {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight font-sans">Buenas tardes, {user?.full_name?.split(" ")[0] || "de nuevo"}</h1>
-          <p className="text-text-muted text-sm mt-1">Aquí tienes el estado actual de tus finanzas orgánicas.</p>
+          <h1 className="font-sans text-3xl font-bold tracking-tight">
+            Buenas tardes, {user?.full_name?.split(' ')[0] || 'de nuevo'}
+          </h1>
+          <p className="text-text-muted mt-1 text-sm">
+            Aquí tienes el estado actual de tus finanzas orgánicas.
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsTransactionModalOpen(true)}
-            className="flex items-center space-x-2 bg-primary hover:bg-primary-dark text-background px-4 py-2 rounded-xl text-sm font-medium transition-colors cursor-pointer"
+            className="bg-primary hover:bg-primary-dark text-background flex cursor-pointer items-center space-x-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors"
           >
             <span>Nuevo movimiento</span>
           </button>
@@ -62,7 +67,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         {isLoading ? (
           <>
             <Skeleton className="h-32 rounded-2xl" />
@@ -110,13 +115,13 @@ export default function DashboardPage() {
 
       {/* Budget Rings */}
       <div>
-        <div className="flex items-center space-x-2 mb-6">
+        <div className="mb-6 flex items-center space-x-2">
           <PieChart className="text-primary" size={20} />
-          <h2 className="text-xl font-bold font-sans text-text">Ejecución de Presupuestos</h2>
+          <h2 className="text-text font-sans text-xl font-bold">Ejecución de Presupuestos</h2>
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="flex flex-col items-center gap-3 p-6">
                 <Skeleton className="h-24 w-24 rounded-full" />
@@ -125,18 +130,19 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
-        ) : (!budgetsProgress || budgetsProgress.length === 0) ? (
+        ) : !budgetsProgress || budgetsProgress.length === 0 ? (
           <EmptyState
             icon={<PieChart size={48} className="opacity-20" />}
             message="Aún no hay datos de progreso."
             description="Asegúrate de tener presupuestos definidos y gastos registrados en este mes."
           />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {budgetsProgress.map((budget, index) => (
               <BudgetRing
                 key={budget.budget_id || `budget-ring-${index}`}
                 categoryName={budget.category_name}
+                categoryIcon={budget.category_icon}
                 budgetAmount={Number(budget.amount_limit)}
                 spentAmount={Number(budget.spent)}
               />
@@ -147,18 +153,20 @@ export default function DashboardPage() {
 
       {/* Recent Transactions */}
       <div>
-        <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="mb-6 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold font-sans text-text">Transacciones recientes</h2>
-            <p className="text-sm text-text-muted mt-1">Últimos movimientos registrados en tu cuenta.</p>
+            <h2 className="text-text font-sans text-xl font-bold">Transacciones recientes</h2>
+            <p className="text-text-muted mt-1 text-sm">
+              Últimos movimientos registrados en tu cuenta.
+            </p>
           </div>
         </div>
 
-        <div className="bg-surface border border-border/70 rounded-3xl overflow-hidden shadow-sm">
+        <div className="bg-surface border-border/70 overflow-hidden rounded-3xl border shadow-sm">
           {isRecentLoading ? (
-            <div className="divide-y divide-border/40">
+            <div className="divide-border/40 divide-y">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="p-4 sm:px-6 flex items-center justify-between gap-4">
+                <div key={i} className="flex items-center justify-between gap-4 p-4 sm:px-6">
                   <div className="flex items-center gap-3">
                     <Skeleton className="h-10 w-10 rounded-full" />
                     <div className="space-y-2">
@@ -170,24 +178,32 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-          ) : (!recentTransactions || recentTransactions.length === 0) ? (
+          ) : !recentTransactions || recentTransactions.length === 0 ? (
             <EmptyState
               icon={<PieChart size={48} className="opacity-20" />}
               message="No hay transacciones recientes."
             />
           ) : (
-            <div className="divide-y divide-border/40">
+            <div className="divide-border/40 divide-y">
               {recentTransactions.map((tx) => {
-                const isExpense = tx.type === "expense";
+                const isExpense = tx.type === 'expense';
 
                 return (
-                  <div key={tx.id} className="p-4 sm:px-6 hover:bg-surface-elevated transition-colors flex items-center justify-between gap-4">
+                  <div
+                    key={tx.id}
+                    className="hover:bg-surface-elevated flex items-center justify-between gap-4 p-4 transition-colors sm:px-6"
+                  >
                     <div>
-                      <p className="font-medium text-text text-sm">{tx.description}</p>
-                      <p className="text-xs text-text-muted capitalize mt-0.5">{formatDate(tx.date, config.locale)}</p>
+                      <p className="text-text text-sm font-medium">{tx.description}</p>
+                      <p className="text-text-muted mt-0.5 text-xs capitalize">
+                        {formatDate(tx.date, config.locale)}
+                      </p>
                     </div>
-                    <p className={`font-semibold font-sans ${isExpense ? "text-text" : "text-primary"}`}>
-                      {isExpense ? "-" : "+"}{formatCurrency(tx.amount, config.currency)}
+                    <p
+                      className={`font-sans font-semibold ${isExpense ? 'text-text' : 'text-primary'}`}
+                    >
+                      {isExpense ? '-' : '+'}
+                      {formatCurrency(tx.amount, config.currency)}
                     </p>
                   </div>
                 );
@@ -206,7 +222,6 @@ export default function DashboardPage() {
         title="Registrar movimiento"
         defaultType="expense"
       />
-
     </div>
   );
 }

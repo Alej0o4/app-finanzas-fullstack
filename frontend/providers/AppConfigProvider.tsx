@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import React, { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 
 interface AppConfig {
   currency: string;
@@ -14,9 +14,9 @@ interface AppConfigContextType {
 }
 
 const defaultConfig: AppConfig = {
-  currency: "COP",
-  locale: "es-CO",
-  theme: "dark",
+  currency: 'COP',
+  locale: 'es-CO',
+  theme: 'dark',
 };
 
 const AppConfigContext = createContext<AppConfigContextType>({

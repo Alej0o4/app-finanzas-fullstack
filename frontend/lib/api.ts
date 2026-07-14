@@ -44,7 +44,8 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
+      const refreshToken =
+        typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
 
       if (!refreshToken) {
         localStorage.removeItem('jwt_token');
@@ -54,10 +55,9 @@ api.interceptors.response.use(
       }
 
       try {
-        const response = await axios.post(
-          `${api.defaults.baseURL}/api/auth/refresh`,
-          { refresh_token: refreshToken },
-        );
+        const response = await axios.post(`${api.defaults.baseURL}/api/auth/refresh`, {
+          refresh_token: refreshToken,
+        });
 
         const { access_token, refresh_token: newRefresh } = response.data;
         localStorage.setItem('jwt_token', access_token);

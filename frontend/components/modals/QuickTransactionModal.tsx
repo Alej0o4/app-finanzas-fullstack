@@ -1,46 +1,48 @@
-"use client";
+'use client';
 
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { api } from "@/lib/api";
-import { queryKeys } from "@/lib/queryKeys";
-import { getApiError } from "@/lib/utils";
-import ModalShell from "@/components/ui/ModalShell";
-import Button from "@/components/ui/Button";
-import type { Account, Category, CreateTransactionPayload } from "@/types/api";
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { api } from '@/lib/api';
+import { queryKeys } from '@/lib/queryKeys';
+import { getApiError } from '@/lib/utils';
+import ModalShell from '@/components/ui/ModalShell';
+import Button from '@/components/ui/Button';
+import Input from '@/components/ui/Input';
+import Select from '@/components/ui/Select';
+import type { Account, Category, CreateTransactionPayload } from '@/types/api';
 
 interface QuickTransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultType?: "income" | "expense";
+  defaultType?: 'income' | 'expense';
 }
 
-const todayAsInputValue = () => new Date().toISOString().split("T")[0];
+const todayAsInputValue = () => new Date().toISOString().split('T')[0];
 
 export default function QuickTransactionModal({
   isOpen,
   onClose,
-  defaultType = "expense",
+  defaultType = 'expense',
 }: QuickTransactionModalProps) {
   const queryClient = useQueryClient();
 
-  const [amount, setAmount] = useState("");
-  const [type, setType] = useState<"income" | "expense">(defaultType);
-  const [accountId, setAccountId] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [amount, setAmount] = useState('');
+  const [type, setType] = useState<'income' | 'expense'>(defaultType);
+  const [accountId, setAccountId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [date, setDate] = useState(todayAsInputValue());
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState('');
 
   const { data: accounts } = useQuery<Account[]>({
     queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get("/api/accounts/")).data,
+    queryFn: async () => (await api.get('/api/accounts/')).data,
     enabled: isOpen,
   });
 
   const { data: categories } = useQuery<Category[]>({
     queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get("/api/categories/")).data,
+    queryFn: async () => (await api.get('/api/categories/')).data,
     enabled: isOpen,
   });
 
@@ -49,11 +51,11 @@ export default function QuickTransactionModal({
     [categories, type]
   );
 
-  const effectiveAccountId = accountId || (accounts?.length ? String(accounts[0].id) : "");
+  const effectiveAccountId = accountId || (accounts?.length ? String(accounts[0].id) : '');
 
   const createMutation = useMutation({
     mutationFn: async (newTx: CreateTransactionPayload) => {
-      const response = await api.post("/api/transactions/", newTx);
+      const response = await api.post('/api/transactions/', newTx);
       return response.data;
     },
     onSuccess: async () => {
@@ -63,16 +65,16 @@ export default function QuickTransactionModal({
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() }),
-        queryClient.invalidateQueries({ queryKey: ["analytics-cashflow"] }),
-        queryClient.invalidateQueries({ queryKey: ["analytics-categories"] }),
+        queryClient.invalidateQueries({ queryKey: ['analytics-cashflow'] }),
+        queryClient.invalidateQueries({ queryKey: ['analytics-categories'] }),
       ]);
 
-      toast.success(type === "expense" ? "Gasto registrado" : "Ingreso registrado");
+      toast.success(type === 'expense' ? 'Gasto registrado' : 'Ingreso registrado');
 
-      setAmount("");
-      setCategoryId("");
+      setAmount('');
+      setCategoryId('');
       setDate(todayAsInputValue());
-      setDescription("");
+      setDescription('');
       onClose();
     },
     onError: (error: unknown) => {
@@ -94,12 +96,12 @@ export default function QuickTransactionModal({
     });
   };
 
-  const handleTypeChange = (newType: "income" | "expense") => {
+  const handleTypeChange = (newType: 'income' | 'expense') => {
     setType(newType);
-    setCategoryId("");
+    setCategoryId('');
   };
 
-  const title = type === "expense" ? "Gasto rápido" : "Ingreso rápido";
+  const title = type === 'expense' ? 'Gasto rápido' : 'Ingreso rápido';
 
   return (
     <ModalShell isOpen={isOpen} onClose={onClose} title={title}>
@@ -107,116 +109,95 @@ export default function QuickTransactionModal({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => handleTypeChange("expense")}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors border cursor-pointer ${
-              type === "expense"
-                ? "bg-background border-border text-text"
-                : "border-transparent text-text-muted hover:text-text"
+            onClick={() => handleTypeChange('expense')}
+            className={`flex-1 cursor-pointer rounded-xl border py-2 text-sm font-medium transition-colors ${
+              type === 'expense'
+                ? 'bg-background border-border text-text'
+                : 'text-text-muted hover:text-text border-transparent'
             }`}
           >
             Gasto
           </button>
           <button
             type="button"
-            onClick={() => handleTypeChange("income")}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors border cursor-pointer ${
-              type === "income"
-                ? "bg-primary/15 border-primary/30 text-primary"
-                : "border-transparent text-text-muted hover:text-text"
+            onClick={() => handleTypeChange('income')}
+            className={`flex-1 cursor-pointer rounded-xl border py-2 text-sm font-medium transition-colors ${
+              type === 'income'
+                ? 'bg-primary/15 border-primary/30 text-primary'
+                : 'text-text-muted hover:text-text border-transparent'
             }`}
           >
             Ingreso
           </button>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">
-            Valor
-          </label>
-          <input
-            type="number"
+        <Input
+          label="Valor"
+          type="number"
+          required
+          autoFocus
+          value={amount}
+          onChange={(event) => setAmount(event.target.value)}
+          className="bg-background"
+          placeholder="0"
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <Select
+            label="Cuenta"
             required
-            autoFocus
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-            placeholder="0"
+            value={effectiveAccountId}
+            onChange={(event) => setAccountId(event.target.value)}
+            className="bg-background"
+          >
+            <option value="" disabled>
+              Selecciona...
+            </option>
+            {accounts?.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name} ({account.currency})
+              </option>
+            ))}
+          </Select>
+          <Select
+            label="Categoría"
+            required
+            value={categoryId}
+            onChange={(event) => setCategoryId(event.target.value)}
+            className="bg-background"
+          >
+            <option value="" disabled>
+              Selecciona...
+            </option>
+            {filteredCategories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Input
+            label="Fecha"
+            type="date"
+            required
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            className="bg-background"
+          />
+          <Input
+            label="Descripción"
+            type="text"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            className="bg-background"
+            placeholder="Opcional"
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">
-              Cuenta
-            </label>
-            <select
-              required
-              value={effectiveAccountId}
-              onChange={(event) => setAccountId(event.target.value)}
-              className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none"
-            >
-              <option value="" disabled>Selecciona...</option>
-              {accounts?.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name} ({account.currency})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">
-              Categoría
-            </label>
-            <select
-              required
-              value={categoryId}
-              onChange={(event) => setCategoryId(event.target.value)}
-              className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none"
-            >
-              <option value="" disabled>Selecciona...</option>
-              {filteredCategories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">
-              Fecha
-            </label>
-            <input
-              type="date"
-              required
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-              className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-text-muted uppercase tracking-wider pl-1">
-              Descripción
-            </label>
-            <input
-              type="text"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              className="w-full bg-background border border-border/70 rounded-xl px-4 py-2.5 text-sm text-text placeholder-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-              placeholder="Opcional"
-            />
-          </div>
-        </div>
-
         <div className="flex gap-3 pt-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onClose}
-            className="flex-1"
-          >
+          <Button type="button" variant="ghost" onClick={onClose} className="flex-1">
             Cancelar
           </Button>
           <Button
