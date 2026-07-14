@@ -123,18 +123,20 @@ export default function CategoriesPage() {
 
   return (
     <div className="relative space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-text font-sans text-2xl font-bold">Tus Categorías</h1>
-          <p className="text-text-muted text-sm">Organiza y clasifica tus movimientos.</p>
+          <h1 className="text-text font-sans text-xl font-bold sm:text-2xl">Tus Categorías</h1>
+          <p className="text-text-muted text-xs sm:text-sm">Organiza y clasifica tus movimientos.</p>
         </div>
-        <button
+        <Button
+          variant="primary"
           onClick={() => setIsCreateModalOpen(true)}
-          className="bg-primary hover:bg-primary-dark text-background flex cursor-pointer items-center space-x-2 rounded-xl px-4 py-2 font-semibold transition-colors"
+          className="shrink-0"
         >
           <Plus size={18} />
-          <span>Nueva Categoría</span>
-        </button>
+          <span className="hidden sm:inline">Nueva Categoría</span>
+          <span className="sm:hidden">Nueva</span>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -145,7 +147,7 @@ export default function CategoriesPage() {
           return (
             <div
               key={category.id}
-              className="bg-surface border-border/70 hover:border-border group relative flex h-32 flex-col justify-between rounded-2xl border p-4 transition-colors"
+              className="bg-surface border-border/70 hover:border-border group relative flex h-28 flex-col justify-between rounded-2xl border p-3 transition-colors sm:h-32 sm:p-4"
             >
               <Link
                 href={`/categories/${category.id}`}
@@ -174,7 +176,7 @@ export default function CategoriesPage() {
               </Link>
 
               {!isSystemCategory && (
-                <div className="bg-surface absolute top-4 right-4 z-10 flex gap-2 rounded-lg pl-2 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="bg-surface absolute top-4 right-4 z-10 flex gap-2 rounded-lg pl-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                   <button
                     onClick={(e) => {
                       e.preventDefault();

@@ -12,20 +12,20 @@ interface SummaryCardProps {
 export default function SummaryCard({ label, value, children, trend, color }: SummaryCardProps) {
   return (
     <div
-      className={`border-border bg-surface rounded-2xl border p-5 transition-all duration-200 hover:scale-[1.02] ${
+      className={`border-border bg-surface rounded-2xl border p-4 transition-all duration-200 hover:scale-[1.02] max-sm:hover:scale-100 sm:hover:scale-[1.02] ${
         color ? `border-l-4` : ''
       }`}
       style={color ? { borderLeftColor: color } : undefined}
     >
-      <p className="text-text-muted text-sm">{label}</p>
-      <div className="mt-1 flex items-center gap-2">
+      <p className="text-text-muted text-xs sm:text-sm">{label}</p>
+      <div className="mt-1 flex min-w-0 items-center gap-2">
         {children ? (
-          <div className="text-text text-2xl font-bold">{children}</div>
+          <div className="min-w-0 text-xl font-bold text-text sm:text-2xl">{children}</div>
         ) : (
-          <p className="text-text text-2xl font-bold">{value}</p>
+          <p className="min-w-0 text-xl font-bold text-text sm:text-2xl">{value}</p>
         )}
-        {trend === 'up' && <TrendingUp className="text-success h-5 w-5" />}
-        {trend === 'down' && <TrendingDown className="text-danger h-5 w-5" />}
+        {trend === 'up' && <TrendingUp className="text-success h-5 w-5 shrink-0" />}
+        {trend === 'down' && <TrendingDown className="text-danger h-5 w-5 shrink-0" />}
       </div>
     </div>
   );

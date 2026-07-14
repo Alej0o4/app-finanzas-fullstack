@@ -147,11 +147,20 @@ Mejoras priorizadas por impacto: bug multi-moneda, seguridad, testing, modularid
 
 ### Responsive / UX (horas)
 
-- [ ] **Dashboard responsive en iPhone 15 Pro** — grid de SummaryCards, BudgetRings y transacciones recientes adaptados a < 640px — 2h
+- [x] **Dashboard responsive en iPhone 15 Pro** — grid de SummaryCards, BudgetRings y transacciones recientes adaptados a < 640px — 2h (2026-07-14)
+  - SummaryCard: padding/text responsive, BudgetRing: ring 24→32, recent transactions: truncate + shrink-0.
 
-- [ ] **Listados responsive** — transacciones, cuentas, categorías: padding reducido, fuente ajustable en móvil — 2h
+- [x] **Listados responsive** — transacciones, cuentas, categorías: padding reducido, fuente ajustable en móvil — 2h (2026-07-14)
+  - Headers responsive, botones con texto corto en móvil, actions visibles sin hover en táctil.
 
-- [ ] **Formularios y modales responsive** — inputs, selects, botones adaptados a pantalla pequeña — 1h
+- [x] **Formularios y modales responsive** — inputs, selects, botones adaptados a pantalla pequeña — 1h (2026-07-14)
+  - ModalShell scroll, grid-cols-2→1 en modales, ConfirmDialog buttons stacked.
+
+- [x] **Sidebar responsive** — drawer overlay en < 640px, hamburger button, auto-colapse en navegación (2026-07-14)
+
+- [x] **Estandarización de botones** — CTAs, auth submits, ConfirmDialog migrados a `<Button>`, toggle Gasto/Ingreso unificado (2026-07-14)
+
+- [x] **Fix filtros fecha móvil** — `min-w-0` en Input/Select wrappers para evitar desbordamiento de date inputs nativos (2026-07-14)
 
 ### Testing (días)
 

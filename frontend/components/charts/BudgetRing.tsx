@@ -40,22 +40,22 @@ export default function BudgetRing({
   const ringColorClass = isDanger ? 'text-danger' : isWarning ? 'text-warning' : 'text-primary';
 
   return (
-    <div className="bg-surface border-border/70 group hover:border-text-muted/30 relative flex flex-col items-center justify-center rounded-2xl border p-6 transition-colors">
+    <div className="bg-surface border-border/70 group hover:border-text-muted/30 relative flex flex-col items-center justify-center rounded-2xl border p-4 transition-colors sm:p-6">
       {rawPercentage > 100 && (
         <div
-          className="text-danger absolute top-4 right-4 animate-pulse"
+          className="text-danger absolute top-3 right-3 animate-pulse sm:top-4 sm:right-4"
           title="Presupuesto excedido"
         >
           <AlertCircle size={18} />
         </div>
       )}
 
-      <div className="relative flex h-32 w-32 items-center justify-center">
+      <div className="relative flex h-24 w-24 items-center justify-center sm:h-32 sm:w-32">
         <div className="absolute flex flex-col items-center justify-center text-center">
-          <span className={`font-sans text-xl font-bold ${ringColorClass}`}>
+          <span className={`font-sans text-lg font-bold sm:text-xl ${ringColorClass}`}>
             {percentage.toFixed(0)}%
           </span>
-          <span className="text-text-muted text-[10px] tracking-wider uppercase">Gastado</span>
+          <span className="text-text-muted text-[9px] tracking-wider uppercase sm:text-[10px]">Gastado</span>
         </div>
 
         <svg className="h-full w-full -rotate-90 transform" viewBox="0 0 100 100">
@@ -83,7 +83,7 @@ export default function BudgetRing({
         </svg>
       </div>
 
-      <div className="mt-4 w-full text-center">
+      <div className="mt-3 w-full text-center sm:mt-4">
         <div className="flex items-center justify-center gap-1.5">
           <CategoryIcon icon={categoryIcon} size={16} />
           <h3 className="text-text truncate text-sm font-medium">{categoryName || 'Sin Nombre'}</h3>

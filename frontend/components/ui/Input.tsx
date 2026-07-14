@@ -10,7 +10,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, className = '', ...rest }, ref) => {
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="min-w-0 flex flex-col gap-1.5">
         {label && <label className="text-text-soft text-sm font-medium">{label}</label>}
         <input
           ref={ref}

@@ -243,18 +243,20 @@ export default function TransactionsPage() {
 
   return (
     <div className="relative space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-text font-sans text-2xl font-bold">Transacciones</h1>
-          <p className="text-text-muted text-sm">El registro histórico de tus movimientos.</p>
+          <h1 className="text-text font-sans text-xl font-bold sm:text-2xl">Transacciones</h1>
+          <p className="text-text-muted text-xs sm:text-sm">El registro histórico de tus movimientos.</p>
         </div>
-        <button
+        <Button
+          variant="primary"
           onClick={() => setIsModalOpen(true)}
-          className="bg-primary hover:bg-primary-dark text-background flex cursor-pointer items-center space-x-2 rounded-xl px-4 py-2 font-semibold transition-colors"
+          className="shrink-0"
         >
           <Plus size={18} />
-          <span>Nuevo Movimiento</span>
-        </button>
+          <span className="hidden sm:inline">Nuevo Movimiento</span>
+          <span className="sm:hidden">Nuevo</span>
+        </Button>
       </div>
 
       <div className="bg-surface border-border/70 space-y-4 rounded-2xl border p-4 shadow-sm sm:p-5">
@@ -263,13 +265,13 @@ export default function TransactionsPage() {
             <FilterX size={16} className="text-text-muted" />
             Filtros de feed
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={clearFilters}
-            className="text-text-muted hover:text-text text-sm transition-colors"
           >
             Limpiar filtros
-          </button>
+          </Button>
         </div>
 
         <div className="space-y-4">
@@ -297,7 +299,7 @@ export default function TransactionsPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Input
               label="Fecha inicial"
               type="date"
@@ -376,20 +378,20 @@ export default function TransactionsPage() {
                 return (
                   <div
                     key={tx.id}
-                    className="hover:bg-surface-elevated group flex items-center justify-between p-4 transition-colors sm:px-6"
+                    className="hover:bg-surface-elevated group flex items-center justify-between gap-3 p-3 transition-colors sm:gap-4 sm:p-4 sm:px-6"
                   >
-                    <div className="flex items-center space-x-4">
+                    <div className="flex min-w-0 items-center space-x-3 sm:space-x-4">
                       <div
-                        className={`bg-background border-border/60 rounded-full border p-2.5 ${isExpense ? 'text-text-muted' : 'text-primary'}`}
+                        className={`bg-background border-border/60 hidden shrink-0 rounded-full border p-2.5 sm:block ${isExpense ? 'text-text-muted' : 'text-primary'}`}
                       >
                         {isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
                       </div>
-                      <div>
-                        <p className="text-text text-sm font-medium">{tx.description}</p>
+                      <div className="min-w-0">
+                        <p className="text-text truncate text-sm font-medium">{tx.description}</p>
                         <div className="text-text-muted mt-0.5 flex space-x-2 text-xs">
-                          <span>{account?.name || 'Cuenta eliminada'}</span>
-                          <span>•</span>
-                          <span className="inline-flex items-center gap-1">
+                          <span className="truncate">{account?.name || 'Cuenta eliminada'}</span>
+                          <span className="hidden sm:inline">•</span>
+                          <span className="hidden items-center gap-1 sm:inline-flex">
                             <CategoryIcon
                               icon={category?.icon}
                               size={12}
@@ -401,19 +403,19 @@ export default function TransactionsPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-6">
+                    <div className="flex shrink-0 items-center gap-2 sm:gap-6">
                       <div className="text-right">
                         <p
-                          className={`font-sans font-semibold ${isExpense ? 'text-text' : 'text-primary'}`}
+                          className={`font-sans text-sm font-semibold sm:text-base ${isExpense ? 'text-text' : 'text-primary'}`}
                         >
                           {isExpense ? '-' : '+'}
                           {formatCurrency(tx.amount, tx.currency)}
                         </p>
-                        <p className="text-text-muted text-xs capitalize">
+                        <p className="text-text-muted text-[11px] capitalize">
                           {formatDate(tx.date, config.locale)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                         <button
                           onClick={() => openEditModal(tx)}
                           className="text-text-muted hover:text-text hover:bg-surface-elevated rounded-lg p-2 transition-colors"
@@ -441,19 +443,14 @@ export default function TransactionsPage() {
 
             {hasMore && (
               <div className="border-border/40 flex justify-center border-t py-6">
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
                   onClick={handleLoadMore}
                   disabled={loadingMore}
-                  className="border-border/70 bg-background text-text-muted hover:text-text hover:bg-surface-elevated inline-flex cursor-pointer items-center gap-2 rounded-xl border px-5 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+                  loading={loadingMore}
                 >
-                  {loadingMore ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Loader2 className="h-4 w-4" />
-                  )}
                   {loadingMore ? 'Cargando...' : `Cargar más (${allItems.length} de ${total})`}
-                </button>
+                </Button>
               </div>
             )}
 
@@ -523,7 +520,7 @@ export default function TransactionsPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-text-muted pl-1 text-xs font-medium tracking-wider uppercase">
                   Cuenta

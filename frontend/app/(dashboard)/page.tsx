@@ -10,6 +10,7 @@ import { useState } from 'react';
 import BudgetRing from '@/components/charts/BudgetRing';
 import TransactionModal from '@/components/modals/TransactionModal';
 import SummaryCard from '@/components/ui/SummaryCard';
+import Button from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton from '@/components/ui/Skeleton';
 import { queryKeys } from '@/lib/queryKeys';
@@ -44,25 +45,25 @@ export default function DashboardPage() {
   const isRecentLoading = loadingRecentTransactions;
 
   return (
-    <div className="space-y-10 pb-10">
+    <div className="space-y-6 pb-10 sm:space-y-10">
       {/* Encabezado */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="font-sans text-3xl font-bold tracking-tight">
+          <h1 className="font-sans text-2xl font-bold tracking-tight sm:text-3xl">
             Buenas tardes, {user?.full_name?.split(' ')[0] || 'de nuevo'}
           </h1>
-          <p className="text-text-muted mt-1 text-sm">
+          <p className="text-text-muted mt-1 text-xs sm:text-sm">
             Aquí tienes el estado actual de tus finanzas orgánicas.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <button
+          <Button
+            variant="primary"
             onClick={() => setIsTransactionModalOpen(true)}
-            className="bg-primary hover:bg-primary-dark text-background flex cursor-pointer items-center space-x-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors"
           >
-            <span>Nuevo movimiento</span>
-          </button>
+            Nuevo movimiento
+          </Button>
         </div>
       </div>
 
@@ -191,16 +192,16 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={tx.id}
-                    className="hover:bg-surface-elevated flex items-center justify-between gap-4 p-4 transition-colors sm:px-6"
+                    className="hover:bg-surface-elevated flex items-center justify-between gap-3 p-3 transition-colors sm:gap-4 sm:p-4 sm:px-6"
                   >
-                    <div>
-                      <p className="text-text text-sm font-medium">{tx.description}</p>
+                    <div className="min-w-0">
+                      <p className="text-text truncate text-sm font-medium">{tx.description}</p>
                       <p className="text-text-muted mt-0.5 text-xs capitalize">
                         {formatDate(tx.date, config.locale)}
                       </p>
                     </div>
                     <p
-                      className={`font-sans font-semibold ${isExpense ? 'text-text' : 'text-primary'}`}
+                      className={`shrink-0 font-sans text-sm font-semibold sm:text-base ${isExpense ? 'text-text' : 'text-primary'}`}
                     >
                       {isExpense ? '-' : '+'}
                       {formatCurrency(tx.amount, config.currency)}

@@ -131,13 +131,13 @@ export default function BudgetsPage() {
             Establece límites y controla tus gastos mensuales.
           </p>
         </div>
-        <button
+        <Button
+          variant="primary"
           onClick={openCreateModal}
-          className="bg-primary hover:bg-primary-dark text-background flex cursor-pointer items-center space-x-2 rounded-xl px-4 py-2 font-semibold transition-colors"
         >
           <Plus size={18} />
           <span>Nuevo Presupuesto</span>
-        </button>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

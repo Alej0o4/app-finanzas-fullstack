@@ -123,7 +123,7 @@ export default function QuickTransactionModal({
             onClick={() => handleTypeChange('income')}
             className={`flex-1 cursor-pointer rounded-xl border py-2 text-sm font-medium transition-colors ${
               type === 'income'
-                ? 'bg-primary/15 border-primary/30 text-primary'
+                ? 'bg-primary/10 border-primary/20 text-primary'
                 : 'text-text-muted hover:text-text border-transparent'
             }`}
           >
@@ -142,7 +142,7 @@ export default function QuickTransactionModal({
           placeholder="0"
         />
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Select
             label="Cuenta"
             required
@@ -177,7 +177,7 @@ export default function QuickTransactionModal({
           </Select>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
             label="Fecha"
             type="date"

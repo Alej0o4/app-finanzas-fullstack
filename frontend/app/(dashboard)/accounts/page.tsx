@@ -162,25 +162,27 @@ export default function AccountsPage() {
 
   return (
     <div className="relative space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-text font-sans text-2xl font-bold">Tus Cuentas</h1>
-          <p className="text-text-muted text-sm">Gestiona el origen de tus fondos.</p>
+          <h1 className="text-text font-sans text-xl font-bold sm:text-2xl">Tus Cuentas</h1>
+          <p className="text-text-muted text-xs sm:text-sm">Gestiona el origen de tus fondos.</p>
         </div>
-        <button
+        <Button
+          variant="primary"
           onClick={() => setIsCreateModalOpen(true)}
-          className="bg-primary hover:bg-primary-dark text-background flex cursor-pointer items-center space-x-2 rounded-xl px-4 py-2 font-semibold transition-colors"
+          className="shrink-0"
         >
           <Plus size={18} />
-          <span>Nueva Cuenta</span>
-        </button>
+          <span className="hidden sm:inline">Nueva Cuenta</span>
+          <span className="sm:hidden">Nueva</span>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {sortedAccounts.map((account) => (
           <div
             key={account.id}
-            className="bg-surface border-border/70 hover:border-primary/30 group relative rounded-2xl border p-5 transition-colors"
+            className="bg-surface border-border/70 hover:border-primary/30 group relative rounded-2xl border p-4 transition-colors sm:p-5"
           >
             <Link href={`/accounts/${account.id}`} className="block cursor-pointer">
               <div className="mb-4 flex items-start justify-between">
@@ -198,13 +200,13 @@ export default function AccountsPage() {
               </div>
 
               <div className="border-border/40 mt-4 border-t pt-4">
-                <p className="text-text font-sans text-2xl font-semibold">
+                <p className="text-text font-sans text-xl font-semibold sm:text-2xl">
                   {formatCurrency(account.balance, account.currency)}
                 </p>
               </div>
             </Link>
 
-            <div className="bg-surface absolute top-5 right-5 flex gap-1 rounded-lg pl-2 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="bg-surface absolute top-5 right-5 z-10 flex gap-1 rounded-lg pl-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
               <button
                 onClick={(e) => {
                   e.preventDefault();

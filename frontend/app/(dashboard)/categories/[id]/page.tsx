@@ -216,7 +216,7 @@ export default function CategoryDetailPage() {
                           {formatDate(tx.date, config.locale)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                         <button
                           onClick={() => openEditModal(tx)}
                           className="text-text-muted hover:text-text hover:bg-surface-elevated rounded-lg p-2 transition-colors"
@@ -286,7 +286,7 @@ export default function CategoryDetailPage() {
               className="bg-background"
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Select
                 label="Cuenta"
                 required

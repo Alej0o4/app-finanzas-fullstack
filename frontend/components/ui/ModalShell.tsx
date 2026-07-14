@@ -15,7 +15,7 @@ export default function ModalShell({ isOpen, onClose, title, children }: ModalSh
 
   return (
     <div className="bg-background/80 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="border-border bg-surface animate-in fade-in w-full max-w-lg rounded-2xl border p-6 shadow-2xl duration-200">
+      <div className="border-border bg-surface animate-in fade-in max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border p-4 shadow-2xl duration-200 sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-text text-lg font-semibold">{title}</h2>
           <button

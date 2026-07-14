@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, Loader2, Wallet } from 'lucide-react';
+import { ArrowRight, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
 import Input from '@/components/ui/Input';
+import Button from '@/components/ui/Button';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -122,20 +123,16 @@ export default function RegisterPage() {
           placeholder="Repite la contraseña"
         />
 
-        <button
+        <Button
           type="submit"
-          disabled={isLoading}
-          className="bg-primary hover:bg-primary-dark text-background mt-2 flex w-full cursor-pointer items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold transition-colors disabled:opacity-70"
+          variant="primary"
+          size="lg"
+          loading={isLoading}
+          className="mt-2 w-full"
         >
-          {isLoading ? (
-            <Loader2 size={18} className="animate-spin" />
-          ) : (
-            <>
-              Crear Cuenta
-              <ArrowRight size={16} className="ml-2" />
-            </>
-          )}
-        </button>
+          Crear Cuenta
+          {!isLoading && <ArrowRight size={16} />}
+        </Button>
       </form>
 
       <p className="text-text-muted mt-6 text-center text-sm">
