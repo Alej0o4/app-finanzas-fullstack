@@ -131,9 +131,9 @@ Mejoras priorizadas por impacto: bug multi-moneda, seguridad, testing, modularid
 
 - [x] **Editar transacciones en página de transacciones** — botón Pencil + modal editable como en cuentas/categorías — 2h (2026-07-14)
 
-- [ ] **Cuentas destacadas (star) para dashboard** — columna `highlighted` en Account, dashboard suma solo destacadas (A) + orden consistente por moneda preferida (C) — 3h
-  - Backend: ALTER TABLE, schema, filtrar en dashboard endpoint.
-  - Frontend: star toggle en página cuentas, orden balances por moneda preferida.
+- [x] **Cuentas destacadas (star) para dashboard** — columna `highlighted` en Account, dashboard suma solo destacadas + orden por moneda preferida — 3h (2026-07-14)
+  - Backend: `highlighted` column, PATCH toggle, dashboard filtered + sorted.
+  - Frontend: star toggle en cuentas, sort highlighted primero + preferred currency.
 
 - [x] **Iconos predefinidos para categorías default** — columna `icon` en Category, Lucide icons para Alimentación/Transporte/Ocio/etc. — 2h
   - Backend: ALTER TABLE, asignar en seed_default_categories, devolver en response.

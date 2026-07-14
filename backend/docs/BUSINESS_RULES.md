@@ -14,6 +14,7 @@
 - `balance` puede definirse al crear la cuenta, pero solo como saldo inicial.
 - En edición, `balance` no debe ser modificable por el Frontend.
 - El saldo real se deriva de transacciones e impactos contables.
+- `highlighted` marca una cuenta como destacada para el dashboard. Si no hay cuentas destacadas, el dashboard muestra todas.
 
 ## Categorías
 

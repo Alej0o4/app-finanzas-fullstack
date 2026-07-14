@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Loader2, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Circle } from 'lucide-react';
+import { Plus, Loader2, Edit2, Trash2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { getApiError } from '@/lib/utils';

@@ -8,7 +8,6 @@ import { queryKeys } from '@/lib/queryKeys';
 import { getApiError } from '@/lib/utils';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
-import CategoryIcon from '@/components/ui/CategoryIcon';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import type { Account, Category, CreateTransactionPayload } from '@/types/api';

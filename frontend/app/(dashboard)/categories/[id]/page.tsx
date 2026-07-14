@@ -10,7 +10,6 @@ import {
   ArrowUpRight,
   Pencil,
   Trash2,
-  Circle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';

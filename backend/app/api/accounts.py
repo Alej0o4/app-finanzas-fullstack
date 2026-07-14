@@ -58,10 +58,27 @@ def actualizar_cuenta(
 
     cuenta.name = cuenta_actualizada.name
     cuenta.type = cuenta_actualizada.type
+    cuenta.highlighted = cuenta_actualizada.highlighted
 
     db.commit()
     db.refresh(cuenta)
     return cuenta
+
+@router.patch("/{account_id}/highlighted", response_model=schemas.AccountResponse)
+def toggle_destacada(
+    account_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    cuenta = db.query(models.Account).filter(models.Account.id == account_id).first()
+    if not cuenta or cuenta.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+
+    cuenta.highlighted = not cuenta.highlighted
+    db.commit()
+    db.refresh(cuenta)
+    return cuenta
+
 
 @router.delete("/{account_id}")
 def eliminar_cuenta(

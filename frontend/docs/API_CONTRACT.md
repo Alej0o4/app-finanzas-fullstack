@@ -33,6 +33,7 @@ Si el backend responde `401`, el frontend intenta renovar el token via `POST /ap
 - `GET /api/accounts/{account_id}`
 - `POST /api/accounts/`
 - `PUT /api/accounts/{account_id}`
+- `PATCH /api/accounts/{account_id}/highlighted`
 - `DELETE /api/accounts/{account_id}`
 
 ### Categorías

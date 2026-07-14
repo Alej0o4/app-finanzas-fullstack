@@ -123,6 +123,15 @@ def _ensure_category_icon_column() -> None:
             conn.commit()
 
 
+def _ensure_account_highlighted_column() -> None:
+    inspector = inspect(engine)
+    columns = {c["name"] for c in inspector.get_columns("accounts")}
+    if "highlighted" not in columns:
+        with engine.connect() as conn:
+            conn.exec_driver_sql("ALTER TABLE accounts ADD COLUMN highlighted BOOLEAN DEFAULT FALSE")
+            conn.commit()
+
+
 async def security_headers_middleware(request: Request, call_next):
     response: Response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -171,6 +180,7 @@ app.include_router(preferences.router, prefix="/api/users", tags=["Preferencias"
 def initialize_shared_data():
     _ensure_user_preference_columns()
     _ensure_category_icon_column()
+    _ensure_account_highlighted_column()
     seed_default_categories()
 
 @app.get("/")

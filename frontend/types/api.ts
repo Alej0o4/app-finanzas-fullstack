@@ -5,6 +5,7 @@ export interface Account {
   balance: number;
   currency: string;
   user_id: number;
+  highlighted: boolean;
 }
 
 export interface Transaction {
@@ -115,6 +116,7 @@ export interface CreateAccountPayload {
   type: 'cash' | 'debit' | 'credit';
   balance: number;
   currency?: string;
+  highlighted?: boolean;
 }
 
 export interface BudgetPayload {

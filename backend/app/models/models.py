@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, func
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -28,6 +28,7 @@ class Account(Base):
     type = Column(String)
     balance = Column(Numeric(14, 2), default=0)  # 🔁 antes: Float
     currency = Column(String(3), default="COP", nullable=False)
+    highlighted = Column(Boolean, default=False)
 
     user_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="accounts")

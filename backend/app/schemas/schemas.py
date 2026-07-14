@@ -66,6 +66,7 @@ class AccountBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     type: AccountType
     currency: str = "COP"
+    highlighted: bool = False
 
 class AccountCreate(AccountBase):
     balance: Decimal = Field(0, ge=0, decimal_places=2, description="Saldo inicial")

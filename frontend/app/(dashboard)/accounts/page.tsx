@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Wallet, Loader2, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Wallet, Loader2, Edit2, Trash2, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, getApiError } from '@/lib/utils';
 import { useConfirmStore } from '@/store/useConfirmStore';
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { queryKeys } from '@/lib/queryKeys';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
@@ -23,6 +24,7 @@ const accountTypeTranslations: Record<string, string> = {
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
+  const { data: user } = useCurrentUser();
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newAccountName, setNewAccountName] = useState('');
@@ -92,6 +94,20 @@ export default function AccountsPage() {
     },
   });
 
+  const toggleHighlightMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await api.patch(`/api/accounts/${id}/highlighted`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
+    },
+    onError: (error: unknown) => {
+      toast.error(getApiError(error));
+    },
+  });
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     createAccountMutation.mutate({
@@ -126,6 +142,17 @@ export default function AccountsPage() {
     setEditingAccount(account);
   };
 
+  const sortedAccounts = useMemo(() => {
+    if (!accounts) return [];
+    const pref = user?.preferred_currency || 'COP';
+    return [...accounts].sort((a, b) => {
+      if (a.highlighted !== b.highlighted) return a.highlighted ? -1 : 1;
+      const aKey = a.currency === pref ? 0 : 1;
+      const bKey = b.currency === pref ? 0 : 1;
+      return aKey - bKey || a.currency.localeCompare(b.currency);
+    });
+  }, [accounts, user]);
+
   if (isLoading)
     return (
       <div className="text-text-muted flex items-center gap-2 p-8">
@@ -150,7 +177,7 @@ export default function AccountsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {accounts?.map((account) => (
+        {sortedAccounts.map((account) => (
           <div
             key={account.id}
             className="bg-surface border-border/70 hover:border-primary/30 group relative rounded-2xl border p-5 transition-colors"
@@ -177,7 +204,22 @@ export default function AccountsPage() {
               </div>
             </Link>
 
-            <div className="bg-surface absolute top-5 right-5 flex gap-2 rounded-lg pl-2 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="bg-surface absolute top-5 right-5 flex gap-1 rounded-lg pl-2 opacity-0 transition-opacity group-hover:opacity-100">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleHighlightMutation.mutate(account.id);
+                }}
+                className={`p-1 transition-colors ${
+                  account.highlighted
+                    ? 'text-yellow-400 hover:text-yellow-300'
+                    : 'text-text-muted hover:text-yellow-400'
+                }`}
+                title={account.highlighted ? 'Quitar de destacadas' : 'Marcar como destacada'}
+              >
+                <Star size={16} fill={account.highlighted ? 'currentColor' : 'none'} />
+              </button>
               <button
                 onClick={(e) => {
                   e.preventDefault();

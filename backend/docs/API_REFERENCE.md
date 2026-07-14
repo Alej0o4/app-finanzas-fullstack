@@ -130,6 +130,7 @@ Entrada:
 - `type`: `cash | debit | credit`
 - `balance`: saldo inicial permitido solo en creación.
 - `currency`: código de moneda (default `"COP"`). Ej: `"COP"`, `"USD"`, `"EUR"`.
+- `highlighted`: si la cuenta es destacada (default `false`).
 
 Salida:
 
@@ -138,6 +139,7 @@ Salida:
 - `type`
 - `balance`
 - `currency`
+- `highlighted`
 - `user_id`
 
 ### `GET /api/accounts/{account_id}`
@@ -150,7 +152,13 @@ Lista las cuentas del usuario autenticado.
 
 ### `PUT /api/accounts/{account_id}`
 
-Actualiza nombre y tipo de la cuenta.
+Actualiza nombre, tipo y destacada de la cuenta.
+
+### `PATCH /api/accounts/{account_id}/highlighted`
+
+Alterna el estado `highlighted` de una cuenta (toggle).
+
+Salida: `AccountResponse` actualizada.
 
 ### `DELETE /api/accounts/{account_id}`
 
@@ -267,12 +275,13 @@ Elimina un presupuesto del usuario autenticado.
 
 ### `GET /api/dashboard/summary`
 
+Devuelve resumen financiero del mes actual. Solo incluye cuentas marcadas como destacadas (`highlighted=true`); si no hay destacadas, incluye todas. Las monedas se ordenan por la moneda preferida del usuario primero.
+
 Devuelve:
 
-- `total_balance`
-- `monthly_income`
-- `monthly_expense`
-- `currency`: moneda del resumen (default `"COP"`)
+- `balances`: array de `{currency, total}` — saldo total por moneda.
+- `monthly_income_by_currency`: array de `{currency, total}` — ingresos del mes por moneda.
+- `monthly_expense_by_currency`: array de `{currency, total}` — gastos del mes por moneda.
 
 ### `GET /api/dashboard/budgets-progress`
 

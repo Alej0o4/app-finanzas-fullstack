@@ -19,18 +19,34 @@ def obtener_resumen(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    preferred_currency = current_user.preferred_currency or "COP"
+
+    # Contar cuentas destacadas
+    highlighted_count = db.query(models.Account).filter(
+        models.Account.user_id == current_user.id,
+        models.Account.highlighted == True,  # noqa: E712
+    ).count()
+
+    # Si hay destacadas, filtrar por ellas; si no, usar todas
+    account_filter = [models.Account.user_id == current_user.id]
+    if highlighted_count > 0:
+        account_filter.append(models.Account.highlighted == True)  # noqa: E712
+
     # Agrupar saldos de cuentas por moneda
     balances_rows = db.query(
         models.Account.currency,
         func.sum(models.Account.balance).label("total"),
     ).filter(
-        models.Account.user_id == current_user.id,
+        *account_filter,
     ).group_by(models.Account.currency).all()
 
     hoy = datetime.now(UTC)
     primer_dia = datetime(hoy.year, hoy.month, 1)
     ultimo_dia_mes = calendar.monthrange(hoy.year, hoy.month)[1]
     ultimo_dia = datetime(hoy.year, hoy.month, ultimo_dia_mes, 23, 59, 59)
+
+    # Transacciones del mes solo de cuentas destacadas (o todas si no hay)
+    tx_account_ids = db.query(models.Account.id).filter(*account_filter).subquery()
 
     # Ingresos del mes agrupados por moneda
     income_rows = db.query(
@@ -39,6 +55,7 @@ def obtener_resumen(
     ).filter(
         models.Transaction.user_id == current_user.id,
         models.Transaction.type == "income",
+        models.Transaction.account_id.in_(tx_account_ids),
         models.Transaction.date >= primer_dia,
         models.Transaction.date <= ultimo_dia,
     ).group_by(models.Transaction.currency).all()
@@ -50,14 +67,27 @@ def obtener_resumen(
     ).filter(
         models.Transaction.user_id == current_user.id,
         models.Transaction.type == "expense",
+        models.Transaction.account_id.in_(tx_account_ids),
         models.Transaction.date >= primer_dia,
         models.Transaction.date <= ultimo_dia,
     ).group_by(models.Transaction.currency).all()
 
+    # Ordenar: moneda preferida primero, luego alfabético
+    def sort_key(currency: str) -> tuple[int, str]:
+        return (0 if currency == preferred_currency else 1, currency)
+
+    balances = [{"currency": r.currency, "total": r.total} for r in balances_rows]
+    income = [{"currency": r.currency, "total": r.total} for r in income_rows]
+    expense = [{"currency": r.currency, "total": r.total} for r in expense_rows]
+
+    balances.sort(key=lambda x: sort_key(x["currency"]))
+    income.sort(key=lambda x: sort_key(x["currency"]))
+    expense.sort(key=lambda x: sort_key(x["currency"]))
+
     return {
-        "balances": [{"currency": r.currency, "total": r.total} for r in balances_rows],
-        "monthly_income_by_currency": [{"currency": r.currency, "total": r.total} for r in income_rows],
-        "monthly_expense_by_currency": [{"currency": r.currency, "total": r.total} for r in expense_rows],
+        "balances": balances,
+        "monthly_income_by_currency": income,
+        "monthly_expense_by_currency": expense,
     }
 
 

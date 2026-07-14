@@ -59,11 +59,11 @@ def run_seed():
 
         cuenta = models.Account(
             name="Cuenta Principal", type="cash", balance=Decimal("14478000"),
-            currency="COP", user_id=user.id,
+            currency="COP", user_id=user.id, highlighted=True,
         )
         ahorros = models.Account(
             name="Ahorros USD", type="debit", balance=Decimal("4615"),
-            currency="USD", user_id=user.id,
+            currency="USD", user_id=user.id, highlighted=True,
         )
         tarjeta = models.Account(
             name="Tarjeta Crédito", type="credit", balance=Decimal("-250000"),
