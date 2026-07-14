@@ -20,77 +20,10 @@
 | 2026-07-09 | Feature Multi-Tema: preferred_theme en backend, ThemeToggle sincronizado, transiciones CSS, WCAG AA verificado |
 | 2026-07-10 | Feature FAB + Transacción Rápida: FloatingActionButton, FabManager, QuickTransactionModal, integrado en dashboard layout |
 | 2026-07-10 | **Fase 1** — Fixes inmediatos: CSS bug dashboard, finanzas.db excluido de git, rate limiting verificado y documentado |
-| 2026-07-10 | **Fase 3** — Documentación actualizada: keys preferencias corregidas, errores API, ARCHITECTURE con RefreshToken y migraciones, AGENTS actualizado, TODO_TECH_DEBT con 3 items nuevos |
+| 2026-07-10 | **Fase 2** — Transacción rápida FAB: FloatingActionButton, FabManager, QuickTransactionModal, integrado en dashboard layout |
+| 2026-07-10 | **Fase 3** — Documentación actualizada: keys preferencias corregidas, errores API, ARCHITECTURE con RefreshToken y migraciones, AGENTS actualizado, docs/TODO.md con 3 items nuevos |
 | 2026-07-11 | **Fase 4A** — Tailscale: CORS regex, uvicorn 0.0.0.0, WSL2 tailscale IP 100.124.221.83, login verificado |
 | 2026-07-11 | **Fase 4B** — Docker: Dockerfiles (backend python:3.12-slim, frontend node:22-alpine multi-stage), docker-compose.yml (postgres + backend + frontend), .dockerignore x2, fix pnpm install (pnpm@9 + --frozen-lockfile + onlyBuiltDependencies en package.json), seed en PostgreSQL |
-
----
-
-## Fase 1 — Fixes inmediatos (bugs + seguridad)
-
-- [x] **Fix bug CSS dashboard** — `frontend/app/(dashboard)/layout.tsx:33` (2026-07-10)
-  - `lg:p-12max-w-[1600px]` → `lg:p-12 max-w-[1600px]` (falta un espacio)
-  - El `max-w-[1600px]` nunca se aplica actualmente.
-
-- [x] **Excluir `finanzas.db` de git** — agregar a `.gitignore` (2026-07-10)
-  - Riesgo de commitear datos financieros reales por accidente.
-
-- [x] **Verificar rate limiting en login** — `backend/app/main.py` (2026-07-10)
-  - El `TODO_TECH_DEBT.md` dice "sin rate limiting" pero `slowapi` parece estar configurado.
-  - Confirmar que funciona y documentar el estado real.
-
----
-
-## Fase 2 — Transacción rápida (FAB)
-
-**Objetivo:** Poder registrar un gasto en <5 segundos desde cualquier pantalla. Este es el feature con mayor impacto en que la app se use diariamente. (2026-07-10)
-
-- [x] **Crear componente `FloatingActionButton.tsx`** (2026-07-10)
-  - Botón flotante fijo en esquina inferior derecha del dashboard.
-  - Visible en todas las pantallas del dashboard (no en auth).
-  - Icono: `Plus` de Lucide, fondo `--color-primary`.
-  - Menú expandible con 2 opciones: "Gasto rápido" y "Nueva transacción".
-  - Click fuera cierra el menú. Z-index z-30 (debajo de sidebar y modales).
-
-- [x] **Crear componente `QuickTransactionModal.tsx`** (2026-07-10)
-  - Modal simplificado basado en `ModalShell`.
-  - Campos: monto (autofocus), tipo toggle, cuenta (select), categoría (filtrada por tipo), fecha (default hoy), descripción (opcional).
-  - Cuenta se auto-selecciona (primera cuenta del usuario).
-  - Al guardar: `POST /api/transactions/`, invalidar 5 queries, toast de éxito, cerrar modal.
-
-- [x] **Crear componente `FabManager.tsx`** (2026-07-10)
-  - Orquestador que maneja el estado del menú FAB y los dos modales.
-  - "Gasto rápido" → `QuickTransactionModal`.
-  - "Nueva transacción" → `TransactionModal` (existente).
-
-- [x] **Integrar FAB en dashboard layout** (2026-07-10)
-  - `frontend/app/(dashboard)/layout.tsx` — `<FabManager />` junto a Sidebar y ConfirmDialog.
-
-- [x] **Feedback visual post-guardado** (2026-07-10)
-  - Toast "Gasto registrado" o "Ingreso registrado" (Sonner).
-  - Cerrar modal automáticamente.
-  - Actualizar datos del dashboard (query invalidation).
-
----
-
-## Fase 3 — Documentación actualizada
-
-**Objetivo:** Que la documentación refleje el estado real del código. Acelera desarrollo futuro con agentes IA.
-
-- [x] **Actualizar `backend/docs/API_REFERENCE.md`** (2026-07-10)
-  - Agregar: refresh tokens, campos currency en accounts/transactions/budgets,
-    preferencias de usuario (GET/PATCH), endpoint `/auth/refresh`, `/auth/logout`.
-
-- [x] **Actualizar `backend/docs/ARCHITECTURE.md`** (2026-07-10)
-  - Corregir: "no hay refresh tokens" → documentar refresh token rotation.
-  - Documentar columnas `preferred_currency`, `preferred_locale`, `preferred_theme`.
-
-- [x] **Actualizar `AGENTS.md`** (2026-07-10)
-  - Reflejar comandos y arquitectura actuales.
-
-- [x] **Actualizar `TODO_TECH_DEBT.md`** (2026-07-10)
-  - Marcar como resueltos los items que ya se completaron (rate limiting, CORS, refresh tokens).
-  - Reorganizar prioridades según el nuevo estado.
 
 ---
 
@@ -173,6 +106,69 @@
 - [ ] **Actualizar frontend `app/(dashboard)/page.tsx`**
   - Mostrar tarjeta de saldo por cada moneda (en vez de una sola suma).
   - Formato: `$1.234.567 COP`, `$850.00 USD`.
+
+---
+
+## Fase 6 — Code Review Roadmap
+
+**Objetivo:** Atender los hallazgos de la auditoría de código (`CODE_REVIEW.md`, 2026-07-14).
+Mejoras priorizadas por impacto: bug multi-moneda, seguridad, testing, modularidad, arquitectura.
+
+### Quick Wins (horas)
+
+- [ ] **Fix bug multi-moneda dashboard** — agrupar saldos por moneda en vez de sumar COP+USD+EUR — 2h
+  - Cambiar `total_balance` por `balances_by_currency` en backend + schema + frontend.
+  - Mostrar tarjeta por moneda: `$1.234.567 COP`, `$850.00 USD`.
+  - *(Ref: Fase 5 — backup y dashboard multi-moneda, ver arriba)*
+
+- [ ] **Reemplazar `datetime.utcnow()`** por `datetime.now(timezone.utc)` en `security.py` — 1h
+  - Deprecated en Python 3.12+, generará warnings.
+
+- [ ] **Sanitizar errores en `dashboard.py:cashflow-series`** — no exponer `str(e)` al cliente — 1h
+  - Reemplazar por mensaje genérico en responses de error.
+
+- [ ] **Headers de seguridad** via middleware FastAPI (CSP, X-Frame-Options, X-Content-Type-Options) — 1h
+
+- [ ] **Crear `README.md`** en raíz del proyecto — entry point de documentación — 1h
+
+- [ ] **Fix input raw → componentes UI** — reemplazar `<input>` por `Input`/`Select` existentes en forms de accounts, categories, transactions — 2h
+
+- [ ] **Agregar `ruff`** (linter/formatter Python) al backend — 1h
+
+- [ ] **Agregar `prettier`** al frontend — 1h
+
+### Testing (días)
+
+- [ ] **Configurar pytest + httpx** para tests de integración backend (endpoints auth + transacciones) — 2d
+  - Cobertura mínima 60% en endpoints de autenticación y lógica contable.
+
+- [ ] **Configurar Vitest + React Testing Library** para tests frontend — 2d
+
+### Modularidad frontend (1 día)
+
+- [ ] **Extraer custom hooks de queries** — `useAccounts`, `useCategories`, `useTransactions` — 1d
+  - Cada página hace `useQuery` + `queryFn` inline; consolidar en hooks reutilizables.
+
+- [ ] **Decidir `AccountUpdate.currency`** — schema hereda `currency` de `AccountBase` pero `accounts.py:59` solo actualiza `name` y `type` — 1h
+  - Resolver: agregar al endpoint o excluir del schema.
+
+### Seguridad avanzada (días)
+
+- [ ] **Migrar JWT** de `localStorage` a cookies httpOnly + secure + sameSite — 2d
+  - Elimina riesgo de robo de token vía XSS.
+
+- [ ] **Script `scripts/backup.sh`** para PostgreSQL con rotación de 7 días — 1d
+  - `docker compose exec postgres pg_dump` → `backups/` con timestamp.
+
+### Arquitectura backend (semanas)
+
+- [ ] **Hacer `docker-compose.yml` paramétrico** — IPs y SECRET_KEY via `.env` en vez de hardcodear — 1d
+
+- [ ] **Crear capa `app/services/`** — lógica de negocio (accounting, budget) fuera de routers — 2s
+
+- [ ] **Crear `app/core/exceptions.py`** — excepciones de dominio en vez de `HTTPException` mezclados con reglas de negocio — 1s
+
+- [ ] **Partir `schemas.py` y `models.py`** por dominio (user, transaction, account, budget, category) — 1s
 
 ---
 

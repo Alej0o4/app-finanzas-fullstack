@@ -97,7 +97,7 @@ NEXT_PUBLIC_API_URL=https://tu-backend.com
 - Falta de observabilidad estructurada.
 - Falta de logging centralizado.
 - Falta de migraciones y rollback formal (usa `create_all()` en startup).
-- Backup manual del volumen PostgreSQL (ver REFACTOR_ROADMAP Fase 5).
+- Backup manual del volumen PostgreSQL (ver docs/ROADMAP.md Fase 5).
 
 ## Checklist antes de escalar
 

@@ -30,9 +30,8 @@ const CATEGORY_COLORS = [
   "var(--color-chart-1)", "var(--color-chart-2)",
 ];
 
-const getCategoryColor = (item: { category_id?: number }, index: number) => {
-  const seed = Number(item.category_id ?? index);
-  return CATEGORY_COLORS[Math.abs(seed) % CATEGORY_COLORS.length];
+const getCategoryColor = (index: number) => {
+  return CATEGORY_COLORS[index % CATEGORY_COLORS.length];
 };
 
 interface CategoryDonutChartProps {
@@ -89,6 +88,12 @@ export default function CategoryDonutChart({
       percentage: totalAmount > 0 ? (item.value / totalAmount) * 100 : 0,
     }));
   }, [originalCategoryData, hiddenCategories]);
+
+  const visibleColorIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    visibleCategoryData.forEach((item, i) => map.set(String(item.category_id), i));
+    return map;
+  }, [visibleCategoryData]);
 
   const toggleCategory = (id: string) => {
     const next = new Set(hiddenCategories);
@@ -192,7 +197,7 @@ export default function CategoryDonutChart({
                     stroke="none"
                   >
                     {visibleCategoryData.map((_entry, index: number) => (
-                      <Cell key={`cell-${index}`} fill={getCategoryColor(_entry, index)} />
+                      <Cell key={`cell-${index}`} fill={getCategoryColor(index)} />
                     ))}
                   </Pie>
                   <Tooltip
@@ -226,6 +231,7 @@ export default function CategoryDonutChart({
                   (d) => String(d.category_id) === String(item.category_id)
                 );
                 const displayPercentage = visibleItem ? visibleItem.percentage : item.percentage;
+                const colorIndex = visibleColorIndexMap.get(String(item.category_id)) ?? index;
                 return (
                   <div
                     key={`${item.category_id ?? index}-legend`}
@@ -235,7 +241,7 @@ export default function CategoryDonutChart({
                     <div className="flex items-center gap-2 min-w-0">
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: getCategoryColor(item, index) }}
+                        style={{ backgroundColor: getCategoryColor(colorIndex) }}
                       />
                       <span className={`truncate ${isHidden ? "line-through text-text-muted" : "text-text-soft"}`}>
                         {item.category_name}

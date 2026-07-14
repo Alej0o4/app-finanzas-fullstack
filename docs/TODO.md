@@ -14,11 +14,11 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 - [ ] **Sin backup automático de PostgreSQL (volumen Docker `pgdata`).**
   - Riesgo: perder el historial financiero completo si se elimina el volumen.
-  - Acción: script `scripts/backup.sh` con rotación de 7 días. Ver REFACTOR_ROADMAP Fase 5.
+  - Acción: script `scripts/backup.sh` con rotación de 7 días. Ver docs/ROADMAP.md Fase 5.
 
 - [ ] **Dashboard suma saldos de diferentes monedas.**
   - `total_balance` en `dashboard.py` mezcla COP + USD + EUR = número sin sentido.
-  - Ver REFACTOR_ROADMAP Fase 5.
+  - Ver docs/ROADMAP.md Fase 5.
 
 ---
 

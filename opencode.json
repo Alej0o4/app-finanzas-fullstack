@@ -58,7 +58,7 @@
       "subtask": true
     },
     "tech-debt": {
-      "template": "Revisa TODO_TECH_DEBT.md y responde qué items de deuda técnica impactan la tarea actual. Si no hay relación, solo di 'Sin impacto'.",
+      "template": "Revisa docs/TODO.md y responde qué items de deuda técnica impactan la tarea actual. Si no hay relación, solo di 'Sin impacto'.",
       "description": "Revisa deuda técnica relevante",
       "subtask": true
     }

@@ -74,8 +74,8 @@ No hay formateador, typecheck ni test configurados en ninguna capa.
 - [API](backend/docs/API_REFERENCE.md) + [Contrato frontend](frontend/docs/API_CONTRACT.md) — endpoints y payloads.
 - [Frontend: fetching y estado](frontend/docs/STATE_AND_FETCHING.md) — query keys y patrones de invalidación.
 - [Frontend: componentes](frontend/docs/COMPONENTS_GUIDE.md) — piezas reutilizables.
-- [Deuda técnica](TODO_TECH_DEBT.md) — atajos del MVP.
-- [Roadmap](REFACTOR_ROADMAP.md) — plan de desarrollo priorizado.
+- [Deuda técnica](docs/TODO.md) — atajos del MVP.
+- [Roadmap](docs/ROADMAP.md) — plan de desarrollo priorizado.
 
 ## Convenciones
 
