@@ -242,7 +242,7 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="relative space-y-6">
+    <div className="relative min-w-0 space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-text font-sans text-xl font-bold sm:text-2xl">Transacciones</h1>
@@ -259,7 +259,7 @@ export default function TransactionsPage() {
         </Button>
       </div>
 
-      <div className="bg-surface border-border/70 space-y-4 rounded-2xl border p-4 shadow-sm sm:p-5">
+      <div className="bg-surface border-border/70 min-w-0 overflow-x-hidden space-y-4 rounded-2xl border p-4 shadow-sm sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <div className="text-text-soft flex items-center gap-2 text-sm font-medium">
             <FilterX size={16} className="text-text-muted" />
@@ -299,7 +299,7 @@ export default function TransactionsPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
             <Input
               label="Fecha inicial"
               type="date"
@@ -309,7 +309,7 @@ export default function TransactionsPage() {
                 setStartDate(event.target.value);
                 setDatePreset('custom');
               }}
-              className="bg-background px-3 py-2"
+              className="bg-background"
             />
 
             <Input
@@ -321,7 +321,7 @@ export default function TransactionsPage() {
                 setEndDate(event.target.value);
                 setDatePreset('custom');
               }}
-              className="bg-background px-3 py-2"
+              className="bg-background"
             />
 
             <Select
@@ -331,7 +331,7 @@ export default function TransactionsPage() {
                 resetPagination();
                 setAccountFilter(event.target.value);
               }}
-              className="bg-background px-3 py-2"
+              className="bg-background"
             >
               <option value="all">Todas las cuentas</option>
               {accounts?.map((account) => (
@@ -348,7 +348,7 @@ export default function TransactionsPage() {
                 resetPagination();
                 setCategoryFilter(event.target.value);
               }}
-              className="bg-background px-3 py-2"
+              className="bg-background"
             >
               <option value="all">Todas las categorías</option>
               {categories?.map((category) => (

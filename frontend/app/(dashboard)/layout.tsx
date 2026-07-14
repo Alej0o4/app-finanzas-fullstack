@@ -50,7 +50,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Menu size={20} />
         </button>
 
-        <main className="mx-auto w-full max-w-[1600px] flex-1 p-4 sm:p-8 lg:p-12">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 overflow-x-hidden p-4 sm:p-8 lg:p-12">{children}</main>
       </div>
     </div>
   );
