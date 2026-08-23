@@ -58,23 +58,23 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 ### Migraciones y esquema
 
-- [ ] **Adoptar Alembic** — reemplazar `create_all()` + los `_ensure_*_column()` ad-hoc de `main.py` — 1d
+- [x] **Adoptar Alembic** — reemplazar `create_all()` + los `_ensure_*_column()` ad-hoc de `main.py` — 1d *(2026-08-22, ver `docs/specs/fase_07_spec.md` §1.1)*
   - Generar migración inicial desde el esquema actual.
   - Retirar `_ensure_user_preference_columns()`, `_ensure_category_icon_column()`, `_ensure_account_highlighted_column()`.
   - Retirar la migración legacy de categorías `"Otro (Ingreso)"` de `seed_default_categories()` (corre en cada arranque).
 
-- [ ] **Bug latente: `preferred_theme` nunca se agrega en DB existentes** — 1h
+- [x] **Bug latente: `preferred_theme` nunca se agrega en DB existentes** — 1h *(2026-08-22, resuelto por la migración baseline de Alembic)*
   - `_ensure_user_preference_columns()` agrega `preferred_currency` y `preferred_locale` pero no `preferred_theme`.
   - Se resuelve con la migración inicial de Alembic.
 
-- [ ] **Índices en `transactions`** — `user_id`, `account_id`, `category_id`, `date` — 2h
+- [x] **Índices en `transactions`** — `user_id`, `account_id`, `category_id`, `date` — 2h *(2026-08-22)*
   - Todas las queries filtran por `user_id + date`; hoy hacen table scan.
   - Índice compuesto `(user_id, date)` como mínimo.
 
-- [ ] **Constraint `UNIQUE(user_id, category_id, month, year)` en `budgets`** — 1h
+- [x] **Constraint `UNIQUE(user_id, category_id, month, year)` en `budgets`** — 1h *(2026-08-22)*
   - Hoy se valida solo en Python → dos requests concurrentes crean duplicados.
 
-- [ ] **`nullable=False` en FKs de `transactions`** (`user_id`, `account_id`, `category_id`) — 1h
+- [x] **`nullable=False` en FKs de `transactions`** (`user_id`, `account_id`, `category_id`) — 1h *(2026-08-22)*
 
 ### Ciclo de vida de cuenta
 
