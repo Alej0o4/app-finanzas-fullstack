@@ -1,6 +1,15 @@
 # AGENTS.md — Oikos
 
-App web de finanzas personales. Backend FastAPI + SQLAlchemy, frontend Next.js App Router + React 19 + TanStack Query + Zustand + Recharts + Tailwind CSS 4. PostgreSQL en Docker, sin tests automatizados aún.
+App web de finanzas personales multi-moneda. Backend FastAPI + SQLAlchemy, frontend Next.js App Router + React 19 + TanStack Query + Zustand + Recharts + Tailwind CSS 4. PostgreSQL en Docker, sin tests automatizados aún.
+
+> ⚠️ **Cambio de enfoque (2026-08-22).** El proyecto pasó de "app personal de un solo usuario"
+> a producto para cualquier persona. Esto revirtió tres decisiones que estaban fuera de scope:
+> **Alembic, testing y versionado de API** — las tres vuelven a scope.
+>
+> El dashboard pasa de medir **stock** (saldo de cuentas) a medir **flujo**
+> (`ingreso mensual − gastos del mes`); los saldos siguen visibles en vista secundaria.
+>
+> **Lee [docs/ROADMAP.md](docs/ROADMAP.md) antes de proponer arquitectura.**
 
 ## Startup
 
@@ -73,12 +82,12 @@ No hay typecheck ni test configurados. Formateadores: `ruff` (backend) + `pretti
 
 ## Documentación relevante
 
+- [Roadmap](docs/ROADMAP.md) — **empieza aquí.** Cambio de enfoque, los 5 componentes del MVP, fases 7–14 y backlog priorizado.
+- [Deuda técnica y bugs](docs/TODO.md) — repriorizada el 2026-08-22; incluye bugs confirmados en auditoría.
 - [Reglas de negocio](backend/docs/BUSINESS_RULES.md) — invariantes de dominio.
 - [API](backend/docs/API_REFERENCE.md) + [Contrato frontend](frontend/docs/API_CONTRACT.md) — endpoints y payloads.
 - [Frontend: fetching y estado](frontend/docs/STATE_AND_FETCHING.md) — query keys y patrones de invalidación.
 - [Frontend: componentes](frontend/docs/COMPONENTS_GUIDE.md) — piezas reutilizables.
-- [Deuda técnica](docs/TODO.md) — atajos del MVP.
-- [Roadmap](docs/ROADMAP.md) — plan de desarrollo priorizado.
 
 ## Convenciones
 
