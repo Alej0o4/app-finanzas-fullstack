@@ -1,4 +1,15 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -57,13 +68,15 @@ class Transaction(Base):
     date = Column(DateTime(timezone=True), server_default=func.now())
     description = Column(String, nullable=True)
 
-    user_id = Column(Integer, ForeignKey("users.id"))
-    account_id = Column(Integer, ForeignKey("accounts.id"))
-    category_id = Column(Integer, ForeignKey("categories.id"))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
 
     owner = relationship("User", back_populates="transactions")
     account = relationship("Account", back_populates="transactions")
     category = relationship("Category", back_populates="transactions")
+
+    __table_args__ = (Index("ix_transactions_user_id_date", "user_id", "date"),)
 
 
 class Budget(Base):
@@ -79,6 +92,10 @@ class Budget(Base):
 
     owner = relationship("User", back_populates="budgets")
     category = relationship("Category", back_populates="budgets")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "category_id", "month", "year", name="uq_budgets_user_category_period"),
+    )
 
 
 class RefreshToken(Base):

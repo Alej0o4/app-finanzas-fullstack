@@ -4,21 +4,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from sqlalchemy import inspect
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
 from app.api import accounts, auth, budgets, categories, dashboard, preferences, transactions, users
-from app.core.database import Base, SessionLocal, engine
+from app.core.database import SessionLocal
 from app.core.rate_limit import limiter
 from app.models import models
 
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(
-    title="API de Finanzas Personales",
-    description="Backend para gestión de ingresos, gastos y presupuestos."
+    title="API de Finanzas Personales", description="Backend para gestión de ingresos, gastos y presupuestos."
 )
 
 DEFAULT_CATEGORIES = [
@@ -40,55 +36,29 @@ LEGACY_DEFAULT_CATEGORY_NAMES = {
 def seed_default_categories() -> None:
     db = SessionLocal()
     try:
-        # Migración: renombrar todo Otro (Gasto) → Otro (sistema + usuarios)
-        otros_gasto = db.query(models.Category).filter(
-            models.Category.name == "Otro (Gasto)",
-            models.Category.type == "expense",
-        ).all()
-        for cat in otros_gasto:
-            cat.name = "Otro"
-
-        # Migración: eliminar todo Otro (Ingreso), migrando transacciones a Otro
-        otros_ingreso = db.query(models.Category).filter(
-            models.Category.name == "Otro (Ingreso)",
-            models.Category.type == "income",
-        ).all()
-        for cat in otros_ingreso:
-            otro = db.query(models.Category).filter(
-                models.Category.name == "Otro",
-                models.Category.type == "expense",
-                models.Category.user_id == cat.user_id,
-            ).first()
-            if otro is None and cat.user_id is not None:
-                otro = db.query(models.Category).filter(
-                    models.Category.name == "Otro",
-                    models.Category.type == "expense",
-                    models.Category.user_id.is_(None),
-                ).first()
-            if otro is not None:
-                db.query(models.Transaction).filter(
-                    models.Transaction.category_id == cat.id,
-                ).update({"category_id": otro.id})
-                db.query(models.Budget).filter(
-                    models.Budget.category_id == cat.id,
-                ).update({"category_id": otro.id})
-                db.delete(cat)
-
         for category_data in DEFAULT_CATEGORIES:
-            existing_category = db.query(models.Category).filter(
-                models.Category.user_id.is_(None),
-                models.Category.name == category_data["name"],
-                models.Category.type == category_data["type"],
-            ).first()
+            existing_category = (
+                db.query(models.Category)
+                .filter(
+                    models.Category.user_id.is_(None),
+                    models.Category.name == category_data["name"],
+                    models.Category.type == category_data["type"],
+                )
+                .first()
+            )
 
             if existing_category is None:
                 legacy_name = LEGACY_DEFAULT_CATEGORY_NAMES.get((category_data["type"], category_data["name"]))
                 if legacy_name:
-                    existing_category = db.query(models.Category).filter(
-                        models.Category.user_id.is_(None),
-                        models.Category.name == legacy_name,
-                        models.Category.type == category_data["type"],
-                    ).first()
+                    existing_category = (
+                        db.query(models.Category)
+                        .filter(
+                            models.Category.user_id.is_(None),
+                            models.Category.name == legacy_name,
+                            models.Category.type == category_data["type"],
+                        )
+                        .first()
+                    )
 
                     if existing_category is not None:
                         existing_category.name = category_data["name"]
@@ -104,34 +74,6 @@ def seed_default_categories() -> None:
         db.close()
 
 
-def _ensure_user_preference_columns() -> None:
-    inspector = inspect(engine)
-    columns = {c["name"] for c in inspector.get_columns("users")}
-    with engine.connect() as conn:
-        if "preferred_currency" not in columns:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN preferred_currency VARCHAR(3) DEFAULT 'COP'")
-        if "preferred_locale" not in columns:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN preferred_locale VARCHAR(10) DEFAULT 'es-CO'")
-        conn.commit()
-
-def _ensure_category_icon_column() -> None:
-    inspector = inspect(engine)
-    columns = {c["name"] for c in inspector.get_columns("categories")}
-    if "icon" not in columns:
-        with engine.connect() as conn:
-            conn.exec_driver_sql("ALTER TABLE categories ADD COLUMN icon VARCHAR")
-            conn.commit()
-
-
-def _ensure_account_highlighted_column() -> None:
-    inspector = inspect(engine)
-    columns = {c["name"] for c in inspector.get_columns("accounts")}
-    if "highlighted" not in columns:
-        with engine.connect() as conn:
-            conn.exec_driver_sql("ALTER TABLE accounts ADD COLUMN highlighted BOOLEAN DEFAULT FALSE")
-            conn.commit()
-
-
 async def security_headers_middleware(request: Request, call_next):
     response: Response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -145,7 +87,9 @@ async def security_headers_middleware(request: Request, call_next):
 # 2. CONFIGURACIÓN CORS (Bloqueo de Fronteras)
 # Leer orígenes permitidos desde variable de entorno
 # IPs de Tailscale (100.x.x.x) se permiten automáticamente vía regex
-cors_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173")
+cors_origins_env = os.getenv(
+    "ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
+)
 origenes_permitidos = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 
 app.add_middleware(
@@ -178,10 +122,8 @@ app.include_router(preferences.router, prefix="/api/users", tags=["Preferencias"
 
 @app.on_event("startup")
 def initialize_shared_data():
-    _ensure_user_preference_columns()
-    _ensure_category_icon_column()
-    _ensure_account_highlighted_column()
     seed_default_categories()
+
 
 @app.get("/")
 def ruta_raiz():
