@@ -16,6 +16,13 @@ def _now_month_year() -> tuple[int, int]:
     return now.month, now.year
 
 
+def _previous_month_year() -> tuple[int, int]:
+    now = datetime.now(UTC)
+    if now.month == 1:
+        return 12, now.year - 1
+    return now.month - 1, now.year
+
+
 class TestBudgetUniqueConstraint:
     def test_duplicate_budget_via_api_returns_400_not_500_and_no_duplicate_row(
         self, client, auth_headers, make_category
@@ -140,3 +147,125 @@ class TestBudgetProgress:
         progreso = next(p for p in progress_response.json() if p["budget_id"] == budget_id)
         assert Decimal(str(progreso["spent"])) == Decimal("0.00")
         assert progreso["percentage"] == 0
+
+
+class TestRecurringBudgets:
+    """Fase 8 §3: generación perezosa por fila (Decisión 3.1).
+
+    Los tests de generación usan períodos fijos (2030) para ser deterministas; el único
+    test anclado a "hoy" es el del dashboard, que por diseño siempre opera sobre el
+    período actual.
+    """
+
+    def _crear_presupuesto(self, client, auth_headers, categoria, month, year, amount="800.00", recurring=True):
+        response = client.post(
+            "/api/v1/budgets/",
+            json={
+                "amount_limit": amount,
+                "currency": "COP",
+                "month": month,
+                "year": year,
+                "category_id": categoria["id"],
+                "is_recurring": recurring,
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    def test_recurring_template_generates_period_via_list_endpoint(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._crear_presupuesto(client, auth_headers, categoria, month=1, year=2030)
+
+        generados = client.get("/api/v1/budgets/", params={"month": 2, "year": 2030}, headers=auth_headers)
+        assert generados.status_code == 200, generados.text
+
+        filas = [b for b in generados.json() if b["category_id"] == categoria["id"]]
+        assert len(filas) == 1
+        assert Decimal(str(filas[0]["amount_limit"])) == Decimal("800.00")
+        assert filas[0]["is_recurring"] is True  # la copia también es plantilla
+
+    def test_recurring_template_generates_current_period_via_dashboard_progress(
+        self, client, auth_headers, make_category
+    ):
+        categoria = make_category(auth_headers, name="Transporte", type="expense")
+        prev_month, prev_year = _previous_month_year()
+        self._crear_presupuesto(client, auth_headers, categoria, month=prev_month, year=prev_year)
+
+        # El dashboard genera el período actual antes de consultar (página de aterrizaje)
+        progress_response = client.get("/api/v1/dashboard/budgets-progress", headers=auth_headers)
+        assert progress_response.status_code == 200, progress_response.text
+        progreso = [p for p in progress_response.json() if p["category_name"] == categoria["name"]]
+        assert len(progreso) == 1
+        assert Decimal(str(progreso[0]["amount_limit"])) == Decimal("800.00")
+
+        month, year = _now_month_year()
+        listado = client.get("/api/v1/budgets/", params={"month": month, "year": year}, headers=auth_headers)
+        fila_actual = [b for b in listado.json() if b["category_id"] == categoria["id"]]
+        assert len(fila_actual) == 1
+        assert fila_actual[0]["is_recurring"] is True
+
+    def test_repeated_requests_for_same_period_do_not_duplicate_generated_budget(
+        self, client, auth_headers, make_category
+    ):
+        categoria = make_category(auth_headers, name="Salud", type="expense")
+        self._crear_presupuesto(client, auth_headers, categoria, month=1, year=2030)
+
+        for _ in range(2):
+            response = client.get("/api/v1/budgets/", params={"month": 2, "year": 2030}, headers=auth_headers)
+            assert response.status_code == 200, response.text
+
+        filas = [b for b in response.json() if b["category_id"] == categoria["id"]]
+        assert len(filas) == 1
+
+    def test_non_recurring_budget_does_not_regenerate_next_period(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Suscripciones", type="expense")
+        self._crear_presupuesto(client, auth_headers, categoria, month=1, year=2030, recurring=False)
+
+        response = client.get("/api/v1/budgets/", params={"month": 2, "year": 2030}, headers=auth_headers)
+        assert response.status_code == 200, response.text
+
+        filas = [b for b in response.json() if b["category_id"] == categoria["id"]]
+        assert filas == []
+
+    def test_edited_amount_limit_is_used_as_new_template(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Educación", type="expense")
+        self._crear_presupuesto(client, auth_headers, categoria, month=1, year=2030)
+
+        febrero = client.get("/api/v1/budgets/", params={"month": 2, "year": 2030}, headers=auth_headers).json()
+        fila_febrero = next(b for b in febrero if b["category_id"] == categoria["id"])
+
+        edicion = client.put(
+            f"/api/v1/budgets/{fila_febrero['id']}",
+            json={
+                "amount_limit": "1200.00",
+                "currency": "COP",
+                "month": 2,
+                "year": 2030,
+                "category_id": categoria["id"],
+                "is_recurring": True,
+            },
+            headers=auth_headers,
+        )
+        assert edicion.status_code == 200, edicion.text
+
+        marzo = client.get("/api/v1/budgets/", params={"month": 3, "year": 2030}, headers=auth_headers).json()
+        fila_marzo = next(b for b in marzo if b["category_id"] == categoria["id"])
+        assert Decimal(str(fila_marzo["amount_limit"])) == Decimal("1200.00")
+
+    def test_is_recurring_defaults_to_false_when_omitted(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Ocio", type="expense")
+
+        response = client.post(
+            "/api/v1/budgets/",
+            json={
+                "amount_limit": "800.00",
+                "currency": "COP",
+                "month": 5,
+                "year": 2030,
+                "category_id": categoria["id"],
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["is_recurring"] is False

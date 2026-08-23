@@ -7,6 +7,7 @@ token (§2.1/§2.2/§2.5).
 
 import re
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from freezegun import freeze_time
 from jose import jwt
@@ -369,6 +370,53 @@ class TestEmailVerification:
         user = register_and_login(email="sin-verificar@example.com", password="Contrasena10")
         response = client.post("/api/v1/auth/login", data={"username": user["email"], "password": user["password"]})
         assert response.status_code == 200
+
+
+# --- Cuenta por defecto al registrarse (Fase 8 §5) -------------------------------
+
+
+class TestCuentaPorDefecto:
+    def test_registration_creates_default_cash_account(self, client, register_and_login):
+        user = register_and_login(email="cuenta-default@example.com")
+
+        response = client.get("/api/v1/accounts/", headers=user["headers"])
+        assert response.status_code == 200, response.text
+        cuentas = response.json()
+
+        assert len(cuentas) == 1
+        efectivo = cuentas[0]
+        assert efectivo["name"] == "Efectivo"
+        assert efectivo["type"] == "cash"
+        assert Decimal(str(efectivo["balance"])) == Decimal("0.00")
+        # UserCreate no pide moneda; se hereda de preferred_currency (default COP)
+        assert efectivo["currency"] == "COP"
+        assert efectivo["highlighted"] is True
+
+    def test_transaction_can_be_created_against_default_account_immediately(
+        self, client, register_and_login, make_category
+    ):
+        """El síntoma exacto del bug original: un usuario nuevo con 0 cuentas no podía
+        transaccionar (QuickTransactionModal fallaba en silencio)."""
+        user = register_and_login(email="tx-inmediata@example.com")
+        cuenta_efectivo = next(
+            c for c in client.get("/api/v1/accounts/", headers=user["headers"]).json() if c["name"] == "Efectivo"
+        )
+        categoria = make_category(user["headers"], name="Salario", type="income")
+
+        response = client.post(
+            "/api/v1/transactions/",
+            json={
+                "amount": "50000.00",
+                "type": "income",
+                "account_id": cuenta_efectivo["id"],
+                "category_id": categoria["id"],
+            },
+            headers=user["headers"],
+        )
+        assert response.status_code == 200, response.text
+
+        saldo = client.get(f"/api/v1/accounts/{cuenta_efectivo['id']}", headers=user["headers"]).json()
+        assert Decimal(str(saldo["balance"])) == Decimal("50000.00")
 
 
 def test_jwt_created_with_expired_delta_is_rejected_by_jose_directly():

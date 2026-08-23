@@ -288,6 +288,115 @@ class TestUpdateTransactionAdjustsBalance:
         assert response.status_code == 404
 
 
+class TestPaymentMethod:
+    """Fase 8 §2: tag opcional cash/card/transfer. Validación de valores en el schema
+    Pydantic (`PaymentMethod`), no como constraint de DB."""
+
+    def test_create_with_payment_method_persists_and_returns_it(
+        self, client, auth_headers, make_account, make_category
+    ):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        creada = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+            payment_method="card",
+        )
+        assert creada.status_code == 200, creada.text
+        assert creada.json()["payment_method"] == "card"
+
+    def test_update_changes_payment_method(self, client, auth_headers, make_account, make_category):
+        """Cubre la línea explícita de `actualizar_transaccion`: sin ella, el PUT borraría
+        silenciosamente el payment_method no reenviado (bug-clase AccountUpdate.currency)."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        creada = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+            payment_method="card",
+        ).json()
+        assert creada["payment_method"] == "card"
+
+        update_payload = {
+            "amount": "100.00",
+            "currency": "COP",
+            "type": "expense",
+            "description": "cambio de método",
+            "account_id": cuenta["id"],
+            "category_id": categoria["id"],
+            "payment_method": "transfer",
+        }
+        update_response = client.put(f"/api/v1/transactions/{creada['id']}", json=update_payload, headers=auth_headers)
+        assert update_response.status_code == 200, update_response.text
+        assert update_response.json()["payment_method"] == "transfer"
+
+    def test_update_without_resending_payment_method_keeps_it(self, client, auth_headers, make_account, make_category):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        creada = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+            payment_method="cash",
+        ).json()
+
+        update_payload = {
+            "amount": "150.00",
+            "currency": "COP",
+            "type": "expense",
+            "description": "solo monto editado",
+            "account_id": cuenta["id"],
+            "category_id": categoria["id"],
+        }
+        update_response = client.put(f"/api/v1/transactions/{creada['id']}", json=update_payload, headers=auth_headers)
+        assert update_response.status_code == 200, update_response.text
+        assert update_response.json()["payment_method"] == "cash"
+
+    def test_invalid_payment_method_value_returns_422(self, client, auth_headers, make_account, make_category):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        response = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+            payment_method="criptomoneda",
+        )
+        assert response.status_code == 422
+
+    def test_transaction_without_payment_method_is_valid(self, client, auth_headers, make_account, make_category):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        creada = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+        )
+        assert creada.status_code == 200, creada.text
+        assert creada.json()["payment_method"] is None
+
+
 @pytest.mark.xfail(
     reason=(
         "Bug conocido documentado en docs/TODO.md (' actualizar_transaccion no actualiza "
