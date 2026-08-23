@@ -22,8 +22,20 @@ if not SECRET_KEY:
     raise ValueError("¡Error Crítico! No se encontró la SECRET_KEY en el archivo .env")
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+# Bajado de 60 a 15 min (Fase 7, §2.5): reduce la ventana en la que un JWT robado sigue
+# siendo válido tras el logout, apoyándose en el refresh token para sesiones largas.
+# Ver "Decisión de diseño 2.5.1" en docs/specs/fase_07_spec.md sobre por qué no se agrega
+# una blacklist de tokens en su lugar.
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 30
+PASSWORD_RESET_TOKEN_EXPIRE_MINUTES = 45
+EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS = 48
+
+# URL base del frontend, usada para construir links en los emails de recuperación de
+# contraseña y verificación de email (§2.1/§2.2). No hay todavía páginas en el frontend
+# que consuman estos links (fuera del alcance de Fase 7 backend) — se documenta como
+# variable opcional en .env.example.
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # 2. CONFIGURACIONES DE SEGURIDAD
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

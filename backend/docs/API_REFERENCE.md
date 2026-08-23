@@ -5,7 +5,7 @@
 - Base path: `/api/v1`
 - Autenticación: `Authorization: Bearer <token>` en rutas protegidas.
 - Content type esperado: `application/json`, excepto login, que usa formulario OAuth2.
-- Rate limiting: solo en `/api/v1/auth/login` (5 req/min por IP via `slowapi`).
+- Rate limiting: `/api/v1/auth/login`, `POST /api/v1/users/` y `/api/v1/auth/password-reset/request` (5 req/min por IP via `slowapi`).
 - CORS: orígenes permitidos vía `ALLOWED_ORIGINS` (env) + regex para IPs de Tailscale (100.x.x.x).
 - Uvicorn escucha en `0.0.0.0` para soportar acceso remoto via Tailscale.
 
@@ -22,7 +22,8 @@ Entrada (form-urlencoded):
 
 Salida:
 
-- `access_token`: JWT firmado (expira en 60 min).
+- `access_token`: JWT firmado (expira en 15 min — bajado de 60 min en Fase 7, ver
+  `docs/specs/fase_07_spec.md` §2.5; se apoya en el refresh token para sesiones largas).
 - `refresh_token`: token opaco para renovar sesión (expira en 30 días).
 - `token_type`: `bearer`.
 
@@ -60,17 +61,73 @@ Salida:
 
 - `{"estado": "OK", "mensaje": "Sesion cerrada exitosamente."}`
 
+### `POST /api/v1/auth/password-reset/request`
+
+Solicita un token de restablecimiento de contraseña (Fase 7, §2.1). Genera el token y lo
+envía por email si el correo existe — **siempre responde 200**, exista o no el correo, para
+no revelar qué emails están registrados. Rate limited (5 req/min por IP).
+
+Entrada:
+
+- `email`
+
+Salida:
+
+- `{"estado": "OK", "mensaje": "Si el correo está registrado, recibirás instrucciones para restablecer tu contraseña."}`
+
+### `POST /api/v1/auth/password-reset/confirm`
+
+Aplica una nueva contraseña usando el token recibido por email. El token expira a los 45
+min y es de un solo uso. Al confirmar, revoca todos los refresh tokens activos del usuario
+(cierra cualquier sesión vieja).
+
+Entrada:
+
+- `token`
+- `new_password` (misma política que en el registro, ver abajo)
+
+Salida:
+
+- `{"estado": "OK", "mensaje": "Contraseña actualizada exitosamente. Iniciá sesión nuevamente."}`
+
+Errores esperados:
+
+- `400` si el token es inválido, ya fue usado o expiró.
+- `422` si `new_password` no cumple la política de contraseñas.
+
+### `GET /api/v1/auth/verify-email`
+
+Verifica el email del usuario a partir del token enviado en el registro (Fase 7, §2.2). El
+token expira a las 48h y es de un solo uso. **No verificar el email no bloquea el login** —
+es una decisión de producto para no agregar fricción al onboarding.
+
+Query params:
+
+- `token`
+
+Salida:
+
+- `{"estado": "OK", "mensaje": "Correo verificado exitosamente."}`
+
+Errores esperados:
+
+- `400` si el token es inválido, ya fue usado o expiró.
+
 ## Usuarios
 
 ### `POST /api/v1/users/`
 
-Crea un usuario nuevo.
+Crea un usuario nuevo. Tras crearlo, envía un email de verificación (ver
+`GET /api/v1/auth/verify-email` arriba) — no bloquea la respuesta del registro si falla el
+envío. Rate limited (5 req/min por IP).
 
 Entrada:
 
 - `full_name`
 - `email`
-- `password`
+- `password` — política de contraseñas (Fase 7, §2.3): mínimo 10 caracteres, máximo 128, no
+  puede ser solo dígitos ni solo letras, y no puede estar en una lista corta de contraseñas
+  comunes. La misma política aplica a `new_password` en `password-reset/confirm`.
 
 Salida:
 
@@ -84,6 +141,8 @@ Salida:
 Errores esperados:
 
 - `400` si el correo ya existe.
+- `422` si `password` no cumple la política de contraseñas.
+- `429` si se exceden 5 intentos por minuto (rate limiting).
 
 ### `GET /api/v1/users/me`
 

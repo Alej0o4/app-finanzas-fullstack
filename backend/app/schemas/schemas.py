@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class PaginatedResponse[T](BaseModel):
@@ -12,6 +12,62 @@ class PaginatedResponse[T](BaseModel):
     page_size: int
 
 
+# --- POLÍTICA DE CONTRASEÑAS (Fase 7, §2.3) ---
+# NIST 800-63B recomienda priorizar longitud sobre complejidad artificial — por eso
+# min_length=10 en vez de reglas de "1 mayúscula + 1 símbolo", y una lista corta de
+# contraseñas comunes en vez de zxcvbn u otra dependencia externa.
+_COMMON_PASSWORDS = {
+    "12345678",
+    "123456789",
+    "1234567890",
+    "password",
+    "password1",
+    "password123",
+    "qwerty123",
+    "qwerty1234",
+    "qwerty123456",
+    "abc123456",
+    "abcd1234",
+    "letmein123",
+    "welcome123",
+    "admin1234",
+    "admin123",
+    "iloveyou1",
+    "123123123",
+    "monkey123",
+    "football1",
+    "baseball1",
+    "dragon123",
+    "master123",
+    "hello1234",
+    "freedom123",
+    "whatever1",
+    "trustno123",
+    "superman1",
+    "1q2w3e4r5t",
+    "zaq12wsx1",
+    "qazwsx123",
+    "passw0rd1",
+    "changeme1",
+    "letmein12",
+    "sunshine1",
+    "princess1",
+    "shadow123",
+    "starwars1",
+    "batman123",
+    "michael123",
+    "computer1",
+}
+
+
+def _validate_password_strength(value: str) -> str:
+    if value.isdigit() or value.isalpha():
+        raise ValueError("La contraseña debe combinar letras y números.")
+    if value.lower() in _COMMON_PASSWORDS:
+        raise ValueError("Esta contraseña es demasiado común.")
+    return value
+
+
 # --- USUARIOS ---
 class UserBase(BaseModel):
     email: EmailStr
@@ -19,7 +75,12 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=10, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        return _validate_password_strength(v)
 
 
 class UserResponse(UserBase):
@@ -177,6 +238,20 @@ class RefreshRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     refresh_token: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=10, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        return _validate_password_strength(v)
 
 
 class CashflowData(BaseModel):

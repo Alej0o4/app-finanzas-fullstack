@@ -78,18 +78,18 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 ### Ciclo de vida de cuenta
 
-- [ ] **Recuperación de contraseña** (token de un solo uso + expiración) — 1d
+- [x] **Recuperación de contraseña** (token de un solo uso + expiración) — 1d *(2026-08-22, ver `docs/specs/fase_07_spec.md` §2.1)*
   - **Bloqueante absoluto.** Sin esto, un usuario que olvida su clave pierde la cuenta.
   - Requiere servicio de correo transaccional (ver Fase 11 — se puede adelantar aquí).
 
-- [ ] **Verificación de email en registro** — 1d
+- [x] **Verificación de email en registro** — 1d *(2026-08-22, ver §2.2 — no bloquea el login)*
   - Evita cuentas basura y valida el canal de recuperación.
 
-- [ ] **Política de contraseñas** más allá de `min_length=8` — 2h
+- [x] **Política de contraseñas** más allá de `min_length=8` — 2h *(2026-08-22, ver §2.3)*
 
-- [ ] **Rate limiting en registro y recuperación** (hoy solo hay en login) — 2h
+- [x] **Rate limiting en registro y recuperación** (hoy solo hay en login) — 2h *(2026-08-22, ver §2.4)*
 
-- [ ] **Invalidación del access token en logout** — 4h
+- [x] **Invalidación del access token en logout** — 4h *(2026-08-22, ver §2.5 — TTL bajado a 15 min)*
   - Hoy el JWT sigue válido hasta 60 min después de cerrar sesión.
   - Opción simple: bajar TTL a 15 min y apoyarse en el refresh token.
 

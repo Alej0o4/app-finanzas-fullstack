@@ -24,6 +24,7 @@ class User(Base):
     preferred_currency = Column(String(3), default="COP")
     preferred_locale = Column(String(10), default="es-CO")
     preferred_theme = Column(String(10), default="dark")
+    email_verified = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     accounts = relationship("Account", back_populates="owner")
@@ -108,3 +109,39 @@ class RefreshToken(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("User", backref="refresh_tokens")
+
+
+class PasswordResetToken(Base):
+    """Token de un solo uso para recuperación de contraseña (ver docs/specs/fase_07_spec.md §2.1).
+
+    Expiración corta (`security.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES`) porque es de alto
+    riesgo si se filtra por email — a diferencia de `RefreshToken`, que dura 30 días.
+    """
+
+    __tablename__ = "password_reset_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    token_hash = Column(String, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    owner = relationship("User", backref="password_reset_tokens")
+
+
+class EmailVerificationToken(Base):
+    """Token de un solo uso para verificar el email en el registro (ver §2.2 del spec).
+
+    Expiración más larga que `PasswordResetToken` (`security.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS`)
+    porque no es tan sensible como un reset de contraseña.
+    """
+
+    __tablename__ = "email_verification_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    token_hash = Column(String, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    owner = relationship("User", backref="email_verification_tokens")
