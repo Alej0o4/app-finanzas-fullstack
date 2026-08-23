@@ -13,7 +13,7 @@ Oikos deja de ser una app personal de un solo usuario para convertirse en un pro
 que cualquier persona pueda usar. Esto invalida tres decisiones que estaban documentadas
 como "fuera de scope": **Alembic, testing y versionado de API**. Las tres vuelven a scope.
 
-El MVP se redefine alrededor de **cinco componentes funcionales** (ver Fases 7–12).
+El MVP se redefine alrededor de **cinco componentes funcionales** (ver Fases 7–14).
 
 ### El cambio conceptual más importante
 
@@ -80,7 +80,7 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 - [x] **Recuperación de contraseña** (token de un solo uso + expiración) — 1d *(2026-08-22, ver `docs/specs/fase_07_spec.md` §2.1)*
   - **Bloqueante absoluto.** Sin esto, un usuario que olvida su clave pierde la cuenta.
-  - Requiere servicio de correo transaccional (ver Fase 11 — se puede adelantar aquí).
+  - Requiere servicio de correo transaccional (ver Fase 13 — se puede adelantar aquí).
 
 - [x] **Verificación de email en registro** — 1d *(2026-08-22, ver §2.2 — no bloquea el login)*
   - Evita cuentas basura y valida el canal de recuperación.
@@ -156,7 +156,53 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 ---
 
-## Fase 9 — Captura en 3 toques
+## Fase 9 — Accesibilidad y componentes base de UI
+
+**Objetivo:** cerrar los defectos de accesibilidad y los hábitos repetidos en `Button`, `Input`,
+`Select` y `ModalShell` antes de que Fase 10 (captura) y Fase 11 (dashboard) construyan las
+pantallas nuevas del MVP sobre estos mismos componentes. Corregir la base ahora evita heredar
+los mismos bugs en la UI nueva.
+
+> Hallazgos de la auditoría de diseño del 2026-08-23 (Web Interface Guidelines + revisión visual
+> con la skill `redesign-existing-projects`). Detalle completo en la conversación de esa fecha.
+
+- [ ] **`focus-visible` en vez de `focus` en `Button`/`Input`/`Select`** — 2h
+  - Hoy el anillo de foco se activa también al hacer click con mouse, no solo con teclado.
+
+- [ ] **Asociar `<label>` con su control (`htmlFor`/`id`)** en `Input.tsx` y `Select.tsx` — 3h
+  - El label no es clickeable ni queda anunciado por un lector de pantalla al enfocar el campo.
+
+- [ ] **`aria-label` en todos los botones icon-only** — 1d
+  - Repetido en ~20 lugares: toggle del sidebar, logout, tema, FAB, cerrar modal, y las acciones
+    de editar/eliminar/destacar en cuentas, categorías, presupuestos y transacciones.
+  - `ChartControlsPopover.tsx:32` ya lo hace bien — usar como plantilla.
+
+- [ ] **Cierre por Escape + `overscroll-behavior: contain`** en `ModalShell` y `ConfirmDialog` — 3h
+
+- [ ] **Arreglar la animación de entrada rota de `ModalShell`/`FloatingActionButton`** — 2h
+  - Usan clases `animate-in fade-in slide-in-from-bottom-2`, pero `tailwindcss-animate` no está
+    instalado y no hay keyframes propios en `globals.css` — hoy no animan nada pese a que el
+    código lo sugiere.
+
+- [ ] **Reemplazar `transition-all` por propiedades explícitas** — 3h
+  - Repetido en `Sidebar`, `Button`, `FloatingActionButton`, `(dashboard)/layout.tsx` y los
+    formularios de edición manual.
+
+- [ ] **`prefers-reduced-motion`** — 4h
+  - No existe en ningún punto del proyecto pese a `animate-pulse`, `animate-spin`, `hover:scale`
+    y la transición global en `*` de `globals.css`.
+
+- [ ] **`autocomplete` en los formularios de autenticación** — 2h
+  - Login, registro, forgot/reset password sin `autocomplete="email"|"current-password"|"new-password"`.
+
+- [ ] **`aria-live="polite"` en los mensajes de error/éxito** de los 4 formularios de auth — 2h
+
+- [ ] **Estado `active:` (pressed) en botones y tarjetas clicables** — 3h
+  - Hay `hover:` en casi todo pero ningún feedback de "presionado" en toda la app.
+
+---
+
+## Fase 10 — Captura en 3 toques
 
 **Objetivo:** que registrar un gasto tome menos de 8 segundos. Es el corazón del producto.
 
@@ -181,7 +227,7 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 ---
 
-## Fase 10 — Dashboard de flujo mensual
+## Fase 11 — Dashboard de flujo mensual
 
 **Objetivo:** el "aha moment" — que el usuario vea su dinero graficado lo antes posible.
 
@@ -213,7 +259,53 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 ---
 
-## Fase 11 — Presupuestos con alertas + infraestructura de notificaciones
+## Fase 12 — Pulido visual y omisiones estratégicas
+
+**Objetivo:** cerrar lo que quedó de la auditoría de diseño después de que Fase 11 estabilice el
+dashboard de flujo — visibilidad de estado en URL, jerarquía visual entre tarjetas, y los huecos
+"de producto" (404, favicon, skip-link) que hoy delatan que el proyecto no se terminó de
+rematar. Va antes de Fase 15 (onboarding) porque el onboarding es la primera impresión de un
+usuario nuevo.
+
+- [ ] **URL-sync de filtros en Transacciones y Analítica** — 1d
+  - Hoy los filtros de fecha/cuenta/categoría viven en `useState`/`localStorage`, no en query
+    params: se pierden al recargar o al compartir el link.
+
+- [ ] **Diferenciar visualmente las tarjetas** (elevación solo donde comunica jerarquía) — 4h
+  - Hoy toda tarjeta usa el mismo patrón `border + shadow-sm + bg-surface` sin distinción entre
+    la tarjeta de saldo destacado y una fila de lista.
+
+- [ ] **Tintar las sombras restantes con el color de fondo/acento** — 2h
+  - Ya hay 2 ejemplos correctos (`shadow-primary/10` en el link activo del sidebar y en el FAB) —
+    extender al resto de tarjetas y modales.
+
+- [ ] **Unificar estados de carga** — 4h
+  - El dashboard usa `Skeleton` con la forma del contenido; Transacciones, Cuentas, Presupuestos
+    y Categorías caen en un `Loader2` genérico.
+
+- [ ] **Favicon de marca + limpieza de assets de scaffold** — 2h
+  - `app/favicon.ico` sigue siendo el default de Next.js; `public/` todavía tiene `next.svg`,
+    `vercel.svg`, `globe.svg`, `file.svg`, `window.svg` sin usar.
+
+- [ ] **Página 404 propia** (`app/not-found.tsx`) — 3h
+
+- [ ] **Skip-link para navegación por teclado** — 1h
+
+- [ ] **Validación de formularios por campo**, con foco en el primer error al hacer submit — 1d
+  - Hoy los formularios solo tienen un banner de error genérico y validación nativa `required`.
+
+- [ ] **`tabular-nums` en cifras** (`SummaryCard`, `BudgetRing`, columnas de montos) — 2h
+
+- [ ] **Enlaces legales (privacidad/términos)** en el shell autenticado — 4h
+  - No es solo diseño: el proyecto pivotó a producto público el 2026-08-22, esto ya no es opcional.
+
+- [ ] Opcional, no bloqueante: **evaluar reemplazar Lucide** por otra librería de iconos —
+      cambio de ~20 archivos para un beneficio principalmente estético; dejar en backlog salvo
+      que sobre tiempo.
+
+---
+
+## Fase 13 — Presupuestos con alertas + infraestructura de notificaciones
 
 **Objetivo:** el primer diferenciador real frente a una hoja de cálculo.
 
@@ -239,7 +331,7 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 ---
 
-## Fase 12 — Resumen semanal automático
+## Fase 14 — Resumen semanal automático
 
 **Objetivo:** re-engagement pasivo. El usuario recibe valor sin abrir la app.
 
@@ -253,10 +345,10 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 ---
 
-## Fase 13 — Onboarding de 3 minutos
+## Fase 15 — Onboarding de 3 minutos
 
 **Objetivo:** llevar al usuario a ver su primer gráfico lo más rápido posible.
-Depende de Fases 8, 9 y 10.
+Depende de Fases 8, 10 y 11.
 
 - [ ] **Minuto 0–1: registro sin fricción** — 1d
   - Solo email (decisión 2026-08-22). Sin formularios largos.
@@ -271,7 +363,7 @@ Depende de Fases 8, 9 y 10.
 
 ---
 
-## Fase 14 — Automatizaciones y preparación móvil (post-MVP)
+## Fase 16 — Automatizaciones y preparación móvil (post-MVP)
 
 **Objetivo:** habilitar atajos de iOS/Android. El backend ya es REST/JSON stateless con bearer
 tokens, así que **no hay que rehacer nada** — solo agregar las piezas que faltan.
@@ -301,13 +393,13 @@ tokens, así que **no hay que rehacer nada** — solo agregar las piezas que fal
 
 | Prioridad | Feature | Nota |
 |---|---|---|
-| Alta | **Automatización de ingresos/gastos recurrentes** | Feature de retención del mes 2, no de adquisición del día 1. Requiere scheduler (ya existirá tras Fase 12). |
+| Alta | **Automatización de ingresos/gastos recurrentes** | Feature de retención del mes 2, no de adquisición del día 1. Requiere scheduler (ya existirá tras Fase 14). |
 | Alta | **Editor de categorías personalizable** | Segunda semana post-lanzamiento. El código ya existe, solo está oculto. |
 | Alta | **Sinking funds** (gastos distribuidos en cuotas mensuales virtuales) | Diferenciador potencial para v1.1. Validado por YNAB. Feature de usuario avanzado. |
-| Media | **Registro por nota de voz con IA** | v1.2. Feature de marketing / efecto "wow". Depende de la captura por nombre (Fase 14). |
+| Media | **Registro por nota de voz con IA** | v1.2. Feature de marketing / efecto "wow". Depende de la captura por nombre (Fase 16). |
 | Media | **Google OAuth** | Aplazado en la decisión del 2026-08-22. |
 | Media | **Filtros de fecha y categoría en dashboard** | Iteración 2, cuando haya datos de uso reales que lo justifiquen. |
-| Media | **App nativa iOS/Android** | Solo si se necesitan widgets de pantalla de inicio, push nativas o Face ID. La PWA de Fase 11 cubre el resto. |
+| Media | **App nativa iOS/Android** | Solo si se necesitan widgets de pantalla de inicio, push nativas o Face ID. La PWA de Fase 13 cubre el resto. |
 | Baja | **Multi-moneda ampliado** (tasas de cambio) | El modelo ya soporta agrupación por moneda; la conversión no está y no se necesita. |
 | Baja | **Sincronización offline** | Las columnas `updated_at` de Fase 8 la dejan preparada. |
 
