@@ -94,6 +94,10 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
   - Opción simple: bajar TTL a 15 min y apoyarse en el refresh token.
 
 - [ ] **Rate limiting distribuido** — `slowapi` en memoria no funciona con múltiples workers — 4h
+  - **Diferido a propósito** (2026-08-22, ver `docs/specs/fase_07_spec.md` §2.6.1): hoy el
+    backend corre en un solo worker sin réplicas, así que el problema que esta tarea resuelve
+    no existe todavía. Diseño listo (Redis + `storage_uri`), implementar cuando el despliegue
+    pase a `--workers > 1` o más de una réplica.
 
 ### Operación y seguridad
 
