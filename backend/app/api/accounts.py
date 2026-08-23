@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -9,11 +8,10 @@ from app.schemas import schemas
 
 router = APIRouter()
 
+
 @router.post("/", response_model=schemas.AccountResponse)
 def crear_cuenta(
-    cuenta: schemas.AccountCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    cuenta: schemas.AccountCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
     nueva_cuenta = models.Account(**cuenta.model_dump(), user_id=current_user.id)
     db.add(nueva_cuenta)
@@ -21,21 +19,21 @@ def crear_cuenta(
     db.refresh(nueva_cuenta)
     return nueva_cuenta
 
+
 @router.get("/", response_model=list[schemas.AccountResponse])
 def obtener_cuentas(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
     cuentas = db.query(models.Account).filter(models.Account.user_id == current_user.id).offset(skip).limit(limit).all()
     return cuentas
 
+
 @router.get("/{account_id}", response_model=schemas.AccountResponse)
 def obtener_cuenta(
-    account_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    account_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
     cuenta = db.query(models.Account).filter(models.Account.id == account_id).first()
 
@@ -45,12 +43,13 @@ def obtener_cuenta(
 
     return cuenta
 
+
 @router.put("/{account_id}", response_model=schemas.AccountResponse)
 def actualizar_cuenta(
     account_id: int,
-    cuenta_actualizada: schemas.AccountUpdate, # 🔒 Usamos el nuevo molde restrictivo
+    cuenta_actualizada: schemas.AccountUpdate,  # 🔒 Usamos el nuevo molde restrictivo
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ) -> models.Account:
     cuenta = db.query(models.Account).filter(models.Account.id == account_id).first()
     if not cuenta or cuenta.user_id != current_user.id:
@@ -63,6 +62,7 @@ def actualizar_cuenta(
     db.commit()
     db.refresh(cuenta)
     return cuenta
+
 
 @router.patch("/{account_id}/highlighted", response_model=schemas.AccountResponse)
 def toggle_destacada(
@@ -82,9 +82,7 @@ def toggle_destacada(
 
 @router.delete("/{account_id}")
 def eliminar_cuenta(
-    account_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    account_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
     cuenta = db.query(models.Account).filter(models.Account.id == account_id).first()
     if not cuenta or cuenta.user_id != current_user.id:
@@ -93,8 +91,7 @@ def eliminar_cuenta(
     tiene_transacciones = db.query(models.Transaction).filter(models.Transaction.account_id == account_id).first()
     if tiene_transacciones:
         raise HTTPException(
-            status_code=400,
-            detail="No se puede eliminar la cuenta porque tiene transacciones asociadas."
+            status_code=400, detail="No se puede eliminar la cuenta porque tiene transacciones asociadas."
         )
 
     db.delete(cuenta)

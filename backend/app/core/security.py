@@ -14,7 +14,7 @@ from app.core.database import get_db
 from app.models import models
 
 # 1. VARIABLES DE ENTORNO (Actualizado)
-load_dotenv() # Esto lee el archivo .env automáticamente
+load_dotenv()  # Esto lee el archivo .env automáticamente
 
 # Extraemos la llave. Si por algún error el archivo .env no existe, lanzará un error para protegerte.
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -29,12 +29,15 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
+
 # 3. FUNCIONES DE CONTRASEÑAS (Bcrypt)
 def get_password_hash(password: str):
     return pwd_context.hash(password)
 
+
 def verify_password(plain_password: str, hashed_password: str):
     return pwd_context.verify(plain_password, hashed_password)
+
 
 # 4. FUNCIÓN PARA CREAR EL TOKEN (JWT)
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
@@ -44,11 +47,13 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     else:
         expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.now(UTC),
-        "jti": secrets.token_urlsafe(16),
-    })
+    to_encode.update(
+        {
+            "exp": expire,
+            "iat": datetime.now(UTC),
+            "jti": secrets.token_urlsafe(16),
+        }
+    )
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -57,14 +62,13 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 def generate_refresh_token() -> str:
     return secrets.token_urlsafe(48)
 
+
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
+
 # 6. EL GUARDIA DE SEGURIDAD (Dependencia para las rutas protegidas)
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-):
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudieron validar las credenciales",

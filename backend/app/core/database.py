@@ -23,6 +23,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Todas nuestras tablas (Usuarios, Transacciones) heredarán de esta clase para que SQLAlchemy sepa que deben convertirse en tablas SQL.
 Base = declarative_base()
 
+
 # 5. Función de Inyección de Dependencias
 # Esta función le dará una conexión de BD abierta a cada endpoint que la solicite, y la cerrará automáticamente al terminar.
 def get_db():

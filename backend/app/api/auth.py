@@ -15,34 +15,26 @@ router = APIRouter()
 
 @router.post("/login", response_model=schemas.TokenResponse)
 @limiter.limit("5/minute")
-def login(
-    request: Request,
-    user_credentials: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
-):
+def login(request: Request, user_credentials: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     normalized_email = user_credentials.username.lower().strip()
     user = db.query(models.User).filter(models.User.email == normalized_email).first()
 
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Credenciales Inválidas"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Credenciales Inválidas")
 
     if not security.verify_password(user_credentials.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Credenciales Inválidas"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Credenciales Inválidas")
 
     access_token = security.create_access_token(data={"sub": str(user.id)})
 
     raw_refresh = security.generate_refresh_token()
-    db.add(models.RefreshToken(
-        token_hash=security.hash_token(raw_refresh),
-        user_id=user.id,
-        expires_at=datetime.now(UTC) + timedelta(days=security.REFRESH_TOKEN_EXPIRE_DAYS),
-    ))
+    db.add(
+        models.RefreshToken(
+            token_hash=security.hash_token(raw_refresh),
+            user_id=user.id,
+            expires_at=datetime.now(UTC) + timedelta(days=security.REFRESH_TOKEN_EXPIRE_DAYS),
+        )
+    )
     db.commit()
 
     return {
@@ -58,11 +50,15 @@ def refresh(
     db: Session = Depends(get_db),
 ):
     token_hash = security.hash_token(body.refresh_token)
-    stored = db.query(models.RefreshToken).filter(
-        models.RefreshToken.token_hash == token_hash,
-        models.RefreshToken.revoked_at.is_(None),
-        models.RefreshToken.expires_at > datetime.now(UTC),
-    ).first()
+    stored = (
+        db.query(models.RefreshToken)
+        .filter(
+            models.RefreshToken.token_hash == token_hash,
+            models.RefreshToken.revoked_at.is_(None),
+            models.RefreshToken.expires_at > datetime.now(UTC),
+        )
+        .first()
+    )
 
     if not stored:
         raise HTTPException(
@@ -74,11 +70,13 @@ def refresh(
 
     access_token = security.create_access_token(data={"sub": str(stored.user_id)})
     raw_refresh = security.generate_refresh_token()
-    db.add(models.RefreshToken(
-        token_hash=security.hash_token(raw_refresh),
-        user_id=stored.user_id,
-        expires_at=datetime.now(UTC) + timedelta(days=security.REFRESH_TOKEN_EXPIRE_DAYS),
-    ))
+    db.add(
+        models.RefreshToken(
+            token_hash=security.hash_token(raw_refresh),
+            user_id=stored.user_id,
+            expires_at=datetime.now(UTC) + timedelta(days=security.REFRESH_TOKEN_EXPIRE_DAYS),
+        )
+    )
     db.commit()
 
     return {
@@ -94,10 +92,14 @@ def logout(
     db: Session = Depends(get_db),
 ):
     token_hash = security.hash_token(body.refresh_token)
-    stored = db.query(models.RefreshToken).filter(
-        models.RefreshToken.token_hash == token_hash,
-        models.RefreshToken.revoked_at.is_(None),
-    ).first()
+    stored = (
+        db.query(models.RefreshToken)
+        .filter(
+            models.RefreshToken.token_hash == token_hash,
+            models.RefreshToken.revoked_at.is_(None),
+        )
+        .first()
+    )
 
     if stored:
         stored.revoked_at = datetime.now(UTC)

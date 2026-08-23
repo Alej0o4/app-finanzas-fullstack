@@ -14,18 +14,20 @@ from app.schemas import schemas
 
 router = APIRouter()
 
+
 @router.get("/summary", response_model=schemas.DashboardSummary)
-def obtener_resumen(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
+def obtener_resumen(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     preferred_currency = current_user.preferred_currency or "COP"
 
     # Contar cuentas destacadas
-    highlighted_count = db.query(models.Account).filter(
-        models.Account.user_id == current_user.id,
-        models.Account.highlighted == True,  # noqa: E712
-    ).count()
+    highlighted_count = (
+        db.query(models.Account)
+        .filter(
+            models.Account.user_id == current_user.id,
+            models.Account.highlighted == True,  # noqa: E712
+        )
+        .count()
+    )
 
     # Si hay destacadas, filtrar por ellas; si no, usar todas
     account_filter = [models.Account.user_id == current_user.id]
@@ -33,12 +35,17 @@ def obtener_resumen(
         account_filter.append(models.Account.highlighted == True)  # noqa: E712
 
     # Agrupar saldos de cuentas por moneda
-    balances_rows = db.query(
-        models.Account.currency,
-        func.sum(models.Account.balance).label("total"),
-    ).filter(
-        *account_filter,
-    ).group_by(models.Account.currency).all()
+    balances_rows = (
+        db.query(
+            models.Account.currency,
+            func.sum(models.Account.balance).label("total"),
+        )
+        .filter(
+            *account_filter,
+        )
+        .group_by(models.Account.currency)
+        .all()
+    )
 
     hoy = datetime.now(UTC)
     primer_dia = datetime(hoy.year, hoy.month, 1)
@@ -49,28 +56,38 @@ def obtener_resumen(
     tx_account_ids = db.query(models.Account.id).filter(*account_filter).subquery()
 
     # Ingresos del mes agrupados por moneda
-    income_rows = db.query(
-        models.Transaction.currency,
-        func.sum(models.Transaction.amount).label("total"),
-    ).filter(
-        models.Transaction.user_id == current_user.id,
-        models.Transaction.type == "income",
-        models.Transaction.account_id.in_(tx_account_ids),
-        models.Transaction.date >= primer_dia,
-        models.Transaction.date <= ultimo_dia,
-    ).group_by(models.Transaction.currency).all()
+    income_rows = (
+        db.query(
+            models.Transaction.currency,
+            func.sum(models.Transaction.amount).label("total"),
+        )
+        .filter(
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.type == "income",
+            models.Transaction.account_id.in_(tx_account_ids),
+            models.Transaction.date >= primer_dia,
+            models.Transaction.date <= ultimo_dia,
+        )
+        .group_by(models.Transaction.currency)
+        .all()
+    )
 
     # Gastos del mes agrupados por moneda
-    expense_rows = db.query(
-        models.Transaction.currency,
-        func.sum(models.Transaction.amount).label("total"),
-    ).filter(
-        models.Transaction.user_id == current_user.id,
-        models.Transaction.type == "expense",
-        models.Transaction.account_id.in_(tx_account_ids),
-        models.Transaction.date >= primer_dia,
-        models.Transaction.date <= ultimo_dia,
-    ).group_by(models.Transaction.currency).all()
+    expense_rows = (
+        db.query(
+            models.Transaction.currency,
+            func.sum(models.Transaction.amount).label("total"),
+        )
+        .filter(
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.type == "expense",
+            models.Transaction.account_id.in_(tx_account_ids),
+            models.Transaction.date >= primer_dia,
+            models.Transaction.date <= ultimo_dia,
+        )
+        .group_by(models.Transaction.currency)
+        .all()
+    )
 
     # Ordenar: moneda preferida primero, luego alfabético
     def sort_key(currency: str) -> tuple[int, str]:
@@ -92,35 +109,39 @@ def obtener_resumen(
 
 
 @router.get("/budgets-progress", response_model=list[schemas.BudgetProgress])
-def obtener_progreso_presupuestos(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
+def obtener_progreso_presupuestos(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     hoy = datetime.now(UTC)
     primer_dia = datetime(hoy.year, hoy.month, 1)
     ultimo_dia = datetime(hoy.year, hoy.month, calendar.monthrange(hoy.year, hoy.month)[1], 23, 59, 59)
 
-    presupuestos = db.query(models.Budget).filter(
-        models.Budget.user_id == current_user.id,
-        models.Budget.month == hoy.month,
-        models.Budget.year == hoy.year
-    ).all()
+    presupuestos = (
+        db.query(models.Budget)
+        .filter(
+            models.Budget.user_id == current_user.id, models.Budget.month == hoy.month, models.Budget.year == hoy.year
+        )
+        .all()
+    )
 
     if not presupuestos:
         return []
 
     category_ids = [p.category_id for p in presupuestos]
 
-    spent_rows = db.query(
-        models.Transaction.category_id,
-        func.sum(models.Transaction.amount).label("spent"),
-    ).filter(
-        models.Transaction.user_id == current_user.id,
-        models.Transaction.type == "expense",
-        models.Transaction.category_id.in_(category_ids),
-        models.Transaction.date >= primer_dia,
-        models.Transaction.date <= ultimo_dia,
-    ).group_by(models.Transaction.category_id).all()
+    spent_rows = (
+        db.query(
+            models.Transaction.category_id,
+            func.sum(models.Transaction.amount).label("spent"),
+        )
+        .filter(
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.type == "expense",
+            models.Transaction.category_id.in_(category_ids),
+            models.Transaction.date >= primer_dia,
+            models.Transaction.date <= ultimo_dia,
+        )
+        .group_by(models.Transaction.category_id)
+        .all()
+    )
 
     spent_map: dict[int, Decimal] = {r.category_id: r.spent for r in spent_rows}
 
@@ -132,16 +153,19 @@ def obtener_progreso_presupuestos(
         gastado = spent_map.get(presupuesto.category_id, Decimal("0.00"))
         porcentaje = float(gastado / presupuesto.amount_limit) * 100 if presupuesto.amount_limit > 0 else 0
         cat_name, cat_icon = cat_info_map.get(presupuesto.category_id, ("Desconocida", None))
-        progreso_lista.append({
-            "budget_id": presupuesto.id,
-            "category_name": cat_name,
-            "category_icon": cat_icon,
-            "amount_limit": presupuesto.amount_limit,
-            "spent": gastado,
-            "percentage": round(porcentaje, 2),
-        })
+        progreso_lista.append(
+            {
+                "budget_id": presupuesto.id,
+                "category_name": cat_name,
+                "category_icon": cat_icon,
+                "amount_limit": presupuesto.amount_limit,
+                "spent": gastado,
+                "percentage": round(porcentaje, 2),
+            }
+        )
 
     return progreso_lista
+
 
 @router.get("/cashflow-series", response_model=list[schemas.CashflowData])
 def obtener_serie_flujo_caja(
@@ -149,7 +173,7 @@ def obtener_serie_flujo_caja(
     end_date: datetime,
     period: str = Query("day", pattern="^(day|month)$", description="Agrupar por 'day' o 'month'"),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
     try:
         dialect = db.bind.dialect.name
@@ -160,15 +184,25 @@ def obtener_serie_flujo_caja(
             fmt = "%Y-%m" if period == "month" else "%Y-%m-%d"
             date_label = func.strftime(fmt, models.Transaction.date).label("date_label")
 
-        rows = db.query(
-            date_label,
-            func.sum(case((models.Transaction.type == "income", models.Transaction.amount), else_=Decimal("0.00"))).label("income"),
-            func.sum(case((models.Transaction.type == "expense", models.Transaction.amount), else_=Decimal("0.00"))).label("expense"),
-        ).filter(
-            models.Transaction.user_id == current_user.id,
-            models.Transaction.date >= start_date,
-            models.Transaction.date <= end_date,
-        ).group_by(date_label).order_by(date_label).all()
+        rows = (
+            db.query(
+                date_label,
+                func.sum(
+                    case((models.Transaction.type == "income", models.Transaction.amount), else_=Decimal("0.00"))
+                ).label("income"),
+                func.sum(
+                    case((models.Transaction.type == "expense", models.Transaction.amount), else_=Decimal("0.00"))
+                ).label("expense"),
+            )
+            .filter(
+                models.Transaction.user_id == current_user.id,
+                models.Transaction.date >= start_date,
+                models.Transaction.date <= end_date,
+            )
+            .group_by(date_label)
+            .order_by(date_label)
+            .all()
+        )
 
         return [
             {"date_label": r.date_label, "income": r.income or Decimal("0.00"), "expense": r.expense or Decimal("0.00")}
@@ -186,45 +220,53 @@ def obtener_distribucion_categorias(
     type: str = Query("expense", pattern="^(income|expense)$", description="Filtrar por tipo de transacción"),
     neto: bool = Query(False, description="Si es True, calcula gasto neto (expense - income) por categoría"),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
     if neto:
         sum_expense = func.sum(case((models.Transaction.type == "expense", models.Transaction.amount), else_=0))
         sum_income = func.sum(case((models.Transaction.type == "income", models.Transaction.amount), else_=0))
         net_total = sum_expense - sum_income
 
-        rows = db.query(
-            models.Transaction.category_id,
-            models.Category.name,
-            net_total.label("total"),
-        ).join(
-            models.Category, models.Category.id == models.Transaction.category_id
-        ).filter(
-            models.Transaction.user_id == current_user.id,
-            models.Transaction.date >= start_date,
-            models.Transaction.date <= end_date,
-        ).group_by(
-            models.Transaction.category_id,
-            models.Category.name,
-        ).having(net_total > 0).order_by(net_total.desc()).all()
+        rows = (
+            db.query(
+                models.Transaction.category_id,
+                models.Category.name,
+                net_total.label("total"),
+            )
+            .join(models.Category, models.Category.id == models.Transaction.category_id)
+            .filter(
+                models.Transaction.user_id == current_user.id,
+                models.Transaction.date >= start_date,
+                models.Transaction.date <= end_date,
+            )
+            .group_by(
+                models.Transaction.category_id,
+                models.Category.name,
+            )
+            .having(net_total > 0)
+            .order_by(net_total.desc())
+            .all()
+        )
     else:
-        rows = db.query(
-            models.Transaction.category_id,
-            models.Category.name,
-            func.sum(models.Transaction.amount).label("total"),
-        ).join(
-            models.Category, models.Category.id == models.Transaction.category_id
-        ).filter(
-            models.Transaction.user_id == current_user.id,
-            models.Transaction.type == type,
-            models.Transaction.date >= start_date,
-            models.Transaction.date <= end_date,
-        ).group_by(
-            models.Transaction.category_id,
-            models.Category.name,
-        ).order_by(func.sum(models.Transaction.amount).desc()).all()
+        rows = (
+            db.query(
+                models.Transaction.category_id,
+                models.Category.name,
+                func.sum(models.Transaction.amount).label("total"),
+            )
+            .join(models.Category, models.Category.id == models.Transaction.category_id)
+            .filter(
+                models.Transaction.user_id == current_user.id,
+                models.Transaction.type == type,
+                models.Transaction.date >= start_date,
+                models.Transaction.date <= end_date,
+            )
+            .group_by(
+                models.Transaction.category_id,
+                models.Category.name,
+            )
+            .order_by(func.sum(models.Transaction.amount).desc())
+            .all()
+        )
 
-    return [
-        {"category_id": r.category_id, "category_name": r.name, "total": r.total}
-        for r in rows
-    ]
+    return [{"category_id": r.category_id, "category_name": r.name, "total": r.total} for r in rows]

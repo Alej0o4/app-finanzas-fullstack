@@ -13,29 +13,37 @@ from app.schemas import schemas
 
 router = APIRouter()
 
+
 # --- RUTA PROTEGIDA ---
 @router.post("/", response_model=schemas.TransactionResponse)
 def crear_transaccion(
     transaccion: schemas.TransactionCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
     # 🔒 1. Verificar que la cuenta de destino exista y PERTENEZCA al usuario
-    cuenta = db.query(models.Account).filter(
-        models.Account.id == transaccion.account_id,
-        models.Account.user_id == current_user.id
-    ).first()
+    cuenta = (
+        db.query(models.Account)
+        .filter(models.Account.id == transaccion.account_id, models.Account.user_id == current_user.id)
+        .first()
+    )
 
     if not cuenta:
         raise HTTPException(status_code=404, detail="La cuenta especificada no existe o no te pertenece.")
 
-    categoria = db.query(models.Category).filter(
-        models.Category.id == transaccion.category_id,
-        or_(models.Category.user_id.is_(None), models.Category.user_id == current_user.id)
-    ).first()
+    categoria = (
+        db.query(models.Category)
+        .filter(
+            models.Category.id == transaccion.category_id,
+            or_(models.Category.user_id.is_(None), models.Category.user_id == current_user.id),
+        )
+        .first()
+    )
 
     if not categoria:
-        raise HTTPException(status_code=404, detail="La categoría especificada no existe o no tienes permisos para usarla.")
+        raise HTTPException(
+            status_code=404, detail="La categoría especificada no existe o no tienes permisos para usarla."
+        )
 
     # 2. Ensamblar la transacción
     nueva_transaccion = models.Transaction(**transaccion.model_dump(exclude_none=True), user_id=current_user.id)
@@ -69,7 +77,7 @@ def obtener_transacciones(
     start_date: datetime | None = None,
     end_date: datetime | None = None,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
     if start_date and end_date and start_date > end_date:
         raise HTTPException(status_code=400, detail="La fecha inicial no puede ser mayor que la fecha final.")
@@ -90,10 +98,9 @@ def obtener_transacciones(
 
     total = query.with_entities(func.count()).scalar()
 
-    transacciones = query.order_by(
-        desc(models.Transaction.date),
-        desc(models.Transaction.id)
-    ).offset(skip).limit(limit).all()
+    transacciones = (
+        query.order_by(desc(models.Transaction.date), desc(models.Transaction.id)).offset(skip).limit(limit).all()
+    )
 
     page = (skip // limit) + 1 if limit > 0 else 1
 
@@ -108,9 +115,7 @@ def obtener_transacciones(
 # --- RUTA PROTEGIDA ---
 @router.delete("/{transaction_id}")
 def eliminar_transaccion(
-    transaction_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    transaction_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
     transaccion = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
 
@@ -137,43 +142,53 @@ def eliminar_transaccion(
         db.rollback()
         raise HTTPException(status_code=500, detail="Error al intentar eliminar y revertir saldos.") from None
 
+
 @router.put("/{transaction_id}", response_model=schemas.TransactionResponse)
 def actualizar_transaccion(
     transaction_id: int,
     transaccion_actualizada: schemas.TransactionBase,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ) -> models.Transaction:
-
     # 1. Buscamos la transacción original
-    transaccion_db = db.query(models.Transaction).filter(
-        models.Transaction.id == transaction_id,
-        models.Transaction.user_id == current_user.id
-    ).first()
+    transaccion_db = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.id == transaction_id, models.Transaction.user_id == current_user.id)
+        .first()
+    )
 
     if not transaccion_db:
         raise HTTPException(status_code=404, detail="Transacción no encontrada.")
 
     # 2. Buscamos las cuentas (la vieja y la nueva, por si el usuario movió el gasto a otra cuenta)
     cuenta_vieja = db.query(models.Account).filter(models.Account.id == transaccion_db.account_id).first()
-    cuenta_nueva = db.query(models.Account).filter(
-        models.Account.id == transaccion_actualizada.account_id,
-        models.Account.user_id == current_user.id
-    ).first()
+    cuenta_nueva = (
+        db.query(models.Account)
+        .filter(models.Account.id == transaccion_actualizada.account_id, models.Account.user_id == current_user.id)
+        .first()
+    )
 
     if not cuenta_nueva:
         raise HTTPException(status_code=404, detail="La nueva cuenta asignada no existe o no te pertenece.")
 
-    categoria = db.query(models.Category).filter(
-        models.Category.id == transaccion_actualizada.category_id,
-        or_(models.Category.user_id.is_(None), models.Category.user_id == current_user.id)
-    ).first()
+    categoria = (
+        db.query(models.Category)
+        .filter(
+            models.Category.id == transaccion_actualizada.category_id,
+            or_(models.Category.user_id.is_(None), models.Category.user_id == current_user.id),
+        )
+        .first()
+    )
 
     if not categoria:
-        raise HTTPException(status_code=404, detail="La categoría especificada no existe o no tienes permisos para usarla.")
+        raise HTTPException(
+            status_code=404, detail="La categoría especificada no existe o no tienes permisos para usarla."
+        )
 
     old_delta = transaccion_db.amount if transaccion_db.type == "income" else -transaccion_db.amount
-    new_delta = transaccion_actualizada.amount if transaccion_actualizada.type == "income" else -transaccion_actualizada.amount
+    new_delta = (
+        transaccion_actualizada.amount if transaccion_actualizada.type == "income" else -transaccion_actualizada.amount
+    )
 
     try:
         if cuenta_vieja.id == cuenta_nueva.id:
