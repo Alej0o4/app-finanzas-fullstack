@@ -17,6 +17,7 @@ export interface Transaction {
   date: string;
   account_id: number;
   category_id: number;
+  payment_method?: 'cash' | 'card' | 'transfer' | null;
   user_id: number;
 }
 
@@ -35,6 +36,7 @@ export interface Budget {
   currency: string;
   month: number;
   year: number;
+  is_recurring: boolean;
   user_id: number;
 }
 
@@ -77,6 +79,7 @@ export interface UserResponse {
   preferred_currency: string;
   preferred_locale: string;
   preferred_theme: string;
+  monthly_income: number | null;
 }
 
 export interface PreferencesUpdatePayload {
@@ -98,6 +101,7 @@ export interface CreateTransactionPayload {
   date: string;
   account_id: number;
   category_id: number;
+  payment_method?: 'cash' | 'card' | 'transfer' | null;
   currency?: string;
 }
 
@@ -109,6 +113,7 @@ export interface UpdateTransactionPayload {
   date: string;
   account_id: number;
   category_id: number;
+  payment_method?: 'cash' | 'card' | 'transfer' | null;
 }
 
 export interface CreateAccountPayload {
@@ -125,6 +130,7 @@ export interface BudgetPayload {
   currency?: string;
   month: number;
   year: number;
+  is_recurring?: boolean;
 }
 
 export interface PaginatedResponse<T> {

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, PieChart, Loader2, Edit2, Trash2, CalendarDays } from 'lucide-react';
+import { Plus, PieChart, Loader2, Edit2, Trash2, CalendarDays, Repeat } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, getApiError } from '@/lib/utils';
@@ -12,6 +12,7 @@ import Button from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
+import Label from '@/components/ui/Label';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import type { Category, Budget, BudgetPayload } from '@/types/api';
 
@@ -28,6 +29,7 @@ export default function BudgetsPage() {
 
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
+  const [isRecurring, setIsRecurring] = useState(false);
   const getCurrentMonthYear = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -90,6 +92,7 @@ export default function BudgetsPage() {
       amount_limit: Number(amount),
       month: Number(monthStr),
       year: Number(yearStr),
+      is_recurring: isRecurring,
     });
   };
 
@@ -97,6 +100,7 @@ export default function BudgetsPage() {
     setEditingBudget(null);
     setCategoryId('');
     setAmount('');
+    setIsRecurring(false);
     setMonthYear(getCurrentMonthYear());
     setIsModalOpen(true);
   };
@@ -105,6 +109,7 @@ export default function BudgetsPage() {
     setEditingBudget(budget);
     setCategoryId(budget.category_id.toString());
     setAmount(budget.amount_limit.toString());
+    setIsRecurring(budget.is_recurring);
     const formattedMonth = budget.month < 10 ? `0${budget.month}` : budget.month;
     setMonthYear(`${budget.year}-${formattedMonth}`);
     setIsModalOpen(true);
@@ -131,10 +136,7 @@ export default function BudgetsPage() {
             Establece límites y controla tus gastos mensuales.
           </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={openCreateModal}
-        >
+        <Button variant="primary" onClick={openCreateModal}>
           <Plus size={18} />
           <span>Nuevo Presupuesto</span>
         </Button>
@@ -168,6 +170,14 @@ export default function BudgetsPage() {
                       <p className="text-text-muted mt-0.5 flex items-center gap-1 text-xs capitalize">
                         <CalendarDays size={12} />
                         {getMonthName(budget.month, budget.year)}
+                        {budget.is_recurring && (
+                          <span
+                            title="Se repite cada mes"
+                            className="text-primary inline-flex items-center"
+                          >
+                            <Repeat size={12} />
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -247,6 +257,21 @@ export default function BudgetsPage() {
             onChange={(e) => setMonthYear(e.target.value)}
             className="bg-background style-color-scheme-dark"
           />
+
+          <div className="flex items-center gap-2">
+            <input
+              id="budget-recurring"
+              type="checkbox"
+              checked={isRecurring}
+              onChange={(e) => setIsRecurring(e.target.checked)}
+              className="accent-primary h-4 w-4 cursor-pointer"
+            />
+            <Label htmlFor="budget-recurring">Repetir cada mes</Label>
+          </div>
+          <p className="text-text-muted text-xs">
+            Se creará automáticamente cada mes con el mismo monto. Editar el presupuesto de un mes
+            también actualiza el monto de los meses futuros.
+          </p>
 
           <div className="mt-6 flex gap-3">
             <Button type="button" variant="ghost" onClick={closeModal} className="flex-1">
