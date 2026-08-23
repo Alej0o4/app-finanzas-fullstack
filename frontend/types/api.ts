@@ -98,7 +98,8 @@ export interface CreateTransactionPayload {
   description: string;
   amount: number;
   type: 'income' | 'expense';
-  date: string;
+  /** Opcional: si se omite, el backend la puebla con server_default=func.now(). */
+  date?: string;
   account_id: number;
   category_id: number;
   payment_method?: 'cash' | 'card' | 'transfer' | null;
