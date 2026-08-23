@@ -49,7 +49,7 @@ export default function Sidebar() {
     const refreshToken = localStorage.getItem('refresh_token');
     if (refreshToken) {
       try {
-        await api.post('/api/auth/logout', { refresh_token: refreshToken });
+        await api.post('auth/logout', { refresh_token: refreshToken });
       } catch {
         // Si falla la revocación, el token expirará solo
       }

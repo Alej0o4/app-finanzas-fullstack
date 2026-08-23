@@ -42,7 +42,7 @@ def upgrade() -> None:
         sa.Column("preferred_currency", sa.String(length=3), nullable=True),
         sa.Column("preferred_locale", sa.String(length=10), nullable=True),
         sa.Column("preferred_theme", sa.String(length=10), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_users_email"), "users", ["email"], unique=True)
@@ -86,7 +86,7 @@ def upgrade() -> None:
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("expires_at", sa.DateTime(), nullable=False),
         sa.Column("revoked_at", sa.DateTime(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=True),
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["users.id"],
@@ -122,7 +122,7 @@ def upgrade() -> None:
         sa.Column("amount", sa.Numeric(precision=14, scale=2), nullable=False),
         sa.Column("currency", sa.String(length=3), nullable=False),
         sa.Column("type", sa.String(), nullable=True),
-        sa.Column("date", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True),
+        sa.Column("date", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=True),
         sa.Column("description", sa.String(), nullable=True),
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("account_id", sa.Integer(), nullable=False),

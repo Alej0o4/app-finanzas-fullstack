@@ -10,46 +10,47 @@ La regla base es simple: el frontend no recalcula saldos, progreso de presupuest
 
 - Base URL: `NEXT_PUBLIC_API_URL`
 - Fallback local: `http://localhost:8000`
+- Prefijo de versión: `/api/v1` — está centralizado en el `baseURL` del cliente Axios en `lib/api.ts` (`` `${NEXT_PUBLIC_API_URL}/api/v1` ``), no repetido en cada call site. Los ~45 call sites de la app llaman a rutas relativas sin prefijo (ej. `api.get('accounts/')`); las rutas documentadas abajo omiten `/api/v1` por brevedad pero es lo que efectivamente se resuelve en runtime.
 - Autenticación: `Authorization: Bearer <token>`
 - El token se lee desde `localStorage` en `lib/api.ts`
 - El refresh token se almacena en `localStorage` como `refresh_token`
 
-Si el backend responde `401`, el frontend intenta renovar el token via `POST /api/auth/refresh` con el `refresh_token`. Si la renovación falla, limpia el token y redirige a `/login`.
+Si el backend responde `401`, el frontend intenta renovar el token via `POST /api/v1/auth/refresh` con el `refresh_token`. Si la renovación falla, limpia el token y redirige a `/login`.
 
 ## Endpoints consumidos por el frontend
 
 ### Autenticación
 
-- `POST /api/auth/login` → devuelve `access_token` + `refresh_token`
-- `POST /api/auth/refresh` → rota refresh token, devuelve nuevo JWT
-- `POST /api/auth/logout` → revoca refresh token
-- `GET /api/users/me`
-- `GET /api/users/me/preferences`
-- `PATCH /api/users/me/preferences`
+- `POST /api/v1/auth/login` → devuelve `access_token` + `refresh_token`
+- `POST /api/v1/auth/refresh` → rota refresh token, devuelve nuevo JWT
+- `POST /api/v1/auth/logout` → revoca refresh token
+- `GET /api/v1/users/me`
+- `GET /api/v1/users/me/preferences`
+- `PATCH /api/v1/users/me/preferences`
 
 ### Cuentas
 
-- `GET /api/accounts/`
-- `GET /api/accounts/{account_id}`
-- `POST /api/accounts/`
-- `PUT /api/accounts/{account_id}`
-- `PATCH /api/accounts/{account_id}/highlighted`
-- `DELETE /api/accounts/{account_id}`
+- `GET /api/v1/accounts/`
+- `GET /api/v1/accounts/{account_id}`
+- `POST /api/v1/accounts/`
+- `PUT /api/v1/accounts/{account_id}`
+- `PATCH /api/v1/accounts/{account_id}/highlighted`
+- `DELETE /api/v1/accounts/{account_id}`
 
 ### Categorías
 
-- `GET /api/categories/`
-- `GET /api/categories/{category_id}`
-- `POST /api/categories/`
-- `PUT /api/categories/{category_id}`
-- `DELETE /api/categories/{category_id}`
+- `GET /api/v1/categories/`
+- `GET /api/v1/categories/{category_id}`
+- `POST /api/v1/categories/`
+- `PUT /api/v1/categories/{category_id}`
+- `DELETE /api/v1/categories/{category_id}`
 
 ### Transacciones
 
-- `GET /api/transactions/`
-- `POST /api/transactions/`
-- `PUT /api/transactions/{transaction_id}`
-- `DELETE /api/transactions/{transaction_id}`
+- `GET /api/v1/transactions/`
+- `POST /api/v1/transactions/`
+- `PUT /api/v1/transactions/{transaction_id}`
+- `DELETE /api/v1/transactions/{transaction_id}`
 
 Filtros soportados por el feed:
 
@@ -69,23 +70,23 @@ El endpoint devuelve una respuesta paginada:
 
 ### Presupuestos
 
-- `GET /api/budgets/`
-- `POST /api/budgets/`
-- `PUT /api/budgets/{budget_id}`
-- `DELETE /api/budgets/{budget_id}`
+- `GET /api/v1/budgets/`
+- `POST /api/v1/budgets/`
+- `PUT /api/v1/budgets/{budget_id}`
+- `DELETE /api/v1/budgets/{budget_id}`
 
 ### Dashboard
 
-- `GET /api/dashboard/summary`
-- `GET /api/dashboard/budgets-progress`
-- `GET /api/dashboard/cashflow-series`
-- `GET /api/dashboard/category-distribution` (soporta `neto=true` para calcular gasto neto por categoría)
+- `GET /api/v1/dashboard/summary`
+- `GET /api/v1/dashboard/budgets-progress`
+- `GET /api/v1/dashboard/cashflow-series`
+- `GET /api/v1/dashboard/category-distribution` (soporta `neto=true` para calcular gasto neto por categoría)
 
 ## Contratos de datos importantes
 
 ### Usuario autenticado
 
-`GET /api/users/me` devuelve al menos:
+`GET /api/v1/users/me` devuelve al menos:
 
 - `id`
 - `email`
@@ -96,13 +97,13 @@ El endpoint devuelve una respuesta paginada:
 
 ### Preferencias de usuario
 
-`GET /api/users/me/preferences` devuelve:
+`GET /api/v1/users/me/preferences` devuelve:
 
 - `preferred_currency`: string
 - `preferred_locale`: string
 - `preferred_theme`: string
 
-`PATCH /api/users/me/preferences` acepta campos opcionales: `preferred_currency`, `preferred_locale`, `preferred_theme`.
+`PATCH /api/v1/users/me/preferences` acepta campos opcionales: `preferred_currency`, `preferred_locale`, `preferred_theme`.
 
 ### Cuenta
 
@@ -193,7 +194,7 @@ Para el progreso de presupuestos, el backend devuelve valores listos para pintar
 - `401`: token ausente o inválido.
 - `403`: acción no permitida (ej: editar/eliminar categoría base del sistema).
 - `404`: recurso inexistente o fuera de alcance del usuario.
-- `429`: rate limiting excedido (solo en `/api/auth/login`, 5 req/min).
+- `429`: rate limiting excedido (solo en `/api/v1/auth/login`, 5 req/min).
 
 ## Reglas de consumo
 

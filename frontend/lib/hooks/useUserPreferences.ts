@@ -20,7 +20,7 @@ export function useUserPreferences() {
   const query = useQuery({
     queryKey: queryKeys.userPreferences(),
     queryFn: async () => {
-      const res = await api.get('/api/users/me/preferences');
+      const res = await api.get('users/me/preferences');
       return res.data as UserPreferences;
     },
     enabled: hasToken,

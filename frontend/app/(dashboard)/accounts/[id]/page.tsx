@@ -49,14 +49,14 @@ export default function AccountDetailPage() {
 
   const { data: account, isLoading: loadingAccount } = useQuery<Account>({
     queryKey: queryKeys.accounts.byId(id as string),
-    queryFn: async () => (await api.get(`/api/accounts/${id}`)).data,
+    queryFn: async () => (await api.get(`accounts/${id}`)).data,
   });
 
   const { data: transactionsData, isLoading: loadingTx } = useQuery<PaginatedResponse<Transaction>>(
     {
       queryKey: queryKeys.transactions.byAccount(id as string),
       queryFn: async () =>
-        (await api.get(`/api/transactions/`, { params: { account_id: Number(id) } })).data,
+        (await api.get(`transactions/`, { params: { account_id: Number(id) } })).data,
     }
   );
 
@@ -64,11 +64,11 @@ export default function AccountDetailPage() {
 
   const { data: categories } = useQuery<Category[]>({
     queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('/api/categories/')).data,
+    queryFn: async () => (await api.get('categories/')).data,
   });
   const { data: allAccounts } = useQuery<Account[]>({
     queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('/api/accounts/')).data,
+    queryFn: async () => (await api.get('accounts/')).data,
   });
 
   const accountOptions: Account[] = allAccounts || (account ? [account] : []);
@@ -77,7 +77,7 @@ export default function AccountDetailPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (payload: UpdateTransactionPayload) => {
-      const response = await api.put(`/api/transactions/${payload.id}`, payload);
+      const response = await api.put(`transactions/${payload.id}`, payload);
       return response.data;
     },
     onSuccess: () => {
@@ -100,7 +100,7 @@ export default function AccountDetailPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (txId: number) => {
-      await api.delete(`/api/transactions/${txId}`);
+      await api.delete(`transactions/${txId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() });

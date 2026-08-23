@@ -27,7 +27,7 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 # 2. CONFIGURACIONES DE SEGURIDAD
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 # 3. FUNCIONES DE CONTRASEÑAS (Bcrypt)

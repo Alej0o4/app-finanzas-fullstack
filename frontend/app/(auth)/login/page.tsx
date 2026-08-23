@@ -29,7 +29,7 @@ function LoginForm() {
       formData.append('password', password);
 
       // Petición al backend
-      const response = await api.post('/api/auth/login', formData, {
+      const response = await api.post('auth/login', formData, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },

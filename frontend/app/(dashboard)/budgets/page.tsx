@@ -36,12 +36,12 @@ export default function BudgetsPage() {
 
   const { data: budgets, isLoading: loadingBudgets } = useQuery<Budget[]>({
     queryKey: queryKeys.budgets.all(),
-    queryFn: async () => (await api.get('/api/budgets/')).data,
+    queryFn: async () => (await api.get('budgets/')).data,
   });
 
   const { data: categories } = useQuery<Category[]>({
     queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('/api/categories/')).data,
+    queryFn: async () => (await api.get('categories/')).data,
   });
 
   const expenseCategories = categories?.filter((c) => c.type === 'expense') || [];
@@ -49,9 +49,9 @@ export default function BudgetsPage() {
   const saveMutation = useMutation({
     mutationFn: async (budgetData: BudgetPayload) => {
       if (editingBudget) {
-        return (await api.put(`/api/budgets/${editingBudget.id}`, budgetData)).data;
+        return (await api.put(`budgets/${editingBudget.id}`, budgetData)).data;
       } else {
-        return (await api.post('/api/budgets/', budgetData)).data;
+        return (await api.post('budgets/', budgetData)).data;
       }
     },
     onSuccess: () => {
@@ -68,7 +68,7 @@ export default function BudgetsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      await api.delete(`/api/budgets/${id}`);
+      await api.delete(`budgets/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.budgets.all() });

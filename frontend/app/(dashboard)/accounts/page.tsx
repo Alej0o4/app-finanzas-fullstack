@@ -39,14 +39,14 @@ export default function AccountsPage() {
   const { data: accounts, isLoading } = useQuery<Account[]>({
     queryKey: queryKeys.accounts.all(),
     queryFn: async () => {
-      const response = await api.get('/api/accounts/');
+      const response = await api.get('accounts/');
       return response.data;
     },
   });
 
   const createAccountMutation = useMutation({
     mutationFn: async (newAccount: CreateAccountPayload) => {
-      const response = await api.post('/api/accounts/', newAccount);
+      const response = await api.post('accounts/', newAccount);
       return response.data;
     },
     onSuccess: () => {
@@ -66,7 +66,7 @@ export default function AccountsPage() {
 
   const updateAccountMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: { name: string; type: string } }) => {
-      const response = await api.put(`/api/accounts/${id}`, data);
+      const response = await api.put(`accounts/${id}`, data);
       return response.data;
     },
     onSuccess: () => {
@@ -81,7 +81,7 @@ export default function AccountsPage() {
 
   const deleteAccountMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await api.delete(`/api/accounts/${id}`);
+      const response = await api.delete(`accounts/${id}`);
       return response.data;
     },
     onSuccess: () => {
@@ -96,7 +96,7 @@ export default function AccountsPage() {
 
   const toggleHighlightMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await api.patch(`/api/accounts/${id}/highlighted`);
+      const response = await api.patch(`accounts/${id}/highlighted`);
       return response.data;
     },
     onSuccess: () => {

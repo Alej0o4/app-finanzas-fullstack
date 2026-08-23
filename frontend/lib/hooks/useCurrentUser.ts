@@ -6,7 +6,7 @@ export function useCurrentUser() {
   return useQuery({
     queryKey: queryKeys.currentUser(),
     queryFn: async () => {
-      const response = await api.get('/api/users/me');
+      const response = await api.get('users/me');
       return response.data as {
         id: number;
         email: string;

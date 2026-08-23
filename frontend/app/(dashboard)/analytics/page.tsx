@@ -94,7 +94,7 @@ export default function AnalyticsPage() {
       barDateRange.period
     ),
     queryFn: async () => {
-      const res = await api.get('/api/dashboard/cashflow-series', {
+      const res = await api.get('dashboard/cashflow-series', {
         params: {
           start_date: barDateRange.start_date,
           end_date: barDateRange.end_date,
@@ -118,7 +118,7 @@ export default function AnalyticsPage() {
       netMode
     ),
     queryFn: async () => {
-      const res = await api.get('/api/dashboard/category-distribution', {
+      const res = await api.get('dashboard/category-distribution', {
         params: {
           start_date: donutDateRange.start_date,
           end_date: donutDateRange.end_date,

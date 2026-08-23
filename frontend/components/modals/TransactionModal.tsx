@@ -41,13 +41,13 @@ export default function TransactionModal({
 
   const { data: accounts } = useQuery<Account[]>({
     queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('/api/accounts/')).data,
+    queryFn: async () => (await api.get('accounts/')).data,
     enabled: isOpen,
   });
 
   const { data: categories } = useQuery<Category[]>({
     queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('/api/categories/')).data,
+    queryFn: async () => (await api.get('categories/')).data,
     enabled: isOpen,
   });
 
@@ -58,7 +58,7 @@ export default function TransactionModal({
 
   const createMutation = useMutation({
     mutationFn: async (newTx: CreateTransactionPayload) => {
-      const response = await api.post('/api/transactions/', newTx);
+      const response = await api.post('transactions/', newTx);
       return response.data;
     },
     onSuccess: async () => {

@@ -149,14 +149,14 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # 3. Conexión de Enrutadores
-app.include_router(auth.router, prefix="/api/auth", tags=["Autenticación"])
-app.include_router(transactions.router, prefix="/api/transactions", tags=["Transacciones"])
-app.include_router(users.router, prefix="/api/users", tags=["Usuarios"])
-app.include_router(accounts.router, prefix="/api/accounts", tags=["Cuentas"])
-app.include_router(categories.router, prefix="/api/categories", tags=["Categorías"])
-app.include_router(budgets.router, prefix="/api/budgets", tags=["Presupuestos"])
-app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
-app.include_router(preferences.router, prefix="/api/users", tags=["Preferencias"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Autenticación"])
+app.include_router(transactions.router, prefix="/api/v1/transactions", tags=["Transacciones"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["Usuarios"])
+app.include_router(accounts.router, prefix="/api/v1/accounts", tags=["Cuentas"])
+app.include_router(categories.router, prefix="/api/v1/categories", tags=["Categorías"])
+app.include_router(budgets.router, prefix="/api/v1/budgets", tags=["Presupuestos"])
+app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard"])
+app.include_router(preferences.router, prefix="/api/v1/users", tags=["Preferencias"])
 
 
 @app.on_event("startup")

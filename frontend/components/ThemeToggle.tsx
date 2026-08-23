@@ -42,7 +42,7 @@ export default function ThemeToggle() {
 
   const patchTheme = useMutation({
     mutationFn: async (body: PreferencesUpdatePayload) => {
-      await api.patch('/api/users/me/preferences', body);
+      await api.patch('users/me/preferences', body);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.userPreferences() });

@@ -2,16 +2,16 @@
 
 ## Convenciones generales
 
-- Base path: `/api`
+- Base path: `/api/v1`
 - Autenticación: `Authorization: Bearer <token>` en rutas protegidas.
 - Content type esperado: `application/json`, excepto login, que usa formulario OAuth2.
-- Rate limiting: solo en `/api/auth/login` (5 req/min por IP via `slowapi`).
+- Rate limiting: solo en `/api/v1/auth/login` (5 req/min por IP via `slowapi`).
 - CORS: orígenes permitidos vía `ALLOWED_ORIGINS` (env) + regex para IPs de Tailscale (100.x.x.x).
 - Uvicorn escucha en `0.0.0.0` para soportar acceso remoto via Tailscale.
 
 ## Autenticación
 
-### `POST /api/auth/login`
+### `POST /api/v1/auth/login`
 
 Inicia sesión y devuelve un JWT + refresh token.
 
@@ -31,7 +31,7 @@ Errores esperados:
 - `403` si las credenciales son inválidas.
 - `429` si se exceden 5 intentos por minuto (rate limiting).
 
-### `POST /api/auth/refresh`
+### `POST /api/v1/auth/refresh`
 
 Rota el refresh token y devuelve un nuevo JWT.
 
@@ -48,7 +48,7 @@ Errores esperados:
 
 - `401` si el refresh token es inválido o expiró.
 
-### `POST /api/auth/logout`
+### `POST /api/v1/auth/logout`
 
 Revoca el refresh token, cerrando la sesión.
 
@@ -62,7 +62,7 @@ Salida:
 
 ## Usuarios
 
-### `POST /api/users/`
+### `POST /api/v1/users/`
 
 Crea un usuario nuevo.
 
@@ -85,7 +85,7 @@ Errores esperados:
 
 - `400` si el correo ya existe.
 
-### `GET /api/users/me`
+### `GET /api/v1/users/me`
 
 Devuelve el usuario autenticado actual.
 
@@ -98,7 +98,7 @@ Salida:
 - `preferred_locale`
 - `preferred_theme`
 
-### `GET /api/users/me/preferences`
+### `GET /api/v1/users/me/preferences`
 
 Devuelve las preferencias del usuario autenticado.
 
@@ -108,7 +108,7 @@ Salida:
 - `preferred_locale`: string (default `"es-CO"`)
 - `preferred_theme`: string (default `"dark"`)
 
-### `PATCH /api/users/me/preferences`
+### `PATCH /api/v1/users/me/preferences`
 
 Actualiza preferencias del usuario autenticado.
 
@@ -120,7 +120,7 @@ Entrada (campos opcionales):
 
 ## Cuentas
 
-### `POST /api/accounts/`
+### `POST /api/v1/accounts/`
 
 Crea una cuenta para el usuario autenticado.
 
@@ -142,25 +142,25 @@ Salida:
 - `highlighted`
 - `user_id`
 
-### `GET /api/accounts/{account_id}`
+### `GET /api/v1/accounts/{account_id}`
 
 Devuelve una cuenta del usuario autenticado.
 
-### `GET /api/accounts/`
+### `GET /api/v1/accounts/`
 
 Lista las cuentas del usuario autenticado.
 
-### `PUT /api/accounts/{account_id}`
+### `PUT /api/v1/accounts/{account_id}`
 
 Actualiza nombre, tipo y destacada de la cuenta.
 
-### `PATCH /api/accounts/{account_id}/highlighted`
+### `PATCH /api/v1/accounts/{account_id}/highlighted`
 
 Alterna el estado `highlighted` de una cuenta (toggle).
 
 Salida: `AccountResponse` actualizada.
 
-### `DELETE /api/accounts/{account_id}`
+### `DELETE /api/v1/accounts/{account_id}`
 
 Elimina la cuenta si no tiene transacciones asociadas.
 
@@ -170,7 +170,7 @@ Errores esperados:
 
 ## Categorías
 
-### `POST /api/categories/`
+### `POST /api/v1/categories/`
 
 Crea una categoría personalizada.
 
@@ -179,21 +179,21 @@ Entrada:
 - `name`
 - `type`: `income | expense`
 
-### `GET /api/categories/`
+### `GET /api/v1/categories/`
 
 Lista categorías base del sistema y categorías propias del usuario.
 
-### `PUT /api/categories/{category_id}`
+### `PUT /api/v1/categories/{category_id}`
 
 Actualiza una categoría personalizada.
 
-### `DELETE /api/categories/{category_id}`
+### `DELETE /api/v1/categories/{category_id}`
 
 Elimina una categoría personalizada solo si no tiene transacciones ni presupuestos asociados.
 
 ## Transacciones
 
-### `POST /api/transactions/`
+### `POST /api/v1/transactions/`
 
 Registra un ingreso o gasto y actualiza el saldo de la cuenta asociada.
 
@@ -208,7 +208,7 @@ Entrada:
 
 Nota: `currency` se hereda automáticamente de la cuenta asociada.
 
-### `GET /api/transactions/`
+### `GET /api/v1/transactions/`
 
 Lista transacciones del usuario autenticado con paginación.
 
@@ -228,17 +228,17 @@ Salida paginada:
 - `page`: `int` — página actual (calculada como `skip/limit + 1`)
 - `page_size`: `int` — número de items por página (`limit`)
 
-### `PUT /api/transactions/{transaction_id}`
+### `PUT /api/v1/transactions/{transaction_id}`
 
 Actualiza una transacción y recalcula saldos de forma inversa y luego aplicada.
 
-### `DELETE /api/transactions/{transaction_id}`
+### `DELETE /api/v1/transactions/{transaction_id}`
 
 Elimina una transacción y revierte el impacto sobre el saldo de la cuenta.
 
 ## Presupuestos
 
-### `POST /api/budgets/`
+### `POST /api/v1/budgets/`
 
 Crea un presupuesto por categoría, mes y año.
 
@@ -254,7 +254,7 @@ Errores esperados:
 
 - `400` si ya existe un presupuesto para la misma categoría, mes y año.
 
-### `GET /api/budgets/`
+### `GET /api/v1/budgets/`
 
 Lista presupuestos del usuario autenticado, con filtros opcionales por mes y año.
 
@@ -263,17 +263,17 @@ Filtros opcionales:
 - `month`
 - `year`
 
-### `PUT /api/budgets/{budget_id}`
+### `PUT /api/v1/budgets/{budget_id}`
 
 Actualiza un presupuesto existente.
 
-### `DELETE /api/budgets/{budget_id}`
+### `DELETE /api/v1/budgets/{budget_id}`
 
 Elimina un presupuesto del usuario autenticado.
 
 ## Dashboard
 
-### `GET /api/dashboard/summary`
+### `GET /api/v1/dashboard/summary`
 
 Devuelve resumen financiero del mes actual. Solo incluye cuentas marcadas como destacadas (`highlighted=true`); si no hay destacadas, incluye todas. Las monedas se ordenan por la moneda preferida del usuario primero.
 
@@ -283,7 +283,7 @@ Devuelve:
 - `monthly_income_by_currency`: array de `{currency, total}` — ingresos del mes por moneda.
 - `monthly_expense_by_currency`: array de `{currency, total}` — gastos del mes por moneda.
 
-### `GET /api/dashboard/budgets-progress`
+### `GET /api/v1/dashboard/budgets-progress`
 
 Devuelve progreso de presupuestos del mes actual con:
 
@@ -293,7 +293,7 @@ Devuelve progreso de presupuestos del mes actual con:
 - `spent`
 - `percentage`
 
-### `GET /api/dashboard/cashflow-series`
+### `GET /api/v1/dashboard/cashflow-series`
 
 Devuelve una serie temporal de flujo de caja agrupada por día o por mes.
 
@@ -309,7 +309,7 @@ Salida:
 - `income`
 - `expense`
 
-### `GET /api/dashboard/category-distribution`
+### `GET /api/v1/dashboard/category-distribution`
 
 Devuelve la distribución por categoría en un rango de fechas.
 

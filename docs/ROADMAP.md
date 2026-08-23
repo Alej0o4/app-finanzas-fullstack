@@ -110,7 +110,7 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 ### Versionado y pruebas
 
-- [ ] **Versionar la API bajo `/api/v1/`** — 2h
+- [x] **Versionar la API bajo `/api/v1/`** — 2h *(2026-08-22)*
   - Barato ahora, carísimo después. Todas las fases siguientes construyen sobre las rutas versionadas.
 
 - [ ] **Tests del módulo contable y de autenticación** (pytest + httpx) — 2d

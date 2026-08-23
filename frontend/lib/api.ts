@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+  baseURL: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1`,
 });
 
 let isRefreshing = false;
@@ -55,7 +55,7 @@ api.interceptors.response.use(
       }
 
       try {
-        const response = await axios.post(`${api.defaults.baseURL}/api/auth/refresh`, {
+        const response = await axios.post(`${api.defaults.baseURL}/auth/refresh`, {
           refresh_token: refreshToken,
         });
 

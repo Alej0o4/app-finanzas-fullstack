@@ -120,17 +120,17 @@ export default function TransactionsPage() {
 
   const { data, isFetching } = useQuery<PaginatedResponse<Transaction>>({
     queryKey: queryKeys.transactions.filtered(params),
-    queryFn: async () => (await api.get('/api/transactions/', { params })).data,
+    queryFn: async () => (await api.get('transactions/', { params })).data,
   });
 
   const { data: accounts } = useQuery<Account[]>({
     queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('/api/accounts/')).data,
+    queryFn: async () => (await api.get('accounts/')).data,
   });
 
   const { data: categories } = useQuery<Category[]>({
     queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('/api/categories/')).data,
+    queryFn: async () => (await api.get('categories/')).data,
   });
 
   // Acumula páginas conforme llegan — sincroniza React Query con estado local
@@ -166,7 +166,7 @@ export default function TransactionsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      await api.delete(`/api/transactions/${id}`);
+      await api.delete(`transactions/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() });
@@ -184,7 +184,7 @@ export default function TransactionsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (payload: UpdateTransactionPayload) => {
-      const response = await api.put(`/api/transactions/${payload.id}`, payload);
+      const response = await api.put(`transactions/${payload.id}`, payload);
       return response.data;
     },
     onSuccess: () => {

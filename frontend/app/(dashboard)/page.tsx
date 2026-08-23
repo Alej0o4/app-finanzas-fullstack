@@ -24,19 +24,19 @@ export default function DashboardPage() {
 
   const { data: summary, isLoading: loadingSummary } = useQuery<DashboardSummary>({
     queryKey: queryKeys.dashboard.summary(),
-    queryFn: async () => (await api.get('/api/dashboard/summary')).data,
+    queryFn: async () => (await api.get('dashboard/summary')).data,
   });
 
   const { data: budgetsProgress, isLoading: loadingBudgets } = useQuery<BudgetProgress[]>({
     queryKey: queryKeys.budgets.progress(),
-    queryFn: async () => (await api.get('/api/dashboard/budgets-progress')).data,
+    queryFn: async () => (await api.get('dashboard/budgets-progress')).data,
   });
 
   const { data: recentTransactionsData, isLoading: loadingRecentTransactions } = useQuery<
     PaginatedResponse<Transaction>
   >({
     queryKey: queryKeys.dashboard.recentTransactions(),
-    queryFn: async () => (await api.get('/api/transactions/', { params: { limit: 5 } })).data,
+    queryFn: async () => (await api.get('transactions/', { params: { limit: 5 } })).data,
   });
 
   const recentTransactions = recentTransactionsData?.items;

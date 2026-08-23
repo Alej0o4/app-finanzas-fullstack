@@ -48,14 +48,14 @@ export default function CategoryDetailPage() {
 
   const { data: category, isLoading: loadingCategory } = useQuery<Category>({
     queryKey: queryKeys.categories.byId(id as string),
-    queryFn: async () => (await api.get(`/api/categories/${id}`)).data,
+    queryFn: async () => (await api.get(`categories/${id}`)).data,
   });
 
   const { data: transactionsData, isLoading: loadingTx } = useQuery<PaginatedResponse<Transaction>>(
     {
       queryKey: queryKeys.transactions.byCategory(id as string),
       queryFn: async () =>
-        (await api.get(`/api/transactions/`, { params: { category_id: Number(id) } })).data,
+        (await api.get(`transactions/`, { params: { category_id: Number(id) } })).data,
     }
   );
 
@@ -63,19 +63,19 @@ export default function CategoryDetailPage() {
 
   const { data: accounts } = useQuery<Account[]>({
     queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('/api/accounts/')).data,
+    queryFn: async () => (await api.get('accounts/')).data,
   });
 
   const { data: categories } = useQuery<Category[]>({
     queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('/api/categories/')).data,
+    queryFn: async () => (await api.get('categories/')).data,
   });
 
   const filteredCategories = categories?.filter((c) => c.type === type) || [];
 
   const updateMutation = useMutation({
     mutationFn: async (payload: UpdateTransactionPayload) => {
-      const response = await api.put(`/api/transactions/${payload.id}`, payload);
+      const response = await api.put(`transactions/${payload.id}`, payload);
       return response.data;
     },
     onSuccess: () => {
@@ -98,7 +98,7 @@ export default function CategoryDetailPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (txId: number) => {
-      await api.delete(`/api/transactions/${txId}`);
+      await api.delete(`transactions/${txId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() });

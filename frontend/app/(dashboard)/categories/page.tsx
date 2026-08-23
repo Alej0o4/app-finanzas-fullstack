@@ -35,14 +35,14 @@ export default function CategoriesPage() {
   const { data: categories, isLoading } = useQuery<Category[]>({
     queryKey: queryKeys.categories.all(),
     queryFn: async () => {
-      const response = await api.get('/api/categories/');
+      const response = await api.get('categories/');
       return response.data;
     },
   });
 
   const createCategoryMutation = useMutation({
     mutationFn: async (newCategory: { name: string; type: string }) => {
-      const response = await api.post('/api/categories/', newCategory);
+      const response = await api.post('categories/', newCategory);
       return response.data;
     },
     onSuccess: () => {
@@ -59,7 +59,7 @@ export default function CategoriesPage() {
 
   const updateCategoryMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: { name: string; type: string } }) => {
-      const response = await api.put(`/api/categories/${id}`, data);
+      const response = await api.put(`categories/${id}`, data);
       return response.data;
     },
     onSuccess: () => {
@@ -74,7 +74,7 @@ export default function CategoriesPage() {
 
   const deleteCategoryMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await api.delete(`/api/categories/${id}`);
+      const response = await api.delete(`categories/${id}`);
       return response.data;
     },
     onSuccess: () => {
