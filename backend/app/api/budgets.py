@@ -1,8 +1,11 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import models
@@ -63,6 +66,12 @@ def obtener_presupuestos(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    # Generación perezosa (Fase 8 §3): solo cuando el caller pide un período concreto.
+    # Sin filtros se devuelve el historial completo sin generar nada nuevo — no hay un
+    # período que "asegurar".
+    if month is not None and year is not None:
+        ensure_recurring_budgets_for_period(db, current_user.id, month, year)
+
     query = db.query(models.Budget).filter(models.Budget.user_id == current_user.id)
 
     if month:
@@ -81,7 +90,7 @@ def eliminar_presupuesto(
     if not presupuesto or presupuesto.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="El presupuesto no existe o no tienes permisos.")
 
-    db.delete(presupuesto)
+    presupuesto.deleted_at = datetime.now(UTC)
     db.commit()
     return {"estado": "OK", "mensaje": "Presupuesto eliminado exitosamente."}
 
@@ -117,6 +126,7 @@ def actualizar_presupuesto(
     presupuesto_db.month = presupuesto_actualizado.month
     presupuesto_db.year = presupuesto_actualizado.year
     presupuesto_db.category_id = presupuesto_actualizado.category_id
+    presupuesto_db.is_recurring = presupuesto_actualizado.is_recurring
 
     db.commit()
     db.refresh(presupuesto_db)

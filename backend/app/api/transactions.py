@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import desc, func, or_, update
@@ -56,9 +56,16 @@ def crear_transaccion(
 
     try:
         db.add(nueva_transaccion)
+        # El filtro explícito de borrado lógico complementa al handler select-only de
+        # database.py (Opción A, Decisión 6.1): un update() ORM-enabled NO queda
+        # cubierto por el filtro global — mutar el saldo de una cuenta soft-deleted
+        # sería un bug de integridad.
         db.execute(
             update(models.Account)
-            .where(models.Account.id == transaccion.account_id)
+            .where(
+                models.Account.id == transaccion.account_id,
+                models.Account.deleted_at.is_(None),
+            )
             .values(balance=models.Account.balance + delta)
         )
         db.commit()
@@ -129,16 +136,20 @@ def eliminar_transaccion(
     cuenta = db.query(models.Account).filter(models.Account.id == transaccion.account_id).first()
 
     # 🧮 2. Lógica Contable Inversa: Revertir el impacto de forma atómica
+    # (mismo filtro explícito de borrado lógico que en crear_transaccion)
     if cuenta:
         delta = -transaccion.amount if transaccion.type == "income" else transaccion.amount
         db.execute(
             update(models.Account)
-            .where(models.Account.id == transaccion.account_id)
+            .where(
+                models.Account.id == transaccion.account_id,
+                models.Account.deleted_at.is_(None),
+            )
             .values(balance=models.Account.balance + delta)
         )
 
     try:
-        db.delete(transaccion)
+        transaccion.deleted_at = datetime.now(UTC)  # borrado lógico: el impacto contable ya fue revertido arriba
         db.commit()
         return {"estado": "OK", "mensaje": "Transacción eliminada y saldo de cuenta revertido exitosamente."}
     except Exception:
@@ -199,18 +210,27 @@ def actualizar_transaccion(
             net_delta = new_delta - old_delta
             db.execute(
                 update(models.Account)
-                .where(models.Account.id == cuenta_vieja.id)
+                .where(
+                    models.Account.id == cuenta_vieja.id,
+                    models.Account.deleted_at.is_(None),
+                )
                 .values(balance=models.Account.balance + net_delta)
             )
         else:
             db.execute(
                 update(models.Account)
-                .where(models.Account.id == cuenta_vieja.id)
+                .where(
+                    models.Account.id == cuenta_vieja.id,
+                    models.Account.deleted_at.is_(None),
+                )
                 .values(balance=models.Account.balance - old_delta)
             )
             db.execute(
                 update(models.Account)
-                .where(models.Account.id == cuenta_nueva.id)
+                .where(
+                    models.Account.id == cuenta_nueva.id,
+                    models.Account.deleted_at.is_(None),
+                )
                 .values(balance=models.Account.balance + new_delta)
             )
 
@@ -219,6 +239,9 @@ def actualizar_transaccion(
         transaccion_db.description = transaccion_actualizada.description
         transaccion_db.account_id = transaccion_actualizada.account_id
         transaccion_db.category_id = transaccion_actualizada.category_id
+        # Opcional: si el cliente no reenvía payment_method conservamos el valor actual
+        if transaccion_actualizada.payment_method is not None:
+            transaccion_db.payment_method = transaccion_actualizada.payment_method
         if transaccion_actualizada.date is not None:
             transaccion_db.date = transaccion_actualizada.date
 

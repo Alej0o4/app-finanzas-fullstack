@@ -27,16 +27,21 @@ app = FastAPI(
 DEFAULT_CATEGORIES = [
     {"name": "Alimentación", "type": "expense", "icon": "UtensilsCrossed"},
     {"name": "Transporte", "type": "expense", "icon": "Car"},
-    {"name": "Ocio", "type": "expense", "icon": "Gamepad2"},
+    {"name": "Vivienda", "type": "expense", "icon": "House"},
+    {"name": "Salud", "type": "expense", "icon": "HeartPulse"},
+    {"name": "Educación", "type": "expense", "icon": "GraduationCap"},
+    {"name": "Entretenimiento", "type": "expense", "icon": "Gamepad2"},
     {"name": "Cuidado personal", "type": "expense", "icon": "Heart"},
     {"name": "Suscripción", "type": "expense", "icon": "Radio"},
     {"name": "Otro", "type": "expense", "icon": "CircleEllipsis"},
     {"name": "Salario", "type": "income", "icon": "Wallet"},
+    {"name": "Otros ingresos", "type": "income", "icon": "TrendingUp"},
 ]
 
 LEGACY_DEFAULT_CATEGORY_NAMES = {
     ("expense", "Otro"): "Otro (Gasto)",
     ("income", "Otro"): "Otro (Ingreso)",
+    ("expense", "Entretenimiento"): "Ocio",
 }
 
 

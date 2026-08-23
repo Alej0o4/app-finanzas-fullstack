@@ -88,6 +88,7 @@ class UserResponse(UserBase):
     preferred_currency: str = "COP"
     preferred_locale: str = "es-CO"
     preferred_theme: str = "dark"
+    monthly_income: Decimal | None = None
 
     class Config:
         from_attributes = True
@@ -99,10 +100,26 @@ class PreferencesUpdate(BaseModel):
     preferred_theme: str | None = None
 
 
+class UserProfileUpdate(BaseModel):
+    """Dato financiero de dominio, separado de PreferencesUpdate (Decisión 1.1 del spec).
+
+    Limitación conocida (igual que PreferencesUpdate): el handler usa exclude_none,
+    así que un valor ya seteado no se puede volver a None desde la API.
+    """
+
+    monthly_income: Decimal | None = Field(None, ge=0, decimal_places=2)
+
+
 # --- TRANSACCIONES ---
 class TransactionType(str, Enum):
     income = "income"
     expense = "expense"
+
+
+class PaymentMethod(str, Enum):
+    cash = "cash"
+    card = "card"
+    transfer = "transfer"
 
 
 class TransactionBase(BaseModel):
@@ -113,6 +130,7 @@ class TransactionBase(BaseModel):
     account_id: int
     category_id: int
     date: datetime | None = None
+    payment_method: PaymentMethod | None = None
 
 
 class TransactionCreate(TransactionBase):
@@ -190,6 +208,7 @@ class BudgetBase(BaseModel):
     month: int = Field(..., ge=1, le=12, description="Mes válido entre 1 y 12")
     year: int = Field(..., ge=2020, le=2100)
     category_id: int
+    is_recurring: bool = False
 
 
 class BudgetCreate(BudgetBase):

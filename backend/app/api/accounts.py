@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -94,6 +96,6 @@ def eliminar_cuenta(
             status_code=400, detail="No se puede eliminar la cuenta porque tiene transacciones asociadas."
         )
 
-    db.delete(cuenta)
+    cuenta.deleted_at = datetime.now(UTC)
     db.commit()
     return {"estado": "OK", "mensaje": "Cuenta eliminada exitosamente."}

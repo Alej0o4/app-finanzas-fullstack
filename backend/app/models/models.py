@@ -7,15 +7,15 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
-    UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import relationship
 
-from app.core.database import Base
+from app.core.database import Base, SoftDeleteMixin
 
 
-class User(Base):
+class User(Base, SoftDeleteMixin):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String, nullable=False)  # 🆕 nuevo campo
@@ -25,7 +25,12 @@ class User(Base):
     preferred_locale = Column(String(10), default="es-CO")
     preferred_theme = Column(String(10), default="dark")
     email_verified = Column(Boolean, nullable=False, default=False)
+    monthly_income = Column(Numeric(14, 2), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # default=func.now(): el INSERT del ORM puebla updated_at también en bases
+    # migradas, donde la migración no pudo dejar DEFAULT en DB (SQLite no permite
+    # ADD COLUMN con default no constante); server_default cubre create_all/tests.
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now())
 
     accounts = relationship("Account", back_populates="owner")
     categories = relationship("Category", back_populates="owner")
@@ -33,7 +38,7 @@ class User(Base):
     budgets = relationship("Budget", back_populates="owner")
 
 
-class Account(Base):
+class Account(Base, SoftDeleteMixin):
     __tablename__ = "accounts"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
@@ -41,18 +46,20 @@ class Account(Base):
     balance = Column(Numeric(14, 2), default=0)  # 🔁 antes: Float
     currency = Column(String(3), default="COP", nullable=False)
     highlighted = Column(Boolean, default=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now())
 
     user_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="accounts")
     transactions = relationship("Transaction", back_populates="account")
 
 
-class Category(Base):
+class Category(Base, SoftDeleteMixin):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     type = Column(String)
     icon = Column(String, nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now())
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     owner = relationship("User", back_populates="categories")
@@ -60,7 +67,7 @@ class Category(Base):
     budgets = relationship("Budget", back_populates="category")
 
 
-class Transaction(Base):
+class Transaction(Base, SoftDeleteMixin):
     __tablename__ = "transactions"
     id = Column(Integer, primary_key=True, index=True)
     amount = Column(Numeric(14, 2), nullable=False)  # 🔁 antes: Float
@@ -68,6 +75,8 @@ class Transaction(Base):
     type = Column(String)
     date = Column(DateTime(timezone=True), server_default=func.now())
     description = Column(String, nullable=True)
+    payment_method = Column(String(20), nullable=True)  # cash/card/transfer; valida el enum en schemas
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now())
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
@@ -80,13 +89,15 @@ class Transaction(Base):
     __table_args__ = (Index("ix_transactions_user_id_date", "user_id", "date"),)
 
 
-class Budget(Base):
+class Budget(Base, SoftDeleteMixin):
     __tablename__ = "budgets"
     id = Column(Integer, primary_key=True, index=True)
     amount_limit = Column(Numeric(14, 2), nullable=False)  # 🔁 antes: Float
     currency = Column(String(3), default="COP", nullable=False)
     month = Column(Integer, nullable=False)
     year = Column(Integer, nullable=False)
+    is_recurring = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now())
 
     user_id = Column(Integer, ForeignKey("users.id"))
     category_id = Column(Integer, ForeignKey("categories.id"))
@@ -94,8 +105,20 @@ class Budget(Base):
     owner = relationship("User", back_populates="budgets")
     category = relationship("Category", back_populates="budgets")
 
+    # Índice único PARCIAL (Decisión 6.2): las filas soft-deleted no ocupan slot de
+    # unicidad — borrar un presupuesto y crear otro para la misma categoría/período
+    # debe funcionar. Sustituye al UniqueConstraint de Fase 7.
     __table_args__ = (
-        UniqueConstraint("user_id", "category_id", "month", "year", name="uq_budgets_user_category_period"),
+        Index(
+            "uq_budgets_user_category_period_active",
+            "user_id",
+            "category_id",
+            "month",
+            "year",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
+        ),
     )
 
 

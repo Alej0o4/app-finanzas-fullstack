@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -94,6 +96,6 @@ def eliminar_categoria(
             detail="No se puede eliminar la categoría porque tiene presupuestos activos. Elimínalos primero.",
         )
 
-    db.delete(categoria)
+    categoria.deleted_at = datetime.now(UTC)
     db.commit()
     return {"estado": "OK", "mensaje": "Categoría eliminada exitosamente."}

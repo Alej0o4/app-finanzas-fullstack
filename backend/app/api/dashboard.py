@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import models
@@ -114,6 +115,10 @@ def obtener_progreso_presupuestos(db: Session = Depends(get_db), current_user: m
     hoy = datetime.now(UTC)
     primer_dia = datetime(hoy.year, hoy.month, 1)
     ultimo_dia = datetime(hoy.year, hoy.month, calendar.monthrange(hoy.year, hoy.month)[1], 23, 59, 59)
+
+    # El dashboard es la página de aterrizaje: genera aquí los presupuestos recurrentes
+    # del mes en curso antes de consultarlos (Fase 8 §3, Decisión 3.1).
+    ensure_recurring_budgets_for_period(db, current_user.id, hoy.month, hoy.year)
 
     presupuestos = (
         db.query(models.Budget)
