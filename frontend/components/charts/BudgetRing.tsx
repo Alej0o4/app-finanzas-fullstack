@@ -55,7 +55,9 @@ export default function BudgetRing({
           <span className={`font-sans text-lg font-bold sm:text-xl ${ringColorClass}`}>
             {percentage.toFixed(0)}%
           </span>
-          <span className="text-text-muted text-[9px] tracking-wider uppercase sm:text-[10px]">Gastado</span>
+          <span className="text-text-muted text-[9px] tracking-wider uppercase sm:text-[10px]">
+            Gastado
+          </span>
         </div>
 
         <svg className="h-full w-full -rotate-90 transform" viewBox="0 0 100 100">

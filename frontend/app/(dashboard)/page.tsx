@@ -58,10 +58,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button
-            variant="primary"
-            onClick={() => setIsTransactionModalOpen(true)}
-          >
+          <Button variant="primary" onClick={() => setIsTransactionModalOpen(true)}>
             Nuevo movimiento
           </Button>
         </div>

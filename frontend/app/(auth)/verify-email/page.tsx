@@ -79,9 +79,7 @@ function VerifyEmailContent() {
       <div className="bg-success/10 text-success mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <CheckCircle2 size={24} />
       </div>
-      <h1 className="text-text font-sans text-2xl font-bold tracking-tight">
-        Correo verificado
-      </h1>
+      <h1 className="text-text font-sans text-2xl font-bold tracking-tight">Correo verificado</h1>
       <p className="text-text-muted mt-2 text-center text-sm">
         Tu correo fue verificado exitosamente.
       </p>

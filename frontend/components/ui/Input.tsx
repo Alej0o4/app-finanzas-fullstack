@@ -12,7 +12,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     const generatedId = useId();
     const inputId = id ?? generatedId;
     return (
-      <div className="min-w-0 flex flex-col gap-1.5">
+      <div className="flex min-w-0 flex-col gap-1.5">
         {label && (
           <label htmlFor={inputId} className="text-text-soft text-sm font-medium">
             {label}
@@ -21,7 +21,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         <input
           ref={ref}
           id={inputId}
-          className={`bg-surface text-text placeholder-text-muted/60 focus-visible:ring-primary/50 min-w-0 w-full rounded-xl border px-4 py-2.5 text-sm transition-colors duration-200 focus-visible:ring-2 focus-visible:outline-none ${
+          className={`bg-surface text-text placeholder-text-muted/60 focus-visible:ring-primary/50 w-full min-w-0 rounded-xl border px-4 py-2.5 text-sm transition-colors duration-200 focus-visible:ring-2 focus-visible:outline-none ${
             error
               ? 'border-danger/50 focus-visible:ring-danger/50'
               : 'border-border focus:border-primary/50'

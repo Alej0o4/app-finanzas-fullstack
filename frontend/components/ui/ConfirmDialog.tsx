@@ -13,7 +13,7 @@ export default function ConfirmDialog() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-surface border-border/70 mx-4 w-full max-w-sm rounded-2xl border p-6 shadow-2xl overscroll-contain">
+      <div className="bg-surface border-border/70 mx-4 w-full max-w-sm overscroll-contain rounded-2xl border p-6 shadow-2xl">
         <p className="text-text text-sm font-medium">{message}</p>
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <Button variant="ghost" onClick={cancel}>
