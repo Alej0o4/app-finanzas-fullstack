@@ -98,6 +98,7 @@ El endpoint devuelve una respuesta paginada:
 - `preferred_currency` (default `"COP"`)
 - `preferred_locale` (default `"es-CO"`)
 - `preferred_theme` (default `"dark"`)
+- `monthly_income` (`number | null`) — dato financiero del perfil, editable vía `PATCH /api/v1/users/me`. Sin UI que lo consuma todavía (onboarding de Fase 13).
 
 ### Preferencias de usuario
 
@@ -153,10 +154,12 @@ El frontend asume:
 - `date`
 - `account_id`
 - `category_id`
+- `payment_method` (opcional: `"cash" | "card" | "transfer" | null`)
 
 Reglas:
 
 - `currency` se hereda de la cuenta al crear; no se envía en el payload.
+- En edición, si no se reenvía `payment_method`, el backend conserva el valor actual.
 - El feed principal debe ordenarse por fecha descendente desde el backend.
 - Los detalles por cuenta y categoría reutilizan el mismo contrato.
 - Al crear, editar o borrar una transacción, se deben invalidar las queries relacionadas.
@@ -173,6 +176,12 @@ El frontend asume:
 - `currency`
 - `month`
 - `year`
+- `is_recurring`
+
+Reglas:
+
+- Con `is_recurring: true`, el backend genera automáticamente la fila del siguiente período la primera vez que ese período se consulta (`GET /api/v1/dashboard/budgets-progress` o `GET /api/v1/budgets/?month=&year=`); la llamada sin filtros devuelve el historial completo sin generar nada.
+- Editar el monto de una fila recurrente lo convierte en la plantilla de los meses futuros.
 
 En el dashboard, el progreso de presupuesto llega ya calculado desde el backend.
 

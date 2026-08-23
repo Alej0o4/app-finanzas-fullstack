@@ -8,6 +8,9 @@
 - Rate limiting: `/api/v1/auth/login`, `POST /api/v1/users/` y `/api/v1/auth/password-reset/request` (5 req/min por IP via `slowapi`).
 - CORS: orígenes permitidos vía `ALLOWED_ORIGINS` (env) + regex para IPs de Tailscale (100.x.x.x).
 - Uvicorn escucha en `0.0.0.0` para soportar acceso remoto via Tailscale.
+- Borrado lógico (Fase 8): los endpoints `DELETE` de cuentas/categorías/transacciones/presupuestos marcan
+  `deleted_at` en lugar de borrar la fila. Los recursos "eliminados" dejan de aparecer en cualquier `GET`
+  y no pueden verse ni editarse — el mecanismo es invisible para el cliente.
 
 ## Autenticación
 
@@ -117,7 +120,8 @@ Errores esperados:
 
 ### `POST /api/v1/users/`
 
-Crea un usuario nuevo. Tras crearlo, envía un email de verificación (ver
+Crea un usuario nuevo y su cuenta por defecto "Efectivo" (tipo `cash`, saldo 0, destacada,
+en la moneda preferida — Fase 8 §5). Tras crearlo, envía un email de verificación (ver
 `GET /api/v1/auth/verify-email` arriba) — no bloquea la respuesta del registro si falla el
 envío. Rate limited (5 req/min por IP).
 
@@ -137,6 +141,7 @@ Salida:
 - `preferred_currency` (default: `"COP"`)
 - `preferred_locale` (default: `"es-CO"`)
 - `preferred_theme` (default: `"dark"`)
+- `monthly_income` (`null` hasta que se defina vía `PATCH /api/v1/users/me`)
 
 Errores esperados:
 
@@ -156,6 +161,22 @@ Salida:
 - `preferred_currency`
 - `preferred_locale`
 - `preferred_theme`
+- `monthly_income`
+
+### `PATCH /api/v1/users/me`
+
+Actualiza el perfil financiero del usuario autenticado. Separado de
+`PATCH /me/preferences` a propósito: `monthly_income` es un dato financiero de dominio,
+no una preferencia cosmética (Fase 8 §1, Decisión 1.1).
+
+Entrada (campos opcionales):
+
+- `monthly_income`: número ≥ 0 con hasta 2 decimales.
+
+Limitación conocida: el endpoint ignora campos `null` (`exclude_none`), así que un
+`monthly_income` ya definido no se puede volver `null` desde la API.
+
+Salida: `UserResponse` actualizada (mismo shape que `GET /me`).
 
 ### `GET /api/v1/users/me/preferences`
 
@@ -264,6 +285,8 @@ Entrada:
 - `date`: fecha de la transación (formato ISO, default: ahora).
 - `account_id`
 - `category_id`
+- `payment_method` (opcional): tag de método de pago — `cash | card | transfer`. Es un dato
+  de la transacción, independiente del `type` de la cuenta asociada (Fase 8 §2).
 
 Nota: `currency` se hereda automáticamente de la cuenta asociada.
 
@@ -289,11 +312,12 @@ Salida paginada:
 
 ### `PUT /api/v1/transactions/{transaction_id}`
 
-Actualiza una transacción y recalcula saldos de forma inversa y luego aplicada.
+Actualiza una transacción y recalcula saldos de forma inversa y luego aplicada. Si
+`payment_method` no se reenvía, conserva su valor actual.
 
 ### `DELETE /api/v1/transactions/{transaction_id}`
 
-Elimina una transacción y revierte el impacto sobre el saldo de la cuenta.
+Elimina (lógicamente) una transacción y revierte el impacto sobre el saldo de la cuenta.
 
 ## Presupuestos
 
@@ -308,10 +332,16 @@ Entrada:
 - `month`: entre 1 y 12.
 - `year`
 - `category_id`
+- `is_recurring` (opcional, default `false`): si es `true`, la fila actúa como plantilla —
+  el presupuesto se genera automáticamente para los períodos futuros que se consulten
+  (Fase 8 §3). Editar el monto del presupuesto de un mes también actualiza el monto de los
+  meses futuros, porque la plantilla siempre es la fila recurrente más reciente. Para
+  "apagar" la recurrencia se edita con `is_recurring: false`; borrar la fila no corta la
+  generación de los meses siguientes.
 
 Errores esperados:
 
-- `400` si ya existe un presupuesto para la misma categoría, mes y año.
+- `400` si ya existe un presupuesto (activo) para la misma categoría, mes y año.
 
 ### `GET /api/v1/budgets/`
 
@@ -322,13 +352,18 @@ Filtros opcionales:
 - `month`
 - `year`
 
+Cuando se pasan `month` y `year`, antes de listar se generan las filas recurrentes
+pendientes de ese período (generación perezosa). Sin filtros devuelve el historial completo
+sin generar nada.
+
 ### `PUT /api/v1/budgets/{budget_id}`
 
-Actualiza un presupuesto existente.
+Actualiza un presupuesto existente (incluido `is_recurring`).
 
 ### `DELETE /api/v1/budgets/{budget_id}`
 
-Elimina un presupuesto del usuario autenticado.
+Elimina (lógicamente) un presupuesto del usuario autenticado. La categoría/período queda
+disponible para crear uno nuevo de inmediato.
 
 ## Dashboard
 
@@ -351,6 +386,9 @@ Devuelve progreso de presupuestos del mes actual con:
 - `amount_limit`
 - `spent`
 - `percentage`
+
+Antes de calcular, genera las filas de presupuestos recurrentes pendientes del mes en
+curso — por eso los presupuestos "reaparecen" solos cada mes al entrar al dashboard.
 
 ### `GET /api/v1/dashboard/cashflow-series`
 

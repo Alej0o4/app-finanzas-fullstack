@@ -39,7 +39,7 @@ cd backend && uvicorn app.main:app --reload --host 0.0.0.0  # http://localhost:8
 cd frontend && pnpm dev                          # http://localhost:3000
 ```
 
-- Backend crea tablas al arrancar (`Base.metadata.create_all()`) — sin Alembic.
+- El esquema se gestiona con Alembic (`alembic upgrade head` desde `backend/`) — ya no se crean tablas con `Base.metadata.create_all()` en el arranque (solo los tests lo usan sobre SQLite en memoria).
 - Columnas de preferencias se agregan en runtime si no existen (`ALTER TABLE` incremental).
 - Categorías base del sistema se siembran en startup (`user_id IS NULL`).
 - Token JWT expira a los 60 min; guardado en `localStorage` como `jwt_token`.
