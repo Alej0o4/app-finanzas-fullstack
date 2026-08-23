@@ -13,45 +13,29 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🔴 Bloqueantes — antes de que exista un usuario que no seas tú
 
-- [ ] **Sin recuperación de contraseña.**
-  - Un usuario que olvida su clave pierde la cuenta de forma permanente.
-  - Ver ROADMAP Fase 7.
+- [ ] **Recuperación de contraseña y verificación de email implementadas, pero sin envío real de correo.**
+  - El código de Fase 7 está completo y probado (`backend/app/api/auth.py`, `docs/specs/fase_07_spec.md`
+    §2.1/§2.2): tokens de un solo uso, expiración, páginas de frontend en `/forgot-password`,
+    `/reset-password`, `/verify-email`. Pero `EMAIL_PROVIDER` sigue en `console` en todos los
+    entornos — el email nunca sale de verdad, solo se loguea (`docker compose logs backend`,
+    buscar `"email_body"`).
+  - **Sigue siendo un bloqueante real para un usuario que no seas vos**: sin `EMAIL_PROVIDER=smtp`
+    + credenciales reales (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`
+    en el `.env` de la raíz), nadie externo puede recibir el link de reset ni el de verificación.
+  - Acción: elegir un proveedor transaccional (Resend, Mailgun, SES, SMTP de un dominio propio),
+    generar credenciales, y setear las variables en el `.env` de despliegue. No requiere cambios
+    de código — `app/core/email.py` ya soporta el modo `smtp`.
 
-- [ ] **Sin verificación de email.**
-  - Registro abierto → cuentas basura, y sin canal validado para la recuperación.
-
-- [ ] **Sin backup automático de PostgreSQL (volumen Docker `pgdata`).**
-  - Riesgo: perder el historial financiero completo si se elimina el volumen.
-  - Con datos de terceros pasa de molesto a inaceptable.
-  - Acción: `scripts/backup.sh` con rotación de 7 días.
-
-- [ ] **Sin migraciones versionadas (Alembic).**
-  - `create_all()` + `ALTER TABLE` ad-hoc en cada arranque.
-  - Con un solo usuario, si algo se rompe se restaura a mano. Con usuarios reales, no.
-  - **Bloquea el resto del roadmap**: todas las fases siguientes agregan columnas.
-
-- [ ] **Sin tests en la lógica que mueve dinero.**
-  - El impacto contable (aplicar/revertir deltas) está duplicado en 3 endpoints
-    con los signos invertidos a mano, y no tiene ninguna prueba.
-  - Es el código de mayor riesgo del proyecto.
-
-- [ ] **Secretos hardcodeados en `docker-compose.yml`.**
-  - `POSTGRES_PASSWORD: oikos_secret` literal.
-  - `SECRET_KEY: ${SECRET_KEY:-changeme_in_production}` — el default silencioso permite
-    arrancar en producción con una clave conocida. Debe fallar el arranque, no continuar.
-
-- [ ] **Sin versionado de API (`/api/v1/`).**
-  - Sin esto no se puede evolucionar el contrato sin romper clientes externos.
-  - Barato ahora, carísimo cuando existan atajos o apps instaladas.
+- [ ] **Backup de PostgreSQL: script listo, sin programar.**
+  - `scripts/backup.sh` existe y funciona (`pg_dump` + gzip + rotación de 7 días,
+    `scripts/restore.sh` para restaurar), pero no hay ningún cron ni scheduler que lo dispare
+    automáticamente todavía — hay que correrlo a mano o programarlo vos mismo.
+  - Con datos de terceros, no tener el cron armado pasa de molesto a inaceptable.
+  - Acción: `crontab -e` en el host de despliegue, ej. `0 3 * * * cd /ruta/al/repo && ./scripts/backup.sh`.
 
 ---
 
 ## 🟠 Bugs confirmados (auditoría 2026-08-22)
-
-- [ ] **`preferred_theme` nunca se agrega a DBs existentes.**
-  - `_ensure_user_preference_columns()` en `main.py` agrega `preferred_currency` y
-    `preferred_locale`, pero **no** `preferred_theme`, aunque el modelo sí lo declara.
-  - Solo afecta a bases creadas antes de que existiera esa columna.
 
 - [ ] **Los 3 endpoints restantes del dashboard mezclan monedas.**
   - Mismo defecto que ya se corrigió en `/summary` (2026-07-14), pero quedó en:
@@ -83,16 +67,6 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🟡 Integridad y escala
 
-- [ ] **Sin índices en `transactions`.**
-  - `user_id`, `account_id`, `category_id`, `date` sin índice.
-  - Todas las queries filtran por `user_id + date` → table scans conforme crezca el historial.
-
-- [ ] **Sin constraint `UNIQUE(user_id, category_id, month, year)` en `budgets`.**
-  - Se valida solo en Python → dos requests concurrentes crean duplicados.
-
-- [ ] **FKs de `transactions` sin `nullable=False`.**
-  - `user_id`, `account_id`, `category_id` aceptan NULL. Integridad débil.
-
 - [ ] **Saldos de cuenta sin reconciliación posible.**
   - `Account.balance` se muta con deltas y no existe la operación "recalcular desde movimientos".
   - Si un saldo se desvía, no hay forma de detectarlo ni corregirlo.
@@ -103,23 +77,17 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   - Un reintento por mala señal crea una transacción duplicada y descuadra el saldo.
   - Crítico para los atajos móviles del backlog.
 
-- [ ] **Rate limiting en memoria (`slowapi`).**
-  - No funciona con múltiples workers ni múltiples instancias.
-
-- [ ] **El logout no invalida el access token.**
-  - El JWT sigue siendo válido hasta 60 min después de cerrar sesión.
-
-- [ ] **Migración legacy de categorías en cada arranque.**
-  - `seed_default_categories()` renombra `"Otro (Gasto)"` y migra `"Otro (Ingreso)"`
-    en **cada** startup, asignando transacciones de tipo `income` a una categoría `expense`.
-  - Debe convertirse en migración Alembic de una sola vez.
+- [ ] **Rate limiting en memoria (`slowapi`), sin backend distribuido.**
+  - No funciona con múltiples workers ni múltiples instancias — pero hoy el backend corre en
+    un solo worker sin réplicas, así que el problema no existe todavía. Diferido a propósito
+    en Fase 7 (`docs/specs/fase_07_spec.md` §2.6.1): diseño listo (Redis + `storage_uri`),
+    implementar cuando `Dockerfile`/`docker-compose.yml` pasen a `--workers > 1` o más de una
+    réplica.
 
 - [ ] **JWT guardado en `localStorage`** (`frontend/lib/api.ts`).
   - Riesgo de robo vía XSS. Alternativa: cookie `httpOnly` + `secure` + `sameSite`.
-  - Sube de prioridad al salir de la red privada Tailscale.
-
-- [ ] **Sin logging estructurado ni observabilidad.**
-  - No se puede diagnosticar el reporte de un usuario.
+  - Sube de prioridad al salir de la red privada Tailscale. Mitigado parcialmente en Fase 7:
+    el TTL del access token bajó de 60 a 15 min, así que la ventana de robo es más corta.
 
 ---
 
@@ -164,6 +132,23 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 | Fecha | Item |
 |-------|------|
+| 2026-08-22 | Fase 7 completa — ver `docs/specs/fase_07_spec.md` para el detalle de cada ítem: |
+| 2026-08-22 | Migraciones versionadas con Alembic (reemplaza `create_all()` + `_ensure_*_column()` ad-hoc) |
+| 2026-08-22 | Bug `preferred_theme` nunca se agregaba a DBs existentes (resuelto por la migración baseline) |
+| 2026-08-22 | Índices en `transactions` (`user_id`+`date` compuesto, `account_id`, `category_id`) |
+| 2026-08-22 | Constraint `UNIQUE(user_id, category_id, month, year)` en `budgets` |
+| 2026-08-22 | FKs de `transactions` con `nullable=False` |
+| 2026-08-22 | Migración legacy de categorías retirada de `seed_default_categories()` (corría en cada arranque) |
+| 2026-08-22 | Secretos fuera de `docker-compose.yml` — `POSTGRES_PASSWORD`/`SECRET_KEY` obligatorias, sin default silencioso |
+| 2026-08-22 | Versionado de API bajo `/api/v1/` (backend + frontend, `lib/api.ts` centraliza el prefijo) |
+| 2026-08-22 | Tests del módulo contable y de autenticación (pytest + httpx, `backend/tests/`) |
+| 2026-08-22 | Recuperación de contraseña y verificación de email (código completo — ver bloqueante de envío real arriba) |
+| 2026-08-22 | Política de contraseñas (`min_length=10` + validación de fuerza) |
+| 2026-08-22 | Rate limiting en registro y en recuperación de contraseña |
+| 2026-08-22 | Logout invalida efectivamente el access token (TTL bajado de 60 a 15 min) |
+| 2026-08-22 | Regex CORS de Tailscale condicional a `ENABLE_TAILSCALE_CORS`, ya no incondicional |
+| 2026-08-22 | Logging estructurado (JSON a stdout) + `X-Request-ID` |
+| 2026-08-22 | `scripts/backup.sh` con rotación de 7 días (falta programar el cron, ver bloqueante arriba) |
 | 2026-07-14 | datetime.utcnow() migrado a datetime.now(timezone.utc) |
 | 2026-07-14 | Formularios migrados de raw input/select a componentes UI |
 | 2026-07-14 | Bug multi-moneda en `/dashboard/summary` (agrupación por moneda) |
