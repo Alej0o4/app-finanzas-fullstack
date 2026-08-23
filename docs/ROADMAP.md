@@ -191,7 +191,7 @@ los mismos bugs en la UI nueva.
   - Repetido en `Sidebar`, `Button`, `FloatingActionButton`, `(dashboard)/layout.tsx` y los
     formularios de edición manual.
 
-- [ ] **`prefers-reduced-motion`** — 4h
+- [x] **`prefers-reduced-motion`** — 4h *(2026-08-23)*
   - No existe en ningún punto del proyecto pese a `animate-pulse`, `animate-spin`, `hover:scale`
     y la transición global en `*` de `globals.css`.
 
