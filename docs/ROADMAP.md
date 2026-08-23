@@ -210,27 +210,44 @@ los mismos bugs en la UI nueva.
 
 ---
 
-## Fase 10 — Captura en 3 toques
+## Fase 10 — Captura en 3 toques ✅ completa (2026-08-23)
 
 **Objetivo:** que registrar un gasto tome menos de 8 segundos. Es el corazón del producto.
 
-- [ ] **Pantalla de captura como ruta principal** — 2d
+> Implementación completa el 2026-08-23 — ver `docs/specs/fase_10_spec.md` para el desglose
+> técnico y las decisiones de diseño numeradas. Revisada por Claude Code el mismo día (pytest
+> backend 75 passed/1 xfailed, `pnpm lint` y `pnpm build` limpios, diff verificado contra la spec
+> ítem por ítem, incluyendo la migración Alembic y los docs cruzados de contrato de API).
+
+- [x] **Pantalla de captura como ruta principal** — 2d *(2026-08-23, ver `docs/specs/fase_10_spec.md` §10.1 — ruta nueva `/capture`, `/` sigue siendo el dashboard)*
   - Hoy la entrada es el dashboard y la captura es un modal encima.
   - El MVP invierte esto: captura primero, dashboard después de guardar.
+  - ⚠️ Decisión 10.1.4 (documentada como riesgo, no como certeza): el login redirige a
+    `/capture` en *todo* inicio de sesión, no solo el primero — un usuario recurrente que solo
+    quiere consultar su saldo ve la pantalla de captura primero, con un toque extra ("Ver
+    dashboard") para saltarla. Es la lectura literal del ROADMAP; validar con datos de uso reales
+    una vez haya usuarios, y reconsiderar si genera fricción medible.
 
-- [ ] **Rediseño del formulario a 3 interacciones** — 2d
+- [x] **Rediseño del formulario a 3 interacciones** — 2d *(2026-08-23, ver §10.2 — `TransactionCaptureForm` compartido entre `/capture` y `QuickTransactionModal`)*
   - Hoy `QuickTransactionModal` pide **6 campos** (tipo, valor, cuenta, categoría, fecha, descripción)
     con dos `<select>` nativos.
   - Objetivo: monto (teclado numérico) → categoría (íconos grandes, no dropdown) → guardar.
   - Fecha = hoy por defecto, sin mostrar. Descripción oculta tras "más opciones".
   - Cuenta preseleccionada; el selector solo aparece si el usuario tiene más de una.
+  - Fecha eliminada del payload por completo (no solo oculta) — el backend la puebla vía
+    `server_default`. Grid de categorías con `<input type="radio">` nativos ocultos, no ARIA
+    manual — hereda foco/anuncio del navegador gratis.
 
-- [ ] **Tag de método de pago** en la captura — 4h
+- [x] **Tag de método de pago** en la captura — 4h *(2026-08-23, ver §10.3 — 100% frontend, el backend ya lo soportaba de punta a punta desde Fase 8)*
 
-- [ ] **Idempotencia (`Idempotency-Key`)** en `POST /transactions` — 1d
+- [x] **Idempotencia (`Idempotency-Key`)** en `POST /transactions` — 1d *(2026-08-23, ver §10.4 — tabla `idempotency_keys`, migración `f2727c013363`)*
   - Un reintento por mala señal hoy crea una transacción duplicada y descuadra el saldo.
+  - Replay con mismo payload devuelve la transacción original sin duplicar saldo; payload
+    distinto con la misma clave → `409`. Carrera resuelta por `UNIQUE(user_id, key)` +
+    `IntegrityError`. Sin TTL/limpieza (diferido a propósito, mismo criterio que el rate
+    limiting distribuido de Fase 7 — no hay scheduler hasta Fase 14).
 
-- [ ] **Corregir el fallo silencioso del submit** — 2h
+- [x] **Corregir el fallo silencioso del submit** — 2h *(2026-08-23, ver §10.5 — toast por campo faltante + foco al campo)*
   - `if (!effectiveAccountId || !categoryId || !amount) return;` no da ninguna señal al usuario.
 
 ---
