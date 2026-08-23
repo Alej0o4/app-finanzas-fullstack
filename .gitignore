@@ -3,6 +3,8 @@ backend/venv/
 
 # Ignorar archivos compilados temporales de Python
 backend/__pycache__/
+backend/.coverage
+backend/.pytest_cache/
 *.pyc
 
 # Ignorar archivo de las variables de entorno

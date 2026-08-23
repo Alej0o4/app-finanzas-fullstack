@@ -37,7 +37,15 @@ cd backend && ruff check .    && ruff format .    # backend
 cd frontend && pnpm lint      && pnpm format       # frontend (eslint + prettier)
 ```
 
-There is no typecheck or test command configured — none exist in this repo yet.
+There is no typecheck command configured — none exists in this repo yet.
+
+### Test
+
+```sh
+cd backend && pytest          # full suite (SQLite in-memory, no Docker/Postgres needed)
+cd backend && pytest -v       # verbose
+cd backend && pytest --cov    # with coverage (pytest-cov)
+```
 
 ### Seed data
 

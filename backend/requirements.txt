@@ -35,3 +35,9 @@ uvloop==0.22.1
 watchfiles==1.2.0
 websockets==16.0
 ruff==0.12.7
+
+# --- Tests (Fase 7, §4.2) ---
+pytest==8.3.4
+httpx==0.28.1
+pytest-cov==6.0.0
+freezegun==1.5.1
