@@ -1,23 +1,17 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import FabManager from '@/components/FabManager';
+import { useRequireAuth } from '@/lib/hooks/useRequireAuth';
 import { useUiStore } from '@/store/useUiStore';
 import { Menu } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const { isSidebarOpen, toggleSidebar, setSidebarOpen } = useUiStore();
 
-  useEffect(() => {
-    const token = localStorage.getItem('jwt_token');
-    if (!token) {
-      router.replace('/login');
-    }
-  }, [router]);
+  useRequireAuth();
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 640px)');
@@ -50,7 +44,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Menu size={20} />
         </button>
 
-        <main className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 overflow-x-hidden p-4 sm:p-8 lg:p-12">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 overflow-x-hidden p-4 sm:p-8 lg:p-12">
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -4,7 +4,7 @@
 
 El frontend de Oikos está construido con Next.js App Router, React 19, TypeScript, TanStack Query, Axios, Zustand, Recharts y Tailwind CSS 4.
 
-La aplicación está organizada por dominios funcionales y separa explícitamente la experiencia pública de autenticación de la experiencia protegida del dashboard.
+La aplicación está organizada por dominios funcionales y separa explícitamente la experiencia pública de autenticación, la experiencia protegida del dashboard y una tercera ruta autenticada minimalista para la captura (`/capture`).
 
 ## Estructura de alto nivel
 
@@ -20,7 +20,8 @@ La aplicación está organizada por dominios funcionales y separa explícitament
 2. `QueryProvider` crea una única instancia de `QueryClient` para toda la sesión.
 3. `app/(auth)/layout.tsx` centra y simplifica la experiencia de acceso.
 4. `app/(dashboard)/layout.tsx` monta la navegación lateral y el contenedor principal de la aplicación autenticada.
-5. Las páginas de dominio consumen datos desde el backend a través de `lib/api.ts`.
+5. `app/capture/layout.tsx` centra el formulario de captura sin chrome del shell (sin sidebar ni FAB), con guard de autenticación propio.
+6. Las páginas de dominio consumen datos desde el backend a través de `lib/api.ts`.
 
 ## Layout raíz
 
@@ -51,6 +52,19 @@ Decisión importante:
 - Monta el `Sidebar` fijo.
 - Ajusta el padding del contenido según si el sidebar está abierto o colapsado.
 - Encapsula todas las rutas protegidas del negocio.
+
+### `app/capture/layout.tsx`
+
+- Ruta autenticada minimalista para la captura rápida (Fase 10, ítem 10.1): no forma parte
+  de ningún route group y convive con `(auth)` y `(dashboard)`.
+- No monta `Sidebar`, `FabManager` ni `ConfirmDialog` — el objetivo de "captura en menos de
+  8 segundos" compite directamente con el chrome completo del shell.
+- Centra el contenido igual que `(auth)/layout.tsx`, pero como es una ruta dentro del flujo
+  normal de uso (no un formulario de una sola vía), provee una salida explícita: un link
+  "Ver dashboard" hacia `/` en la cabecera.
+- Protege la ruta con el hook compartido `useRequireAuth`.
+- Tras guardar, `capture/page.tsx` navega a `/`; el login redirige a `/capture` (Decisión
+  10.1.4: en todo login, no solo la primera vez). `/` sigue siendo el dashboard sin cambios.
 
 ## Cliente de datos
 
@@ -100,6 +114,14 @@ Convención:
 - Centraliza la lectura del perfil actual para no repetir la misma lógica en múltiples páginas.
 - Debe usarse solo dentro de la experiencia autenticada.
 
+### `lib/hooks/useRequireAuth.ts`
+
+- Guard de autenticación compartido: lee `jwt_token` de `localStorage` y redirige a `/login`
+  con `router.replace` si falta.
+- Lo llaman los layouts de las rutas autenticadas: `(dashboard)/layout.tsx` y
+  `app/capture/layout.tsx`. Si una futura ruta agrega otro layout autenticado, reutilizar este
+  hook en vez de copiar el `useEffect`.
+
 ## Componentes compartidos
 
 ### `components/modals/TransactionModal.tsx`
@@ -128,6 +150,8 @@ Las páginas del dashboard deben limitarse a composición, fetching y UX local.
 - `app/(dashboard)/categories/[id]/page.tsx`: detalle de categoría.
 - `app/(dashboard)/budgets/page.tsx`: gestión de presupuestos.
 - `app/(auth)/login/page.tsx`: acceso al sistema.
+- `app/capture/page.tsx`: pantalla de captura rápida (punto de entrada post-login). Solo
+  compone `TransactionCaptureForm`; al guardar navega a `/`.
 
 ## Reglas de arquitectura
 

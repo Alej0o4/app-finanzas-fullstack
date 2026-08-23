@@ -79,7 +79,7 @@ Money is always `Decimal` in schemas and `Numeric(14,2)` in models — never flo
 
 ### Frontend (`frontend/`)
 
-Next.js App Router with two route groups: `app/(auth)/` (login, register, forgot-password, reset-password, verify-email — minimal layout, no sidebar) and `app/(dashboard)/` (the authenticated shell — sidebar + all domain pages: dashboard root, `analytics/`, `transactions/`, `accounts/[id]`, `categories/[id]`, `budgets/`).
+Next.js App Router with two route groups: `app/(auth)/` (login, register, forgot-password, reset-password, verify-email — minimal layout, no sidebar) and `app/(dashboard)/` (the authenticated shell — sidebar + all domain pages: dashboard root, `analytics/`, `transactions/`, `accounts/[id]`, `categories/[id]`, `budgets/`). There is also a standalone authenticated route outside both groups, `app/capture/` (`/capture`, the post-login capture screen from Phase 10) — minimalist centered layout like `(auth)`, no sidebar/FAB, guarded by the shared `useRequireAuth` hook with an explicit "Ver dashboard" exit link.
 
 State layering is intentional and split three ways — don't blur these:
 - **TanStack Query** — all server state. `QueryProvider` creates one `QueryClient` for the session (`staleTime` 1 min, `refetchOnWindowFocus` off). Mutations must invalidate related queries (see `frontend/docs/STATE_AND_FETCHING.md` for the key/invalidation map).

@@ -41,8 +41,8 @@ function LoginForm() {
       localStorage.setItem('jwt_token', access_token);
       localStorage.setItem('refresh_token', refresh_token);
 
-      // Redirigimos al Dashboard (la fuente de verdad)
-      router.push('/');
+      // Redirigimos a la captura: captura primero, dashboard después de guardar (Fase 10, Decisión 10.1.4)
+      router.push('/capture');
     } catch (err: unknown) {
       const error = err as { response?: { status?: number } };
       if (error.response?.status === 401 || error.response?.status === 403) {

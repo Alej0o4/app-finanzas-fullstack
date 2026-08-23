@@ -72,6 +72,23 @@ El endpoint devuelve una respuesta paginada:
 - `page`: `int` — página actual
 - `page_size`: `int` — items por página
 
+Header opcional en `POST`:
+
+- `Idempotency-Key` (opcional, máximo 255 caracteres): hace el POST idempotente para reintentos
+  seguros (Fase 10 §10.4; espejo de `backend/docs/API_REFERENCE.md`, que es el contrato canónico).
+  Si la clave ya fue usada antes por el mismo usuario:
+  - con un payload idéntico → se devuelve la transacción original sin crear otra ni volver a mover
+    el saldo (replay);
+  - con un payload distinto → `409 Conflict` ("Esta Idempotency-Key ya se usó con datos
+    distintos"); si la transacción original fue eliminada, también `409`.
+
+Cómo lo usa el frontend (`TransactionCaptureForm.tsx`): genera una clave con `crypto.randomUUID()`
+una vez por montaje del formulario y la regenera tras cada envío exitoso — así, los reintentos de
+un mismo envío fallido reusan la clave y una captura nueva usa una clave distinta. El header viaja
+en el tercer argumento de `api.post(...)` y sobrevive el reintento interno del interceptor de
+refresh de token sin cambios en `lib/api.ts`. Solo aplica a este endpoint; `GET`/`PUT`/`DELETE` lo
+ignoran.
+
 ### Presupuestos
 
 - `GET /api/v1/budgets/`
