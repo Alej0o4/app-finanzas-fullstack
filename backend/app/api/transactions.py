@@ -1,8 +1,11 @@
+import hashlib
+import json
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy import desc, func, or_, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -22,7 +25,43 @@ def crear_transaccion(
     transaccion: schemas.TransactionCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key", max_length=255),
 ):
+    # 🔁 Idempotencia (Fase 10, ítem 10.4): si el cliente reenvía la misma
+    # Idempotency-Key, se devuelve la transacción original en vez de crear otra y
+    # volver a mover el saldo. Un payload distinto con una clave ya usada es casi con
+    # certeza un bug del cliente (Decisión 10.4.3): se hace visible con un 409.
+    request_hash = None
+    if idempotency_key:
+        request_hash = hashlib.sha256(
+            json.dumps(transaccion.model_dump(mode="json"), sort_keys=True).encode()
+        ).hexdigest()
+        existente = (
+            db.query(models.IdempotencyKey)
+            .filter(
+                models.IdempotencyKey.user_id == current_user.id,
+                models.IdempotencyKey.key == idempotency_key,
+            )
+            .first()
+        )
+        if existente:
+            if existente.request_hash != request_hash:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Esta Idempotency-Key ya se usó con datos distintos.",
+                )
+            transaccion_previa = (
+                db.query(models.Transaction).filter(models.Transaction.id == existente.transaction_id).first()
+            )
+            if not transaccion_previa:
+                # La transacción original fue borrada (soft-delete) desde el envío
+                # original — ver caso borde en el spec de Fase 10, ítem 10.4.
+                raise HTTPException(
+                    status_code=409,
+                    detail="La transacción original de esta Idempotency-Key ya no existe.",
+                )
+            return transaccion_previa
+
     # 🔒 1. Verificar que la cuenta de destino exista y PERTENEZCA al usuario
     cuenta = (
         db.query(models.Account)
@@ -68,9 +107,33 @@ def crear_transaccion(
             )
             .values(balance=models.Account.balance + delta)
         )
+        if idempotency_key:
+            # Decisión 10.4.4: Transaction + saldo + bitácora comparten UN solo commit —
+            # si el INSERT de la clave pierde una carrera contra el UNIQUE(user_id, key),
+            # el rollback revierte también la transacción contable completa.
+            db.flush()  # asigna nueva_transaccion.id antes del commit final
+            db.add(
+                models.IdempotencyKey(
+                    user_id=current_user.id,
+                    key=idempotency_key,
+                    request_hash=request_hash,
+                    transaction_id=nueva_transaccion.id,
+                )
+            )
         db.commit()
         db.refresh(nueva_transaccion)
         return nueva_transaccion
+    except IntegrityError:
+        db.rollback()
+        # Se perdió la carrera: otra petición con la misma clave ya insertó primero.
+        existente = (
+            db.query(models.IdempotencyKey)
+            .filter(models.IdempotencyKey.user_id == current_user.id, models.IdempotencyKey.key == idempotency_key)
+            .first()
+        )
+        if existente:
+            return db.query(models.Transaction).filter(models.Transaction.id == existente.transaction_id).first()
+        raise HTTPException(status_code=500, detail="Error interno al procesar la transacción contable.") from None
     except Exception:
         db.rollback()
         logger.exception("Error al crear transacción para el usuario %s", current_user.id)

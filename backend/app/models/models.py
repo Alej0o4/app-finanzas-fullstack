@@ -168,3 +168,23 @@ class EmailVerificationToken(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("User", backref="email_verification_tokens")
+
+
+class IdempotencyKey(Base):
+    """Bitácora de reintentos seguros para POST /transactions (Fase 10, ROADMAP).
+
+    No es una tabla polimórfica a propósito (Decisión 10.4.1 del spec de Fase 10): el
+    alcance actual es un solo endpoint. Sin SoftDeleteMixin, mismo criterio que
+    RefreshToken/PasswordResetToken/EmailVerificationToken (Decisión 6.3 de Fase 8):
+    es bitácora técnica, no un dato de dominio que el usuario liste o borre.
+    """
+
+    __tablename__ = "idempotency_keys"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    key = Column(String(255), nullable=False)
+    request_hash = Column(String(64), nullable=False)  # sha256 hex del payload canónico
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("uq_idempotency_keys_user_key", "user_id", "key", unique=True),)

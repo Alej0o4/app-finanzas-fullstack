@@ -288,6 +288,18 @@ Entrada:
 - `payment_method` (opcional): tag de método de pago — `cash | card | transfer`. Es un dato
   de la transacción, independiente del `type` de la cuenta asociada (Fase 8 §2).
 
+Header opcional:
+
+- `Idempotency-Key` (opcional, máximo 255 caracteres): hace el POST idempotente para
+  reintentos seguros (Fase 10 §10.4). Si la clave ya fue usada antes por el mismo usuario:
+  - con un payload idéntico → se devuelve la transacción original sin crear otra ni volver
+    a mover el saldo (replay);
+  - con un payload distinto → `409 Conflict` ("Esta Idempotency-Key ya se usó con datos
+    distintos"); si la transacción original fue eliminada, también `409`.
+  El cliente debe generar una clave nueva por captura lógica (p. ej. `crypto.randomUUID()`)
+  y reusarla solo en reintentos del mismo envío. Este header **solo aplica a este endpoint**;
+  `GET`/`PUT`/`DELETE` lo ignoran.
+
 Nota: `currency` se hereda automáticamente de la cuenta asociada.
 
 ### `GET /api/v1/transactions/`

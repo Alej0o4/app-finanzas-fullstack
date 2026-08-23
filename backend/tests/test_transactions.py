@@ -437,3 +437,105 @@ def test_update_moving_to_different_currency_account_updates_currency(
     # Comportamiento correcto esperado: la transacción debería heredar la moneda de su
     # nueva cuenta (USD), igual que hace al crearse (transactions.py:52). Hoy no ocurre.
     assert update_response.json()["currency"] == "USD"
+
+
+class TestIdempotencyKeyHeader:
+    """Fase 10 §10.4: header `Idempotency-Key` en POST /transactions.
+
+    La clave viaja como header HTTP (no como campo del body); el constraint de
+    unicidad en DB es `(user_id, key)`, no global.
+    """
+
+    def _post(self, client: TestClient, headers: dict, payload: dict):
+        return client.post("/api/v1/transactions/", json=payload, headers=headers)
+
+    def test_replay_same_key_same_payload_returns_same_transaction_and_moves_balance_once(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """Caso central del ítem: el reintento NO crea una segunda transacción ni vuelve
+        a mover el saldo — ambas respuestas comparten id y el delta se aplicó UNA vez."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        payload = {
+            "amount": "100.00",
+            "type": "expense",
+            "description": "compra con posible reintento",
+            "account_id": cuenta["id"],
+            "category_id": categoria["id"],
+        }
+        headers = {**auth_headers, "Idempotency-Key": "01890c5a-d6de-7de1-a3f2-clave-de-prueba"}
+
+        primera = self._post(client, headers, payload)
+        segunda = self._post(client, headers, payload)  # reintento con la misma clave
+
+        assert primera.status_code == 200, primera.text
+        assert segunda.status_code == 200, segunda.text
+        assert segunda.json()["id"] == primera.json()["id"]
+
+        cuenta_final = _get_account(client, auth_headers, cuenta["id"])
+        # Delta exacto aplicado una sola vez: 1000 - 100 = 900 (un doble cobro daría 800)
+        assert Decimal(str(cuenta_final["balance"])) == Decimal("900.00")
+
+    def test_replay_same_key_different_amount_returns_409(self, client, auth_headers, make_account, make_category):
+        """Decisión 10.4.3: clave conocida + hash distinto → 409 Conflict (no replay
+        silencioso ni segunda transacción)."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        payload = {
+            "amount": "100.00",
+            "type": "expense",
+            "description": "compra original",
+            "account_id": cuenta["id"],
+            "category_id": categoria["id"],
+        }
+        headers = {**auth_headers, "Idempotency-Key": "clave-reusada-con-otro-payload"}
+
+        primera = self._post(client, headers, payload)
+        assert primera.status_code == 200, primera.text
+
+        conflicto = self._post(client, headers, {**payload, "amount": "250.00"})
+        assert conflicto.status_code == 409
+
+        # Y el saldo solo se movió por la transacción original (no se creó la segunda)
+        cuenta_final = _get_account(client, auth_headers, cuenta["id"])
+        assert Decimal(str(cuenta_final["balance"])) == Decimal("900.00")
+
+    def test_same_key_across_two_users_is_independent(
+        self, client, auth_headers, other_user, make_account, make_category
+    ):
+        """El constraint es `(user_id, key)`, no global: dos usuarios pueden usar el
+        mismo string literal como clave sin interferirse (cliente descuidado con clave
+        constante en vez de UUID)."""
+        cuenta_a = make_account(auth_headers, name="Cuenta A", balance="1000.00")
+        categoria_a = make_category(auth_headers, name="Comida A", type="expense")
+        cuenta_b = make_account(other_user["headers"], name="Cuenta B", balance="2000.00")
+        categoria_b = make_category(other_user["headers"], name="Comida B", type="expense")
+
+        payload_a = {
+            "amount": "100.00",
+            "type": "expense",
+            "description": "gasto usuario A",
+            "account_id": cuenta_a["id"],
+            "category_id": categoria_a["id"],
+        }
+        payload_b = {
+            "amount": "50.00",
+            "type": "expense",
+            "description": "gasto usuario B",
+            "account_id": cuenta_b["id"],
+            "category_id": categoria_b["id"],
+        }
+        headers_a = {**auth_headers, "Idempotency-Key": "clave-literal-compartida"}
+        headers_b = {**other_user["headers"], "Idempotency-Key": "clave-literal-compartida"}
+
+        respuesta_a = self._post(client, headers_a, payload_a)
+        respuesta_b = self._post(client, headers_b, payload_b)
+
+        assert respuesta_a.status_code == 200, respuesta_a.text
+        assert respuesta_b.status_code == 200, respuesta_b.text
+        assert respuesta_a.json()["id"] != respuesta_b.json()["id"]
+
+        saldo_a = _get_account(client, auth_headers, cuenta_a["id"])
+        saldo_b = _get_account(client, other_user["headers"], cuenta_b["id"])
+        assert Decimal(str(saldo_a["balance"])) == Decimal("900.00")
+        assert Decimal(str(saldo_b["balance"])) == Decimal("1950.00")
