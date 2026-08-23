@@ -123,34 +123,37 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 ---
 
-## Fase 8 — Modelo de datos del nuevo MVP
+## Fase 8 — Modelo de datos del nuevo MVP ✅ completa (2026-08-23)
 
 **Objetivo:** las columnas y entidades que los 5 componentes necesitan. Depende de Fase 7 (Alembic).
 
-- [ ] **`User.monthly_income`** (`Numeric(14,2)`, nullable) — 2h
+> Implementación completa y auditada el 2026-08-23 — ver `docs/specs/fase_08_spec.md` para el
+> desglose técnico y las decisiones de diseño numeradas.
+
+- [x] **`User.monthly_income`** (`Numeric(14,2)`, nullable) — 2h *(2026-08-23, ver `docs/specs/fase_08_spec.md` §1)*
   - Lo captura el onboarding; activa el balance de flujo del dashboard.
 
-- [ ] **`Transaction.payment_method`** (nullable: `cash` / `card` / `transfer`) — 3h
+- [x] **`Transaction.payment_method`** (nullable: `cash` / `card` / `transfer`) — 3h *(2026-08-23, ver §2)*
   - Tag ligero, **no** un módulo de configuración de métodos de pago.
   - Distinto de `Account.type`: el método es de la transacción, no de la cuenta.
 
-- [ ] **Presupuestos recurrentes** — 1d
+- [x] **Presupuestos recurrentes** — 1d *(2026-08-23, ver §3 — generación perezosa por período, Decisión 3.1)*
   - 🔴 **Bloqueador de retención.** Hoy `Budget` exige `month`+`year` fijos: el presupuesto de enero
     desaparece en febrero y el dashboard queda vacío, rompiendo el loop registro → feedback → ajuste.
   - Opción: `is_recurring` + resolución del periodo en consulta, o generación perezosa del mes actual.
 
-- [ ] **Categorías default ampliadas a 8–10** — 3h
+- [x] **Categorías default ampliadas a 8–10** — 3h *(2026-08-23, ver §4 — quedaron 11, ver Decisión 4.1)*
   - Agregar: **Vivienda**, **Salud**, **Educación**.
   - Renombrar `Ocio` → `Entretenimiento`.
   - Revisar categorías de ingreso (hoy solo existe `Salario`).
 
-- [ ] **Cuenta por defecto al registrarse** — 3h
+- [x] **Cuenta por defecto al registrarse** — 3h *(2026-08-23, ver §5)*
   - 🔴 **Bloqueador de onboarding.** Un usuario nuevo tiene 0 cuentas, `account_id` es obligatorio
     y `QuickTransactionModal` hace `return` en silencio: el botón "Registrar" no hace nada,
     sin error ni aviso.
   - Auto-crear una cuenta "Efectivo" en el registro.
 
-- [ ] **`updated_at` + borrado lógico en todas las entidades** — 1d
+- [x] **`updated_at` + borrado lógico en todas las entidades** — 1d *(2026-08-23, ver §6)*
   - Trivial ahora; migración con datos reales después.
   - Habilita sincronización offline si algún día hay app nativa.
 
