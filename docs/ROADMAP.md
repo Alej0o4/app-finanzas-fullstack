@@ -159,48 +159,53 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 ---
 
-## Fase 9 — Accesibilidad y componentes base de UI
+## Fase 9 — Accesibilidad y componentes base de UI ✅ completa (2026-08-23)
 
 **Objetivo:** cerrar los defectos de accesibilidad y los hábitos repetidos en `Button`, `Input`,
 `Select` y `ModalShell` antes de que Fase 10 (captura) y Fase 11 (dashboard) construyan las
 pantallas nuevas del MVP sobre estos mismos componentes. Corregir la base ahora evita heredar
 los mismos bugs en la UI nueva.
 
+> Implementación completa el 2026-08-23 — ver `docs/specs/fase_09_spec.md` para el desglose
+> técnico y las decisiones de diseño numeradas. Revisada por Claude Code el mismo día
+> (build + lint limpios, diff verificado contra la spec ítem por ítem); queda un gap de alcance
+> documentado en "Pendientes heredados de fases anteriores" más abajo.
+
 > Hallazgos de la auditoría de diseño del 2026-08-23 (Web Interface Guidelines + revisión visual
 > con la skill `redesign-existing-projects`). Detalle completo en la conversación de esa fecha.
 
-- [x] **`focus-visible` en vez de `focus` en `Button`/`Input`/`Select`** — 2h *(2026-08-23)*
+- [x] **`focus-visible` en vez de `focus` en `Button`/`Input`/`Select`** — 2h *(2026-08-23, ver `docs/specs/fase_09_spec.md` §9.1)*
   - Hoy el anillo de foco se activa también al hacer click con mouse, no solo con teclado.
 
-- [x] **Asociar `<label>` con su control (`htmlFor`/`id`)** en `Input.tsx` y `Select.tsx` — 3h *(2026-08-23)*
+- [x] **Asociar `<label>` con su control (`htmlFor`/`id`)** en `Input.tsx` y `Select.tsx` — 3h *(2026-08-23, ver §9.2)*
   - El label no es clickeable ni queda anunciado por un lector de pantalla al enfocar el campo.
 
-- [x] **`aria-label` en todos los botones icon-only** — 1d *(2026-08-23)*
+- [x] **`aria-label` en todos los botones icon-only** — 1d *(2026-08-23, ver §9.3 — 21 ubicaciones en 9 archivos)*
   - Repetido en ~20 lugares: toggle del sidebar, logout, tema, FAB, cerrar modal, y las acciones
     de editar/eliminar/destacar en cuentas, categorías, presupuestos y transacciones.
   - `ChartControlsPopover.tsx:32` ya lo hace bien — usar como plantilla.
 
-- [x] **Cierre por Escape + `overscroll-behavior: contain`** en `ModalShell` y `ConfirmDialog` — 3h *(2026-08-23)*
+- [x] **Cierre por Escape + `overscroll-behavior: contain`** en `ModalShell` y `ConfirmDialog` — 3h *(2026-08-23, ver §9.4 — hook compartido `lib/hooks/useEscapeToClose.ts`, ambos componentes eran implementaciones independientes)*
 
-- [x] **Arreglar la animación de entrada rota de `ModalShell`/`FloatingActionButton`** — 2h *(2026-08-23)*
+- [x] **Arreglar la animación de entrada rota de `ModalShell`/`FloatingActionButton`** — 2h *(2026-08-23, ver §9.5 — `--animate-*` + `@keyframes` propios en `globals.css`, no se instaló `tailwindcss-animate` por ser incompatible con Tailwind v4)*
   - Usan clases `animate-in fade-in slide-in-from-bottom-2`, pero `tailwindcss-animate` no está
     instalado y no hay keyframes propios en `globals.css` — hoy no animan nada pese a que el
     código lo sugiere.
 
-- [x] **Reemplazar `transition-all` por propiedades explícitas** — 3h *(2026-08-23)*
+- [x] **Reemplazar `transition-all` por propiedades explícitas** — 3h *(2026-08-23, ver §9.6)*
   - Repetido en `Sidebar`, `Button`, `FloatingActionButton`, `(dashboard)/layout.tsx` y los
     formularios de edición manual.
 
-- [x] **`prefers-reduced-motion`** — 4h *(2026-08-23)*
+- [x] **`prefers-reduced-motion`** — 4h *(2026-08-23, ver §9.7)*
   - No existe en ningún punto del proyecto pese a `animate-pulse`, `animate-spin`, `hover:scale`
     y la transición global en `*` de `globals.css`.
 
-- [x] **`autocomplete` en los formularios de autenticación** — 2h *(2026-08-23)*
+- [x] **`autocomplete` en los formularios de autenticación** — 2h *(2026-08-23, ver §9.8)*
   - Login, registro, forgot/reset password sin `autocomplete="email"|"current-password"|"new-password"`.
 
-- [x] **`aria-live="polite"` en los mensajes de error/éxito** de los 4 formularios de auth — 2h *(2026-08-23)*
+- [x] **`aria-live="polite"` en los mensajes de error/éxito** de los 4 formularios de auth — 2h *(2026-08-23, ver §9.9)*
 
-- [x] **Estado `active:` (pressed) en botones y tarjetas clicables** — 3h *(2026-08-23)*
+- [x] **Estado `active:` (pressed) en botones y tarjetas clicables** — 3h *(2026-08-23, ver §9.10)*
   - Hay `hover:` en casi todo pero ningún feedback de "presionado" en toda la app.
 
 ---
@@ -456,3 +461,12 @@ Estas estaban "fuera de scope" bajo el supuesto de un solo usuario. Ese supuesto
 - [ ] Extraer custom hooks de queries (`useAccounts`, `useCategories`, `useTransactions`).
 - [ ] Migrar JWT de `localStorage` a cookies httpOnly (sube de prioridad al salir de Tailscale).
 - [ ] Crear capa `app/services/` y `app/core/exceptions.py`; partir `models.py` y `schemas.py` por dominio.
+- [ ] **`focus-visible` y `htmlFor`/`id` en el modal de edición manual de `transactions/page.tsx`** (Fase 9).
+  - El modal de editar transacción (líneas ~495-577) usa `<input>`/`<select>` crudos en vez de los
+    componentes `Input`/`Select` ya corregidos en Fase 9 (§9.1/§9.2 de `docs/specs/fase_09_spec.md`):
+    sus `<label>` siguen sin `htmlFor`, sus controles sin `id`, y el anillo de foco sigue activándose
+    con click de mouse (`focus:` en vez de `focus-visible:`).
+  - Quedó fuera de alcance a propósito en Fase 9 porque el ROADMAP nombraba literalmente solo
+    `Button`/`Input`/`Select` — no un descuido de implementación, ver hallazgo en la revisión de
+    código del 2026-08-23. Vale la pena resolverlo migrando ese modal a los componentes `Input`/
+    `Select` compartidos (elimina la duplicación de markup a la vez que cierra el gap).
