@@ -169,10 +169,10 @@ los mismos bugs en la UI nueva.
 > Hallazgos de la auditoría de diseño del 2026-08-23 (Web Interface Guidelines + revisión visual
 > con la skill `redesign-existing-projects`). Detalle completo en la conversación de esa fecha.
 
-- [ ] **`focus-visible` en vez de `focus` en `Button`/`Input`/`Select`** — 2h
+- [x] **`focus-visible` en vez de `focus` en `Button`/`Input`/`Select`** — 2h *(2026-08-23)*
   - Hoy el anillo de foco se activa también al hacer click con mouse, no solo con teclado.
 
-- [ ] **Asociar `<label>` con su control (`htmlFor`/`id`)** en `Input.tsx` y `Select.tsx` — 3h
+- [x] **Asociar `<label>` con su control (`htmlFor`/`id`)** en `Input.tsx` y `Select.tsx` — 3h *(2026-08-23)*
   - El label no es clickeable ni queda anunciado por un lector de pantalla al enfocar el campo.
 
 - [ ] **`aria-label` en todos los botones icon-only** — 1d
