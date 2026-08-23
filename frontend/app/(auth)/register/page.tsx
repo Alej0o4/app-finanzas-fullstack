@@ -28,8 +28,8 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres.');
+    if (password.length < 10) {
+      setError('La contraseña debe tener al menos 10 caracteres.');
       setIsLoading(false);
       return;
     }
@@ -106,11 +106,11 @@ export default function RegisterPage() {
           label="Contraseña"
           type="password"
           required
-          minLength={8}
+          minLength={10}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="bg-background py-3"
-          placeholder="Mínimo 6 caracteres"
+          placeholder="Mínimo 10 caracteres, con letras y números"
         />
 
         <Input

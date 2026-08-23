@@ -12,6 +12,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const registered = searchParams.get('registered');
+  const resetSuccess = searchParams.get('reset');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -74,6 +75,13 @@ function LoginForm() {
         </div>
       )}
 
+      {/* Mensaje de éxito post-restablecimiento de contraseña */}
+      {resetSuccess === 'true' && (
+        <div className="bg-success/10 border-success/20 text-success mb-6 rounded-xl border p-3 text-center text-sm">
+          Contraseña actualizada exitosamente. Ahora puedes iniciar sesión.
+        </div>
+      )}
+
       {/* Mensaje de Error */}
       {error && (
         <div className="bg-danger/10 border-danger/20 text-danger mb-6 rounded-xl border p-3 text-center text-sm">
@@ -93,15 +101,25 @@ function LoginForm() {
           placeholder="alejandro@ejemplo.com"
         />
 
-        <Input
-          label="Contraseña"
-          type="password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="bg-background py-3"
-          placeholder="••••••••"
-        />
+        <div className="space-y-1.5">
+          <Input
+            label="Contraseña"
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="bg-background py-3"
+            placeholder="••••••••"
+          />
+          <div className="text-right">
+            <Link
+              href="/forgot-password"
+              className="text-primary hover:text-primary-dark text-xs font-medium transition-colors"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
+        </div>
 
         <Button
           type="submit"
