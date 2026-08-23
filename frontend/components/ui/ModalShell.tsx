@@ -2,6 +2,7 @@
 
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useEscapeToClose } from '@/lib/hooks/useEscapeToClose';
 
 interface ModalShellProps {
   isOpen: boolean;
@@ -11,11 +12,13 @@ interface ModalShellProps {
 }
 
 export default function ModalShell({ isOpen, onClose, title, children }: ModalShellProps) {
+  useEscapeToClose(isOpen, onClose);
+
   if (!isOpen) return null;
 
   return (
     <div className="bg-background/80 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="border-border bg-surface animate-in fade-in max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border p-4 shadow-2xl duration-200 sm:p-6">
+      <div className="border-border bg-surface animate-fade-in max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border p-4 shadow-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-text text-lg font-semibold">{title}</h2>
           <button

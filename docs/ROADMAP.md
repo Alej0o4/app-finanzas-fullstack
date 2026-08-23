@@ -180,9 +180,9 @@ los mismos bugs en la UI nueva.
     de editar/eliminar/destacar en cuentas, categorías, presupuestos y transacciones.
   - `ChartControlsPopover.tsx:32` ya lo hace bien — usar como plantilla.
 
-- [ ] **Cierre por Escape + `overscroll-behavior: contain`** en `ModalShell` y `ConfirmDialog` — 3h
+- [x] **Cierre por Escape + `overscroll-behavior: contain`** en `ModalShell` y `ConfirmDialog` — 3h *(2026-08-23)*
 
-- [ ] **Arreglar la animación de entrada rota de `ModalShell`/`FloatingActionButton`** — 2h
+- [x] **Arreglar la animación de entrada rota de `ModalShell`/`FloatingActionButton`** — 2h *(2026-08-23)*
   - Usan clases `animate-in fade-in slide-in-from-bottom-2`, pero `tailwindcss-animate` no está
     instalado y no hay keyframes propios en `globals.css` — hoy no animan nada pese a que el
     código lo sugiere.

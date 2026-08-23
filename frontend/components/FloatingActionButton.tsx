@@ -15,7 +15,7 @@ const FloatingActionButton = forwardRef<HTMLDivElement, FloatingActionButtonProp
     return (
       <div ref={ref} className="fixed right-6 bottom-6 z-30 flex flex-col items-end gap-3">
         {isOpen && (
-          <div className="bg-surface border-border animate-in fade-in slide-in-from-bottom-2 min-w-[200px] rounded-2xl border p-2 shadow-2xl duration-200">
+          <div className="bg-surface border-border animate-fade-in animate-slide-in-bottom min-w-[200px] rounded-2xl border p-2 shadow-2xl">
             {children}
           </div>
         )}
