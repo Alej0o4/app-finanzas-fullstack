@@ -1,4 +1,7 @@
+import logging
 import os
+import time
+import uuid
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,8 +13,12 @@ from starlette.responses import Response
 
 from app.api import accounts, auth, budgets, categories, dashboard, preferences, transactions, users
 from app.core.database import SessionLocal
+from app.core.logging_config import configure_logging, request_id_var
 from app.core.rate_limit import limiter
 from app.models import models
+
+configure_logging()
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="API de Finanzas Personales", description="Backend para gestión de ingresos, gastos y presupuestos."
@@ -84,18 +91,45 @@ async def security_headers_middleware(request: Request, call_next):
     return response
 
 
+async def request_id_middleware(request: Request, call_next):
+    request_id = str(uuid.uuid4())
+    token = request_id_var.set(request_id)
+    start = time.perf_counter()
+    try:
+        response: Response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+        response.headers["X-Request-ID"] = request_id
+        logger.info(
+            "request completed",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": round(duration_ms, 2),
+            },
+        )
+        return response
+    finally:
+        request_id_var.reset(token)
+
+
 # 2. CONFIGURACIÓN CORS (Bloqueo de Fronteras)
 # Leer orígenes permitidos desde variable de entorno
-# IPs de Tailscale (100.x.x.x) se permiten automáticamente vía regex
+# IPs de Tailscale (100.x.x.x) se permiten vía regex, solo si ENABLE_TAILSCALE_CORS=true
+# (el despliegue actual sigue usando Tailscale; al salir de esa red privada, no setear
+# la variable desactiva el regex sin bifurcar el código — ver docs/specs/fase_07_spec.md §3.3).
 cors_origins_env = os.getenv(
     "ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
 )
 origenes_permitidos = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 
+_TAILSCALE_CORS_REGEX = r"^https?://100\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$"
+allow_origin_regex = _TAILSCALE_CORS_REGEX if os.getenv("ENABLE_TAILSCALE_CORS", "false").lower() == "true" else None
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origenes_permitidos,
-    allow_origin_regex=r"^https?://100\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$",
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -104,6 +138,11 @@ app.add_middleware(
 app.add_middleware(
     BaseHTTPMiddleware,
     dispatch=security_headers_middleware,
+)
+
+app.add_middleware(
+    BaseHTTPMiddleware,
+    dispatch=request_id_middleware,
 )
 
 app.state.limiter = limiter

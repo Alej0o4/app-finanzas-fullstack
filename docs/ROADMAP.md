@@ -97,16 +97,16 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 
 ### Operación y seguridad
 
-- [ ] **Script `scripts/backup.sh`** — `pg_dump` con rotación de 7 días — 1d
+- [x] **Script `scripts/backup.sh`** — `pg_dump` con rotación de 7 días — 1d *(2026-08-22)*
   - Con datos de terceros esto pasa de molesto a inaceptable.
 
-- [ ] **Secretos fuera de `docker-compose.yml`** — 4h
+- [x] **Secretos fuera de `docker-compose.yml`** — 4h *(2026-08-22)*
   - Hoy: `POSTGRES_PASSWORD: oikos_secret` hardcodeado y `SECRET_KEY:-changeme_in_production` como default silencioso.
   - El default silencioso debe fallar el arranque, no continuar.
 
-- [ ] **Retirar el regex CORS `100.x.x.x`** en despliegue público — 1h
+- [x] **Retirar el regex CORS `100.x.x.x`** en despliegue público — 1h *(2026-08-22)*
 
-- [ ] **Logging estructurado** — sin esto no puedes diagnosticar el reporte de un usuario — 1d
+- [x] **Logging estructurado** — sin esto no puedes diagnosticar el reporte de un usuario — 1d *(2026-08-22)*
 
 ### Versionado y pruebas
 

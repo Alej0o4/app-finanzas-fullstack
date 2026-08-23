@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,7 @@ from app.models import models
 from app.schemas import schemas
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # --- RUTA PROTEGIDA ---
@@ -64,6 +66,7 @@ def crear_transaccion(
         return nueva_transaccion
     except Exception:
         db.rollback()
+        logger.exception("Error al crear transacción para el usuario %s", current_user.id)
         raise HTTPException(status_code=500, detail="Error interno al procesar la transacción contable.") from None
 
 
@@ -140,6 +143,7 @@ def eliminar_transaccion(
         return {"estado": "OK", "mensaje": "Transacción eliminada y saldo de cuenta revertido exitosamente."}
     except Exception:
         db.rollback()
+        logger.exception("Error al eliminar la transacción %s del usuario %s", transaction_id, current_user.id)
         raise HTTPException(status_code=500, detail="Error al intentar eliminar y revertir saldos.") from None
 
 
@@ -224,4 +228,5 @@ def actualizar_transaccion(
 
     except Exception:
         db.rollback()
+        logger.exception("Error al actualizar la transacción %s del usuario %s", transaction_id, current_user.id)
         raise HTTPException(status_code=500, detail="Error al recalcular saldos en la actualización.") from None

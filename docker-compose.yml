@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: oikos
-      POSTGRES_PASSWORD: oikos_secret
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Definí POSTGRES_PASSWORD en .env}
       POSTGRES_DB: oikos
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -21,9 +21,10 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://oikos:oikos_secret@postgres:5432/oikos
-      SECRET_KEY: ${SECRET_KEY:-changeme_in_production}
-      ALLOWED_ORIGINS: http://localhost:3000,http://100.76.235.30:3000
+      DATABASE_URL: postgresql://oikos:${POSTGRES_PASSWORD:?Definí POSTGRES_PASSWORD en .env}@postgres:5432/oikos
+      SECRET_KEY: ${SECRET_KEY:?Definí SECRET_KEY en .env}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://100.76.235.30:3000}
+      ENABLE_TAILSCALE_CORS: "true"
     ports:
       - "8000:8000"
     healthcheck:

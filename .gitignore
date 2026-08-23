@@ -7,6 +7,10 @@ backend/__pycache__/
 
 # Ignorar archivo de las variables de entorno
 backend/.env
+/.env
+
+# Backups locales de la base de datos (scripts/backup.sh)
+backups/
 
 # Base de datos SQLite
 *.db

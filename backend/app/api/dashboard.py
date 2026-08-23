@@ -13,6 +13,7 @@ from app.models import models
 from app.schemas import schemas
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/summary", response_model=schemas.DashboardSummary)
@@ -209,7 +210,7 @@ def obtener_serie_flujo_caja(
             for r in rows
         ]
     except Exception:
-        logging.exception("Error in cashflow-series")
+        logger.exception("Error in cashflow-series")
         raise HTTPException(status_code=500, detail="Error al obtener serie de flujo de caja") from None
 
 
