@@ -66,7 +66,12 @@ export default function ForgotPasswordPage() {
 
       {/* Mensaje de error */}
       {requestResetMutation.isError && (
-        <div className="bg-danger/10 border-danger/20 text-danger mb-6 rounded-xl border p-3 text-center text-sm">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="bg-danger/10 border-danger/20 text-danger mb-6 rounded-xl border p-3 text-center text-sm"
+        >
           Error de conexión. Inténtalo más tarde.
         </div>
       )}
@@ -76,6 +81,7 @@ export default function ForgotPasswordPage() {
         <Input
           label="Correo Electrónico"
           type="email"
+          autoComplete="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}

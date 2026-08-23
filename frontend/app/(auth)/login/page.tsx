@@ -70,21 +70,36 @@ function LoginForm() {
 
       {/* Mensaje de éxito post-registro */}
       {registered === 'true' && (
-        <div className="bg-success/10 border-success/20 text-success mb-6 rounded-xl border p-3 text-center text-sm">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="bg-success/10 border-success/20 text-success mb-6 rounded-xl border p-3 text-center text-sm"
+        >
           Cuenta creada exitosamente. Ahora puedes iniciar sesión.
         </div>
       )}
 
       {/* Mensaje de éxito post-restablecimiento de contraseña */}
       {resetSuccess === 'true' && (
-        <div className="bg-success/10 border-success/20 text-success mb-6 rounded-xl border p-3 text-center text-sm">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="bg-success/10 border-success/20 text-success mb-6 rounded-xl border p-3 text-center text-sm"
+        >
           Contraseña actualizada exitosamente. Ahora puedes iniciar sesión.
         </div>
       )}
 
       {/* Mensaje de Error */}
       {error && (
-        <div className="bg-danger/10 border-danger/20 text-danger mb-6 rounded-xl border p-3 text-center text-sm">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="bg-danger/10 border-danger/20 text-danger mb-6 rounded-xl border p-3 text-center text-sm"
+        >
           {error}
         </div>
       )}
@@ -94,6 +109,7 @@ function LoginForm() {
         <Input
           label="Correo Electrónico"
           type="email"
+          autoComplete="email"
           required
           value={username}
           onChange={(e) => setUsername(e.target.value)}
@@ -105,6 +121,7 @@ function LoginForm() {
           <Input
             label="Contraseña"
             type="password"
+            autoComplete="current-password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}

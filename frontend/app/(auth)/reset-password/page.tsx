@@ -34,8 +34,8 @@ function InvalidLinkPanel() {
         </div>
         <h1 className="text-text font-sans text-2xl font-bold tracking-tight">Enlace inválido</h1>
         <p className="text-text-muted mt-2 text-center text-sm">
-          Este enlace para restablecer tu contraseña no es válido o ya expiró. Solicita uno
-          nuevo para continuar.
+          Este enlace para restablecer tu contraseña no es válido o ya expiró. Solicita uno nuevo
+          para continuar.
         </p>
       </div>
 
@@ -119,7 +119,12 @@ function ResetPasswordForm() {
 
       {/* Mensaje de error */}
       {(formError || submissionError) && (
-        <div className="bg-danger/10 border-danger/20 text-danger mb-6 rounded-xl border p-3 text-center text-sm">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="bg-danger/10 border-danger/20 text-danger mb-6 rounded-xl border p-3 text-center text-sm"
+        >
           {formError || submissionError}
         </div>
       )}
@@ -129,6 +134,7 @@ function ResetPasswordForm() {
         <Input
           label="Nueva Contraseña"
           type="password"
+          autoComplete="new-password"
           required
           minLength={10}
           value={newPassword}
@@ -140,6 +146,7 @@ function ResetPasswordForm() {
         <Input
           label="Confirmar Contraseña"
           type="password"
+          autoComplete="new-password"
           required
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}

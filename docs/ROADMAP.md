@@ -195,10 +195,10 @@ los mismos bugs en la UI nueva.
   - No existe en ningún punto del proyecto pese a `animate-pulse`, `animate-spin`, `hover:scale`
     y la transición global en `*` de `globals.css`.
 
-- [ ] **`autocomplete` en los formularios de autenticación** — 2h
+- [x] **`autocomplete` en los formularios de autenticación** — 2h *(2026-08-23)*
   - Login, registro, forgot/reset password sin `autocomplete="email"|"current-password"|"new-password"`.
 
-- [ ] **`aria-live="polite"` en los mensajes de error/éxito** de los 4 formularios de auth — 2h
+- [x] **`aria-live="polite"` en los mensajes de error/éxito** de los 4 formularios de auth — 2h *(2026-08-23)*
 
 - [x] **Estado `active:` (pressed) en botones y tarjetas clicables** — 3h *(2026-08-23)*
   - Hay `hover:` en casi todo pero ningún feedback de "presionado" en toda la app.

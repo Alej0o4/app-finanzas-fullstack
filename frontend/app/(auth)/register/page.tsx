@@ -76,7 +76,12 @@ export default function RegisterPage() {
       </div>
 
       {error && (
-        <div className="bg-danger/10 border-danger/20 text-danger mb-6 rounded-xl border p-3 text-center text-sm">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="bg-danger/10 border-danger/20 text-danger mb-6 rounded-xl border p-3 text-center text-sm"
+        >
           {error}
         </div>
       )}
@@ -85,6 +90,7 @@ export default function RegisterPage() {
         <Input
           label="Nombre Completo"
           type="text"
+          autoComplete="name"
           required
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
@@ -95,6 +101,7 @@ export default function RegisterPage() {
         <Input
           label="Correo Electrónico"
           type="email"
+          autoComplete="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -105,6 +112,7 @@ export default function RegisterPage() {
         <Input
           label="Contraseña"
           type="password"
+          autoComplete="new-password"
           required
           minLength={10}
           value={password}
@@ -116,6 +124,7 @@ export default function RegisterPage() {
         <Input
           label="Confirmar Contraseña"
           type="password"
+          autoComplete="new-password"
           required
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
