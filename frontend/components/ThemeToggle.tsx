@@ -96,7 +96,7 @@ export default function ThemeToggle() {
   return (
     <button
       onClick={cycleTheme}
-      className="text-text-muted hover:text-text cursor-pointer rounded-lg p-1.5 transition-colors"
+      className="text-text-muted hover:text-text cursor-pointer rounded-lg p-1.5 transition-colors active:scale-95"
       title={`Tema: ${THEME_LABELS[theme]}`}
       aria-label={`Tema: ${THEME_LABELS[theme]}`}
     >

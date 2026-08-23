@@ -167,11 +167,7 @@ export default function AccountsPage() {
           <h1 className="text-text font-sans text-xl font-bold sm:text-2xl">Tus Cuentas</h1>
           <p className="text-text-muted text-xs sm:text-sm">Gestiona el origen de tus fondos.</p>
         </div>
-        <Button
-          variant="primary"
-          onClick={() => setIsCreateModalOpen(true)}
-          className="shrink-0"
-        >
+        <Button variant="primary" onClick={() => setIsCreateModalOpen(true)} className="shrink-0">
           <Plus size={18} />
           <span className="hidden sm:inline">Nueva Cuenta</span>
           <span className="sm:hidden">Nueva</span>
@@ -184,7 +180,10 @@ export default function AccountsPage() {
             key={account.id}
             className="bg-surface border-border/70 hover:border-primary/30 group relative rounded-2xl border p-4 transition-colors sm:p-5"
           >
-            <Link href={`/accounts/${account.id}`} className="block cursor-pointer">
+            <Link
+              href={`/accounts/${account.id}`}
+              className="block cursor-pointer transition-transform duration-200 active:scale-[0.99]"
+            >
               <div className="mb-4 flex items-start justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="bg-background text-primary rounded-lg p-2">
@@ -213,15 +212,13 @@ export default function AccountsPage() {
                   e.stopPropagation();
                   toggleHighlightMutation.mutate(account.id);
                 }}
-                className={`p-1 transition-colors ${
+                className={`p-1 transition-colors active:scale-95 ${
                   account.highlighted
                     ? 'text-yellow-400 hover:text-yellow-300'
                     : 'text-text-muted hover:text-yellow-400'
                 }`}
                 title={account.highlighted ? 'Quitar de destacadas' : 'Marcar como destacada'}
-                aria-label={
-                  account.highlighted ? 'Quitar de destacadas' : 'Marcar como destacada'
-                }
+                aria-label={account.highlighted ? 'Quitar de destacadas' : 'Marcar como destacada'}
               >
                 <Star size={16} fill={account.highlighted ? 'currentColor' : 'none'} />
               </button>
@@ -231,7 +228,7 @@ export default function AccountsPage() {
                   e.stopPropagation();
                   openEditModal(account);
                 }}
-                className="text-text-muted hover:text-primary p-1 transition-colors"
+                className="text-text-muted hover:text-primary p-1 transition-colors active:scale-95"
                 title="Editar cuenta"
                 aria-label="Editar cuenta"
               >
@@ -243,7 +240,7 @@ export default function AccountsPage() {
                   e.stopPropagation();
                   handleDelete(account.id, account.name);
                 }}
-                className="text-text-muted hover:text-danger p-1 transition-colors"
+                className="text-text-muted hover:text-danger p-1 transition-colors active:scale-95"
                 title="Eliminar cuenta"
                 aria-label="Eliminar cuenta"
               >

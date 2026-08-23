@@ -200,7 +200,7 @@ los mismos bugs en la UI nueva.
 
 - [ ] **`aria-live="polite"` en los mensajes de error/éxito** de los 4 formularios de auth — 2h
 
-- [ ] **Estado `active:` (pressed) en botones y tarjetas clicables** — 3h
+- [x] **Estado `active:` (pressed) en botones y tarjetas clicables** — 3h *(2026-08-23)*
   - Hay `hover:` en casi todo pero ningún feedback de "presionado" en toda la app.
 
 ---

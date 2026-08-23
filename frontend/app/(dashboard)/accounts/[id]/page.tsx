@@ -160,7 +160,7 @@ export default function AccountDetailPage() {
       <div className="flex items-center space-x-4">
         <button
           onClick={() => router.back()}
-          className="bg-surface hover:bg-surface-elevated border-border/70 text-text-muted hover:text-text cursor-pointer rounded-xl border p-2 transition-colors"
+          className="bg-surface hover:bg-surface-elevated border-border/70 text-text-muted hover:text-text cursor-pointer rounded-xl border p-2 transition-colors active:scale-95"
           aria-label="Volver"
         >
           <ArrowLeft size={18} />
@@ -235,7 +235,7 @@ export default function AccountDetailPage() {
                       <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                         <button
                           onClick={() => openEditModal(tx)}
-                          className="text-text-muted hover:text-text hover:bg-surface-elevated rounded-lg p-2 transition-colors"
+                          className="text-text-muted hover:text-text hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
                           aria-label="Editar transacción"
                         >
                           <Pencil size={16} />
@@ -248,7 +248,7 @@ export default function AccountDetailPage() {
                                 deleteMutation.mutate(tx.id)
                               )
                           }
-                          className="text-text-muted hover:text-danger hover:bg-surface-elevated rounded-lg p-2 transition-colors"
+                          className="text-text-muted hover:text-danger hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
                           aria-label="Eliminar transacción"
                         >
                           <Trash2 size={16} />

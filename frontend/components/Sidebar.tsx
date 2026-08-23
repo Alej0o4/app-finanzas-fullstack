@@ -94,12 +94,14 @@ export default function Sidebar() {
             </span>
             <button
               onClick={toggleSidebar}
-              className="bg-background hover:bg-surface-elevated border-border/70 text-text-muted hover:text-text cursor-pointer rounded-lg border p-1.5 transition-colors"
+              className="bg-background hover:bg-surface-elevated border-border/70 text-text-muted hover:text-text cursor-pointer rounded-lg border p-1.5 transition-colors active:scale-95"
               aria-label={isSidebarOpen ? 'Cerrar menú' : 'Abrir menú'}
               aria-expanded={isSidebarOpen}
             >
               {isSidebarOpen ? (
-                <span className="sm:hidden"><X size={16} /></span>
+                <span className="sm:hidden">
+                  <X size={16} />
+                </span>
               ) : (
                 <ChevronRight size={16} />
               )}
@@ -124,8 +126,8 @@ export default function Sidebar() {
                   }}
                   className={`group relative flex items-center space-x-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors duration-200 ${
                     isActive
-                      ? 'bg-primary text-background shadow-primary/10 font-semibold shadow-lg'
-                      : 'text-text-muted hover:text-text hover:bg-surface-elevated'
+                      ? 'bg-primary text-background shadow-primary/10 font-semibold shadow-lg active:brightness-95'
+                      : 'text-text-muted hover:text-text hover:bg-surface-elevated active:bg-surface'
                   }`}
                 >
                   <Icon
@@ -165,7 +167,7 @@ export default function Sidebar() {
                     .map((n: string) => n[0])
                     .join('') || 'U'}
                 </div>
-                <div className="min-w-0 flex flex-col">
+                <div className="flex min-w-0 flex-col">
                   <span className="text-text truncate text-xs font-medium">
                     {user?.full_name || 'Usuario'}
                   </span>
@@ -178,7 +180,7 @@ export default function Sidebar() {
                 <ThemeToggle />
                 <button
                   onClick={handleLogout}
-                  className="text-text-muted hover:text-danger cursor-pointer rounded-lg p-1.5 transition-colors"
+                  className="text-text-muted hover:text-danger cursor-pointer rounded-lg p-1.5 transition-colors active:scale-95"
                   title="Cerrar sesión"
                   aria-label="Cerrar sesión"
                 >
@@ -197,7 +199,7 @@ export default function Sidebar() {
               <ThemeToggle />
               <button
                 onClick={handleLogout}
-                className="text-text-muted hover:text-danger cursor-pointer rounded-lg p-1.5 transition-colors"
+                className="text-text-muted hover:text-danger cursor-pointer rounded-lg p-1.5 transition-colors active:scale-95"
                 title="Cerrar sesión"
                 aria-label="Cerrar sesión"
               >

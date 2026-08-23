@@ -246,30 +246,24 @@ export default function TransactionsPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-text font-sans text-xl font-bold sm:text-2xl">Transacciones</h1>
-          <p className="text-text-muted text-xs sm:text-sm">El registro histórico de tus movimientos.</p>
+          <p className="text-text-muted text-xs sm:text-sm">
+            El registro histórico de tus movimientos.
+          </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={() => setIsModalOpen(true)}
-          className="shrink-0"
-        >
+        <Button variant="primary" onClick={() => setIsModalOpen(true)} className="shrink-0">
           <Plus size={18} />
           <span className="hidden sm:inline">Nuevo Movimiento</span>
           <span className="sm:hidden">Nuevo</span>
         </Button>
       </div>
 
-      <div className="bg-surface border-border/70 min-w-0 overflow-x-hidden space-y-4 rounded-2xl border p-4 shadow-sm sm:p-5">
+      <div className="bg-surface border-border/70 min-w-0 space-y-4 overflow-x-hidden rounded-2xl border p-4 shadow-sm sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <div className="text-text-soft flex items-center gap-2 text-sm font-medium">
             <FilterX size={16} className="text-text-muted" />
             Filtros de feed
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearFilters}
-          >
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
             Limpiar filtros
           </Button>
         </div>
@@ -418,7 +412,7 @@ export default function TransactionsPage() {
                       <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                         <button
                           onClick={() => openEditModal(tx)}
-                          className="text-text-muted hover:text-text hover:bg-surface-elevated rounded-lg p-2 transition-colors"
+                          className="text-text-muted hover:text-text hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
                           aria-label="Editar transacción"
                         >
                           <Pencil size={16} />
@@ -431,7 +425,7 @@ export default function TransactionsPage() {
                                 deleteMutation.mutate(tx.id)
                               )
                           }
-                          className="text-text-muted hover:text-danger hover:bg-surface-elevated rounded-lg p-2 transition-colors"
+                          className="text-text-muted hover:text-danger hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
                           aria-label="Eliminar transacción"
                         >
                           <Trash2 size={16} />

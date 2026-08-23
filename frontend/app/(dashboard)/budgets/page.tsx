@@ -184,7 +184,7 @@ export default function BudgetsPage() {
                   <div className="flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       onClick={() => openEditModal(budget)}
-                      className="text-text-muted hover:text-primary p-1 transition-colors"
+                      className="text-text-muted hover:text-primary p-1 transition-colors active:scale-95"
                       aria-label="Editar presupuesto"
                     >
                       <Edit2 size={16} />
@@ -197,7 +197,7 @@ export default function BudgetsPage() {
                             deleteMutation.mutate(budget.id)
                           )
                       }
-                      className="text-text-muted hover:text-danger p-1 transition-colors"
+                      className="text-text-muted hover:text-danger p-1 transition-colors active:scale-95"
                       aria-label="Eliminar presupuesto"
                     >
                       <Trash2 size={16} />

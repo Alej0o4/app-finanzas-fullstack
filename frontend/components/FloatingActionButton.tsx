@@ -22,7 +22,7 @@ const FloatingActionButton = forwardRef<HTMLDivElement, FloatingActionButtonProp
         <button
           type="button"
           onClick={onToggle}
-          className={`flex h-14 w-14 cursor-pointer items-center justify-center rounded-2xl shadow-lg transition-[transform,box-shadow,background-color] duration-200 ${
+          className={`flex h-14 w-14 cursor-pointer items-center justify-center rounded-2xl shadow-lg transition-[transform,box-shadow,background-color] duration-200 active:scale-95 ${
             isOpen
               ? 'bg-surface-elevated border-border text-text rotate-45 border shadow-none'
               : 'bg-primary hover:bg-primary-dark text-background shadow-primary/20 hover:shadow-primary/30'

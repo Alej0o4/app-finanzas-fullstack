@@ -126,13 +126,11 @@ export default function CategoriesPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-text font-sans text-xl font-bold sm:text-2xl">Tus Categorías</h1>
-          <p className="text-text-muted text-xs sm:text-sm">Organiza y clasifica tus movimientos.</p>
+          <p className="text-text-muted text-xs sm:text-sm">
+            Organiza y clasifica tus movimientos.
+          </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={() => setIsCreateModalOpen(true)}
-          className="shrink-0"
-        >
+        <Button variant="primary" onClick={() => setIsCreateModalOpen(true)} className="shrink-0">
           <Plus size={18} />
           <span className="hidden sm:inline">Nueva Categoría</span>
           <span className="sm:hidden">Nueva</span>
@@ -151,7 +149,7 @@ export default function CategoriesPage() {
             >
               <Link
                 href={`/categories/${category.id}`}
-                className="block flex h-full w-full cursor-pointer flex-col justify-between"
+                className="block flex h-full w-full cursor-pointer flex-col justify-between transition-transform duration-200 active:scale-[0.99]"
               >
                 <div className="flex items-start justify-between">
                   <div
@@ -183,7 +181,7 @@ export default function CategoriesPage() {
                       e.stopPropagation();
                       openEditModal(category);
                     }}
-                    className="text-text-muted hover:text-primary p-1 transition-colors"
+                    className="text-text-muted hover:text-primary p-1 transition-colors active:scale-95"
                     title="Editar categoría"
                     aria-label="Editar categoría"
                   >
@@ -195,7 +193,7 @@ export default function CategoriesPage() {
                       e.stopPropagation();
                       handleDelete(category.id, category.name);
                     }}
-                    className="text-text-muted hover:text-danger p-1 transition-colors"
+                    className="text-text-muted hover:text-danger p-1 transition-colors active:scale-95"
                     title="Eliminar categoría"
                     aria-label="Eliminar categoría"
                   >
