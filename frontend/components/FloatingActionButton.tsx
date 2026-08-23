@@ -27,6 +27,8 @@ const FloatingActionButton = forwardRef<HTMLDivElement, FloatingActionButtonProp
               ? 'bg-surface-elevated border-border text-text rotate-45 border shadow-none'
               : 'bg-primary hover:bg-primary-dark text-background shadow-primary/20 hover:shadow-primary/30'
           }`}
+          aria-label="Registrar movimiento"
+          aria-expanded={isOpen}
         >
           <Plus className="h-6 w-6" />
         </button>

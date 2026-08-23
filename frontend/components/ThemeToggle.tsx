@@ -98,6 +98,7 @@ export default function ThemeToggle() {
       onClick={cycleTheme}
       className="text-text-muted hover:text-text cursor-pointer rounded-lg p-1.5 transition-colors"
       title={`Tema: ${THEME_LABELS[theme]}`}
+      aria-label={`Tema: ${THEME_LABELS[theme]}`}
     >
       <Icon size={16} />
     </button>

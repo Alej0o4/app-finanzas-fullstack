@@ -185,6 +185,7 @@ export default function CategoriesPage() {
                     }}
                     className="text-text-muted hover:text-primary p-1 transition-colors"
                     title="Editar categoría"
+                    aria-label="Editar categoría"
                   >
                     <Edit2 size={16} />
                   </button>
@@ -196,6 +197,7 @@ export default function CategoriesPage() {
                     }}
                     className="text-text-muted hover:text-danger p-1 transition-colors"
                     title="Eliminar categoría"
+                    aria-label="Eliminar categoría"
                   >
                     <Trash2 size={16} />
                   </button>

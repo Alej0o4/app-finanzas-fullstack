@@ -185,6 +185,7 @@ export default function BudgetsPage() {
                     <button
                       onClick={() => openEditModal(budget)}
                       className="text-text-muted hover:text-primary p-1 transition-colors"
+                      aria-label="Editar presupuesto"
                     >
                       <Edit2 size={16} />
                     </button>
@@ -197,6 +198,7 @@ export default function BudgetsPage() {
                           )
                       }
                       className="text-text-muted hover:text-danger p-1 transition-colors"
+                      aria-label="Eliminar presupuesto"
                     >
                       <Trash2 size={16} />
                     </button>

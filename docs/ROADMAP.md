@@ -175,7 +175,7 @@ los mismos bugs en la UI nueva.
 - [x] **Asociar `<label>` con su control (`htmlFor`/`id`)** en `Input.tsx` y `Select.tsx` — 3h *(2026-08-23)*
   - El label no es clickeable ni queda anunciado por un lector de pantalla al enfocar el campo.
 
-- [ ] **`aria-label` en todos los botones icon-only** — 1d
+- [x] **`aria-label` en todos los botones icon-only** — 1d *(2026-08-23)*
   - Repetido en ~20 lugares: toggle del sidebar, logout, tema, FAB, cerrar modal, y las acciones
     de editar/eliminar/destacar en cuentas, categorías, presupuestos y transacciones.
   - `ChartControlsPopover.tsx:32` ya lo hace bien — usar como plantilla.

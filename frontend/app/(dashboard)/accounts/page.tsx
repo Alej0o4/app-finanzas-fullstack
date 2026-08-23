@@ -219,6 +219,9 @@ export default function AccountsPage() {
                     : 'text-text-muted hover:text-yellow-400'
                 }`}
                 title={account.highlighted ? 'Quitar de destacadas' : 'Marcar como destacada'}
+                aria-label={
+                  account.highlighted ? 'Quitar de destacadas' : 'Marcar como destacada'
+                }
               >
                 <Star size={16} fill={account.highlighted ? 'currentColor' : 'none'} />
               </button>
@@ -230,6 +233,7 @@ export default function AccountsPage() {
                 }}
                 className="text-text-muted hover:text-primary p-1 transition-colors"
                 title="Editar cuenta"
+                aria-label="Editar cuenta"
               >
                 <Edit2 size={16} />
               </button>
@@ -241,6 +245,7 @@ export default function AccountsPage() {
                 }}
                 className="text-text-muted hover:text-danger p-1 transition-colors"
                 title="Eliminar cuenta"
+                aria-label="Eliminar cuenta"
               >
                 <Trash2 size={16} />
               </button>

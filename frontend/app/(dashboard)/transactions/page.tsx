@@ -419,6 +419,7 @@ export default function TransactionsPage() {
                         <button
                           onClick={() => openEditModal(tx)}
                           className="text-text-muted hover:text-text hover:bg-surface-elevated rounded-lg p-2 transition-colors"
+                          aria-label="Editar transacción"
                         >
                           <Pencil size={16} />
                         </button>
@@ -431,6 +432,7 @@ export default function TransactionsPage() {
                               )
                           }
                           className="text-text-muted hover:text-danger hover:bg-surface-elevated rounded-lg p-2 transition-colors"
+                          aria-label="Eliminar transacción"
                         >
                           <Trash2 size={16} />
                         </button>

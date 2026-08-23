@@ -30,6 +30,7 @@ export default function ChartControlsPopover({ children }: ChartControlsPopoverP
         onClick={() => setOpen((prev) => !prev)}
         className="border-border/70 bg-background/40 text-text-muted hover:text-text hover:bg-surface-elevated flex items-center justify-center rounded-lg border p-2 transition-colors"
         aria-label="Configurar visualización"
+        aria-expanded={open}
       >
         <Settings2 className="h-4 w-4" />
       </button>

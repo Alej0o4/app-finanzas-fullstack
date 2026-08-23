@@ -24,6 +24,7 @@ export default function ModalShell({ isOpen, onClose, title, children }: ModalSh
           <button
             onClick={onClose}
             className="text-text-muted hover:text-text hover:bg-surface-elevated cursor-pointer rounded-lg p-1.5 transition-colors"
+            aria-label="Cerrar"
           >
             <X className="h-5 w-5" />
           </button>

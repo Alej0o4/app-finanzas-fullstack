@@ -95,6 +95,8 @@ export default function Sidebar() {
             <button
               onClick={toggleSidebar}
               className="bg-background hover:bg-surface-elevated border-border/70 text-text-muted hover:text-text cursor-pointer rounded-lg border p-1.5 transition-colors"
+              aria-label={isSidebarOpen ? 'Cerrar menú' : 'Abrir menú'}
+              aria-expanded={isSidebarOpen}
             >
               {isSidebarOpen ? (
                 <span className="sm:hidden"><X size={16} /></span>
@@ -178,6 +180,7 @@ export default function Sidebar() {
                   onClick={handleLogout}
                   className="text-text-muted hover:text-danger cursor-pointer rounded-lg p-1.5 transition-colors"
                   title="Cerrar sesión"
+                  aria-label="Cerrar sesión"
                 >
                   <LogOut size={16} />
                 </button>
@@ -196,6 +199,7 @@ export default function Sidebar() {
                 onClick={handleLogout}
                 className="text-text-muted hover:text-danger cursor-pointer rounded-lg p-1.5 transition-colors"
                 title="Cerrar sesión"
+                aria-label="Cerrar sesión"
               >
                 <LogOut size={16} />
               </button>
