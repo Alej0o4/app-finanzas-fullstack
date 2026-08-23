@@ -256,31 +256,59 @@ los mismos bugs en la UI nueva.
 
 **Objetivo:** el "aha moment" — que el usuario vea su dinero graficado lo antes posible.
 
-- [ ] **Tarjeta principal de flujo mensual** — 1d
-  - Tres datos: total gastado, total ingresado, **balance del mes**.
-  - Reemplaza la tarjeta actual `Balance Total` (que suma saldos de cuentas, no flujo).
-
-- [ ] **Desglose por categoría en barras horizontales** ordenadas de mayor a menor — 1d
-  - Existe `CategoryDonutChart`; el MVP pide barras.
-
-- [ ] **Vista secundaria de saldos de cuentas** — 4h
-  - Decisión 2026-08-22: los saldos siguen accesibles, solo dejan de ser el dato principal.
-  - La página `accounts/` ya cubre buena parte de esto.
-
-- [ ] **Podar del flujo principal** — 1d
-  - Página `analytics/` + `CashflowChart` + `ChartControlsPopover` + filtros de fecha → detrás del menú.
-  - Editor de categorías (`categories/`, `categories/[id]`) → **ocultar, no borrar**.
-  - No se elimina código: se retira de la ruta principal.
+> Reevaluada el 2026-08-23 (ver conversación de esa fecha): la redacción original proponía sacar
+> Analítica y el editor de Categorías del sidebar ("detrás del menú"), asumiendo una fricción de
+> navegación no validada con usuarios reales (el pivote a producto público es de un día antes, y
+> el sidebar actual son 6 ítems, no un menú saturado). Una auditoría del código mostró que el
+> objetivo real — que el dashboard no se sature de gráficos de analítica — ya estaba cumplido:
+> `CashflowChart`, `ChartControlsPopover` y `CategoryDonutChart` viven únicamente en `/analytics`
+> y nunca tocaron el dashboard. Se redujo el alcance de "podar" a lo que sí tiene justificación
+> (categorías curadas sin editor en v1, ver Fase 8) y se aplica el mismo criterio que la Decisión
+> 10.1.4 de Fase 10: no remover una ruta ya construida sin datos de uso que lo respalden.
 
 - [ ] **Corregir los 3 bugs multi-moneda restantes** — 1d
-  - Como las cuentas quedan visibles y multi-moneda sigue alcanzable, estos bugs son reales:
-    - `budgets-progress` suma gastos **sin filtrar por moneda** y los compara contra `Budget.currency`.
-    - `cashflow-series` suma todas las monedas en una sola serie.
-    - `category-distribution` mezcla monedas en los totales por categoría.
+  - Se adelanta al inicio de la fase: es corrección pura, no depende de ninguna decisión de
+    diseño pendiente y se puede enviar de forma independiente y segura.
+  - `budgets-progress` suma gastos **sin filtrar por moneda** y los compara contra `Budget.currency`.
+  - `cashflow-series` suma todas las monedas en una sola serie.
+  - `category-distribution` mezcla monedas en los totales por categoría.
   - Mismo defecto que ya se corrigió en `/summary` en 2026-07-14.
 
 - [ ] **`actualizar_transaccion` no actualiza `currency`** — 2h
   - Mover una transacción de una cuenta COP a una USD la deja con `currency="COP"`.
+
+- [ ] **Reordenar la jerarquía de las summary cards del dashboard** — 4h
+  - No es un reemplazo: el dashboard ya muestra `Balance Total`, `Ingresos del Mes` y `Gastos del
+    Mes` como 3 cards lado a lado. Se agrega el cálculo de **balance del mes** (ingreso mensual −
+    gastos del mes) y se le da prioridad visual; `Balance Total` (suma de saldos de cuentas) se
+    **demueve, no se elimina** — pasa a la vista secundaria de cuentas (ver abajo).
+
+- [ ] **Desglose por categoría en barras horizontales**, ordenadas de mayor a menor — 1d
+  - Aditivo, no reemplazo: el dashboard hoy no tiene ningún desglose por categoría (los Budget
+    Rings son otra cosa). Reusa el endpoint `category-distribution` ya existente.
+  - `CategoryDonutChart` se queda intacto en `/analytics` — dona y barras sirven audiencias
+    distintas (exploración detallada vs. vistazo rápido); no hace falta que una reemplace a la otra.
+
+- [ ] **Vista secundaria de saldos de cuentas** — 4h
+  - Decisión 2026-08-22: los saldos siguen accesibles, solo dejan de ser el dato principal.
+  - La página `accounts/` ya cubre esto — la tarea real es mover ahí la card `Balance Total` que
+    sale del dashboard, no construir nada nuevo.
+
+- [ ] **Ocultar solo los controles de creación/edición de categorías personalizadas** — 4h
+  - Alcance reducido respecto a la versión original (que sacaba toda la ruta `categories/` del
+    sidebar). Consistente con Fase 8 (categorías curadas, sin editor en v1): se ocultan los
+    botones de crear/editar categoría, pero la ruta se queda en el sidebar y la lista sigue
+    visible, para que el usuario pueda ver qué categorías existen.
+  - El editor completo vuelve en el backlog post-MVP ("Editor de categorías personalizable" — el
+    código ya existe, solo queda oculto).
+
+- [ ] **Reagrupar visualmente el sidebar** (primario: Dashboard/Transacciones/Presupuestos —
+      secundario: Analítica/Cuentas/Categorías, con separador) — 2h
+  - Reemplaza la tarea original "Podar del flujo principal" (que sacaba Analítica del sidebar).
+  - Ningún ítem se remueve del menú ni ninguna ruta se oculta — solo se reordena/agrupa para dar
+    prioridad visual a los componentes del MVP sin esconder features ya construidas.
+  - Revisar remoción real solo si hay datos de uso que la justifiquen — mismo criterio que la
+    Decisión 10.1.4 de Fase 10 (no comprometerse con fricción no validada).
 
 ---
 
