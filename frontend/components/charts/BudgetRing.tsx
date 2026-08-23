@@ -72,7 +72,7 @@ export default function BudgetRing({
             cx="50"
             cy="50"
             r={radius}
-            className={`${ringColorClass} transition-all duration-1000 ease-out`}
+            className={`${ringColorClass} transition-[stroke-dashoffset] duration-1000 ease-out`}
             strokeWidth="6"
             strokeDasharray={circumference}
             strokeDashoffset={strokeDashoffset}

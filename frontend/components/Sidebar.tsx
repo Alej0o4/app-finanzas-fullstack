@@ -80,7 +80,7 @@ export default function Sidebar() {
       />
 
       <aside
-        className={`bg-surface border-border/70 fixed top-0 left-0 z-40 flex h-screen flex-col justify-between border-r transition-all duration-300 ease-in-out ${
+        className={`bg-surface border-border/70 fixed top-0 left-0 z-40 flex h-screen flex-col justify-between border-r transition-[width] duration-300 ease-in-out ${
           isSidebarOpen ? 'w-64' : 'w-20'
         } ${isSidebarOpen ? 'max-sm:translate-x-0' : 'max-sm:-translate-x-full'}`}
       >
@@ -122,7 +122,7 @@ export default function Sidebar() {
                   onClick={() => {
                     if (isMobile()) closeSidebar();
                   }}
-                  className={`group relative flex items-center space-x-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
+                  className={`group relative flex items-center space-x-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors duration-200 ${
                     isActive
                       ? 'bg-primary text-background shadow-primary/10 font-semibold shadow-lg'
                       : 'text-text-muted hover:text-text hover:bg-surface-elevated'
@@ -144,7 +144,7 @@ export default function Sidebar() {
 
                   {/* Tooltip flotante si el sidebar está colapsado */}
                   {!isSidebarOpen && (
-                    <div className="bg-surface-elevated text-text border-border absolute left-24 z-50 origin-left scale-0 rounded-md border px-2.5 py-1.5 font-sans text-xs shadow-xl transition-all duration-150 group-hover:scale-100">
+                    <div className="bg-surface-elevated text-text border-border absolute left-24 z-50 origin-left scale-0 rounded-md border px-2.5 py-1.5 font-sans text-xs shadow-xl transition-[transform,opacity] duration-150 group-hover:scale-100">
                       {item.name}
                     </div>
                   )}

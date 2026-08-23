@@ -37,7 +37,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <FabManager />
 
       <div
-        className={`flex min-h-screen flex-col transition-all duration-300 ease-in-out ${
+        className={`flex min-h-screen flex-col transition-[padding] duration-300 ease-in-out ${
           isSidebarOpen ? 'sm:pl-64' : 'sm:pl-20'
         }`}
       >

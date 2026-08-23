@@ -187,7 +187,7 @@ los mismos bugs en la UI nueva.
     instalado y no hay keyframes propios en `globals.css` — hoy no animan nada pese a que el
     código lo sugiere.
 
-- [ ] **Reemplazar `transition-all` por propiedades explícitas** — 3h
+- [x] **Reemplazar `transition-all` por propiedades explícitas** — 3h *(2026-08-23)*
   - Repetido en `Sidebar`, `Button`, `FloatingActionButton`, `(dashboard)/layout.tsx` y los
     formularios de edición manual.
 

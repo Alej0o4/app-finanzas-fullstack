@@ -506,7 +506,7 @@ export default function TransactionsPage() {
                 required
                 value={editAmount}
                 onChange={(e) => setEditAmount(e.target.value)}
-                className="bg-background border-border/70 text-text focus:ring-primary/50 focus:border-primary w-full rounded-xl border px-4 py-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
+                className="bg-background border-border/70 text-text focus:ring-primary/50 focus:border-primary w-full rounded-xl border px-4 py-2.5 text-sm transition-colors focus:ring-2 focus:outline-none"
               />
             </div>
 
@@ -518,7 +518,7 @@ export default function TransactionsPage() {
                 required
                 value={editDescription}
                 onChange={(e) => setEditDescription(e.target.value)}
-                className="bg-background border-border/70 text-text focus:ring-primary/50 focus:border-primary w-full rounded-xl border px-4 py-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
+                className="bg-background border-border/70 text-text focus:ring-primary/50 focus:border-primary w-full rounded-xl border px-4 py-2.5 text-sm transition-colors focus:ring-2 focus:outline-none"
               />
             </div>
 
@@ -531,7 +531,7 @@ export default function TransactionsPage() {
                   required
                   value={editAccountId}
                   onChange={(e) => setEditAccountId(e.target.value)}
-                  className="bg-background border-border/70 text-text focus:ring-primary/50 w-full appearance-none rounded-xl border px-4 py-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
+                  className="bg-background border-border/70 text-text focus:ring-primary/50 w-full appearance-none rounded-xl border px-4 py-2.5 text-sm transition-colors focus:ring-2 focus:outline-none"
                 >
                   <option value="" disabled>
                     Selecciona...
@@ -551,7 +551,7 @@ export default function TransactionsPage() {
                   required
                   value={editCategoryId}
                   onChange={(e) => setEditCategoryId(e.target.value)}
-                  className="bg-background border-border/70 text-text focus:ring-primary/50 w-full appearance-none rounded-xl border px-4 py-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
+                  className="bg-background border-border/70 text-text focus:ring-primary/50 w-full appearance-none rounded-xl border px-4 py-2.5 text-sm transition-colors focus:ring-2 focus:outline-none"
                 >
                   <option value="" disabled>
                     Selecciona...
@@ -576,7 +576,7 @@ export default function TransactionsPage() {
                 required
                 value={editDate}
                 onChange={(e) => setEditDate(e.target.value)}
-                className="bg-background border-border/70 text-text focus:ring-primary/50 focus:border-primary w-full rounded-xl border px-4 py-2.5 text-sm transition-all focus:ring-2 focus:outline-none"
+                className="bg-background border-border/70 text-text focus:ring-primary/50 focus:border-primary w-full rounded-xl border px-4 py-2.5 text-sm transition-colors focus:ring-2 focus:outline-none"
               />
             </div>
 

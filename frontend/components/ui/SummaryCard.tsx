@@ -12,7 +12,7 @@ interface SummaryCardProps {
 export default function SummaryCard({ label, value, children, trend, color }: SummaryCardProps) {
   return (
     <div
-      className={`border-border bg-surface rounded-2xl border p-4 transition-all duration-200 hover:scale-[1.02] max-sm:hover:scale-100 sm:hover:scale-[1.02] ${
+      className={`border-border bg-surface rounded-2xl border p-4 transition-transform duration-200 hover:scale-[1.02] max-sm:hover:scale-100 sm:hover:scale-[1.02] ${
         color ? `border-l-4` : ''
       }`}
       style={color ? { borderLeftColor: color } : undefined}

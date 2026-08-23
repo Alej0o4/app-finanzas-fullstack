@@ -38,7 +38,7 @@ export default function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`focus-visible:ring-primary/50 inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 focus-visible:ring-2 focus-visible:outline-none ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+      className={`focus-visible:ring-primary/50 inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl font-medium transition-colors duration-200 focus-visible:ring-2 focus-visible:outline-none ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
       disabled={disabled || loading}
       {...rest}
     >
