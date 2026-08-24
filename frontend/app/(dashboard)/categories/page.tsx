@@ -16,6 +16,12 @@ import { useConfirmStore } from '@/store/useConfirmStore';
 import CategoryIcon from '@/components/ui/CategoryIcon';
 import type { Category } from '@/types/api';
 
+// Fase 11 §11.6: categorías curadas sin editor en v1 (consistente con Fase 8). El código de
+// creación/edición se mantiene funcional pero oculto — reactivar cambiando este flag cuando
+// el editor de categorías salga del backlog post-MVP (ver docs/ROADMAP.md, "Backlog
+// priorizado").
+const CUSTOM_CATEGORY_EDITING_ENABLED = false;
+
 const categoryTypeTranslations: Record<string, string> = {
   income: 'Ingreso',
   expense: 'Gasto',
@@ -130,11 +136,13 @@ export default function CategoriesPage() {
             Organiza y clasifica tus movimientos.
           </p>
         </div>
-        <Button variant="primary" onClick={() => setIsCreateModalOpen(true)} className="shrink-0">
-          <Plus size={18} />
-          <span className="hidden sm:inline">Nueva Categoría</span>
-          <span className="sm:hidden">Nueva</span>
-        </Button>
+        {CUSTOM_CATEGORY_EDITING_ENABLED && (
+          <Button variant="primary" onClick={() => setIsCreateModalOpen(true)} className="shrink-0">
+            <Plus size={18} />
+            <span className="hidden sm:inline">Nueva Categoría</span>
+            <span className="sm:hidden">Nueva</span>
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -173,7 +181,7 @@ export default function CategoriesPage() {
                 </div>
               </Link>
 
-              {!isSystemCategory && (
+              {!isSystemCategory && CUSTOM_CATEGORY_EDITING_ENABLED && (
                 <div className="bg-surface absolute top-4 right-4 z-10 flex gap-2 rounded-lg pl-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                   <button
                     onClick={(e) => {
@@ -206,71 +214,26 @@ export default function CategoriesPage() {
         })}
       </div>
 
-      <ModalShell
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        title="Nueva Categoría"
-      >
-        <form onSubmit={handleCreate} className="space-y-4">
-          <Input
-            label="Nombre"
-            required
-            value={newCategoryName}
-            onChange={(e) => setNewCategoryName(e.target.value)}
-            className="bg-background"
-            placeholder="Ej. Suscripciones"
-          />
-
-          <Select
-            label="Naturaleza"
-            value={newCategoryType}
-            onChange={(e) => setNewCategoryType(e.target.value)}
-            className="bg-background"
-          >
-            <option value="expense">Gasto</option>
-            <option value="income">Ingreso</option>
-          </Select>
-
-          <div className="mt-6 flex gap-3">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setIsCreateModalOpen(false)}
-              className="flex-1"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              loading={createCategoryMutation.isPending}
-              className="flex-1"
-            >
-              Guardar
-            </Button>
-          </div>
-        </form>
-      </ModalShell>
-
-      <ModalShell
-        isOpen={!!editingCategory}
-        onClose={() => setEditingCategory(null)}
-        title="Editar Categoría"
-      >
-        {editingCategory && (
-          <form onSubmit={handleUpdate} className="space-y-4">
+      {CUSTOM_CATEGORY_EDITING_ENABLED && (
+        <ModalShell
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          title="Nueva Categoría"
+        >
+          <form onSubmit={handleCreate} className="space-y-4">
             <Input
               label="Nombre"
               required
-              value={editCategoryName}
-              onChange={(e) => setEditCategoryName(e.target.value)}
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
               className="bg-background"
+              placeholder="Ej. Suscripciones"
             />
 
             <Select
               label="Naturaleza"
-              value={editCategoryType}
-              onChange={(e) => setEditCategoryType(e.target.value)}
+              value={newCategoryType}
+              onChange={(e) => setNewCategoryType(e.target.value)}
               className="bg-background"
             >
               <option value="expense">Gasto</option>
@@ -281,7 +244,7 @@ export default function CategoriesPage() {
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => setEditingCategory(null)}
+                onClick={() => setIsCreateModalOpen(false)}
                 className="flex-1"
               >
                 Cancelar
@@ -289,15 +252,64 @@ export default function CategoriesPage() {
               <Button
                 type="submit"
                 variant="primary"
-                loading={updateCategoryMutation.isPending}
+                loading={createCategoryMutation.isPending}
                 className="flex-1"
               >
-                Actualizar
+                Guardar
               </Button>
             </div>
           </form>
-        )}
-      </ModalShell>
+        </ModalShell>
+      )}
+
+      {CUSTOM_CATEGORY_EDITING_ENABLED && (
+        <ModalShell
+          isOpen={!!editingCategory}
+          onClose={() => setEditingCategory(null)}
+          title="Editar Categoría"
+        >
+          {editingCategory && (
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <Input
+                label="Nombre"
+                required
+                value={editCategoryName}
+                onChange={(e) => setEditCategoryName(e.target.value)}
+                className="bg-background"
+              />
+
+              <Select
+                label="Naturaleza"
+                value={editCategoryType}
+                onChange={(e) => setEditCategoryType(e.target.value)}
+                className="bg-background"
+              >
+                <option value="expense">Gasto</option>
+                <option value="income">Ingreso</option>
+              </Select>
+
+              <div className="mt-6 flex gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setEditingCategory(null)}
+                  className="flex-1"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  loading={updateCategoryMutation.isPending}
+                  className="flex-1"
+                >
+                  Actualizar
+                </Button>
+              </div>
+            </form>
+          )}
+        </ModalShell>
+      )}
     </div>
   );
 }

@@ -47,6 +47,8 @@ export interface BudgetProgress {
   amount_limit: number;
   spent: number;
   percentage: number;
+  /** Moneda real del presupuesto (Fase 11 §11.1): gasto y límite viven en esta moneda. */
+  currency: string;
 }
 
 export interface BalanceByCurrency {
@@ -58,6 +60,12 @@ export interface DashboardSummary {
   balances: BalanceByCurrency[];
   monthly_income_by_currency: BalanceByCurrency[];
   monthly_expense_by_currency: BalanceByCurrency[];
+  /**
+   * Ingreso mensual declarado − gasto del mes (en la moneda preferida), calculado por el
+   * backend (Fase 11 §11.3). `null` = el usuario no ha fijado monthly_income todavía;
+   * distinguir de `undefined` (query en carga).
+   */
+  monthly_flow_balance: number | null;
 }
 
 export interface CashflowItem {

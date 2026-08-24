@@ -37,17 +37,6 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🟠 Bugs confirmados (auditoría 2026-08-22)
 
-- [ ] **Los 3 endpoints restantes del dashboard mezclan monedas.**
-  - Mismo defecto que ya se corrigió en `/summary` (2026-07-14), pero quedó en:
-    - `budgets-progress` — suma gastos sin filtrar por moneda, los compara contra `Budget.currency`.
-    - `cashflow-series` — suma todas las monedas en una sola serie.
-    - `category-distribution` — mezcla monedas en los totales por categoría.
-  - Sigue siendo alcanzable porque las cuentas quedan visibles (decisión 2026-08-22).
-
-- [ ] **`actualizar_transaccion` no actualiza `currency`.**
-  - Mover una transacción de una cuenta COP a una USD la deja con `currency="COP"`
-    viviendo en una cuenta USD.
-
 - [ ] **Un usuario nuevo no puede registrar nada.**
   - `account_id` es obligatorio y un usuario recién registrado tiene 0 cuentas.
   - `QuickTransactionModal` hace `if (!effectiveAccountId || ...) return;` — **falla en silencio**:
@@ -118,6 +107,13 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   - `crear_transaccion` devuelve `TransactionResponse`; variables `cuenta`/`transaccion`
     junto a `models.Account`. Irrelevante en solitario, molesto si el proyecto se abre.
 
+- [ ] **`category-distribution` no expone `icon` — el desglose por categoría del dashboard
+  usa un ícono genérico en todas las filas.**
+  - `CategoryBreakdownBars` (Fase 11 §11.4) siempre cae al fallback `Wallet`: el schema
+    `CategoryDistributionData` no trae `category_icon` como sí lo hace `BudgetProgress`.
+  - Bajo impacto: cosmético, no afecta montos ni orden. Agregar el campo al schema y al
+    query de `obtener_distribucion_categorias` si se quiere ícono real por fila.
+
 ---
 
 ## 🔵 Solo si el proyecto crece
@@ -132,6 +128,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 | Fecha | Item |
 |-------|------|
+| 2026-08-23 | Fase 11 — bugs multi-moneda del dashboard: `budgets-progress` agrupa el gasto por `(categoría, moneda)` y expone `currency`; `cashflow-series` y `category-distribution` filtran por una sola moneda (param `currency`, default la preferida) — ver `docs/specs/fase_11_spec.md` §11.1 |
+| 2026-08-23 | Bug `actualizar_transaccion` no actualizaba `currency`: ahora siempre hereda la moneda de la cuenta destino, igual que en la creación (Fase 11 §11.2) |
 | 2026-08-22 | Fase 7 completa — ver `docs/specs/fase_07_spec.md` para el detalle de cada ítem: |
 | 2026-08-22 | Migraciones versionadas con Alembic (reemplaza `create_all()` + `_ensure_*_column()` ad-hoc) |
 | 2026-08-22 | Bug `preferred_theme` nunca se agregaba a DBs existentes (resuelto por la migración baseline) |

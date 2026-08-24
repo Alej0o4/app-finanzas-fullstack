@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -31,6 +32,26 @@ def obtener_cuentas(
 ):
     cuentas = db.query(models.Account).filter(models.Account.user_id == current_user.id).offset(skip).limit(limit).all()
     return cuentas
+
+
+# ⚠️ Declarada ANTES de GET /{account_id}: FastAPI resuelve rutas en orden de declaración
+# y si esta ruta quedara después, "/accounts/summary" coincidiría con /{account_id} y
+# daría 422 al intentar parsear "summary" como int.
+@router.get("/summary", response_model=list[schemas.BalanceByCurrency])
+def obtener_resumen_saldos(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Saldo total por moneda de TODAS las cuentas del usuario (sin filtro de destacadas).
+
+    Distinto de GET /dashboard/summary, que sí filtra por cuentas destacadas cuando existen
+    (Fase 11 §11.5, Decisión 11.5.1) — este endpoint alimenta accounts/page.tsx, cuya lista
+    de tarjetas tampoco filtra por destacadas, así que el total debe coincidir con esa lista.
+    """
+    rows = (
+        db.query(models.Account.currency, func.sum(models.Account.balance).label("total"))
+        .filter(models.Account.user_id == current_user.id)
+        .group_by(models.Account.currency)
+        .all()
+    )
+    return [{"currency": r.currency, "total": r.total} for r in rows]
 
 
 @router.get("/{account_id}", response_model=schemas.AccountResponse)

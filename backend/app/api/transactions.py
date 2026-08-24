@@ -302,6 +302,9 @@ def actualizar_transaccion(
         transaccion_db.description = transaccion_actualizada.description
         transaccion_db.account_id = transaccion_actualizada.account_id
         transaccion_db.category_id = transaccion_actualizada.category_id
+        # Sin condición: la moneda es un dato derivado de la cuenta, no un campo que el
+        # usuario edite — siempre hereda la de la cuenta destino, igual que crear_transaccion.
+        transaccion_db.currency = cuenta_nueva.currency
         # Opcional: si el cliente no reenvía payment_method conservamos el valor actual
         if transaccion_actualizada.payment_method is not None:
             transaccion_db.payment_method = transaccion_actualizada.payment_method

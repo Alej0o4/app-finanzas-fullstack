@@ -29,12 +29,14 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
 - `POST /api/v1/auth/refresh` → rota refresh token, devuelve nuevo JWT
 - `POST /api/v1/auth/logout` → revoca refresh token
 - `GET /api/v1/users/me`
+- `PATCH /api/v1/users/me` (acepta `{ monthly_income }` — usado por la card "Balance del mes" del dashboard para fijar el ingreso mensual inline, Fase 11 §11.3)
 - `GET /api/v1/users/me/preferences`
 - `PATCH /api/v1/users/me/preferences`
 
 ### Cuentas
 
 - `GET /api/v1/accounts/`
+- `GET /api/v1/accounts/summary` — saldo total por moneda de **TODAS** las cuentas del usuario, sin filtro de destacadas (Fase 11 §11.5). Devuelve `BalanceByCurrency[]`. Es distinto de `GET /dashboard/summary`, cuyo array `balances` sí filtra por cuentas destacadas cuando existen; este endpoint alimenta el encabezado de `accounts/page.tsx`, cuya lista tampoco filtra, para que el total coincida con las tarjetas listadas.
 - `GET /api/v1/accounts/{account_id}`
 - `POST /api/v1/accounts/`
 - `PUT /api/v1/accounts/{account_id}`
@@ -98,10 +100,10 @@ ignoran.
 
 ### Dashboard
 
-- `GET /api/v1/dashboard/summary`
-- `GET /api/v1/dashboard/budgets-progress`
-- `GET /api/v1/dashboard/cashflow-series`
-- `GET /api/v1/dashboard/category-distribution` (soporta `neto=true` para calcular gasto neto por categoría)
+- `GET /api/v1/dashboard/summary` — incluye `monthly_flow_balance: number | null` desde Fase 11 §11.3 (ver "Contratos de datos" abajo)
+- `GET /api/v1/dashboard/budgets-progress` — cada fila incluye `currency` desde Fase 11 §11.1
+- `GET /api/v1/dashboard/cashflow-series` — parámetro opcional `currency` (Fase 11 §11.1): filtra la serie a una sola moneda; si se omite, el backend usa `preferred_currency` del usuario. El frontend lo pasa explícito (Decisión 11.1.1 del spec de Fase 11)
+- `GET /api/v1/dashboard/category-distribution` — mismo parámetro opcional `currency` que cashflow-series; soporta además `neto=true` para calcular gasto neto por categoría
 
 ## Contratos de datos importantes
 
@@ -115,7 +117,7 @@ ignoran.
 - `preferred_currency` (default `"COP"`)
 - `preferred_locale` (default `"es-CO"`)
 - `preferred_theme` (default `"dark"`)
-- `monthly_income` (`number | null`) — dato financiero del perfil, editable vía `PATCH /api/v1/users/me`. Sin UI que lo consuma todavía (onboarding de Fase 13).
+- `monthly_income` (`number | null`) — dato financiero del perfil, editable vía `PATCH /api/v1/users/me`. El dashboard lo consume dos veces (Fase 11 §11.3): indirectamente a través de `monthly_flow_balance` en `/dashboard/summary`, y directamente vía el formulario inline de la card "Balance del mes" cuando ese valor es `null`.
 
 ### Preferencias de usuario
 
@@ -206,9 +208,9 @@ En el dashboard, el progreso de presupuesto llega ya calculado desde el backend.
 
 El frontend asume:
 
-- `total_balance`
-- `monthly_income`
-- `monthly_expense`
+- `balances` (`BalanceByCurrency[]`) — saldos por moneda de las cuentas **destacadas** (o todas si no hay destacadas). Desde Fase 11 §11.3 el dashboard ya no renderiza este array como card "Balance Total": esa vista vive en `/accounts` vía `GET /accounts/summary`, que no filtra por destacadas.
+- `monthly_income_by_currency` / `monthly_expense_by_currency` (`BalanceByCurrency[]`)
+- `monthly_flow_balance` (`number | null`, Fase 11 §11.3) — ingreso mensual declarado por el usuario menos el gasto del mes **en su moneda preferida**, calculado por el backend. `null` significa que el usuario no fijó `monthly_income` todavía (el frontend lo distingue del estado de carga y muestra un formulario inline). Limitación conocida, aceptada a propósito: el gasto en monedas distintas a la preferida no resta (misma limitación de una-sola-moneda que cashflow-series/category-distribution).
 
 Para el progreso de presupuestos, el backend devuelve valores listos para pintar:
 
@@ -217,6 +219,9 @@ Para el progreso de presupuestos, el backend devuelve valores listos para pintar
 - `amount_limit`
 - `spent`
 - `percentage`
+- `currency` (Fase 11 §11.1) — moneda real del presupuesto; `spent` y `amount_limit` viven en esta moneda. `BudgetRing` la usa para formatear en vez de la moneda preferida global.
+
+Los endpoints de series (`cashflow-series`, `category-distribution`) devuelven una sola serie filtrada a una moneda (`currency` explícito o `preferred_currency` por defecto) — nunca suman monedas distintas en un mismo punto.
 
 ## Errores esperados
 

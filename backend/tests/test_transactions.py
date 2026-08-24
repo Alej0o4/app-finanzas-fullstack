@@ -6,7 +6,6 @@ Alcance de Fase 7 §4.2: "solo la lógica que mueve dinero" — no cobertura com
 
 from decimal import Decimal
 
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -397,18 +396,12 @@ class TestPaymentMethod:
         assert creada.json()["payment_method"] is None
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Bug conocido documentado en docs/TODO.md (' actualizar_transaccion no actualiza "
-        "currency'): mover una transacción a una cuenta de otra moneda deja transaccion.currency "
-        "con el valor viejo en vez de heredar la moneda de la cuenta nueva. Fix planeado para "
-        "Fase 10, no en el alcance de Fase 7 — este test debe seguir fallando hasta entonces."
-    ),
-    strict=True,
-)
 def test_update_moving_to_different_currency_account_updates_currency(
     client, auth_headers, make_account, make_category
 ):
+    """Fase 11 §11.2: mover una transacción a una cuenta de otra moneda hereda la moneda
+    de la cuenta destino, igual que en la creación (antes quedaba con el valor viejo —
+    bug documentado en docs/TODO.md y resuelto en esta fase)."""
     cuenta_cop = make_account(auth_headers, name="Cuenta COP", currency="COP", balance="1000.00")
     cuenta_usd = make_account(auth_headers, name="Cuenta USD", currency="USD", balance="500.00")
     categoria = make_category(auth_headers, name="Comida", type="expense")
@@ -434,8 +427,7 @@ def test_update_moving_to_different_currency_account_updates_currency(
     update_response = client.put(f"/api/v1/transactions/{creada['id']}", json=update_payload, headers=auth_headers)
     assert update_response.status_code == 200, update_response.text
 
-    # Comportamiento correcto esperado: la transacción debería heredar la moneda de su
-    # nueva cuenta (USD), igual que hace al crearse (transactions.py:52). Hoy no ocurre.
+    # La transacción hereda la moneda de su nueva cuenta (USD), igual que hace al crearse.
     assert update_response.json()["currency"] == "USD"
 
 

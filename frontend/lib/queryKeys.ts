@@ -4,6 +4,8 @@ export const queryKeys = {
   accounts: {
     all: () => ['accounts'] as const,
     byId: (id: string | number) => ['account', id] as const,
+    /** Saldo total por moneda de TODAS las cuentas (GET /accounts/summary, Fase 11 §11.5). */
+    summary: () => ['accounts-summary'] as const,
   },
   categories: {
     all: () => ['categories'] as const,
@@ -22,6 +24,9 @@ export const queryKeys = {
   dashboard: {
     summary: () => ['dashboardSummary'] as const,
     recentTransactions: (limit: number = 5) => ['recent-transactions', limit] as const,
+    /** Desglose de gastos del mes por categoría en el dashboard (Fase 11 §11.4).
+     *  Clave propia: no reutiliza analytics.categories(), que exige período/tipo/neto. */
+    categoryBreakdown: () => ['dashboard-category-breakdown'] as const,
   },
   analytics: {
     cashflow: (start: string, end: string, period: string) =>

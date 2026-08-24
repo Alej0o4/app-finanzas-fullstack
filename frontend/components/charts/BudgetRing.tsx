@@ -10,6 +10,8 @@ interface BudgetRingProps {
   budgetAmount: number;
   spentAmount: number;
   categoryIcon?: string | null;
+  /** Moneda real del presupuesto (Fase 11 §11.1). Si se omite, cae a la preferida global. */
+  currency?: string;
 }
 
 export default function BudgetRing({
@@ -17,6 +19,7 @@ export default function BudgetRing({
   budgetAmount,
   spentAmount,
   categoryIcon,
+  currency,
 }: BudgetRingProps) {
   const { config } = useAppConfig();
   // PROGRAMACIÓN DEFENSIVA: Si el valor es undefined, usamos 0.
@@ -91,12 +94,14 @@ export default function BudgetRing({
           <h3 className="text-text truncate text-sm font-medium">{categoryName || 'Sin Nombre'}</h3>
         </div>
         <div className="mt-2 flex items-center justify-between text-xs">
-          <span className="text-text-muted">{formatCurrency(safeSpent, config.currency)}</span>
+          <span className="text-text-muted">
+            {formatCurrency(safeSpent, currency ?? config.currency)}
+          </span>
           <span className="text-text-muted/60">/</span>
           <span className="text-text">
             {formatCurrency(
               safeBudget === 1 && budgetAmount === 0 ? 0 : safeBudget,
-              config.currency
+              currency ?? config.currency
             )}
           </span>
         </div>

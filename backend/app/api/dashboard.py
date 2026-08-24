@@ -103,10 +103,22 @@ def obtener_resumen(db: Session = Depends(get_db), current_user: models.User = D
     income.sort(key=lambda x: sort_key(x["currency"]))
     expense.sort(key=lambda x: sort_key(x["currency"]))
 
+    # Balance de flujo mensual (Fase 11 §11.3): ingreso mensual declarado por el usuario
+    # menos el gasto del mes en su moneda preferida. None si el usuario no ha fijado
+    # monthly_income todavía — el frontend debe distinguir "0" de "sin definir".
+    monthly_flow_balance = None
+    if current_user.monthly_income is not None:
+        gasto_moneda_preferida = next(
+            (item["total"] for item in expense if item["currency"] == preferred_currency),
+            Decimal("0.00"),
+        )
+        monthly_flow_balance = current_user.monthly_income - gasto_moneda_preferida
+
     return {
         "balances": balances,
         "monthly_income_by_currency": income,
         "monthly_expense_by_currency": expense,
+        "monthly_flow_balance": monthly_flow_balance,
     }
 
 
@@ -136,6 +148,7 @@ def obtener_progreso_presupuestos(db: Session = Depends(get_db), current_user: m
     spent_rows = (
         db.query(
             models.Transaction.category_id,
+            models.Transaction.currency,
             func.sum(models.Transaction.amount).label("spent"),
         )
         .filter(
@@ -145,18 +158,18 @@ def obtener_progreso_presupuestos(db: Session = Depends(get_db), current_user: m
             models.Transaction.date >= primer_dia,
             models.Transaction.date <= ultimo_dia,
         )
-        .group_by(models.Transaction.category_id)
+        .group_by(models.Transaction.category_id, models.Transaction.currency)
         .all()
     )
 
-    spent_map: dict[int, Decimal] = {r.category_id: r.spent for r in spent_rows}
+    spent_map: dict[tuple[int, str], Decimal] = {(r.category_id, r.currency): r.spent for r in spent_rows}
 
     categorias = db.query(models.Category).filter(models.Category.id.in_(category_ids)).all()
     cat_info_map: dict[int, tuple[str, str | None]] = {c.id: (c.name, c.icon) for c in categorias}
 
     progreso_lista = []
     for presupuesto in presupuestos:
-        gastado = spent_map.get(presupuesto.category_id, Decimal("0.00"))
+        gastado = spent_map.get((presupuesto.category_id, presupuesto.currency), Decimal("0.00"))
         porcentaje = float(gastado / presupuesto.amount_limit) * 100 if presupuesto.amount_limit > 0 else 0
         cat_name, cat_icon = cat_info_map.get(presupuesto.category_id, ("Desconocida", None))
         progreso_lista.append(
@@ -167,6 +180,7 @@ def obtener_progreso_presupuestos(db: Session = Depends(get_db), current_user: m
                 "amount_limit": presupuesto.amount_limit,
                 "spent": gastado,
                 "percentage": round(porcentaje, 2),
+                "currency": presupuesto.currency,
             }
         )
 
@@ -178,9 +192,11 @@ def obtener_serie_flujo_caja(
     start_date: datetime,
     end_date: datetime,
     period: str = Query("day", pattern="^(day|month)$", description="Agrupar por 'day' o 'month'"),
+    currency: str | None = Query(None, description="Moneda a filtrar; por defecto la preferida del usuario"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    filtro_moneda = currency or current_user.preferred_currency or "COP"
     try:
         dialect = db.bind.dialect.name
         if dialect == "postgresql":
@@ -202,6 +218,7 @@ def obtener_serie_flujo_caja(
             )
             .filter(
                 models.Transaction.user_id == current_user.id,
+                models.Transaction.currency == filtro_moneda,
                 models.Transaction.date >= start_date,
                 models.Transaction.date <= end_date,
             )
@@ -225,9 +242,11 @@ def obtener_distribucion_categorias(
     end_date: datetime,
     type: str = Query("expense", pattern="^(income|expense)$", description="Filtrar por tipo de transacción"),
     neto: bool = Query(False, description="Si es True, calcula gasto neto (expense - income) por categoría"),
+    currency: str | None = Query(None, description="Moneda a filtrar; por defecto la preferida del usuario"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    filtro_moneda = currency or current_user.preferred_currency or "COP"
     if neto:
         sum_expense = func.sum(case((models.Transaction.type == "expense", models.Transaction.amount), else_=0))
         sum_income = func.sum(case((models.Transaction.type == "income", models.Transaction.amount), else_=0))
@@ -242,6 +261,7 @@ def obtener_distribucion_categorias(
             .join(models.Category, models.Category.id == models.Transaction.category_id)
             .filter(
                 models.Transaction.user_id == current_user.id,
+                models.Transaction.currency == filtro_moneda,
                 models.Transaction.date >= start_date,
                 models.Transaction.date <= end_date,
             )
@@ -264,6 +284,7 @@ def obtener_distribucion_categorias(
             .filter(
                 models.Transaction.user_id == current_user.id,
                 models.Transaction.type == type,
+                models.Transaction.currency == filtro_moneda,
                 models.Transaction.date >= start_date,
                 models.Transaction.date <= end_date,
             )

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
 import type { CashflowItem, CategoryDistributionItem } from '@/types/api';
 import { api } from '@/lib/api';
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { Loader2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { usePersistedState } from '@/hooks/usePersistedState';
@@ -64,6 +65,9 @@ const buildDonutDateRange = (period: DonutPeriod) => {
 };
 
 export default function AnalyticsPage() {
+  // Decisión 11.1.1 (Fase 11): se pasa `currency` explícito a los endpoints de dashboard
+  // aunque el backend ya defaultea a la moneda preferida — deja la intención explícita.
+  const { data: user } = useCurrentUser();
   const [barPeriod, setBarPeriod] = usePersistedState<BarPeriod>('analytics-barPeriod', '30d');
   const [seriesMode, setSeriesMode] = usePersistedState<AnalyticsSeries>(
     'analytics-seriesMode',
@@ -99,6 +103,7 @@ export default function AnalyticsPage() {
           start_date: barDateRange.start_date,
           end_date: barDateRange.end_date,
           period: barDateRange.period,
+          currency: user?.preferred_currency,
         },
       });
       return res.data;
@@ -124,6 +129,7 @@ export default function AnalyticsPage() {
           end_date: donutDateRange.end_date,
           type: netMode ? 'expense' : categoryType,
           neto: netMode || undefined,
+          currency: user?.preferred_currency,
         },
       });
       return res.data;

@@ -1,26 +1,53 @@
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { PieChart } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { PieChart, Tags } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useState } from 'react';
 import BudgetRing from '@/components/charts/BudgetRing';
+import CategoryBreakdownBars from '@/components/charts/CategoryBreakdownBars';
 import TransactionModal from '@/components/modals/TransactionModal';
 import SummaryCard from '@/components/ui/SummaryCard';
 import Button from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
+import Input from '@/components/ui/Input';
 import Skeleton from '@/components/ui/Skeleton';
 import { queryKeys } from '@/lib/queryKeys';
-import type { DashboardSummary, BudgetProgress, Transaction, PaginatedResponse } from '@/types/api';
+import type {
+  DashboardSummary,
+  BudgetProgress,
+  Transaction,
+  PaginatedResponse,
+  CategoryDistributionItem,
+} from '@/types/api';
+
+// Mismo formato que analytics/page.tsx::formatISOForBackend. El spec (§11.4) permite duplicar
+// este helper pequeño en lugar de extraerlo compartido para este alcance.
+const formatISOForBackend = (date: Date) => {
+  const pad = (value: number) => String(value).padStart(2, '0');
+
+  return (
+    [date.getFullYear(), pad(date.getMonth() + 1), pad(date.getDate())].join('-') +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  );
+};
 
 export default function DashboardPage() {
   const { config } = useAppConfig();
   const { data: user } = useCurrentUser();
   const queryClient = useQueryClient();
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+  const [monthlyIncomeInput, setMonthlyIncomeInput] = useState('');
+
+  const now = new Date();
+  const monthStartISO = formatISOForBackend(new Date(now.getFullYear(), now.getMonth(), 1));
+  const todayISO = formatISOForBackend(now);
+  // La moneda preferida del usuario; config.currency es su espejo desde preferencias.
+  const preferredCurrency = user?.preferred_currency ?? config.currency;
 
   const { data: summary, isLoading: loadingSummary } = useQuery<DashboardSummary>({
     queryKey: queryKeys.dashboard.summary(),
@@ -39,10 +66,57 @@ export default function DashboardPage() {
     queryFn: async () => (await api.get('transactions/', { params: { limit: 5 } })).data,
   });
 
+  // Desglose de gastos del mes por categoría (Fase 11 §11.4). Decisión 11.1.1: se pasa
+  // `currency` explícito aunque el backend ya defaultea a la moneda preferida.
+  const { data: categoryBreakdown, isLoading: loadingCategoryBreakdown } = useQuery<
+    CategoryDistributionItem[]
+  >({
+    queryKey: queryKeys.dashboard.categoryBreakdown(),
+    queryFn: async () =>
+      (
+        await api.get('dashboard/category-distribution', {
+          params: {
+            start_date: monthStartISO,
+            end_date: todayISO,
+            type: 'expense',
+            currency: user?.preferred_currency,
+          },
+        })
+      ).data,
+  });
+
   const recentTransactions = recentTransactionsData?.items;
+
+  // Fase 11 §11.3, Decisión 11.3.2: vía de escape inline para fijar el ingreso mensual sin
+  // salir del dashboard (el flujo guiado completo llega con el onboarding de Fase 15).
+  const setMonthlyIncomeMutation = useMutation({
+    mutationFn: async (monthly_income: number) =>
+      (await api.patch('users/me', { monthly_income })).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.currentUser() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
+      toast.success('Ingreso mensual guardado');
+    },
+    onError: (error: unknown) => toast.error(getApiError(error)),
+  });
 
   const isLoading = loadingSummary || loadingBudgets;
   const isRecentLoading = loadingRecentTransactions;
+
+  // Balance del mes calculado POR EL BACKEND (summary.monthly_flow_balance). Nunca se resta
+  // en el cliente. Tres estados distinguidos: undefined = query en carga/error, null = el
+  // usuario no ha fijado monthly_income, number = valor listo para pintar.
+  const flowBalance = summary?.monthly_flow_balance;
+  const flowBalanceValue = typeof flowBalance === 'number' ? flowBalance : null;
+  const flowIsPositive = (flowBalanceValue ?? 0) >= 0;
+  const flowTrend =
+    flowBalanceValue === null ? undefined : flowIsPositive ? ('up' as const) : ('down' as const);
+  const flowColor =
+    flowBalanceValue === null
+      ? undefined
+      : flowIsPositive
+        ? 'var(--color-success)'
+        : 'var(--color-danger)';
 
   return (
     <div className="space-y-6 pb-10 sm:space-y-10">
@@ -64,51 +138,88 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        {isLoading ? (
-          <>
-            <Skeleton className="h-32 rounded-2xl" />
-            <Skeleton className="h-32 rounded-2xl" />
-            <Skeleton className="h-32 rounded-2xl" />
-          </>
+      {/* Summary Cards — la card principal mide flujo mensual (Fase 11 §11.3); el saldo total
+          de cuentas vive ahora en /accounts como vista secundaria (§11.5). */}
+      <div className="space-y-6">
+        {loadingSummary ? (
+          <Skeleton className="h-36 rounded-2xl" />
         ) : (
-          <>
-            <SummaryCard label="Balance Total">
-              {summary?.balances.length ? (
-                <div className="space-y-1">
-                  {summary.balances.map((b) => (
-                    <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
-                  ))}
+          <SummaryCard label="Balance del mes" size="lg" trend={flowTrend} color={flowColor}>
+            {flowBalanceValue !== null ? (
+              <span className={flowIsPositive ? '' : 'text-danger'}>
+                {formatCurrency(flowBalanceValue, preferredCurrency)}
+              </span>
+            ) : summary ? (
+              <form
+                className="mt-2 w-full space-y-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const parsed = Number(monthlyIncomeInput);
+                  if (monthlyIncomeInput.trim() === '' || Number.isNaN(parsed) || parsed < 0)
+                    return;
+                  setMonthlyIncomeMutation.mutate(parsed);
+                }}
+              >
+                <p className="text-text-muted text-sm font-normal">
+                  Define tu ingreso mensual para calcular tu balance.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    required
+                    min={0}
+                    step="0.01"
+                    aria-label="Ingreso mensual"
+                    placeholder={`Ej. 3000000 (${preferredCurrency})`}
+                    value={monthlyIncomeInput}
+                    onChange={(e) => setMonthlyIncomeInput(e.target.value)}
+                    className="bg-background"
+                  />
+                  <Button type="submit" loading={setMonthlyIncomeMutation.isPending}>
+                    Guardar
+                  </Button>
                 </div>
-              ) : (
-                <p>{formatCurrency(0, config.currency)}</p>
-              )}
-            </SummaryCard>
-            <SummaryCard label="Ingresos del Mes" trend="up" color="var(--color-success)">
-              {summary?.monthly_income_by_currency.length ? (
-                <div className="space-y-1">
-                  {summary.monthly_income_by_currency.map((b) => (
-                    <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
-                  ))}
-                </div>
-              ) : (
-                <p>{formatCurrency(0, config.currency)}</p>
-              )}
-            </SummaryCard>
-            <SummaryCard label="Gastos del Mes" trend="down" color="var(--color-danger)">
-              {summary?.monthly_expense_by_currency.length ? (
-                <div className="space-y-1">
-                  {summary.monthly_expense_by_currency.map((b) => (
-                    <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
-                  ))}
-                </div>
-              ) : (
-                <p>{formatCurrency(0, config.currency)}</p>
-              )}
-            </SummaryCard>
-          </>
+              </form>
+            ) : (
+              <p>{formatCurrency(0, preferredCurrency)}</p>
+            )}
+          </SummaryCard>
         )}
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {loadingSummary ? (
+            <>
+              <Skeleton className="h-32 rounded-2xl" />
+              <Skeleton className="h-32 rounded-2xl" />
+            </>
+          ) : (
+            <>
+              <SummaryCard label="Ingresos del Mes" trend="up" color="var(--color-success)">
+                {summary?.monthly_income_by_currency.length ? (
+                  <div className="space-y-1">
+                    {summary.monthly_income_by_currency.map((b) => (
+                      <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p>{formatCurrency(0, preferredCurrency)}</p>
+                )}
+              </SummaryCard>
+              <SummaryCard label="Gastos del Mes" trend="down" color="var(--color-danger)">
+                {summary?.monthly_expense_by_currency.length ? (
+                  <div className="space-y-1">
+                    {summary.monthly_expense_by_currency.map((b) => (
+                      <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p>{formatCurrency(0, preferredCurrency)}</p>
+                )}
+              </SummaryCard>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Budget Rings */}
@@ -143,10 +254,21 @@ export default function DashboardPage() {
                 categoryIcon={budget.category_icon}
                 budgetAmount={Number(budget.amount_limit)}
                 spentAmount={Number(budget.spent)}
+                currency={budget.currency}
               />
             ))}
           </div>
         )}
+      </div>
+
+      {/* Gastos por categoría del mes en curso (Fase 11 §11.4) */}
+      <div>
+        <div className="mb-6 flex items-center space-x-2">
+          <Tags className="text-primary" size={20} />
+          <h2 className="text-text font-sans text-xl font-bold">Gastos por Categoría</h2>
+        </div>
+
+        <CategoryBreakdownBars data={categoryBreakdown} isLoading={loadingCategoryBreakdown} />
       </div>
 
       {/* Recent Transactions */}

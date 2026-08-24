@@ -233,6 +233,7 @@ class DashboardSummary(BaseModel):
     balances: list[BalanceByCurrency]
     monthly_income_by_currency: list[BalanceByCurrency]
     monthly_expense_by_currency: list[BalanceByCurrency]
+    monthly_flow_balance: Decimal | None = None
 
 
 class BudgetProgress(BaseModel):
@@ -242,6 +243,7 @@ class BudgetProgress(BaseModel):
     amount_limit: Decimal  # 🔁 antes: float
     spent: Decimal  # 🔁 antes: float
     percentage: float  # ✅ se queda float, es un porcentaje calculado, no dinero
+    currency: str
 
 
 # --- AUTENTICACIÓN ---

@@ -13,8 +13,9 @@ import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
+import SummaryCard from '@/components/ui/SummaryCard';
 import Link from 'next/link';
-import type { Account, CreateAccountPayload } from '@/types/api';
+import type { Account, BalanceByCurrency, CreateAccountPayload } from '@/types/api';
 
 const accountTypeTranslations: Record<string, string> = {
   cash: 'Efectivo',
@@ -44,6 +45,14 @@ export default function AccountsPage() {
     },
   });
 
+  // Saldo total por moneda de TODAS las cuentas (Fase 11 §11.5). A diferencia de
+  // /dashboard/summary, este endpoint no filtra por destacadas — así el total mostrado
+  // coincide con la suma de las tarjetas listadas debajo.
+  const { data: balancesSummary, isLoading: loadingBalances } = useQuery<BalanceByCurrency[]>({
+    queryKey: queryKeys.accounts.summary(),
+    queryFn: async () => (await api.get('accounts/summary')).data,
+  });
+
   const createAccountMutation = useMutation({
     mutationFn: async (newAccount: CreateAccountPayload) => {
       const response = await api.post('accounts/', newAccount);
@@ -51,6 +60,7 @@ export default function AccountsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
       toast.success('Cuenta creada correctamente');
       setIsCreateModalOpen(false);
@@ -86,6 +96,7 @@ export default function AccountsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
       toast.success('Cuenta eliminada');
     },
@@ -101,6 +112,7 @@ export default function AccountsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
     },
     onError: (error: unknown) => {
@@ -153,7 +165,7 @@ export default function AccountsPage() {
     });
   }, [accounts, user]);
 
-  if (isLoading)
+  if (isLoading || loadingBalances)
     return (
       <div className="text-text-muted flex items-center gap-2 p-8">
         <Loader2 className="animate-spin" /> Cargando cuentas...
@@ -172,6 +184,22 @@ export default function AccountsPage() {
           <span className="hidden sm:inline">Nueva Cuenta</span>
           <span className="sm:hidden">Nueva</span>
         </Button>
+      </div>
+
+      {/* Vista secundaria de saldos (Fase 11 §11.5): una card "Balance Total" por moneda,
+          mismo patrón visual que usaba el dashboard antes de §11.3. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {balancesSummary && balancesSummary.length > 0 ? (
+          balancesSummary.map((b) => (
+            <SummaryCard key={b.currency} label="Balance Total">
+              <p>{formatCurrency(b.total, b.currency)}</p>
+            </SummaryCard>
+          ))
+        ) : (
+          <SummaryCard label="Balance Total">
+            <p>{formatCurrency(0, user?.preferred_currency || 'COP')}</p>
+          </SummaryCard>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

@@ -222,6 +222,14 @@ Salida:
 - `highlighted`
 - `user_id`
 
+### `GET /api/v1/accounts/summary`
+
+Saldo total por moneda de TODAS las cuentas del usuario, agrupado por moneda. A diferencia
+de `GET /api/v1/dashboard/summary`, **no** filtra por cuentas destacadas — el total coincide
+con la suma de todas las tarjetas listadas en la vista de cuentas (Fase 11 §11.5).
+
+Salida: array de `{currency, total}`.
+
 ### `GET /api/v1/accounts/{account_id}`
 
 Devuelve una cuenta del usuario autenticado.
@@ -388,6 +396,11 @@ Devuelve:
 - `balances`: array de `{currency, total}` — saldo total por moneda.
 - `monthly_income_by_currency`: array de `{currency, total}` — ingresos del mes por moneda.
 - `monthly_expense_by_currency`: array de `{currency, total}` — gastos del mes por moneda.
+- `monthly_flow_balance` (Fase 11 §11.3): ingreso mensual declarado por el usuario
+  (`User.monthly_income`) menos el gasto del mes en su moneda preferida; `null` si el
+  usuario aún no ha fijado `monthly_income` (el frontend distingue "0" de "sin definir").
+  Los gastos en otras monedas no restan — misma limitación de "una moneda a la vez"
+  documentada para `cashflow-series` y `category-distribution`.
 
 ### `GET /api/v1/dashboard/budgets-progress`
 
@@ -398,6 +411,8 @@ Devuelve progreso de presupuestos del mes actual con:
 - `amount_limit`
 - `spent`
 - `percentage`
+- `currency` — moneda del presupuesto (`Budget.currency`); `spent` solo suma los gastos
+  de esa misma moneda (Fase 11 §11.1)
 
 Antes de calcular, genera las filas de presupuestos recurrentes pendientes del mes en
 curso — por eso los presupuestos "reaparecen" solos cada mes al entrar al dashboard.
@@ -411,6 +426,8 @@ Parámetros:
 - `start_date`
 - `end_date`
 - `period`: `day | month`
+- `currency` (opcional): moneda a filtrar; por defecto la preferida del usuario. La serie
+  nunca mezcla monedas — se filtra por una sola, no se agrupa (Fase 11 §11.1).
 
 Salida:
 
@@ -428,6 +445,9 @@ Parámetros:
 - `end_date`
 - `type` (opcional, default `"expense"`): `income | expense`
 - `neto` (opcional, default `false`): si es `true`, calcula gasto neto (`SUM(expense) - SUM(income)`) por categoría. Ignora el parámetro `type`. Solo devuelve categorías con neto positivo.
+- `currency` (opcional): moneda a filtrar; por defecto la preferida del usuario. Se aplica
+  en ambas ramas (`neto=true` y `neto=false`) — los totales nunca mezclan monedas
+  (Fase 11 §11.1).
 
 Salida:
 

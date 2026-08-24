@@ -60,14 +60,58 @@ export default function Sidebar() {
     router.push('/login');
   };
 
-  const navItems = [
+  const primaryNavItems = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Analítica', href: '/analytics', icon: TrendingUp },
-    { name: 'Cuentas', href: '/accounts', icon: Wallet },
     { name: 'Transacciones', href: '/transactions', icon: ArrowLeftRight },
     { name: 'Presupuestos', href: '/budgets', icon: PieChart },
+  ];
+
+  const secondaryNavItems = [
+    { name: 'Analítica', href: '/analytics', icon: TrendingUp },
+    { name: 'Cuentas', href: '/accounts', icon: Wallet },
     { name: 'Categorías', href: '/categories', icon: Tags },
   ];
+
+  const renderNavItem = (item: (typeof primaryNavItems)[number]) => {
+    const Icon = item.icon;
+    const isActive = pathname === item.href;
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={() => {
+          if (isMobile()) closeSidebar();
+        }}
+        className={`group relative flex items-center space-x-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors duration-200 ${
+          isActive
+            ? 'bg-primary text-background shadow-primary/10 font-semibold shadow-lg active:brightness-95'
+            : 'text-text-muted hover:text-text hover:bg-surface-elevated active:bg-surface'
+        }`}
+      >
+        <Icon
+          size={20}
+          className={
+            isActive
+              ? 'text-background'
+              : 'text-text-muted group-hover:text-primary transition-colors'
+          }
+        />
+        <span
+          className={`transition-opacity duration-200 ${isSidebarOpen ? 'opacity-100' : 'hidden opacity-0'}`}
+        >
+          {item.name}
+        </span>
+
+        {/* Tooltip flotante si el sidebar está colapsado */}
+        {!isSidebarOpen && (
+          <div className="bg-surface-elevated text-text border-border absolute left-24 z-50 origin-left scale-0 rounded-md border px-2.5 py-1.5 font-sans text-xs shadow-xl transition-[transform,opacity] duration-150 group-hover:scale-100">
+            {item.name}
+          </div>
+        )}
+      </Link>
+    );
+  };
 
   return (
     <>
@@ -112,48 +156,12 @@ export default function Sidebar() {
           </div>
 
           {/* Navegación Principal */}
-          <nav className="mt-6 space-y-1.5 px-3">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => {
-                    if (isMobile()) closeSidebar();
-                  }}
-                  className={`group relative flex items-center space-x-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors duration-200 ${
-                    isActive
-                      ? 'bg-primary text-background shadow-primary/10 font-semibold shadow-lg active:brightness-95'
-                      : 'text-text-muted hover:text-text hover:bg-surface-elevated active:bg-surface'
-                  }`}
-                >
-                  <Icon
-                    size={20}
-                    className={
-                      isActive
-                        ? 'text-background'
-                        : 'text-text-muted group-hover:text-primary transition-colors'
-                    }
-                  />
-                  <span
-                    className={`transition-opacity duration-200 ${isSidebarOpen ? 'opacity-100' : 'hidden opacity-0'}`}
-                  >
-                    {item.name}
-                  </span>
-
-                  {/* Tooltip flotante si el sidebar está colapsado */}
-                  {!isSidebarOpen && (
-                    <div className="bg-surface-elevated text-text border-border absolute left-24 z-50 origin-left scale-0 rounded-md border px-2.5 py-1.5 font-sans text-xs shadow-xl transition-[transform,opacity] duration-150 group-hover:scale-100">
-                      {item.name}
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
+          <nav className="mt-6 space-y-1.5 px-3">{primaryNavItems.map(renderNavItem)}</nav>
+          <div
+            className={`border-border/40 mx-3 my-3 border-t ${isSidebarOpen ? '' : 'mx-4'}`}
+            role="separator"
+          />
+          <nav className="space-y-1.5 px-3">{secondaryNavItems.map(renderNavItem)}</nav>
         </div>
 
         {/* Parte Inferior: Perfil / Cerrar Sesión */}

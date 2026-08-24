@@ -79,6 +79,8 @@ export default function TransactionCaptureForm({
         queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() }),
         queryClient.invalidateQueries({ queryKey: ['analytics-cashflow'] }),
         queryClient.invalidateQueries({ queryKey: ['analytics-categories'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() }),
       ]);
 
       toast.success(type === 'expense' ? 'Gasto registrado' : 'Ingreso registrado');

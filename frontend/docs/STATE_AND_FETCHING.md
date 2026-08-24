@@ -41,6 +41,8 @@ Las claves deben mantenerse consistentes entre páginas y componentes.
 - `dashboardSummary`
 - `budgets-progress`
 - `recent-transactions`
+- `dashboard-category-breakdown` (Fase 11 §11.4)
+- `accounts-summary` (Fase 11 §11.5)
 
 ### Vista específica
 
@@ -62,6 +64,10 @@ Cuando se crea una transacción, se invalidan como mínimo:
 - `accounts`
 - `dashboardSummary`
 - `budgets-progress`
+- `analytics-cashflow`, `analytics-categories`
+- `dashboard-category-breakdown`, `accounts-summary` (Fase 11 — la card de flujo mensual y
+  el desglose por categoría del dashboard, y el total de `/accounts`, dependen de datos
+  agregados de transacciones)
 
 ### Editar transacción
 
@@ -72,6 +78,8 @@ Después de editar:
 - `accounts`
 - `dashboardSummary`
 - `budgets-progress`
+- `analytics-cashflow`, `analytics-categories`
+- `dashboard-category-breakdown`, `accounts-summary`
 
 ### Eliminar transacción
 
@@ -81,12 +89,15 @@ Después de borrar:
 - `accounts`
 - `dashboardSummary`
 - `budgets-progress`
+- `analytics-cashflow`, `analytics-categories`
+- `dashboard-category-breakdown`, `accounts-summary`
 
 ### Crear/editar/eliminar cuenta
 
 Después de mutar una cuenta:
 
 - `accounts`
+- `accounts-summary` (Fase 11 §11.5)
 - `dashboardSummary`
 
 ### Crear/editar/eliminar categoría
@@ -167,9 +178,10 @@ Consecuencias para el estado:
 
 ### Dashboard
 
-- Resumen: `dashboardSummary`
+- Resumen (incluye `monthly_flow_balance`, Fase 11 §11.3): `dashboardSummary`
 - Progreso de presupuestos: `budgets-progress`
 - Transacciones recientes: `recent-transactions`
+- Desglose por categoría del mes (Fase 11 §11.4): `dashboard-category-breakdown`
 
 ### Analytics
 
