@@ -14,6 +14,7 @@ import Select from '@/components/ui/Select';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import SummaryCard from '@/components/ui/SummaryCard';
+import Skeleton from '@/components/ui/Skeleton';
 import Link from 'next/link';
 import type { Account, BalanceByCurrency, CreateAccountPayload } from '@/types/api';
 
@@ -165,7 +166,11 @@ export default function AccountsPage() {
     });
   }, [accounts, user]);
 
-  if (isLoading || loadingBalances)
+  // Solo bloquea en la carga de cuentas: el resumen de saldos (accounts/summary, una
+  // request separada desde Fase 11 §11.5) se renderiza con su propio skeleton más abajo
+  // en vez de retrasar toda la página — antes esta era la única pantalla que esperaba dos
+  // round-trips en serie para mostrar cualquier contenido.
+  if (isLoading)
     return (
       <div className="text-text-muted flex items-center gap-2 p-8">
         <Loader2 className="animate-spin" /> Cargando cuentas...
@@ -189,7 +194,9 @@ export default function AccountsPage() {
       {/* Vista secundaria de saldos (Fase 11 §11.5): una card "Balance Total" por moneda,
           mismo patrón visual que usaba el dashboard antes de §11.3. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {balancesSummary && balancesSummary.length > 0 ? (
+        {loadingBalances ? (
+          <Skeleton className="h-24 rounded-2xl" />
+        ) : balancesSummary && balancesSummary.length > 0 ? (
           balancesSummary.map((b) => (
             <SummaryCard key={b.currency} label="Balance Total">
               <p>{formatCurrency(b.total, b.currency)}</p>

@@ -1,4 +1,5 @@
-from datetime import datetime
+import calendar
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import or_
@@ -6,6 +7,24 @@ from sqlalchemy import or_
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models import models
+
+# Cuántos meses hacia atrás cubre el seed, además del mes en curso (Fase 11, seguimiento:
+# antes las fechas estaban fijas en mayo-julio 2026 y quedaban "viejas" apenas cambiaba el
+# mes real). Con MONTHS_BACK=5 el seed siempre cubre "hoy" + 5 meses atrás, sin importar
+# cuándo se corra.
+MONTHS_BACK = 5
+
+
+def _shift_months(base_year: int, base_month: int, delta: int) -> tuple[int, int]:
+    """(year, month) que resulta de retroceder `delta` meses desde (base_year, base_month)."""
+    total = base_year * 12 + (base_month - 1) - delta
+    return total // 12, total % 12 + 1
+
+
+def _seed_date(today: datetime, months_ago: int, day: int) -> datetime:
+    year, month = _shift_months(today.year, today.month, months_ago)
+    last_day_of_month = calendar.monthrange(year, month)[1]
+    return datetime(year, month, min(day, last_day_of_month))
 
 
 def _make_tx(db, user, account, category_name, category_type, amount, description, date):
@@ -19,6 +38,10 @@ def _make_tx(db, user, account, category_name, category_type, amount, descriptio
         .first()
     )
     if category is None:
+        # No debe pasar en silencio: la última vez que pasó (categoría "Ocio" renombrada a
+        # "Entretenimiento" en Fase 8) el seed perdió 6 transacciones y 1 presupuesto sin
+        # ningún error visible.
+        print(f"WARNING: categoría de seed no encontrada: '{category_name}' ({category_type}) — se omite la fila")
         return None
     return models.Transaction(
         amount=Decimal(str(amount)),
@@ -32,6 +55,50 @@ def _make_tx(db, user, account, category_name, category_type, amount, descriptio
     )
 
 
+def _build_transactions_data(cuenta, ahorros, tarjeta, today: datetime) -> list[tuple]:
+    """Genera las filas de transacciones para el mes en curso y los `MONTHS_BACK` anteriores,
+    con fechas relativas a `today` (Fase 11, seguimiento). El mes en curso solo incluye días
+    hasta hoy — nada de fechas futuras aunque la plantilla las pida."""
+    tx_data: list[tuple] = []
+
+    for months_ago in range(MONTHS_BACK, -1, -1):  # de más viejo a más reciente
+        # El ingreso mensual sube ~100.000 por mes para simular una progresión real, igual
+        # que el seed original (3.000.000 en el mes más viejo → 3.500.000 en el actual).
+        salario = 3_000_000 + (MONTHS_BACK - months_ago) * 100_000
+
+        def d(day: int, _months_ago: int = months_ago) -> datetime:
+            return _seed_date(today, _months_ago, day)
+
+        tx_data += [
+            (cuenta, "Salario", "income", salario, "Salario mensual", d(1)),
+            (cuenta, "Alimentación", "expense", 90_000 + months_ago * 3_000, "Mercado quincenal", d(5)),
+            (cuenta, "Transporte", "expense", 30_000 + months_ago * 2_000, "Gasolina", d(7)),
+            (cuenta, "Servicios Públicos", "expense", 250_000, "Agua + Luz + Internet", d(9)),
+            (cuenta, "Entretenimiento", "expense", 90_000, "Cine y salidas", d(12)),
+            (cuenta, "Alimentación", "expense", 70_000, "Mercado", d(15)),
+            (cuenta, "Suscripción", "expense", 25_000, "Netflix", d(15)),
+            (cuenta, "Transporte", "expense", 18_000, "Uber", d(18)),
+            (cuenta, "Cuidado personal", "expense", 90_000, "Barbería", d(20)),
+            (cuenta, "Suscripción", "expense", 25_000, "Spotify", d(22)),
+        ]
+
+        if months_ago % 2 == 0:
+            tx_data.append((cuenta, "Freelance", "income", 500_000 + months_ago * 50_000, "Proyecto freelance", d(23)))
+        if months_ago % 3 == 0:
+            tx_data.append((cuenta, "Otro", "expense", 50_000, "Gastos varios", d(27)))
+
+        tx_data.append((ahorros, "Salario", "income", 1_200 + (MONTHS_BACK - months_ago) * 50, "Bono USD", d(20)))
+        if months_ago % 2 == 1:
+            tx_data.append((ahorros, "Entretenimiento", "expense", 200, "Compra en USD", d(15)))
+
+        if months_ago % 3 == 1:
+            tx_data.append((tarjeta, "Alimentación", "expense", 200_000, "Cena restaurante", d(28)))
+
+    # El mes en curso no debe tener fechas futuras: descarta cualquier fila cuyo día caiga
+    # después de hoy (equivale a "solo lo que ya pasó este mes").
+    return [row for row in tx_data if row[-1].date() <= today.date()]
+
+
 def run_seed():
     db = SessionLocal()
     try:
@@ -42,6 +109,16 @@ def run_seed():
             db.query(models.Account).filter(models.Account.user_id == existing.id).delete()
             db.query(models.Category).filter(models.Category.user_id == existing.id).delete()
             db.query(models.RefreshToken).filter(models.RefreshToken.user_id == existing.id).delete()
+            # user_id es NOT NULL en las tres (Fases 7 y 10): sin borrarlas explícitamente,
+            # db.delete(existing) intenta poner user_id=NULL vía el FK y revienta con
+            # IntegrityError apenas el usuario de prueba tiene algún token o idempotency key
+            # real generado por uso normal de la app (p. ej. probar "olvidé mi contraseña" o
+            # reintentar un POST /transactions con Idempotency-Key).
+            db.query(models.PasswordResetToken).filter(models.PasswordResetToken.user_id == existing.id).delete()
+            db.query(models.EmailVerificationToken).filter(
+                models.EmailVerificationToken.user_id == existing.id
+            ).delete()
+            db.query(models.IdempotencyKey).filter(models.IdempotencyKey.user_id == existing.id).delete()
             db.delete(existing)
             db.flush()
 
@@ -51,6 +128,7 @@ def run_seed():
             password_hash=get_password_hash("testpass123"),
             preferred_currency="COP",
             preferred_locale="es-CO",
+            monthly_income=Decimal("3500000"),
         )
         db.add(user)
         db.flush()
@@ -88,56 +166,8 @@ def run_seed():
         db.flush()
         print(f"Accounts created: {cuenta.id} (COP), {ahorros.id} (USD), {tarjeta.id} (Tarjeta)")
 
-        tx_data = [
-            # --- MAYO 2026 ---
-            (cuenta, "Salario", "income", 3000000, "Salario mensual", datetime(2026, 5, 1)),
-            (cuenta, "Alimentación", "expense", 130000, "Mercado semanal", datetime(2026, 5, 5)),
-            (cuenta, "Ocio", "expense", 200000, "Cena y cervezas", datetime(2026, 5, 8)),
-            (cuenta, "Transporte", "expense", 35000, "Gasolina", datetime(2026, 5, 12)),
-            (cuenta, "Suscripción", "expense", 25000, "Netflix", datetime(2026, 5, 15)),
-            (cuenta, "Alimentación", "expense", 85000, "Mercado", datetime(2026, 5, 18)),
-            (cuenta, "Freelance", "income", 500000, "Diseño web - Cliente A", datetime(2026, 5, 22)),
-            (cuenta, "Cuidado personal", "expense", 85000, "Barbería", datetime(2026, 5, 25)),
-            (ahorros, "Salario", "income", 1200, "Bono USD - proyecto internacional", datetime(2026, 5, 20)),
-            # --- JUNIO 2026 ---
-            (cuenta, "Salario", "income", 3200000, "Salario mensual", datetime(2026, 6, 1)),
-            (cuenta, "Alimentación", "expense", 95000, "Desayuno y almuerzo fuera", datetime(2026, 6, 3)),
-            (cuenta, "Transporte", "expense", 18000, "Uber", datetime(2026, 6, 5)),
-            (cuenta, "Alimentación", "expense", 150000, "Mercado quincenal", datetime(2026, 6, 8)),
-            (cuenta, "Servicios Públicos", "expense", 250000, "Agua + Luz + Gas", datetime(2026, 6, 10)),
-            (cuenta, "Ocio", "expense", 85000, "Cine y palomitas", datetime(2026, 6, 12)),
-            (cuenta, "Suscripción", "expense", 25000, "Spotify", datetime(2026, 6, 15)),
-            (cuenta, "Alimentación", "expense", 62000, "Almuerzo ejecutivo", datetime(2026, 6, 18)),
-            (cuenta, "Transporte", "expense", 45000, "Gasolina", datetime(2026, 6, 20)),
-            (cuenta, "Freelance", "income", 800000, "App mobile - Cliente B", datetime(2026, 6, 22)),
-            (cuenta, "Cuidado personal", "expense", 120000, "Corte + productos", datetime(2026, 6, 25)),
-            (cuenta, "Otro", "expense", 45000, "Regalo cumpleaños", datetime(2026, 6, 28)),
-            (ahorros, "Ocio", "expense", 300, "Viaje fin de semana", datetime(2026, 6, 25)),
-            (tarjeta, "Alimentación", "expense", 250000, "Cena restaurante", datetime(2026, 6, 28)),
-            # --- JULIO 2026 ---
-            (cuenta, "Salario", "income", 3500000, "Salario mensual", datetime(2026, 7, 1)),
-            (cuenta, "Alimentación", "expense", 45000, "Café y pan", datetime(2026, 7, 2)),
-            (cuenta, "Transporte", "expense", 12000, "Bus", datetime(2026, 7, 3)),
-            (cuenta, "Alimentación", "expense", 120000, "Mercado semanal", datetime(2026, 7, 5)),
-            (cuenta, "Servicios Públicos", "expense", 280000, "Agua + Luz + Internet", datetime(2026, 7, 7)),
-            (cuenta, "Ocio", "expense", 180000, "Concierto", datetime(2026, 7, 8)),
-            (cuenta, "Alimentación", "expense", 55000, "Almuerzo", datetime(2026, 7, 12)),
-            (cuenta, "Alimentación", "expense", 90000, "Mercado quincenal", datetime(2026, 7, 14)),
-            (cuenta, "Suscripción", "expense", 25000, "Netflix", datetime(2026, 7, 15)),
-            (cuenta, "Transporte", "expense", 85000, "Gasolina", datetime(2026, 7, 10)),
-            (cuenta, "Transporte", "expense", 15000, "Taxi", datetime(2026, 7, 16)),
-            (cuenta, "Ocio", "expense", 55000, "Videojuego", datetime(2026, 7, 18)),
-            (cuenta, "Freelance", "income", 1200000, "Consultoría - Cliente C", datetime(2026, 7, 20)),
-            (cuenta, "Suscripción", "expense", 25000, "Spotify", datetime(2026, 7, 22)),
-            (cuenta, "Cuidado personal", "expense", 95000, "Barbería + productos", datetime(2026, 7, 24)),
-            (cuenta, "Otro", "expense", 60000, "Libro", datetime(2026, 7, 25)),
-            (cuenta, "Alimentación", "expense", 78000, "Despensa", datetime(2026, 7, 27)),
-            (cuenta, "Transporte", "expense", 22000, "Uber", datetime(2026, 7, 28)),
-            (cuenta, "Suscripción", "expense", 25000, "Crunchyroll", datetime(2026, 7, 30)),
-            (ahorros, "Salario", "income", 1500, "Bono USD - Julio", datetime(2026, 7, 3)),
-            (ahorros, "Ocio", "expense", 200, "Cena fuera", datetime(2026, 7, 15)),
-            (ahorros, "Alimentación", "expense", 85, "Mercado USD", datetime(2026, 7, 25)),
-        ]
+        today = datetime.now(UTC)
+        tx_data = _build_transactions_data(cuenta, ahorros, tarjeta, today)
 
         transactions = []
         for account, cat_name, cat_type, amount, desc, date in tx_data:
@@ -147,19 +177,23 @@ def run_seed():
 
         db.add_all(transactions)
         db.flush()
-        print(f"Transactions created: {len(transactions)}")
+        print(f"Transactions created: {len(transactions)} (cubren hoy y los {MONTHS_BACK} meses anteriores)")
 
+        # Presupuestos del mes en curso, marcados is_recurring=True: ensure_recurring_budgets_
+        # for_period (Fase 8 §3) los clona automáticamente para cada mes siguiente la próxima
+        # vez que se visite el dashboard, así que el seed sigue siendo válido sin volver a
+        # correrlo, sin importar cuánto tiempo pase.
         budgets_data = [
-            ("Alimentación", Decimal("1500000"), 7, 2026),
-            ("Transporte", Decimal("400000"), 7, 2026),
-            ("Ocio", Decimal("500000"), 7, 2026),
-            ("Suscripción", Decimal("100000"), 7, 2026),
-            ("Cuidado personal", Decimal("200000"), 7, 2026),
-            ("Servicios Públicos", Decimal("300000"), 7, 2026),
+            ("Alimentación", Decimal("1500000")),
+            ("Transporte", Decimal("400000")),
+            ("Entretenimiento", Decimal("500000")),
+            ("Suscripción", Decimal("100000")),
+            ("Cuidado personal", Decimal("200000")),
+            ("Servicios Públicos", Decimal("300000")),
         ]
 
         budgets = []
-        for cat_name, amount_limit, month, year in budgets_data:
+        for cat_name, amount_limit in budgets_data:
             category = (
                 db.query(models.Category)
                 .filter(
@@ -170,12 +204,14 @@ def run_seed():
                 .first()
             )
             if category is None:
+                print(f"WARNING: categoría de presupuesto de seed no encontrada: '{cat_name}' — se omite")
                 continue
             budget = models.Budget(
                 amount_limit=amount_limit,
                 currency="COP",
-                month=month,
-                year=year,
+                month=today.month,
+                year=today.year,
+                is_recurring=True,
                 user_id=user.id,
                 category_id=category.id,
             )
