@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path'); case \"$f\" in */.env|*/.env.local|*/.env.production|*.env) echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Bloqueado: edicion directa de .env (usar .env.example para plantillas)\"}}';; *) echo '{}';; esac"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // .tool_response.filePath'); case \"$f\" in */backend/*.py) (cd \"$(git rev-parse --show-toplevel)/backend\" && ./venv/bin/ruff check --fix \"$f\" >/dev/null 2>&1; ./venv/bin/ruff format \"$f\" >/dev/null 2>&1);; */frontend/*.ts|*/frontend/*.tsx) (cd \"$(git rev-parse --show-toplevel)/frontend\" && node_modules/.bin/eslint --fix \"$f\" >/dev/null 2>&1; node_modules/.bin/prettier --write \"$f\" >/dev/null 2>&1);; esac; true"
+          }
+        ]
+      }
+    ]
+  }
+}

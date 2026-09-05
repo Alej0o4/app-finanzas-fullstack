@@ -1,6 +1,9 @@
 # Ignorar entornos virtuales
 backend/venv/
 
+# Config local de Claude Code (personal, no compartir con el equipo)
+.claude/settings.local.json
+
 # Ignorar archivos compilados temporales de Python
 backend/__pycache__/
 backend/.coverage
