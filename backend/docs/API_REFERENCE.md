@@ -120,8 +120,9 @@ Errores esperados:
 
 ### `POST /api/v1/users/`
 
-Crea un usuario nuevo y su cuenta por defecto "Efectivo" (tipo `cash`, saldo 0, destacada,
-en la moneda preferida — Fase 8 §5). Tras crearlo, envía un email de verificación (ver
+Crea un usuario nuevo y su cuenta por defecto "Cuenta principal" (tipo `debit`, saldo 0,
+destacada, en la moneda preferida — Fase 8 §5, renombrada de "Efectivo"/`cash` en un ajuste
+posterior a Fase 15). Tras crearlo, envía un email de verificación (ver
 `GET /api/v1/auth/verify-email` arriba) — no bloquea la respuesta del registro si falla el
 envío. Rate limited (5 req/min por IP).
 

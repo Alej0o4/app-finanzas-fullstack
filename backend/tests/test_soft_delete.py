@@ -96,7 +96,7 @@ class TestSoftDeletedEntitiesDisappear:
         assert delete_response.status_code == 200, delete_response.text
 
         listado = client.get("/api/v1/accounts/", headers=auth_headers).json()
-        # El registro crea una cuenta por defecto ("Efectivo"); solo garantizamos
+        # El registro crea una cuenta por defecto ("Cuenta principal"); solo garantizamos
         # que la cuenta borrada desapareció del listado.
         assert all(c["id"] != cuenta["id"] for c in listado)
         assert client.get(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).status_code == 404

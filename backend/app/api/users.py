@@ -56,8 +56,8 @@ def crear_usuario(request: Request, usuario: schemas.UserCreate, db: Session = D
     # — `account_id` es obligatorio al transaccionar y QuickTransactionModal falla en silencio.
     # Mismo commit que el usuario: o existen ambos, o ninguno.
     cuenta_por_defecto = models.Account(
-        name="Efectivo",
-        type="cash",
+        name="Cuenta principal",
+        type="debit",
         balance=Decimal("0.00"),
         currency=nuevo_usuario.preferred_currency or "COP",
         user_id=nuevo_usuario.id,

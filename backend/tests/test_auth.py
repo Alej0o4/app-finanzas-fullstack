@@ -376,7 +376,7 @@ class TestEmailVerification:
 
 
 class TestCuentaPorDefecto:
-    def test_registration_creates_default_cash_account(self, client, register_and_login):
+    def test_registration_creates_default_debit_account(self, client, register_and_login):
         user = register_and_login(email="cuenta-default@example.com")
 
         response = client.get("/api/v1/accounts/", headers=user["headers"])
@@ -384,13 +384,13 @@ class TestCuentaPorDefecto:
         cuentas = response.json()
 
         assert len(cuentas) == 1
-        efectivo = cuentas[0]
-        assert efectivo["name"] == "Efectivo"
-        assert efectivo["type"] == "cash"
-        assert Decimal(str(efectivo["balance"])) == Decimal("0.00")
+        cuenta_principal = cuentas[0]
+        assert cuenta_principal["name"] == "Cuenta principal"
+        assert cuenta_principal["type"] == "debit"
+        assert Decimal(str(cuenta_principal["balance"])) == Decimal("0.00")
         # UserCreate no pide moneda; se hereda de preferred_currency (default COP)
-        assert efectivo["currency"] == "COP"
-        assert efectivo["highlighted"] is True
+        assert cuenta_principal["currency"] == "COP"
+        assert cuenta_principal["highlighted"] is True
 
     def test_transaction_can_be_created_against_default_account_immediately(
         self, client, register_and_login, make_category
@@ -399,7 +399,9 @@ class TestCuentaPorDefecto:
         transaccionar (QuickTransactionModal fallaba en silencio)."""
         user = register_and_login(email="tx-inmediata@example.com")
         cuenta_efectivo = next(
-            c for c in client.get("/api/v1/accounts/", headers=user["headers"]).json() if c["name"] == "Efectivo"
+            c
+            for c in client.get("/api/v1/accounts/", headers=user["headers"]).json()
+            if c["name"] == "Cuenta principal"
         )
         categoria = make_category(user["headers"], name="Salario", type="income")
 
