@@ -8,14 +8,7 @@ import ChartControlsPopover from '@/components/ChartControlsPopover';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import type { CategoryDistributionItem } from '@/types/api';
 
-export type DonutPeriod = 'month' | '3months' | 'year';
 export type CategoryType = 'expense' | 'income';
-
-const PERIOD_OPTIONS: { value: DonutPeriod; label: string }[] = [
-  { value: 'month', label: 'Este mes' },
-  { value: '3months', label: '3 meses' },
-  { value: 'year', label: 'Este año' },
-];
 
 const TYPE_OPTIONS: { value: CategoryType; label: string }[] = [
   { value: 'expense', label: 'Gastos' },
@@ -45,8 +38,6 @@ interface CategoryDonutChartProps {
   data: CategoryDistributionItem[] | undefined;
   isFetching: boolean;
   isError: boolean;
-  donutPeriod: DonutPeriod;
-  onDonutPeriodChange: (period: DonutPeriod) => void;
   categoryType: CategoryType;
   onCategoryTypeChange: (type: CategoryType) => void;
   netMode: boolean;
@@ -59,8 +50,6 @@ export default function CategoryDonutChart({
   data,
   isFetching,
   isError,
-  donutPeriod,
-  onDonutPeriodChange,
   categoryType,
   onCategoryTypeChange,
   netMode,
@@ -117,22 +106,6 @@ export default function CategoryDonutChart({
           {netMode ? 'Distribución Neta por Categoría' : 'Distribución por Categorías'}
         </h2>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="border-border/70 bg-background/40 flex items-center gap-1 rounded-lg border p-0.5">
-            {PERIOD_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => onDonutPeriodChange(option.value)}
-                className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                  donutPeriod === option.value
-                    ? 'bg-primary text-background'
-                    : 'text-text-muted hover:text-text'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
           <ChartControlsPopover>
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">

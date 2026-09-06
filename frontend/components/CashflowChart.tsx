@@ -17,14 +17,7 @@ import ChartControlsPopover from '@/components/ChartControlsPopover';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import type { CashflowItem } from '@/types/api';
 
-export type BarPeriod = '7d' | '30d' | '12m';
 export type AnalyticsSeries = 'both' | 'income' | 'expense';
-
-const PERIOD_OPTIONS: { value: BarPeriod; label: string }[] = [
-  { value: '7d', label: '7 días' },
-  { value: '30d', label: '30 días' },
-  { value: '12m', label: '12 meses' },
-];
 
 const SERIES_OPTIONS: { value: AnalyticsSeries; label: string }[] = [
   { value: 'both', label: 'Ambos' },
@@ -48,8 +41,6 @@ interface CashflowChartProps {
   data: CashflowItem[];
   isLoading: boolean;
   isError: boolean;
-  barPeriod: BarPeriod;
-  onBarPeriodChange: (period: BarPeriod) => void;
   seriesMode: AnalyticsSeries;
   onSeriesModeChange: (mode: AnalyticsSeries) => void;
   periodType: 'day' | 'month';
@@ -59,8 +50,6 @@ export default function CashflowChart({
   data,
   isLoading,
   isError,
-  barPeriod,
-  onBarPeriodChange,
   seriesMode,
   onSeriesModeChange,
   periodType,
@@ -81,22 +70,6 @@ export default function CashflowChart({
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-text-soft text-lg font-medium">Flujo de Caja</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="border-border/70 bg-background/40 flex items-center gap-1 rounded-lg border p-0.5">
-            {PERIOD_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => onBarPeriodChange(option.value)}
-                className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                  barPeriod === option.value
-                    ? 'bg-primary text-background'
-                    : 'text-text-muted hover:text-text'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
           <ChartControlsPopover>
             <div className="flex flex-col gap-1">
               <p className="text-text-muted px-2 py-1 text-xs font-medium">Serie</p>

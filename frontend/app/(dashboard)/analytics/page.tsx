@@ -6,75 +6,97 @@ import type { CashflowItem, CategoryDistributionItem } from '@/types/api';
 import { api } from '@/lib/api';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useState, useMemo, Suspense } from 'react';
-import { useQueryParamState } from '@/hooks/useQueryParamState';
-import CashflowChart, { type BarPeriod, type AnalyticsSeries } from '@/components/CashflowChart';
-import CategoryDonutChart, {
-  type DonutPeriod,
-  type CategoryType,
-} from '@/components/CategoryDonutChart';
+import { useQueryParamState, useQueryParamsBatch } from '@/hooks/useQueryParamState';
+import CashflowChart, { type AnalyticsSeries } from '@/components/CashflowChart';
+import CategoryDonutChart, { type CategoryType } from '@/components/CategoryDonutChart';
 import AnalyticsSummary from '@/components/AnalyticsSummary';
+import Input from '@/components/ui/Input';
 import Skeleton from '@/components/ui/Skeleton';
 
+export type AnalyticsPeriod = 'week' | 'month' | 'year' | 'custom';
+
+const PERIOD_OPTIONS: { value: AnalyticsPeriod; label: string }[] = [
+  { value: 'week', label: 'Esta semana' },
+  { value: 'month', label: 'Este mes' },
+  { value: 'year', label: 'Este año' },
+  { value: 'custom', label: 'Personalizado' },
+];
+
+// Un solo rango de fechas alimenta la tarjeta de KPIs, el gráfico de barras y la dona — antes
+// cada uno tenía su propio selector de período independiente, y solo el de barras afectaba los
+// números de arriba, lo cual era confuso (Fase de discusión UX, 2026-09-06).
+//
 // .toISOString() manda el instante UTC real. Un string armado a mano con los getters locales
 // (getHours() etc.) sin sufijo de zona horaria se interpretaba como UTC en el backend (sesión
 // de Postgres en UTC) — con el servidor en America/Bogota (UTC-5), eso recortaba "ahora" 5 horas
 // antes del real y excluía del todo las transacciones recién creadas de estos rangos.
-const buildBarDateRange = (period: BarPeriod) => {
-  const now = new Date();
-  const start = new Date(now);
-
-  if (period === '7d') start.setDate(now.getDate() - 7);
-  else if (period === '30d') start.setDate(now.getDate() - 30);
-  else start.setFullYear(now.getFullYear() - 1);
-
-  return {
-    start_date: start.toISOString(),
-    end_date: now.toISOString(),
-    period: period === '12m' ? ('month' as const) : ('day' as const),
-  };
-};
-
-const buildDonutDateRange = (period: DonutPeriod) => {
+const buildDateRange = (period: AnalyticsPeriod, customStart: string, customEnd: string) => {
   const now = new Date();
 
-  if (period === '3months') {
+  if (period === 'week') {
     const start = new Date(now);
-    start.setMonth(now.getMonth() - 3);
+    start.setDate(now.getDate() - 6);
     return {
       start_date: start.toISOString(),
       end_date: now.toISOString(),
+      granularity: 'day' as const,
     };
   }
 
   if (period === 'year') {
+    // Date.UTC (no el constructor local `new Date(y, 0, 1)`): un límite de calendario como
+    // "inicio de año" debe anclarse en UTC porque el backend guarda y compara fechas en UTC
+    // (sesión de Postgres en UTC) — construirlo con getters locales lo desplaza por el offset
+    // de la zona horaria del navegador y excluye transacciones del borde del período (mismo
+    // bug ya corregido para el dashboard, ver comentario de buildDateRange más arriba).
     return {
-      start_date: new Date(now.getFullYear(), 0, 1).toISOString(),
+      start_date: new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString(),
       end_date: now.toISOString(),
+      granularity: 'month' as const,
     };
   }
 
+  if (period === 'custom' && customStart && customEnd) {
+    // 'Z' explícito: el input type=date entrega "YYYY-MM-DD" sin zona horaria — sin el
+    // sufijo, `new Date(...)` lo interpreta en hora local y desplaza el límite (mismo
+    // problema que el de 'year'/'month').
+    const start = new Date(`${customStart}T00:00:00Z`);
+    const end = new Date(`${customEnd}T23:59:59Z`);
+    const spanDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+    // El backend de cashflow-series solo agrupa por 'day' o 'month' (sin 'week') — un rango
+    // personalizado largo usa 'month' para no devolver cientos de barras diarias.
+    return {
+      start_date: start.toISOString(),
+      end_date: end.toISOString(),
+      granularity: spanDays > 60 ? ('month' as const) : ('day' as const),
+    };
+  }
+
+  // 'month' (default) y fallback de 'custom' mientras el usuario no completa el rango.
   return {
-    start_date: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
+    start_date: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
     end_date: now.toISOString(),
+    granularity: 'day' as const,
   };
 };
 
 // Fase 13 §13.6: validadores read-time de los query params de analytics. Un link inválido
-// (?bar=abc) devolvía strings crudos que luego se casteaban a ciegas (barPeriod as BarPeriod);
-// ahora el hook devuelve el valor ya validado y tipado por estos validators, sin casts en la página.
-// El tipo de retorno del validator es lo que el hook infiere como tipo del valor.
-const validateBarPeriod = (raw: string): BarPeriod =>
-  (['7d', '30d', '12m'] as const).includes(raw as BarPeriod) ? (raw as BarPeriod) : '30d';
+// (?period=abc) devolvía strings crudos que luego se casteaban a ciegas; ahora el hook devuelve
+// el valor ya validado y tipado por estos validators, sin casts en la página. El tipo de retorno
+// del validator es lo que el hook infiere como tipo del valor.
+const validatePeriod = (raw: string): AnalyticsPeriod =>
+  (['week', 'month', 'year', 'custom'] as const).includes(raw as AnalyticsPeriod)
+    ? (raw as AnalyticsPeriod)
+    : 'month';
+
+// Mismo patrón que transactions/page.tsx: whitelist de formato para start/end (rango
+// personalizado), sin reescribir la URL con el valor corregido.
+const validateDateParam = (raw: string) => (/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : '');
 
 const validateSeriesMode = (raw: string): AnalyticsSeries =>
   (['both', 'income', 'expense'] as const).includes(raw as AnalyticsSeries)
     ? (raw as AnalyticsSeries)
     : 'both';
-
-const validateDonutPeriod = (raw: string): DonutPeriod =>
-  (['month', '3months', 'year'] as const).includes(raw as DonutPeriod)
-    ? (raw as DonutPeriod)
-    : 'month';
 
 const validateCategoryType = (raw: string): CategoryType =>
   (['expense', 'income'] as const).includes(raw as CategoryType)
@@ -91,9 +113,11 @@ function AnalyticsPageContent() {
   // abandona usePersistedState (un link limpio vuelve a defaults; esa es la semántica
   // esperada de un link compartible). hiddenCategories sigue en useState (Decisión 12.1.3).
   // Fase 13 §13.6: cada valor sale validado del hook (whitelist tipada), sin casts locales.
-  const [barPeriod, setBarPeriod] = useQueryParamState('bar', '30d', validateBarPeriod);
+  const [period] = useQueryParamState('period', 'month', validatePeriod);
+  const [customStart] = useQueryParamState('start', '', validateDateParam);
+  const [customEnd] = useQueryParamState('end', '', validateDateParam);
+  const setPeriodParams = useQueryParamsBatch();
   const [seriesMode, setSeriesMode] = useQueryParamState('series', 'both', validateSeriesMode);
-  const [donutPeriod, setDonutPeriod] = useQueryParamState('donut', 'month', validateDonutPeriod);
   const [categoryType, setCategoryType] = useQueryParamState(
     'type',
     'expense',
@@ -104,8 +128,19 @@ function AnalyticsPageContent() {
 
   const netMode = netoRaw === 'true';
 
-  const barDateRange = useMemo(() => buildBarDateRange(barPeriod), [barPeriod]);
-  const donutDateRange = useMemo(() => buildDonutDateRange(donutPeriod), [donutPeriod]);
+  // Un solo rango de fechas para las 3 secciones (KPIs, barras, dona) — ver buildDateRange.
+  const dateRange = useMemo(
+    () => buildDateRange(period, customStart, customEnd),
+    [period, customStart, customEnd]
+  );
+
+  const handlePeriodChange = (next: AnalyticsPeriod) => {
+    if (next === 'custom') {
+      setPeriodParams({ period: 'custom' });
+    } else {
+      setPeriodParams({ period: next === 'month' ? null : next, start: null, end: null });
+    }
+  };
 
   const {
     data: trendData,
@@ -113,16 +148,16 @@ function AnalyticsPageContent() {
     isError: trendError,
   } = useQuery({
     queryKey: queryKeys.analytics.cashflow(
-      barDateRange.start_date,
-      barDateRange.end_date,
-      barDateRange.period
+      dateRange.start_date,
+      dateRange.end_date,
+      dateRange.granularity
     ),
     queryFn: async () => {
       const res = await api.get('dashboard/cashflow-series', {
         params: {
-          start_date: barDateRange.start_date,
-          end_date: barDateRange.end_date,
-          period: barDateRange.period,
+          start_date: dateRange.start_date,
+          end_date: dateRange.end_date,
+          period: dateRange.granularity,
           currency: user?.preferred_currency,
         },
       });
@@ -137,16 +172,16 @@ function AnalyticsPageContent() {
     isError: categoryError,
   } = useQuery({
     queryKey: queryKeys.analytics.categories(
-      donutDateRange.start_date,
-      donutDateRange.end_date,
+      dateRange.start_date,
+      dateRange.end_date,
       categoryType,
       netMode
     ),
     queryFn: async () => {
       const res = await api.get('dashboard/category-distribution', {
         params: {
-          start_date: donutDateRange.start_date,
-          end_date: donutDateRange.end_date,
+          start_date: dateRange.start_date,
+          end_date: dateRange.end_date,
           type: netMode ? 'expense' : categoryType,
           neto: netMode || undefined,
           currency: user?.preferred_currency,
@@ -198,6 +233,52 @@ function AnalyticsPageContent() {
         </p>
       </div>
 
+      {/* Selector de período único: controla la tarjeta de KPIs, el gráfico de barras y la
+          dona a la vez — antes cada gráfico tenía su propio selector y solo uno de ellos
+          afectaba los números de arriba, lo cual generaba confusión. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="border-border/70 bg-background/40 flex items-center gap-1 rounded-lg border p-0.5">
+          {PERIOD_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => handlePeriodChange(option.value)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                period === option.value
+                  ? 'bg-primary text-background'
+                  : 'text-text-muted hover:text-text'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {period === 'custom' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="date"
+              value={customStart}
+              onChange={(event) =>
+                setPeriodParams({ period: 'custom', start: event.target.value || null })
+              }
+              className="bg-background"
+              aria-label="Fecha inicial"
+            />
+            <span className="text-text-muted text-sm">a</span>
+            <Input
+              type="date"
+              value={customEnd}
+              onChange={(event) =>
+                setPeriodParams({ period: 'custom', end: event.target.value || null })
+              }
+              className="bg-background"
+              aria-label="Fecha final"
+            />
+          </div>
+        )}
+      </div>
+
       <AnalyticsSummary totalIncome={totals.totalIncome} totalExpense={totals.totalExpense} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -205,19 +286,15 @@ function AnalyticsPageContent() {
           data={visibleTrendData}
           isLoading={loadingTrends}
           isError={trendError}
-          barPeriod={barPeriod}
-          onBarPeriodChange={setBarPeriod}
           seriesMode={seriesMode}
           onSeriesModeChange={setSeriesMode}
-          periodType={barPeriod === '12m' ? 'month' : 'day'}
+          periodType={dateRange.granularity}
         />
 
         <CategoryDonutChart
           data={categoryData as CategoryDistributionItem[]}
           isFetching={fetchingCategories}
           isError={categoryError}
-          donutPeriod={donutPeriod}
-          onDonutPeriodChange={setDonutPeriod}
           categoryType={categoryType}
           onCategoryTypeChange={setCategoryType}
           netMode={netMode}
