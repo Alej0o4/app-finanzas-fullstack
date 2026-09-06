@@ -143,12 +143,10 @@ export default function Sidebar() {
               aria-label={isSidebarOpen ? 'Cerrar menú' : 'Abrir menú'}
               aria-expanded={isSidebarOpen}
             >
-              {isSidebarOpen ? (
+              {isSidebarOpen && (
                 <span className="sm:hidden">
                   <X size={16} />
                 </span>
-              ) : (
-                <ChevronRight size={16} />
               )}
               <span className="hidden sm:block">
                 {isSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
