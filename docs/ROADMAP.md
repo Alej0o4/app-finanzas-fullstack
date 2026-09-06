@@ -558,6 +558,17 @@ puntos toca contratos de API ni requiere migración — alcance 100% frontend.
 **Objetivo:** habilitar atajos de iOS/Android. El backend ya es REST/JSON stateless con bearer
 tokens, así que **no hay que rehacer nada** — solo agregar las piezas que faltan.
 
+> Spec técnica completa (evaluación arquitectónica previa del agente `software-architect`,
+> 2026-09-06) en `docs/specs/fase_16_spec.md` — desglose por ítem con esquema de datos,
+> decisiones numeradas (16.1.1–16.4.3) y verificación contra el código real (confirma, entre
+> otros, que `Account.balance` ya se muta con deltas SQL sin ningún mecanismo de verificación,
+> y que los `Decimal` ya serializan como `string` en el `openapi.json` real, drift que ya causó
+> el bug corregido en Fase 15). Orden de implementación recomendado: **16.1 → 16.2 → 16.4 →
+> 16.3** (difiere del orden de abajo solo en 16.3/16.4, sin dependencia dura entre ambos). Antes
+> de implementar 16.1, ver la Decisión 16.1.8: se recomienda una revisión de `security-reviewer`
+> por ser el primer mecanismo de autenticación alternativo del proyecto, compartido por todos
+> los routers protegidos.
+
 - [ ] **API keys personales revocables** — 2d
   - 🔑 **Es lo que habilita los atajos.** Un Shortcut de iOS no puede hacer el flujo OAuth2
     password ni refrescar un token cada 60 minutos.

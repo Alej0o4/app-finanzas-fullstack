@@ -62,10 +62,6 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   - `AccountCreate.balance` mezcla saldo de apertura con saldo derivado.
   - Sigue en scope porque las cuentas quedan visibles (decisión 2026-08-22).
 
-- [ ] **Sin idempotencia en `POST /transactions`.**
-  - Un reintento por mala señal crea una transacción duplicada y descuadra el saldo.
-  - Crítico para los atajos móviles del backlog.
-
 - [ ] **Rate limiting en memoria (`slowapi`), sin backend distribuido.**
   - No funciona con múltiples workers ni múltiples instancias — pero hoy el backend corre en
     un solo worker sin réplicas, así que el problema no existe todavía. Diferido a propósito
@@ -128,6 +124,7 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 | Fecha | Item |
 |-------|------|
+| 2026-08-23 | Idempotencia en `POST /transactions` (`Idempotency-Key` + tabla `idempotency_keys`) — resuelto en Fase 10, ver `docs/ROADMAP.md` §10.4. Entrada corregida el 2026-09-06 al detectarse desactualizada durante el análisis de la Fase 16 (`docs/specs/fase_16_spec.md`, hallazgo 12) |
 | 2026-08-23 | Fase 11 — bugs multi-moneda del dashboard: `budgets-progress` agrupa el gasto por `(categoría, moneda)` y expone `currency`; `cashflow-series` y `category-distribution` filtran por una sola moneda (param `currency`, default la preferida) — ver `docs/specs/fase_11_spec.md` §11.1 |
 | 2026-08-23 | Bug `actualizar_transaccion` no actualizaba `currency`: ahora siempre hereda la moneda de la cuenta destino, igual que en la creación (Fase 11 §11.2) |
 | 2026-08-22 | Fase 7 completa — ver `docs/specs/fase_07_spec.md` para el detalle de cada ítem: |
