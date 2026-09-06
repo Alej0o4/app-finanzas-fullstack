@@ -500,6 +500,59 @@ Depende de Fases 8, 10 y 11.
 
 ---
 
+## Parada — Correcciones de UX post-pivote ✅ completa (2026-09-06)
+
+**Objetivo:** cerrar cinco fricciones de UX encontradas en pruebas manuales en vivo del producto
+ya pivotado, antes de seguir con Fase 16. No es una fase numerada del MVP — es una parada de
+mantenimiento entre Fase 15 (onboarding) y Fase 16 (automatizaciones). Ninguno de los cinco
+puntos toca contratos de API ni requiere migración — alcance 100% frontend.
+
+> Implementado en la rama `worktree-ux-fixes-analitica-filtros` (pendiente merge a `main` al
+> momento de escribir esto). Verificado en navegador con Playwright contra un backend/frontend
+> aislados (SQLite local, seed real, sin tocar el stack de Docker en uso) — no solo contra el
+> build. `pnpm lint`/`pnpm build` limpios.
+
+- [x] **Método de pago heredado del tipo de cuenta** en la captura rápida — *(2026-09-06)*
+  - El selector manual (efectivo/tarjeta/transferencia) era independiente del tipo de cuenta
+    elegida, permitiendo combinaciones sin sentido (ej. cuenta crédito + efectivo). Ahora se
+    deriva automáticamente (`cash→cash`, `debit`/`credit→card`) y se elimina el selector de
+    `TransactionCaptureForm.tsx`. Verificado extremo a extremo contra la base de datos.
+
+- [x] **Bug de filtros en Transacciones: la lista quedaba vacía** al aplicar cualquier preset de
+  fecha o editar fechas a mano — *(2026-09-06)*
+  - Causa raíz: `useQueryParamState` construía cada `URLSearchParams` a partir de un snapshot
+    obsoleto de `searchParams`; un handler que llamaba a varios setters seguidos (`applyPreset`,
+    `clearFilters`, edición manual de fecha) perdía todos los parámetros salvo el del último
+    `router.replace`. Se agrega `useQueryParamsBatch` (mismo hook, un solo `router.replace` para
+    varios parámetros a la vez) y se usa en los 4 puntos afectados de `transactions/page.tsx`.
+
+- [x] **Selector de período único en Analítica** (Semana/Mes/Año/Personalizado) — *(2026-09-06)*
+  - Reemplaza los dos selectores independientes que existían (uno en el gráfico de barras, que
+    afectaba la tarjeta de KPIs de arriba; otro en la dona, que no afectaba nada más) sin ninguna
+    señal visual de esa diferencia de alcance. Ahora un único rango de fechas alimenta KPIs,
+    barras y dona a la vez, con rango personalizado (fecha inicio/fin) para los casos que no
+    cubren los presets.
+  - De paso se corrigió un bug de zona horaria en los límites de mes/año: se construían con
+    getters locales del navegador (`new Date(y, m, 1)`) y luego `.toISOString()`, lo que los
+    desplazaba por el offset horario y excluía transacciones del borde del período — mismo patrón
+    de bug ya corregido antes para el dashboard (ver hallazgo #1 de las correcciones
+    post-lanzamiento de Fase 15). Ahora se anclan en UTC con `Date.UTC(...)`.
+
+- [x] **Iconos de la sidebar colapsada** más grandes y centrados — *(2026-09-06)*
+  - Se veían pequeños y "perdidos" porque el padding horizontal no se reducía al colapsar
+    (`w-20` con `px-4 py-3` sin cambios). Ahora cada ítem se centra en una caja de `h-12 w-12` y
+    el icono sube de `size 20` a `22`.
+
+- [x] **Botones "agregar" estandarizados y deduplicados con el FAB** — *(2026-09-06)*
+  - El botón "Nuevo movimiento" del dashboard y de transacciones abría el mismo `TransactionModal`
+    que ya ofrece el FAB global ("Nueva transacción"), duplicando la misma acción en dos controles
+    visualmente distintos. Se retiran ambos botones en línea; el FAB queda como única vía para
+    crear transacciones en todo el dashboard. El botón de Presupuestos, que no tenía la variante
+    de texto corto en móvil que ya usan Cuentas/Categorías, se actualiza para unificar el patrón
+    (ícono `Plus` + texto completo en desktop + label corto en móvil).
+
+---
+
 ## Fase 16 — Automatizaciones y preparación móvil (post-MVP)
 
 **Objetivo:** habilitar atajos de iOS/Android. El backend ya es REST/JSON stateless con bearer
