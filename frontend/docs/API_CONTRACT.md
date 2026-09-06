@@ -135,7 +135,7 @@ Suscripción del navegador al canal de avisos. Los consumidores son
 - `POST /api/v1/push/subscribe` — auth. Body `{ endpoint: string, keys: { p256dh: string,
 auth: string } }` — el shape exacto de `subscription.toJSON()`. Upsert por `endpoint`:
   repetir el mismo POST actualiza la fila en vez de duplicar. Devuelve la suscripción con
-  `id`, `endpoint`, `created_at` (y `updated_at` en el backend).
+  `id`, `endpoint`, `created_at`.
 - `DELETE /api/v1/push/subscribe` — auth. Body `{ endpoint: string }` (el frontend no
   guarda el `id` persistido; solo tiene el objeto del navegador). `404` si la suscripción
   no existe o no es del usuario. El frontend no lo consume todavía: el backend limpia las

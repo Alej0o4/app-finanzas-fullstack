@@ -78,6 +78,24 @@ def _spent_for_budget(db: Session, presupuesto: models.Budget) -> Decimal:
     return spent_map.get((presupuesto.category_id, presupuesto.currency), Decimal("0.00"))
 
 
+def evaluate_budget_thresholds_safely(
+    db: Session, user_id: int, category_id: int, fecha: datetime, contexto: str
+) -> None:
+    """Envuelve `evaluate_budget_thresholds_for_category` en su propio try/except + rollback
+    (Decisión 13.3.4): un fallo del motor nunca debe tumbar el request que ya confirmó el
+    movimiento contable. El rollback es necesario, no cosmético — sin él, una excepción a
+    mitad de camino (p. ej. el `IntegrityError` del índice único de `notifications` bajo
+    carrera) deja la sesión en estado de transacción abortada, y una evaluación posterior en
+    el mismo request (la categoría de origen tras reclasificar un gasto) fallaría también.
+    Único punto de llamada al motor desde los routers — evita que crear/actualizar
+    transacción diverjan en cómo manejan sus propios fallos."""
+    try:
+        evaluate_budget_thresholds_for_category(db, user_id, category_id, fecha.month, fecha.year)
+    except Exception:
+        db.rollback()
+        logger.exception("Error al evaluar umbrales de presupuesto (%s)", contexto)
+
+
 def evaluate_budget_thresholds_for_category(db: Session, user_id: int, category_id: int, month: int, year: int) -> None:
     """Evalúa si el gasto de (usuario, categoría, período) cruzó un umbral y, de ser así,
     persiste el aviso en `notifications` (una sola vez por umbral y período — Decisión
@@ -190,6 +208,10 @@ def _enviar_push(db: Session, notificacion: models.Notification) -> None:
                 data=payload,
                 vapid_private_key=private_key,
                 vapid_claims={"sub": subject},
+                # El push es un canal adicional, best-effort, sobre un request que ya
+                # confirmó el movimiento contable (Decisión 13.2.3) — un push service lento
+                # o colgado no debe demorar la respuesta HTTP indefinidamente.
+                timeout=5,
             )
         except WebPushException as exc:
             status = exc.response.status_code if exc.response is not None else None

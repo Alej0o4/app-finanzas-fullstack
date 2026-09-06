@@ -177,7 +177,7 @@ class TestBudgetAlertsEngine:
         def _booom(*args, **kwargs):
             raise RuntimeError("fallo interno del motor de alertas (mock)")
 
-        monkeypatch.setattr("app.api.transactions.evaluate_budget_thresholds_for_category", _booom)
+        monkeypatch.setattr("app.core.budget_alerts.evaluate_budget_thresholds_for_category", _booom)
 
         response = client.post(
             "/api/v1/transactions/",
@@ -196,3 +196,58 @@ class TestBudgetAlertsEngine:
 
         # El motor no corrió: la bandeja quedó vacía
         assert _notificaciones(client, auth_headers) == []
+
+    def test_reclassifying_expense_evaluates_old_category_against_its_original_period(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """Regresión: al reclasificar un gasto a otra categoría, la categoría de ORIGEN
+        debe re-evaluarse contra el período al que pertenecía la transacción ANTES del
+        cambio, nunca contra el período de la fecha nueva (bug encontrado en code review
+        de Fase 13: `actualizar_transaccion` usaba `transaccion_db.date` ya mutado para
+        ambas evaluaciones). Para detectarlo se deja la categoría de origen con gasto sin
+        notificar aún en OTRO período (el de la fecha nueva) — si el motor mirara ese
+        período por error, dispararía un aviso disparado por una acción que no tiene nada
+        que ver con ese presupuesto."""
+        cuenta = make_account(auth_headers, balance="1000000.00")
+        categoria_a = make_category(auth_headers, name="Origen", type="expense")
+        categoria_b = make_category(auth_headers, name="Destino", type="expense")
+
+        mes_actual, anio_actual = _now_month_year()
+        mes_siguiente, anio_siguiente = _next_month_year()
+        fecha_siguiente = datetime(anio_siguiente, mes_siguiente, 1).isoformat()
+
+        _crear_presupuesto(client, auth_headers, categoria_a["id"], "1000.00", "COP", mes_actual, anio_actual)
+
+        # Gasto sin relación, en el mes SIGUIENTE, ANTES de que exista presupuesto ahí:
+        # el motor no notifica nada porque no hay presupuesto contra qué evaluar todavía.
+        _crear_gasto(client, auth_headers, cuenta["id"], categoria_a["id"], "95.00", date=fecha_siguiente)
+        presupuesto_a_siguiente = _crear_presupuesto(
+            client, auth_headers, categoria_a["id"], "100.00", "COP", mes_siguiente, anio_siguiente
+        )
+        # 95/100 = 95% ya cruzado, pero aún sin notificar (el presupuesto llegó después).
+
+        # Gasto a reclasificar: categoría A, mes ACTUAL, monto bajo (no cruza el 80% de
+        # su propio presupuesto).
+        gasto = _crear_gasto(client, auth_headers, cuenta["id"], categoria_a["id"], "50.00")
+        assert _notificaciones(client, auth_headers) == []
+
+        # Reclasificación: se mueve a categoría B, con fecha nueva en el mes SIGUIENTE.
+        response = client.put(
+            f"/api/v1/transactions/{gasto['id']}",
+            json={
+                "amount": "50.00",
+                "currency": "COP",
+                "type": "expense",
+                "account_id": cuenta["id"],
+                "category_id": categoria_b["id"],
+                "date": fecha_siguiente,
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+
+        # La categoría de origen (A) se re-evalúa contra su período ORIGINAL (mes actual,
+        # donde ahora no le queda ningún gasto) — nunca contra el mes siguiente, así que
+        # el 95%-sin-notificar de A/mes-siguiente no debe dispararse por esta acción.
+        budget_ids_notificados = {n["budget_id"] for n in _notificaciones(client, auth_headers)}
+        assert presupuesto_a_siguiente["id"] not in budget_ids_notificados

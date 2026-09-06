@@ -523,7 +523,7 @@ Entrada:
 - `endpoint`: URL asignada por el push service.
 - `keys.p256dh` y `keys.auth`: claves base64url que emite el navegador.
 
-Salida: la suscripción con `id`, `endpoint`, `user_id`, `created_at`, `updated_at`.
+Salida: la suscripción con `id`, `endpoint`, `created_at`.
 
 ### `DELETE /api/v1/push/subscribe`
 
