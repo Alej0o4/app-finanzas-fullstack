@@ -36,7 +36,9 @@ function CaptureScreen() {
               Ya casi. Registra tu primer gasto para ver el impacto en tu dashboard.
             </p>
           )}
-          <TransactionCaptureForm onSuccess={() => router.push('/')} />
+          <TransactionCaptureForm
+            onSuccess={() => router.push(isOnboarding ? '/?onboarding=1' : '/')}
+          />
         </>
       )}
     </div>

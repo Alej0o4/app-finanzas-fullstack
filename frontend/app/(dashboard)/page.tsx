@@ -3,12 +3,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PieChart, Tags } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useSetMonthlyIncome } from '@/lib/hooks/useSetMonthlyIncome';
 import { useAppConfig } from '@/providers/AppConfigProvider';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import BudgetRing from '@/components/charts/BudgetRing';
 import CategoryBreakdownBars from '@/components/charts/CategoryBreakdownBars';
 import TransactionModal from '@/components/modals/TransactionModal';
@@ -26,10 +27,11 @@ import type {
   CategoryDistributionItem,
 } from '@/types/api';
 
-export default function DashboardPage() {
+function DashboardScreen() {
   const { config } = useAppConfig();
   const { data: user } = useCurrentUser();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [monthlyIncomeInput, setMonthlyIncomeInput] = useState('');
 
@@ -105,18 +107,23 @@ export default function DashboardPage() {
         ? 'var(--color-success)'
         : 'var(--color-danger)';
 
-  // Fase 15 §15.5, Decisión 15.0.1: `total === 1` es cierto exactamente una vez en la
-  // vida del usuario — la primera transacción registrada — sin ningún flag que apagar.
-  const isFirstEverTransaction = recentTransactionsData?.total === 1;
+  // Fase 15 §15.5, Decisión 15.0.1 (revisada): originalmente `total === 1`, pero eso se
+  // rompió al agregar la transacción semilla del ingreso declarado (§15.3.3) — con ella, la
+  // captura guiada del primer gasto ya es la SEGUNDA transacción del usuario, y el banner
+  // nunca se mostraba. Se reemplaza por el mismo mecanismo que ya usa /capture (`?onboarding=1`,
+  // Decisión 15.0.2): TransactionCaptureForm redirige aquí con ese query param solo al terminar
+  // la captura guiada, sin importar cuántas transacciones existan.
+  const cameFromOnboardingCapture = searchParams.get('onboarding') === '1';
   const preferredExpense =
     summary?.monthly_expense_by_currency.find((b) => b.currency === preferredCurrency)?.total ?? 0;
 
   return (
     <div className="space-y-6 pb-10 sm:space-y-10">
-      {/* Aha moment (Fase 15 §15.5, Decisión 15.5.1) — se muestra solo mientras total === 1;
-          desaparece solo con la segunda transacción, sin estado adicional que mantener.
+      {/* Aha moment (Fase 15 §15.5, Decisión 15.5.1) — se muestra solo llegando desde la
+          captura guiada del onboarding (?onboarding=1); desaparece en cuanto el usuario
+          navega a cualquier otro lado, sin estado adicional que mantener.
           Los montos Decimal llegan como string (Decisión 15.6), de ahí los Number(...). */}
-      {isFirstEverTransaction && (
+      {cameFromOnboardingCapture && (
         <div
           role="status"
           className="bg-primary/10 border-primary/20 text-text rounded-2xl border p-4 text-sm"
@@ -364,5 +371,15 @@ export default function DashboardPage() {
         defaultType="expense"
       />
     </div>
+  );
+}
+
+// useSearchParams() exige un límite <Suspense> propio (mismo patrón que capture/page.tsx
+// y analytics/page.tsx) — sin esto, Next falla el build.
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardScreen />
+    </Suspense>
   );
 }
