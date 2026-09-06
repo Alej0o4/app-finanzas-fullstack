@@ -438,20 +438,31 @@ usuario nuevo.
 
 ---
 
-## Fase 15 — Onboarding de 3 minutos
+## Fase 15 — Onboarding de 3 minutos ✅ completa (2026-09-06)
 
 **Objetivo:** llevar al usuario a ver su primer gráfico lo más rápido posible.
 Depende de Fases 8, 10 y 11.
 
-- [ ] **Minuto 0–1: registro sin fricción** — 1d
-  - Solo email (decisión 2026-08-22). Sin formularios largos.
-  - Una sola pregunta: *"¿Cuál es tu ingreso mensual aproximado?"* → `User.monthly_income`.
+> Implementación completa el 2026-09-06 — ver `docs/specs/fase_15_spec.md` para el desglose
+> técnico y las decisiones de diseño numeradas (15.0.1–15.6). Fase **100% frontend**: los
+> tres "minutos" se resuelven encadenando endpoints ya existentes (hallazgo central del spec,
+> verificado contra el código); ningún archivo de `backend/` fue tocado. Verificación: pytest
+> backend 122 passed intacto, `pnpm lint`/`format:check`/`build` limpios. Hallazgo del análisis
+> de integración (Decisión 15.6): los `Decimal` del backend serializan a `string` en JSON
+> (`model_dump(mode="json")`), lo que dejaba la card "Balance del mes" en fallback cuando un
+> usuario fija su ingreso — corregido normalizando con `Number(...)` en `page.tsx:101`.
 
-- [ ] **Minuto 1–2: primer gasto guiado** — 1d
+- [x] **Minuto 0–1: registro sin fricción** — 1d *(2026-09-06, ver `docs/specs/fase_15_spec.md` §15.1/15.3 — auto-login post-registro con degradación explícita, Decisión 15.0.3)*
+  - Solo email (decisión 2026-08-22). Sin formularios largos.
+  - Una sola pregunta: *"¿Cuál es tu ingreso mensual aproximado?"* → `User.monthly_income`
+    (paso `OnboardingIncomeStep` dentro de `/capture?onboarding=1`, condicionado a
+    `monthly_income == null`, Decisión 15.3.2).
+
+- [x] **Minuto 1–2: primer gasto guiado** — 1d *(2026-09-06, ver `docs/specs/fase_15_spec.md` §15.4 — wizard de 2 pasos activado por query param efímero `?onboarding=1`, Decisión 15.0.2)*
   - Redirección directa a la captura con instrucción explícita.
   - Requiere la cuenta por defecto de Fase 8.
 
-- [ ] **Minuto 2–3: el "aha moment"** — 1d
+- [x] **Minuto 2–3: el "aha moment"** — 1d *(2026-09-06, ver `docs/specs/fase_15_spec.md` §15.5 — banner derivado de `total === 1` sin estado persistido, 2 variantes de mensaje, Decisión 15.0.1/15.5.1)*
   - Redirección al dashboard mostrando el impacto: *"Has gastado X de tu ingreso mensual."*
 
 ---
