@@ -104,21 +104,26 @@ def run_seed():
     try:
         existing = db.query(models.User).filter(models.User.email == "test@test.com").first()
         if existing:
+            # Orden de borrado dictado por FKs, no alfabético (Fases 7/10/13): una fila con
+            # FK NOT NULL o NULL-pero-sin-ondelete a otra tabla debe borrarse ANTES que la
+            # tabla referenciada, o la DELETE revienta con ForeignKeyViolation apenas el
+            # usuario de prueba acumula datos reales de uso normal de la app (tokens,
+            # idempotency keys, avisos de presupuesto, suscripciones push) y no solo los
+            # que el propio seed insertó la corrida anterior.
+            #   Notification.budget_id -> budgets.id (nullable, sin ondelete): antes de Budget.
+            db.query(models.Notification).filter(models.Notification.user_id == existing.id).delete()
+            db.query(models.PushSubscription).filter(models.PushSubscription.user_id == existing.id).delete()
             db.query(models.Budget).filter(models.Budget.user_id == existing.id).delete()
+            #   IdempotencyKey.transaction_id -> transactions.id: antes de Transaction.
+            db.query(models.IdempotencyKey).filter(models.IdempotencyKey.user_id == existing.id).delete()
             db.query(models.Transaction).filter(models.Transaction.user_id == existing.id).delete()
             db.query(models.Account).filter(models.Account.user_id == existing.id).delete()
             db.query(models.Category).filter(models.Category.user_id == existing.id).delete()
             db.query(models.RefreshToken).filter(models.RefreshToken.user_id == existing.id).delete()
-            # user_id es NOT NULL en las tres (Fases 7 y 10): sin borrarlas explícitamente,
-            # db.delete(existing) intenta poner user_id=NULL vía el FK y revienta con
-            # IntegrityError apenas el usuario de prueba tiene algún token o idempotency key
-            # real generado por uso normal de la app (p. ej. probar "olvidé mi contraseña" o
-            # reintentar un POST /transactions con Idempotency-Key).
             db.query(models.PasswordResetToken).filter(models.PasswordResetToken.user_id == existing.id).delete()
             db.query(models.EmailVerificationToken).filter(
                 models.EmailVerificationToken.user_id == existing.id
             ).delete()
-            db.query(models.IdempotencyKey).filter(models.IdempotencyKey.user_id == existing.id).delete()
             db.delete(existing)
             db.flush()
 
