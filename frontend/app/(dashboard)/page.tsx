@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { PieChart, Tags } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams } from 'next/navigation';
@@ -12,7 +12,6 @@ import { useAppConfig } from '@/providers/AppConfigProvider';
 import { Suspense, useState } from 'react';
 import BudgetRing from '@/components/charts/BudgetRing';
 import CategoryBreakdownBars from '@/components/charts/CategoryBreakdownBars';
-import TransactionModal from '@/components/modals/TransactionModal';
 import SummaryCard from '@/components/ui/SummaryCard';
 import Button from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
@@ -30,9 +29,7 @@ import type {
 function DashboardScreen() {
   const { config } = useAppConfig();
   const { data: user } = useCurrentUser();
-  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [monthlyIncomeInput, setMonthlyIncomeInput] = useState('');
 
   const now = new Date();
@@ -148,12 +145,6 @@ function DashboardScreen() {
           <p className="text-text-muted mt-1 text-xs sm:text-sm">
             Aquí tienes el estado actual de tus finanzas orgánicas.
           </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Button variant="primary" onClick={() => setIsTransactionModalOpen(true)}>
-            Nuevo movimiento
-          </Button>
         </div>
       </div>
 
@@ -360,16 +351,6 @@ function DashboardScreen() {
           )}
         </div>
       </div>
-
-      <TransactionModal
-        isOpen={isTransactionModalOpen}
-        onClose={() => setIsTransactionModalOpen(false)}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.recentTransactions() });
-        }}
-        title="Registrar movimiento"
-        defaultType="expense"
-      />
     </div>
   );
 }

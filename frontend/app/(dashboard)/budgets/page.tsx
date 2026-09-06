@@ -164,9 +164,10 @@ export default function BudgetsPage() {
             Establece límites y controla tus gastos mensuales.
           </p>
         </div>
-        <Button variant="primary" onClick={openCreateModal}>
+        <Button variant="primary" onClick={openCreateModal} className="shrink-0">
           <Plus size={18} />
-          <span>Nuevo Presupuesto</span>
+          <span className="hidden sm:inline">Nuevo Presupuesto</span>
+          <span className="sm:hidden">Nuevo</span>
         </Button>
       </div>
 
