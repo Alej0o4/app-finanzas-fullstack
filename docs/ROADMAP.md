@@ -553,37 +553,39 @@ puntos toca contratos de API ni requiere migración — alcance 100% frontend.
 
 ---
 
-## Fase 16 — Automatizaciones y preparación móvil (post-MVP)
+## Fase 16 — Automatizaciones y preparación móvil (post-MVP) ✅ completa (2026-09-06)
 
 **Objetivo:** habilitar atajos de iOS/Android. El backend ya es REST/JSON stateless con bearer
 tokens, así que **no hay que rehacer nada** — solo agregar las piezas que faltan.
 
-> Spec técnica completa (evaluación arquitectónica previa del agente `software-architect`,
-> 2026-09-06) en `docs/specs/fase_16_spec.md` — desglose por ítem con esquema de datos,
-> decisiones numeradas (16.1.1–16.4.3) y verificación contra el código real (confirma, entre
-> otros, que `Account.balance` ya se muta con deltas SQL sin ningún mecanismo de verificación,
-> y que los `Decimal` ya serializan como `string` en el `openapi.json` real, drift que ya causó
-> el bug corregido en Fase 15). Orden de implementación recomendado: **16.1 → 16.2 → 16.4 →
-> 16.3** (difiere del orden de abajo solo en 16.3/16.4, sin dependencia dura entre ambos). Antes
-> de implementar 16.1, ver la Decisión 16.1.8: se recomienda una revisión de `security-reviewer`
-> por ser el primer mecanismo de autenticación alternativo del proyecto, compartido por todos
-> los routers protegidos.
+> Implementación completa el 2026-09-06 — ver `docs/specs/fase_16_spec.md` para el desglose
+> técnico y las decisiones numeradas (16.1.1–16.4.3). Orden de implementación seguido:
+> **16.1 → 16.2 → 16.4 → 16.3** (el del spec). Verificación: pytest backend 154 passed
+> (32 nuevos entre `test_api_keys.py`, `test_transactions.py` y `test_accounts.py`),
+> ruff check/format, eslint, `prettier --check` y `pnpm build` limpios; migraciones
+> `6c9bbf3564cc` (api_keys) y `e460a42926d7` (opening_balance) aplicadas, `alembic current`
+> → head. Desviaciones documentadas respecto del spec: (1) la desviación recomendada de
+> `security-reviewer` para §16.1 (Decisión 16.1.8) queda **pendiente** — el agente no estaba
+> disponible en el entorno; anotada en `docs/TODO.md`. (2) §16.2 descubrió en implementación
+> que `Transaction` ya tiene una *relación* ORM llamada `category`, que colisionaba con el
+> campo de texto nuevo → se resolvió con un `field_validator(mode="before")` en
+> `TransactionResponse` (la respuesta siempre trae `category: null`; `category_id` es el dato).
 
-- [ ] **API keys personales revocables** — 2d
+- [x] **API keys personales revocables** — 2d *(2026-09-06)*
   - 🔑 **Es lo que habilita los atajos.** Un Shortcut de iOS no puede hacer el flujo OAuth2
     password ni refrescar un token cada 60 minutos.
   - La misma pieza sirve para la nota de voz con IA de v1.2.
 
-- [ ] **Endpoint de captura rápida por nombre** — 1d
+- [x] **Endpoint de captura rápida por nombre** — 1d *(2026-09-06)*
   - Aceptar `category: "Alimentación"` en vez de `category_id: 3`.
   - Un Shortcut no puede resolver IDs cómodamente. También es la puerta de entrada natural
     para el parseo de lenguaje natural.
 
-- [ ] **Codegen de tipos desde OpenAPI** — 1d
+- [x] **Codegen de tipos desde OpenAPI** — 1d *(2026-09-06)*
   - FastAPI ya expone el schema. Elimina el drift manual entre Pydantic y TypeScript.
   - Con una app nativa serían tres copias de los tipos en vez de dos.
 
-- [ ] **Reconciliación de saldos** — 1d
+- [x] **Reconciliación de saldos** — 1d *(2026-09-06)*
   - Como las cuentas quedan visibles, hace falta una operación "recalcular saldo desde movimientos".
   - Hoy, si un saldo se desvía, no hay forma de detectarlo ni corregirlo.
   - Separar `opening_balance` (inmutable) de `current_balance` (derivado).

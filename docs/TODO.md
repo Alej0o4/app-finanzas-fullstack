@@ -56,11 +56,13 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🟡 Integridad y escala
 
-- [ ] **Saldos de cuenta sin reconciliación posible.**
-  - `Account.balance` se muta con deltas y no existe la operación "recalcular desde movimientos".
-  - Si un saldo se desvía, no hay forma de detectarlo ni corregirlo.
-  - `AccountCreate.balance` mezcla saldo de apertura con saldo derivado.
-  - Sigue en scope porque las cuentas quedan visibles (decisión 2026-08-22).
+- [ ] **Revisión de seguridad de API keys pendiente (Fase 16 §16.1, Decisión 16.1.8).**
+  - Primer mecanismo de autenticación alternativo del proyecto, compartido por todos los
+    routers protegidos vía `get_current_user`. El spec recomienda una pasada de
+    `security-reviewer` antes del merge; el agente no estaba disponible en el entorno de
+    implementación → se avanzó con las defensas ya diseñadas y se documenta la deuda aquí.
+  - Puntos a revisar: ausencia de TTL obligatorio, ausencia de scopes en v1, y el diseño
+    del `key_func` del rate limit de `POST /transactions` (keyed por hash de la key).
 
 - [ ] **Rate limiting en memoria (`slowapi`), sin backend distribuido.**
   - No funciona con múltiples workers ni múltiples instancias — pero hoy el backend corre en
@@ -97,7 +99,11 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 - [ ] **Tipos de dominio no compartidos backend→frontend.**
   - Enums en Python vs string unions en TS, mantenidos a mano.
-  - Con una app nativa serían tres copias. Resolver con codegen desde OpenAPI.
+  - Resuelto a medias en Fase 16 §16.3: ya existe codegen desde OpenAPI
+    (`frontend/types/generated/api.ts` + script `pnpm gen:types`), usado para código nuevo
+    (API keys, reconciliación). Pendiente: migrar oportunistamente los call sites existentes
+    que usan los tipos manuales (Decisión 16.3.2, convivencia deliberada sin fecha de
+    deprecación).
 
 - [ ] **Nomenclatura mezclada español/inglés** dentro del mismo módulo.
   - `crear_transaccion` devuelve `TransactionResponse`; variables `cuenta`/`transaccion`
@@ -124,6 +130,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 | Fecha | Item |
 |-------|------|
+| 2026-09-06 | Saldos de cuenta sin reconciliación posible — resuelto en Fase 16 §16.4: `opening_balance` inmutable (con backfill en la migración `e460a42926d7`) + `POST /accounts/{id}/reconcile`. Nota: el backfill solo establece línea de base hacia adelante, no audita desviaciones históricas (ver `BUSINESS_RULES.md`) |
+| 2026-09-06 | API keys personales revocables (Fase 16 §16.1): tabla `api_keys` (migración `6c9bbf3564cc`), auth alternativa `oikos_pat_*` en `get_current_user`, CRUD `/api/v1/api-keys/`, rate limit 60/min en `POST /transactions` keyed por key, UI en `/settings`. Revisión `security-reviewer` pendiente — ver 🟡 más arriba |
 | 2026-08-23 | Idempotencia en `POST /transactions` (`Idempotency-Key` + tabla `idempotency_keys`) — resuelto en Fase 10, ver `docs/ROADMAP.md` §10.4. Entrada corregida el 2026-09-06 al detectarse desactualizada durante el análisis de la Fase 16 (`docs/specs/fase_16_spec.md`, hallazgo 12) |
 | 2026-08-23 | Fase 11 — bugs multi-moneda del dashboard: `budgets-progress` agrupa el gasto por `(categoría, moneda)` y expone `currency`; `cashflow-series` y `category-distribution` filtran por una sola moneda (param `currency`, default la preferida) — ver `docs/specs/fase_11_spec.md` §11.1 |
 | 2026-08-23 | Bug `actualizar_transaccion` no actualizaba `currency`: ahora siempre hereda la moneda de la cuenta destino, igual que en la creación (Fase 11 §11.2) |
