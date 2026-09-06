@@ -411,23 +411,30 @@ usuario nuevo.
 
 ---
 
-## Fase 14 — Resumen semanal automático
+## Fase 14 — Resumen semanal automático ✅ completa (2026-09-06)
 
 **Objetivo:** re-engagement pasivo. El usuario recibe valor sin abrir la app.
 
 > El template es barato; **el canal de entrega no**. Hoy no existe scheduler ni servicio de envío.
 > Presupuestar como infraestructura, no como detalle.
 
-> Spec detallada: ver `docs/specs/fase_14_spec.md` (2026-09-06, evaluación arquitectónica del
-> agente `software-architect`). Redefine el orden de ejecución real (el ítem "Envío" del ROADMAP
-> se disuelve en "Cálculo"; hace falta un paso previo de modelo de datos + un refactor del módulo
-> de notificaciones de Fase 13 que el ROADMAP no lista) y ajusta el total a ~5.9d — el mayor
-> ajuste es "Preferencia de usuario" (4h → 1.5d): no existe hoy ninguna página de Ajustes en el
-> frontend de la que partir.
+> Implementación completa el 2026-09-06 — ver `docs/specs/fase_14_spec.md` para el desglose
+> técnico y las decisiones de diseño numeradas (§14.1–§14.7; evaluación arquitectónica previa del
+> agente `software-architect`). Verificación: pytest backend 122 passed (9 nuevos en
+> `test_weekly_summary.py`), ruff/eslint/`prettier --check`/`pnpm build` limpios, migración
+> `418c35db8cbc` aplicada sobre la base de datos de dev (`docker compose up -d --build backend`,
+> confirmado `alembic current` → head). Revisado archivo por archivo contra la spec: modelo de
+> datos (`User.weekly_summary_enabled` opt-out, `Notification.period_key` + índice único parcial
+> `uq_notifications_user_type_period_active`), refactor de `budget_alerts.py` a
+> `app/core/notification_dispatch.py` (compartido con Fase 13, sin cambio de comportamiento),
+> `app/core/weekly_summary.py` (semana lunes-domingo en `America/Bogota`, solo moneda preferida,
+> se envía siempre incluso con $0, delta vs. semana anterior), `BackgroundScheduler` in-process
+> con `CronTrigger` lunes 07:00 + hook de `shutdown` (antes inexistente en el proyecto), y la
+> primera página de Ajustes del frontend (`/settings`, un solo control).
 
-- [ ] **Scheduler** (APScheduler in-process, ver spec §14.4) — 1d
-- [ ] **Cálculo del resumen semanal** — total gastado, categoría principal, comparación con la semana anterior — 1.5d
-- [ ] **Preferencia de usuario para activar/desactivar** el resumen — 1.5d (incluye primera página de Ajustes del frontend, ver spec §14.6)
+- [x] **Scheduler** (APScheduler in-process, ver spec §14.4) — 1d *(2026-09-06)*
+- [x] **Cálculo del resumen semanal** — total gastado, categoría principal, comparación con la semana anterior — 1.5d *(2026-09-06, ver spec §14.3)*
+- [x] **Preferencia de usuario para activar/desactivar** el resumen — 1.5d *(2026-09-06, incluye primera página de Ajustes del frontend, ver spec §14.6)*
 
 ---
 
