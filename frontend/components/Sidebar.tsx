@@ -88,14 +88,16 @@ export default function Sidebar() {
         onClick={() => {
           if (isMobile()) closeSidebar();
         }}
-        className={`group relative flex items-center space-x-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors duration-200 ${
+        className={`group relative flex items-center rounded-xl text-sm font-medium transition-colors duration-200 ${
+          isSidebarOpen ? 'space-x-3 px-4 py-3' : 'mx-auto h-12 w-12 justify-center'
+        } ${
           isActive
             ? 'bg-primary text-background shadow-primary/10 font-semibold shadow-lg active:brightness-95'
             : 'text-text-muted hover:text-text hover:bg-surface-elevated active:bg-surface'
         }`}
       >
         <Icon
-          size={20}
+          size={22}
           className={
             isActive
               ? 'text-background'
