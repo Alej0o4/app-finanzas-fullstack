@@ -11,16 +11,26 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
  * Requiere que el componente que lo usa esté envuelto en <Suspense> (mismo requisito
  * de Next.js App Router que ya aplica a useSearchParams en login/page.tsx y
  * reset-password/page.tsx).
+ *
+ * `validate` (opcional, Fase 13 §13.6) normaliza valores inválidos del query string a
+ * lectura: un link con `?category=abc` (o cualquier valor fuera de la whitelist) devuelve
+ * el fallback en vez de un string crudo que después se castea a ciegas. La URL no se
+ * reescribe con el valor corregido — el re-normalizado en cada render alcanza (el setter
+ * sigue escribiendo solo valores que el propio UI produce, y el next render valida igual).
+ * Cuando `validate` devuelve un tipo de unión concreta (p. ej. `BarPeriod`), el hook lo
+ * infiere como tipo del valor; sin `validate`, se comporta como antes y devuelve `string`.
  */
-export function useQueryParamState(
+export function useQueryParamState<T extends string = string>(
   key: string,
-  defaultValue: string
-): [string, (value: string) => void] {
+  defaultValue: string,
+  validate?: (raw: string) => T
+): [T, (value: string) => void] {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const value = searchParams.get(key) ?? defaultValue;
+  const rawValue = searchParams.get(key) ?? defaultValue;
+  const value = (validate ? validate(rawValue) : rawValue) as T;
 
   const setValue = useCallback(
     (next: string) => {

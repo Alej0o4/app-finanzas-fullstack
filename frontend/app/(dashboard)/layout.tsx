@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import FabManager from '@/components/FabManager';
+import InstallPrompt from '@/components/InstallPrompt';
 import { useRequireAuth } from '@/lib/hooks/useRequireAuth';
 import { useUiStore } from '@/store/useUiStore';
 import { Menu } from 'lucide-react';
@@ -37,6 +38,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <Sidebar />
       <ConfirmDialog />
       <FabManager />
+      <InstallPrompt />
 
       <div
         className={`flex min-h-screen flex-col transition-[padding] duration-300 ease-in-out ${

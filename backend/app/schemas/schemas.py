@@ -291,3 +291,54 @@ class CategoryDistributionData(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- NOTIFICACIONES (Fase 13 §13.5) ---
+# Decisión 13.5.2: el Enum vive en schemas, no en la columna `notifications.type`
+# (String(30) libre) — Fase 14 agrega "weekly_summary" sin migración de esquema.
+class NotificationType(str, Enum):
+    budget_threshold_80 = "budget_threshold_80"
+    budget_threshold_100 = "budget_threshold_100"
+
+
+class NotificationResponse(BaseModel):
+    id: int
+    type: str
+    title: str
+    body: str
+    budget_id: int | None = None
+    read_at: datetime | None = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UnreadCountResponse(BaseModel):
+    count: int
+
+
+# --- PUSH WEB (Fase 13 §13.2) ---
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionCreate(BaseModel):
+    """Shape estándar de `PushSubscription.toJSON()` del navegador."""
+
+    endpoint: str = Field(..., min_length=1, max_length=500)
+    keys: PushSubscriptionKeys
+
+
+class PushSubscriptionDelete(BaseModel):
+    endpoint: str = Field(..., min_length=1, max_length=500)
+
+
+class PushSubscriptionResponse(BaseModel):
+    id: int
+    endpoint: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

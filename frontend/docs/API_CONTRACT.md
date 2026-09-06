@@ -105,6 +105,42 @@ ignoran.
 - `GET /api/v1/dashboard/cashflow-series` — parámetro opcional `currency` (Fase 11 §11.1): filtra la serie a una sola moneda; si se omite, el backend usa `preferred_currency` del usuario. El frontend lo pasa explícito (Decisión 11.1.1 del spec de Fase 11)
 - `GET /api/v1/dashboard/category-distribution` — mismo parámetro opcional `currency` que cashflow-series; soporta además `neto=true` para calcular gasto neto por categoría
 
+### Notificaciones (Fase 13 §13.5)
+
+Los avisos los escribe el motor de alertas del backend (transacciones de gasto que cruzan
+el 80/100 % de un presupuesto); estos endpoints solo leen/escriben el estado de la bandeja.
+Todos requieren `Bearer` y devuelven los timestamps en ISO 8601.
+
+- `GET /api/v1/notifications/?skip=0&limit=50` — bandeja del usuario, más recientes primero,
+  paginada con el mismo shape que transacciones. Los consumidores usan `limit=50` (la lista
+  completa de la bandeja) — sin paginación "load more": el popover muestra las primeras 50.
+  Devuelve `PaginatedResponse<AppNotification>`.
+- `GET /api/v1/notifications/unread-count` — `{ "count": number }` para el badge de la
+  campana. Es la única query con `refetchInterval` corto (60 s, Decisión 13.5.4): un
+  `COUNT(*)` barato en el backend; el badge no dispara la query de lista completa.
+- `PATCH /api/v1/notifications/{notification_id}/read` — marca como leída
+  (`read_at = now()`). Idempotente. `404` si no existe o no es del usuario.
+- `PATCH /api/v1/notifications/read-all` — marca todas las no leídas y devuelve
+  `{ "count": 0 }` (idempotente).
+
+### Push web (Fase 13 §13.2)
+
+Suscripción del navegador al canal de avisos. Los consumidores son
+`PushOptIn.tsx` (alta) y el service worker (recepción).
+
+- `GET /api/v1/push/vapid-public-key` — **público** (sin auth; el SW lo consulta antes de
+  tener tokens). Devuelve `{ "public_key": string }` en base64url. `503` si el backend no
+  tiene `VAPID_PUBLIC_KEY` configurado — el frontend lo trata como fallo silencioso del
+  opt-in, no como error de la app.
+- `POST /api/v1/push/subscribe` — auth. Body `{ endpoint: string, keys: { p256dh: string,
+auth: string } }` — el shape exacto de `subscription.toJSON()`. Upsert por `endpoint`:
+  repetir el mismo POST actualiza la fila en vez de duplicar. Devuelve la suscripción con
+  `id`, `endpoint`, `created_at` (y `updated_at` en el backend).
+- `DELETE /api/v1/push/subscribe` — auth. Body `{ endpoint: string }` (el frontend no
+  guarda el `id` persistido; solo tiene el objeto del navegador). `404` si la suscripción
+  no existe o no es del usuario. El frontend no lo consume todavía: el backend limpia las
+  suscripciones caducadas solo al fallar el envío (404/410 Gone), sin acción del cliente.
+
 ## Contratos de datos importantes
 
 ### Usuario autenticado
@@ -222,6 +258,24 @@ Para el progreso de presupuestos, el backend devuelve valores listos para pintar
 - `currency` (Fase 11 §11.1) — moneda real del presupuesto; `spent` y `amount_limit` viven en esta moneda. `BudgetRing` la usa para formatear en vez de la moneda preferida global.
 
 Los endpoints de series (`cashflow-series`, `category-distribution`) devuelven una sola serie filtrada a una moneda (`currency` explícito o `preferred_currency` por defecto) — nunca suman monedas distintas en un mismo punto.
+
+### Notificación
+
+`GET /api/v1/notifications/` devuelve `PaginatedResponse<AppNotification>`; cada ítem:
+
+- `id` — int
+- `type` — string (`budget_threshold_80` | `budget_threshold_100`; Fase 14 agrega `weekly_summary`)
+- `title` — string (título del aviso, listo para pintar)
+- `body` — string (cuerpo, listo para pintar)
+- `budget_id` — `number | null`; si no es `null`, el frontend enlaza el título a `/budgets`
+- `read_at` — `string | null` (ISO 8601; `null` = no leída)
+- `created_at` — string (ISO 8601, usada para el tiempo relativo del popover)
+
+Reglas:
+
+- La lista nunca se deriva ni se agrega en cliente: el backend escribe y entrega los avisos.
+- "Marcar como leída" no se optimiza localmente: se hace `PATCH` y la invalidación recarga
+  lista + badge (el `unread_count` se recalcula del server, nunca restando en el cliente).
 
 ## Errores esperados
 

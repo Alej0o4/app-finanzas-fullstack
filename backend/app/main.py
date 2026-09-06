@@ -11,7 +11,18 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.api import accounts, auth, budgets, categories, dashboard, preferences, transactions, users
+from app.api import (
+    accounts,
+    auth,
+    budgets,
+    categories,
+    dashboard,
+    notifications,
+    preferences,
+    push,
+    transactions,
+    users,
+)
 from app.core.database import SessionLocal
 from app.core.logging_config import configure_logging, request_id_var
 from app.core.rate_limit import limiter
@@ -162,6 +173,8 @@ app.include_router(categories.router, prefix="/api/v1/categories", tags=["Catego
 app.include_router(budgets.router, prefix="/api/v1/budgets", tags=["Presupuestos"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard"])
 app.include_router(preferences.router, prefix="/api/v1/users", tags=["Preferencias"])
+app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notificaciones"])
+app.include_router(push.router, prefix="/api/v1/push", tags=["Push"])
 
 
 @app.on_event("startup")

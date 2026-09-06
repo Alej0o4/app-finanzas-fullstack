@@ -22,6 +22,8 @@ backups/
 
 # Imágenes de referencia
 *.png
+# Excepto los íconos de la PWA (Fase 13 §13.1), que manifest.json y sw.js referencian en runtime
+!frontend/public/icons/*.png
 
 .vscode/
 .idea/

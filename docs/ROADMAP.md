@@ -374,7 +374,7 @@ usuario nuevo.
 
 ---
 
-## Fase 13 — Presupuestos con alertas + infraestructura de notificaciones
+## Fase 13 — Presupuestos con alertas + infraestructura de notificaciones ✅ completa (2026-09-06)
 
 **Objetivo:** el primer diferenciador real frente a una hoja de cálculo.
 
@@ -385,18 +385,20 @@ usuario nuevo.
 > prototiparlo temprano y considerar un **fallback in-app** (bandeja de avisos dentro de la app)
 > o correo como respaldo.
 
-- [ ] **PWA instalable** (manifest + service worker + prompt de instalación) — 2d
+- [x] **PWA instalable** (manifest + service worker + prompt de instalación) — 2d *(2026-09-06, ver `docs/specs/fase_13_spec.md` §13.1 — manifest manual + `sw.js` ~40 líneas, sin next-pwa; prompt con umbral de visitas + fallback iOS)*
   - Prerrequisito de push. Beneficio extra: cubre buena parte del caso "app móvil" sin código nativo.
 
-- [ ] **Infraestructura de push web** (VAPID, tabla de suscripciones, envío) — 3d
+- [x] **Infraestructura de push web** (VAPID, tabla de suscripciones, envío) — 3d *(2026-09-06, §13.2 — `pywebpush`, tabla `push_subscriptions` con upsert por `endpoint`, limpieza de suscripciones 410/404, par de claves VAPID generado para dev local)*
 
-- [ ] **Motor de evaluación de presupuestos** (umbrales 80% y 100%) — 2d
+- [x] **Motor de evaluación de presupuestos** (umbrales 80% y 100%) — 2d *(2026-09-06, §13.3 — evaluación síncrona post-commit; idempotencia por `(budget_id, type)`; extracción de `spent` compartido con `dashboard.py`; fallos nunca revierten la transacción)*
   - Un aviso por umbral por periodo: no repetir en cada transacción.
 
-- [ ] **Indicador visual de progreso** que cambia de color al acercarse al límite — 1d
+- [x] **Indicador visual de progreso** que cambia de color al acercarse al límite — 1d *(2026-09-06, §13.4 — BudgetRing realineado a cortes 80/100 en `BudgetRing.tsx:40-41`)*
   - `BudgetRing` ya existe; adaptar al lenguaje visual del MVP.
 
-- [ ] **Bandeja de avisos in-app** como fallback — 1d
+- [x] **Bandeja de avisos in-app** como fallback — 1d *(2026-09-06, §13.5 — tabla `notifications`, campana en el sidebar con badge `refetchInterval` 60s, popover con listado y "marcar todas")*
+
+*Más deuda de Fase 12 resuelta en el mismo hito: **13.6** validación read-time de query params (whitelist + fallback con tercer arg `validate` en `useQueryParamState`) — cierra la frontera de entrada donde un link `?category=abc` producía 422 y `?bar=foo` entraba con cast silencioso.*
 
 ---
 
@@ -513,6 +515,7 @@ Estas estaban "fuera de scope" bajo el supuesto de un solo usuario. Ese supuesto
 | 2026-07-14 | **Fase 6 Quick Wins** — Fix multi-moneda en `/summary`, sanitización de errores, headers de seguridad, README raíz, edición de transacciones, cuentas destacadas, iconos de categorías, ruff + prettier |
 | 2026-07-14 | **Fase 6 Responsive** — Dashboard, listados, formularios, modales y sidebar adaptados a móvil; estandarización de botones |
 | 2026-09-05 | **Fase 12** — Pulido visual: URL-sync (hook `useQueryParamState`), elevación selectiva de tarjetas, sombras tintadas `shadow-background/NN`, loading unificado con Skeleton (7 archivos), favicon de marca + limpieza de assets, 404 propio, skip-link, validación por campo con `noValidate`, `tabular-nums`, enlaces legales. Fase 100% frontend |
+| 2026-09-06 | **Fase 13** — Presupuestos con alertas + notificaciones: tabla `notifications` + motor de umbrales 80/100 (síncrono post-commit, idempotente por `(budget_id, type)`, `spent` compartido con dashboard), campana in-app con badge (poll 60s, "marcar todas"), PWA instalable (manifest + `sw.js` manual, íconos 192/512, prompt con fallback iOS), push web (`pywebpush`, VAPID dev, upsert por endpoint, limpieza 410), BudgetRing alineado a 80/100. Más 13.6: validación read-time de query params (deuda de Fase 12). 17 tests nuevos |
 
 ### Pendientes heredados de fases anteriores
 

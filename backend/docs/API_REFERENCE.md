@@ -454,3 +454,89 @@ Salida:
 - `category_id`
 - `category_name`
 - `total` — cuando `neto=true`, representa el gasto neto
+
+## Notificaciones (Fase 13 §13.5)
+
+Las notificaciones las escribe el motor de alertas de presupuestos (`GET /api/v1/budgets/` +
+transacciones de gasto que cruzan el 80 %/100 % del límite, ver §13.3); estos endpoints solo
+leen/escriben el estado de la bandeja. Auth: `Bearer`, sin rate limiting (mismo criterio que
+budgets/dashboard).
+
+### `GET /api/v1/notifications/`
+
+Lista las notificaciones del usuario actual, más recientes primero, con paginación simple
+(`skip`/`limit`, mismo patrón que `GET /api/v1/transactions/`).
+
+Salida (paginada):
+
+- `items`: array de notificaciones con `id`, `type` (`budget_threshold_80` |
+  `budget_threshold_100`), `title`, `body`, `budget_id` (nullable), `read_at` (nullable),
+  `created_at`
+- `total`, `page`, `page_size`
+
+### `GET /api/v1/notifications/unread-count`
+
+Conteo de no leídas para el badge de la campana — `{"count": N}`. Query barata
+(`COUNT(*) WHERE user_id=? AND read_at IS NULL`, cubierta por el índice compuesto
+`ix_notifications_user_id_created_at`).
+
+### `PATCH /api/v1/notifications/{notification_id}/read`
+
+Marca una notificación como leída (`read_at = now()`). Idempotente.
+
+Errores esperados:
+
+- `404` si la notificación no existe o no es del usuario autenticado (nunca `403`, no filtra
+  existencia ajena).
+
+### `PATCH /api/v1/notifications/read-all`
+
+Marca todas las no leídas del usuario como leídas. Devuelve el nuevo conteo de no leídas
+(siempre `{"count": 0}` tras la acción) — idempotente.
+
+## Push web (Fase 13 §13.2)
+
+Suscripciones Web Push para avisos de presupuestos. Las claves del servidor se configuran con
+`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` (ver `docker-compose.yml` y `.env`).
+
+### `GET /api/v1/push/vapid-public-key`
+
+Devuelve la clave pública VAPID (base64url) que el frontend necesita para crear la suscripción
+del navegador. Endpoint público (sin auth): el `navigator.serviceWorker` lo consulta antes de
+tener tokens.
+
+Salida:
+
+- `public_key`
+
+Errores esperados:
+
+- `503` si `VAPID_PUBLIC_KEY` no está configurado en el entorno.
+
+### `POST /api/v1/push/subscribe`
+
+Registra (o actualiza, "upsert" por `endpoint`) la suscripción del navegador del usuario
+autenticado.
+
+Entrada:
+
+- `endpoint`: URL asignada por el push service.
+- `keys.p256dh` y `keys.auth`: claves base64url que emite el navegador.
+
+Salida: la suscripción con `id`, `endpoint`, `user_id`, `created_at`, `updated_at`.
+
+### `DELETE /api/v1/push/subscribe`
+
+Da de baja la suscripción del usuario autenticado. El cuerpo JSON lleva el `endpoint` (el
+frontend no guarda el `id` persistido: solo tiene la suscripción que devuelve el navegador).
+
+Entrada:
+
+- `endpoint`
+
+Errores esperados:
+
+- `404` si la suscripción no existe o no pertenece al usuario autenticado.
+
+Cuando un push falla con `404/410 Gone` (el navegador revocó la suscripción), el backend borra
+la fila automáticamente al intentar enviar — no requiere acción del cliente.

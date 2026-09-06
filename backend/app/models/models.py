@@ -188,3 +188,73 @@ class IdempotencyKey(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("uq_idempotency_keys_user_key", "user_id", "key", unique=True),)
+
+
+class Notification(Base):
+    """Aviso persistido para la bandeja in-app (Fase 13 §13.5).
+
+    Fuente única de avisos: tanto el motor de presupuestos (§13.3) como, en el futuro,
+    el resumen semanal de Fase 14, insertan aquí. El envío push (§13.2) es un canal
+    adicional sobre la misma fila, no una tabla paralela — evita que un aviso "exista"
+    en push pero no en la bandeja, o viceversa.
+    """
+
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    type = Column(
+        String(30), nullable=False
+    )  # "budget_threshold_80" | "budget_threshold_100" (Fase 14 agrega "weekly_summary")
+    title = Column(String(200), nullable=False)
+    body = Column(String(500), nullable=False)
+    # Referencia opcional a la entidad que originó el aviso, para que el frontend pueda
+    # enlazar "Ver presupuesto" — nullable porque Fase 14 (resumen semanal) no apunta a
+    # un presupuesto puntual.
+    budget_id = Column(Integer, ForeignKey("budgets.id"), nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    owner = relationship("User", backref="notifications")
+    budget = relationship("Budget")
+
+    # Decisión 13.3.2: la idempotencia "un aviso por umbral por período" es una garantía
+    # de base de datos, no solo de aplicación — dos transacciones concurrentes que
+    # empujan el mismo presupuesto sobre el 100% no pueden generar dos avisos. El índice
+    # es PARCIAL (budget_id IS NOT NULL) porque las notificaciones de Fase 14 (resumen
+    # semanal) no apuntan a un presupuesto y no deben ocupar slot de unicidad.
+    __table_args__ = (
+        Index("ix_notifications_user_id_created_at", "user_id", "created_at"),
+        Index(
+            "uq_notifications_budget_type_active",
+            "budget_id",
+            "type",
+            unique=True,
+            postgresql_where=text("budget_id IS NOT NULL"),
+            sqlite_where=text("budget_id IS NOT NULL"),
+        ),
+    )
+
+
+class PushSubscription(Base):
+    """Suscripción push de un navegador/dispositivo (Fase 13 §13.2).
+
+    Un usuario puede tener varias filas (multi-dispositivo). Sin SoftDeleteMixin — una
+    suscripción revocada por el navegador (410 Gone al enviar) se borra de verdad, no
+    tiene valor histórico (Decisión 6.3 de Fase 8, mismo criterio que RefreshToken).
+    """
+
+    __tablename__ = "push_subscriptions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    endpoint = Column(String(500), nullable=False)
+    p256dh_key = Column(String(255), nullable=False)
+    auth_key = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    owner = relationship("User", backref="push_subscriptions")
+
+    # `endpoint` es único GLOBALMENTE (no por usuario): el estándar Web Push garantiza
+    # un endpoint único por navegador/instalación — si el mismo endpoint se re-registra
+    # (cierre de sesión y re-login en el mismo dispositivo), se actualiza la fila en vez
+    # de duplicar (upsert por endpoint, Decisión 13.2.3 del spec).
+    __table_args__ = (Index("uq_push_subscriptions_endpoint", "endpoint", unique=True),)

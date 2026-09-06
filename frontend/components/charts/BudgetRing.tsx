@@ -36,9 +36,9 @@ export default function BudgetRing({
   // Ahora estamos 100% seguros de que percentage es un número válido
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
-  // ... (el resto del código se mantiene igual desde la línea de colores semánticos hacia abajo)
-  const isDanger = percentage >= 90;
-  const isWarning = percentage >= 75 && percentage < 90;
+  // Alineado con el motor de alertas (§13.3/Decisión 13.4.1): 80% = warning, 100% = danger.
+  const isDanger = percentage >= 100;
+  const isWarning = percentage >= 80 && percentage < 100;
 
   const ringColorClass = isDanger ? 'text-danger' : isWarning ? 'text-warning' : 'text-primary';
 

@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
+import NotificationBell from '@/components/NotificationBell';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -186,6 +187,7 @@ export default function Sidebar() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
+                  <NotificationBell />
                   <ThemeToggle />
                   <button
                     onClick={handleLogout}
@@ -216,6 +218,7 @@ export default function Sidebar() {
                   .map((n: string) => n[0])
                   .join('') || 'U'}
               </div>
+              <NotificationBell />
               <ThemeToggle />
               <button
                 onClick={handleLogout}

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.core.budget_alerts import spent_por_categoria_y_moneda
 from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -125,8 +126,6 @@ def obtener_resumen(db: Session = Depends(get_db), current_user: models.User = D
 @router.get("/budgets-progress", response_model=list[schemas.BudgetProgress])
 def obtener_progreso_presupuestos(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     hoy = datetime.now(UTC)
-    primer_dia = datetime(hoy.year, hoy.month, 1)
-    ultimo_dia = datetime(hoy.year, hoy.month, calendar.monthrange(hoy.year, hoy.month)[1], 23, 59, 59)
 
     # El dashboard es la página de aterrizaje: genera aquí los presupuestos recurrentes
     # del mes en curso antes de consultarlos (Fase 8 §3, Decisión 3.1).
@@ -145,24 +144,10 @@ def obtener_progreso_presupuestos(db: Session = Depends(get_db), current_user: m
 
     category_ids = [p.category_id for p in presupuestos]
 
-    spent_rows = (
-        db.query(
-            models.Transaction.category_id,
-            models.Transaction.currency,
-            func.sum(models.Transaction.amount).label("spent"),
-        )
-        .filter(
-            models.Transaction.user_id == current_user.id,
-            models.Transaction.type == "expense",
-            models.Transaction.category_id.in_(category_ids),
-            models.Transaction.date >= primer_dia,
-            models.Transaction.date <= ultimo_dia,
-        )
-        .group_by(models.Transaction.category_id, models.Transaction.currency)
-        .all()
-    )
-
-    spent_map: dict[tuple[int, str], Decimal] = {(r.category_id, r.currency): r.spent for r in spent_rows}
+    # Fase 13 §13.3: el cálculo de `spent` agrupado por (category_id, currency) vive en
+    # `app/core/budget_alerts.py` y lo comparten el dashboard y el motor de alertas —
+    # "cuánto gasté" no puede divergir entre la vista y el aviso (Fase 11 §11.1).
+    spent_map = spent_por_categoria_y_moneda(db, current_user.id, category_ids, hoy.month, hoy.year)
 
     categorias = db.query(models.Category).filter(models.Category.id.in_(category_ids)).all()
     cat_info_map: dict[int, tuple[str, str | None]] = {c.id: (c.name, c.icon) for c in categorias}

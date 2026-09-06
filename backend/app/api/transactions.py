@@ -8,6 +8,7 @@ from sqlalchemy import desc, func, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.budget_alerts import evaluate_budget_thresholds_for_category
 from app.core.database import get_db
 
 # 🔒 Importamos a nuestro Guardia de Seguridad
@@ -122,7 +123,6 @@ def crear_transaccion(
             )
         db.commit()
         db.refresh(nueva_transaccion)
-        return nueva_transaccion
     except IntegrityError:
         db.rollback()
         # Se perdió la carrera: otra petición con la misma clave ya insertó primero.
@@ -138,6 +138,26 @@ def crear_transaccion(
         db.rollback()
         logger.exception("Error al crear transacción para el usuario %s", current_user.id)
         raise HTTPException(status_code=500, detail="Error interno al procesar la transacción contable.") from None
+
+    # 🚨 Hook Fase 13 §13.3 (motor de presupuestos): se evalúa tras confirmar el
+    # movimiento contable y solo para gastos. Decisión 13.3.4: un fallo del motor NUNCA
+    # revierte la transacción ya confirmada ni tumba el request — se loguea y se sigue.
+    # Decisión 13.3.1: evalúa el mes/año de la transacción recién guardada (su `date`),
+    # no el mes en curso — un gasto atrasado se registra contra el período que corresponde.
+    if nueva_transaccion.type == "expense":
+        try:
+            fecha = nueva_transaccion.date or datetime.now(UTC)
+            evaluate_budget_thresholds_for_category(
+                db, current_user.id, nueva_transaccion.category_id, fecha.month, fecha.year
+            )
+        except Exception:
+            logger.exception(
+                "Error al evaluar umbrales de presupuesto al crear la transacción %s del usuario %s",
+                nueva_transaccion.id,
+                current_user.id,
+            )
+
+    return nueva_transaccion
 
 
 # --- RUTA PROTEGIDA ---
@@ -238,6 +258,11 @@ def actualizar_transaccion(
     if not transaccion_db:
         raise HTTPException(status_code=404, detail="Transacción no encontrada.")
 
+    # Categoría original: si el gasto se reclasifica, hay que re-evaluar también la
+    # categoría de origen (un gasto que se mueve puede hacer que baje de umbral, pero
+    # el ROADMAP no pide retirar avisos ya emitidos — solo se evalúa, no se revierte).
+    categoria_vieja_id = transaccion_db.category_id
+
     # 2. Buscamos las cuentas (la vieja y la nueva, por si el usuario movió el gasto a otra cuenta)
     cuenta_vieja = db.query(models.Account).filter(models.Account.id == transaccion_db.account_id).first()
     cuenta_nueva = (
@@ -313,9 +338,31 @@ def actualizar_transaccion(
 
         db.commit()
         db.refresh(transaccion_db)
-        return transaccion_db
-
     except Exception:
         db.rollback()
         logger.exception("Error al actualizar la transacción %s del usuario %s", transaction_id, current_user.id)
         raise HTTPException(status_code=500, detail="Error al recalcular saldos en la actualización.") from None
+
+    # 🚨 Hook Fase 13 §13.3 (motor de presupuestos): mismo criterio que en la creación —
+    # después del commit contable, solo para gastos, try/except propio (Decisión 13.3.4).
+    if transaccion_db.type == "expense":
+        try:
+            fecha = transaccion_db.date or datetime.now(UTC)
+            # Categoría NUEVA; y si cambió de categoría, también la vieja (un gasto que
+            # se reclasifica puede hacer que la categoría anterior baje de umbral — solo
+            # se evalúa si la nueva cruza un umbral, no se revierte el aviso viejo).
+            evaluate_budget_thresholds_for_category(
+                db, current_user.id, transaccion_db.category_id, fecha.month, fecha.year
+            )
+            if categoria_vieja_id != transaccion_db.category_id:
+                evaluate_budget_thresholds_for_category(
+                    db, current_user.id, categoria_vieja_id, fecha.month, fecha.year
+                )
+        except Exception:
+            logger.exception(
+                "Error al evaluar umbrales de presupuesto al actualizar la transacción %s del usuario %s",
+                transaction_id,
+                current_user.id,
+            )
+
+    return transaccion_db

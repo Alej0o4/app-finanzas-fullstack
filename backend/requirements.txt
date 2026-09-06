@@ -36,6 +36,24 @@ watchfiles==1.2.0
 websockets==16.0
 ruff==0.12.7
 
+# --- Push web (Fase 13 §13.2, Decisión 13.2.1) ---
+# pywebpush implementa el protocolo Web Push estándar (VAPID) sin proveedor externo.
+# Los binarios vienen del par VAPID generado localmente para dev (ver backend/.env).
+aiohappyeyeballs==2.7.1
+aiohttp==3.14.3
+aiosignal==1.4.0
+attrs==26.1.0
+charset_normalizer==3.5.1
+frozenlist==1.8.0
+http-ece==1.2.1
+multidict==6.7.1
+propcache==0.5.2
+py-vapid==1.9.4
+pywebpush==2.5.0
+requests==2.34.2
+urllib3==2.7.0
+yarl==1.24.5
+
 # --- Tests (Fase 7, §4.2) ---
 pytest==8.3.4
 httpx==0.28.1

@@ -74,18 +74,37 @@ const getPresetDates = (preset: Exclude<DatePreset, 'custom'>) => {
   };
 };
 
+// Fase 13 §13.6: whitelist read-time de los query params. Un link inválido
+// (?category=abc, ?start=1-2-3) devolvía strings crudos que luego se casteaban a ciegas
+// (Number(NaN)→422) o entraban directo al cast silencioso. Se valida a lectura y la URL
+// no se reescribe con el valor corregido (el re-normalizado en cada render alcanza).
+// 'custom' está en la whitelist de preset porque la propia página lo escribe cuando el
+// usuario edita fechas a mano (setDatePreset('custom')) — sin él, el chip "Todo el
+// histórico" se encendería por error con un rango custom activo.
+const validatePreset = (raw: string) =>
+  (['all', '7d', 'month', 'year', 'custom'] as const).includes(raw as DatePreset) ? raw : 'all';
+
+const validateIdOrAll = (raw: string) => (raw === 'all' || /^\d+$/.test(raw) ? raw : 'all');
+
+const validateDateParam = (raw: string) => (/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : '');
+
 function TransactionsPageContent() {
   const { config } = useAppConfig();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   // Fase 12 §12.1: filtros sincronizados con la URL (start/end/category/account/preset).
   // El estado por defecto nunca aparece en el query string; un link copiado con filtros
-  // activos reproduce la vista exacta en cualquier navegador/sesión.
-  const [startDate, setStartDate] = useQueryParamState('start', '');
-  const [endDate, setEndDate] = useQueryParamState('end', '');
-  const [categoryFilter, setCategoryFilter] = useQueryParamState('category', 'all');
-  const [accountFilter, setAccountFilter] = useQueryParamState('account', 'all');
-  const [datePreset, setDatePreset] = useQueryParamState('preset', 'all');
+  // activos reproduce la vista exacta en cualquier navegador/sesión. Fase 13 §13.6: cada
+  // valor pasa por su validator a lectura (whitelist / formato), los seeds quedan normalizados.
+  const [startDate, setStartDate] = useQueryParamState('start', '', validateDateParam);
+  const [endDate, setEndDate] = useQueryParamState('end', '', validateDateParam);
+  const [categoryFilter, setCategoryFilter] = useQueryParamState(
+    'category',
+    'all',
+    validateIdOrAll
+  );
+  const [accountFilter, setAccountFilter] = useQueryParamState('account', 'all', validateIdOrAll);
+  const [datePreset, setDatePreset] = useQueryParamState('preset', 'all', validatePreset);
 
   // Un link compartido puede traer solo `preset` explícito (ej. ?preset=month&category=3):
   // se derivan las fechas del preset una sola vez al montar, para que la vista reproducida

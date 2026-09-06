@@ -64,6 +64,30 @@ const buildDonutDateRange = (period: DonutPeriod) => {
   };
 };
 
+// Fase 13 §13.6: validadores read-time de los query params de analytics. Un link inválido
+// (?bar=abc) devolvía strings crudos que luego se casteaban a ciegas (barPeriod as BarPeriod);
+// ahora el hook devuelve el valor ya validado y tipado por estos validators, sin casts en la página.
+// El tipo de retorno del validator es lo que el hook infiere como tipo del valor.
+const validateBarPeriod = (raw: string): BarPeriod =>
+  (['7d', '30d', '12m'] as const).includes(raw as BarPeriod) ? (raw as BarPeriod) : '30d';
+
+const validateSeriesMode = (raw: string): AnalyticsSeries =>
+  (['both', 'income', 'expense'] as const).includes(raw as AnalyticsSeries)
+    ? (raw as AnalyticsSeries)
+    : 'both';
+
+const validateDonutPeriod = (raw: string): DonutPeriod =>
+  (['month', '3months', 'year'] as const).includes(raw as DonutPeriod)
+    ? (raw as DonutPeriod)
+    : 'month';
+
+const validateCategoryType = (raw: string): CategoryType =>
+  (['expense', 'income'] as const).includes(raw as CategoryType)
+    ? (raw as CategoryType)
+    : 'expense';
+
+const validateNeto = (raw: string): 'true' | 'false' => (raw === 'true' ? 'true' : 'false');
+
 function AnalyticsPageContent() {
   // Decisión 11.1.1 (Fase 11): se pasa `currency` explícito a los endpoints de dashboard
   // aunque el backend ya defaultea a la moneda preferida — deja la intención explícita.
@@ -71,23 +95,22 @@ function AnalyticsPageContent() {
   // Fase 12 §12.1, Decisión 12.1.2: la vista vive en la URL, no en localStorage — se
   // abandona usePersistedState (un link limpio vuelve a defaults; esa es la semántica
   // esperada de un link compartible). hiddenCategories sigue en useState (Decisión 12.1.3).
-  const [barPeriod, setBarPeriod] = useQueryParamState('bar', '30d');
-  const [seriesMode, setSeriesMode] = useQueryParamState('series', 'both');
-  const [donutPeriod, setDonutPeriod] = useQueryParamState('donut', 'month');
-  const [categoryType, setCategoryType] = useQueryParamState('type', 'expense');
-  const [netModeRaw, setNetMode] = useQueryParamState('neto', 'false');
+  // Fase 13 §13.6: cada valor sale validado del hook (whitelist tipada), sin casts locales.
+  const [barPeriod, setBarPeriod] = useQueryParamState('bar', '30d', validateBarPeriod);
+  const [seriesMode, setSeriesMode] = useQueryParamState('series', 'both', validateSeriesMode);
+  const [donutPeriod, setDonutPeriod] = useQueryParamState('donut', 'month', validateDonutPeriod);
+  const [categoryType, setCategoryType] = useQueryParamState(
+    'type',
+    'expense',
+    validateCategoryType
+  );
+  const [netoRaw, setNetMode] = useQueryParamState('neto', 'false', validateNeto);
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
 
-  // La capa de URL comunica strings; los charts esperan uniones literales. Los setters se
-  // pasan tal cual (aceptan string, que cubre la unión); los valores se afinan al tipar.
-  const barPeriodTyped = barPeriod as BarPeriod;
-  const seriesModeTyped = seriesMode as AnalyticsSeries;
-  const donutPeriodTyped = donutPeriod as DonutPeriod;
-  const categoryTypeTyped = categoryType as CategoryType;
-  const netMode = netModeRaw === 'true';
+  const netMode = netoRaw === 'true';
 
-  const barDateRange = useMemo(() => buildBarDateRange(barPeriodTyped), [barPeriodTyped]);
-  const donutDateRange = useMemo(() => buildDonutDateRange(donutPeriodTyped), [donutPeriodTyped]);
+  const barDateRange = useMemo(() => buildBarDateRange(barPeriod), [barPeriod]);
+  const donutDateRange = useMemo(() => buildDonutDateRange(donutPeriod), [donutPeriod]);
 
   const {
     data: trendData,
@@ -121,7 +144,7 @@ function AnalyticsPageContent() {
     queryKey: queryKeys.analytics.categories(
       donutDateRange.start_date,
       donutDateRange.end_date,
-      categoryTypeTyped,
+      categoryType,
       netMode
     ),
     queryFn: async () => {
@@ -129,7 +152,7 @@ function AnalyticsPageContent() {
         params: {
           start_date: donutDateRange.start_date,
           end_date: donutDateRange.end_date,
-          type: netMode ? 'expense' : categoryTypeTyped,
+          type: netMode ? 'expense' : categoryType,
           neto: netMode || undefined,
           currency: user?.preferred_currency,
         },
@@ -151,10 +174,10 @@ function AnalyticsPageContent() {
   const visibleTrendData = useMemo(() => {
     return parsedTrendData.map((item) => ({
       ...item,
-      income: seriesModeTyped === 'expense' ? 0 : item.income,
-      expense: seriesModeTyped === 'income' ? 0 : item.expense,
+      income: seriesMode === 'expense' ? 0 : item.income,
+      expense: seriesMode === 'income' ? 0 : item.expense,
     }));
-  }, [parsedTrendData, seriesModeTyped]);
+  }, [parsedTrendData, seriesMode]);
 
   const totals = useMemo(() => {
     const totalIncome = parsedTrendData.reduce((sum, item) => sum + item.income, 0);
@@ -187,20 +210,20 @@ function AnalyticsPageContent() {
           data={visibleTrendData}
           isLoading={loadingTrends}
           isError={trendError}
-          barPeriod={barPeriodTyped}
+          barPeriod={barPeriod}
           onBarPeriodChange={setBarPeriod}
-          seriesMode={seriesModeTyped}
+          seriesMode={seriesMode}
           onSeriesModeChange={setSeriesMode}
-          periodType={barPeriodTyped === '12m' ? 'month' : 'day'}
+          periodType={barPeriod === '12m' ? 'month' : 'day'}
         />
 
         <CategoryDonutChart
           data={categoryData as CategoryDistributionItem[]}
           isFetching={fetchingCategories}
           isError={categoryError}
-          donutPeriod={donutPeriodTyped}
+          donutPeriod={donutPeriod}
           onDonutPeriodChange={setDonutPeriod}
-          categoryType={categoryTypeTyped}
+          categoryType={categoryType}
           onCategoryTypeChange={setCategoryType}
           netMode={netMode}
           onNetModeChange={(net) => setNetMode(String(net))}

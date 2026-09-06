@@ -4,6 +4,7 @@ import './globals.css';
 import QueryProvider from '@/components/QueryProvider';
 import { AppConfigProvider } from '@/providers/AppConfigProvider';
 import { UserPreferencesSync } from '@/providers/UserPreferencesSync';
+import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration';
 import { Toaster } from 'sonner';
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -15,6 +16,9 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: 'Oikos | Finanzas Personales',
   description: 'Dashboard financiero minimalista y orgánico',
+  // Fase 13 §13.1: el manifest hace la app instalable (PWA). Los íconos los produce
+  // diseño (mismo caso que el favicon de Fase 12 §12.5); acá solo se referencian.
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
@@ -30,6 +34,7 @@ export default function RootLayout({
           <QueryProvider>
             {children}
             <UserPreferencesSync />
+            <ServiceWorkerRegistration />
             <Toaster richColors position="top-right" closeButton />
           </QueryProvider>
         </AppConfigProvider>

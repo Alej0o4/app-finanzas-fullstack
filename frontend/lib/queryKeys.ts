@@ -34,4 +34,12 @@ export const queryKeys = {
     categories: (start: string, end: string, type: string, neto?: boolean) =>
       ['analytics-categories', start, end, type, neto] as const,
   },
+  notifications: {
+    /** Lista paginada de la bandeja in-app (GET /notifications, Fase 13 §13.5). */
+    all: () => ['notifications'] as const,
+    /** Conteo para el badge de la campana (GET /notifications/unread-count) — clave
+     *  separada a propósito (Decisión 13.5.4): el poll corto del badge no dispara
+     *  la query de lista completa. */
+    unreadCount: () => ['notifications-unread-count'] as const,
+  },
 };

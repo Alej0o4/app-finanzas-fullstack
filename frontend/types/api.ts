@@ -148,3 +148,20 @@ export interface PaginatedResponse<T> {
   page: number;
   page_size: number;
 }
+
+export interface AppNotification {
+  id: number;
+  /** `budget_threshold_80` | `budget_threshold_100` (Fase 14 agrega `weekly_summary`). */
+  type: string;
+  title: string;
+  body: string;
+  /** Referencia opcional al presupuesto que originó el aviso; el frontend enlaza
+   *  "Ver presupuesto" cuando no es null. */
+  budget_id: number | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface UnreadCountResponse {
+  count: number;
+}
