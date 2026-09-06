@@ -26,17 +26,6 @@ import type {
   CategoryDistributionItem,
 } from '@/types/api';
 
-// Mismo formato que analytics/page.tsx::formatISOForBackend. El spec (§11.4) permite duplicar
-// este helper pequeño en lugar de extraerlo compartido para este alcance.
-const formatISOForBackend = (date: Date) => {
-  const pad = (value: number) => String(value).padStart(2, '0');
-
-  return (
-    [date.getFullYear(), pad(date.getMonth() + 1), pad(date.getDate())].join('-') +
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-  );
-};
-
 export default function DashboardPage() {
   const { config } = useAppConfig();
   const { data: user } = useCurrentUser();
@@ -45,8 +34,12 @@ export default function DashboardPage() {
   const [monthlyIncomeInput, setMonthlyIncomeInput] = useState('');
 
   const now = new Date();
-  const monthStartISO = formatISOForBackend(new Date(now.getFullYear(), now.getMonth(), 1));
-  const todayISO = formatISOForBackend(now);
+  // .toISOString() (no formateo manual): manda el instante UTC real. Un string armado a mano
+  // con los getters locales (getHours() etc.) sin sufijo de zona horaria se interpretaba como
+  // UTC en el backend (sesión de Postgres en UTC) — con el servidor en America/Bogota (UTC-5),
+  // eso recortaba "ahora" 5 horas antes del real y excluía las transacciones recién creadas.
+  const monthStartISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const todayISO = now.toISOString();
   // La moneda preferida del usuario; config.currency es su espejo desde preferencias.
   const preferredCurrency = user?.preferred_currency ?? config.currency;
 

@@ -15,15 +15,10 @@ import CategoryDonutChart, {
 import AnalyticsSummary from '@/components/AnalyticsSummary';
 import Skeleton from '@/components/ui/Skeleton';
 
-const formatISOForBackend = (date: Date) => {
-  const pad = (value: number) => String(value).padStart(2, '0');
-
-  return (
-    [date.getFullYear(), pad(date.getMonth() + 1), pad(date.getDate())].join('-') +
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-  );
-};
-
+// .toISOString() manda el instante UTC real. Un string armado a mano con los getters locales
+// (getHours() etc.) sin sufijo de zona horaria se interpretaba como UTC en el backend (sesión
+// de Postgres en UTC) — con el servidor en America/Bogota (UTC-5), eso recortaba "ahora" 5 horas
+// antes del real y excluía del todo las transacciones recién creadas de estos rangos.
 const buildBarDateRange = (period: BarPeriod) => {
   const now = new Date();
   const start = new Date(now);
@@ -33,8 +28,8 @@ const buildBarDateRange = (period: BarPeriod) => {
   else start.setFullYear(now.getFullYear() - 1);
 
   return {
-    start_date: formatISOForBackend(start),
-    end_date: formatISOForBackend(now),
+    start_date: start.toISOString(),
+    end_date: now.toISOString(),
     period: period === '12m' ? ('month' as const) : ('day' as const),
   };
 };
@@ -46,21 +41,21 @@ const buildDonutDateRange = (period: DonutPeriod) => {
     const start = new Date(now);
     start.setMonth(now.getMonth() - 3);
     return {
-      start_date: formatISOForBackend(start),
-      end_date: formatISOForBackend(now),
+      start_date: start.toISOString(),
+      end_date: now.toISOString(),
     };
   }
 
   if (period === 'year') {
     return {
-      start_date: formatISOForBackend(new Date(now.getFullYear(), 0, 1)),
-      end_date: formatISOForBackend(now),
+      start_date: new Date(now.getFullYear(), 0, 1).toISOString(),
+      end_date: now.toISOString(),
     };
   }
 
   return {
-    start_date: formatISOForBackend(new Date(now.getFullYear(), now.getMonth(), 1)),
-    end_date: formatISOForBackend(now),
+    start_date: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
+    end_date: now.toISOString(),
   };
 };
 

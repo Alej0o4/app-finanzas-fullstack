@@ -171,8 +171,8 @@ export default function Sidebar() {
         <div className="border-border/40 border-t p-3">
           {isSidebarOpen ? (
             <>
-              <div className="bg-background/40 border-border/40 flex items-center justify-between rounded-xl border p-2 px-3">
-                <div className="flex items-center space-x-3">
+              <div className="bg-background/40 border-border/40 flex items-center justify-between gap-2 rounded-xl border p-2 px-3">
+                <div className="flex min-w-0 items-center space-x-3">
                   <div className="bg-surface-elevated border-border text-primary flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold uppercase">
                     {user?.full_name
                       ?.split(' ')
