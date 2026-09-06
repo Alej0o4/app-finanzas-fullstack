@@ -111,7 +111,7 @@ export default function CategoryDonutChart({
   };
 
   return (
-    <div className="bg-surface/80 border-border/70 rounded-2xl border p-6 shadow-sm backdrop-blur-sm">
+    <div className="bg-surface/80 border-border/70 shadow-background/20 rounded-2xl border p-6 shadow-sm backdrop-blur-sm">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-text-soft text-lg font-medium">
           {netMode ? 'Distribución Neta por Categoría' : 'Distribución por Categorías'}
@@ -215,7 +215,7 @@ export default function CategoryDonutChart({
                       const item = payload?.[0]?.payload;
                       if (!active || !item) return null;
                       return (
-                        <div className="border-border bg-surface-elevated rounded-lg border px-3 py-2 text-sm shadow-lg">
+                        <div className="border-border bg-surface-elevated shadow-background/30 rounded-lg border px-3 py-2 text-sm shadow-lg">
                           <p className="text-text font-medium">{item.category_name}</p>
                           <p className="text-text-soft mt-1">
                             {netMode ? 'Gasto neto:' : 'Total:'}{' '}

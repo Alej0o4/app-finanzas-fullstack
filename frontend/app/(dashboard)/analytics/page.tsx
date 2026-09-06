@@ -5,15 +5,15 @@ import { queryKeys } from '@/lib/queryKeys';
 import type { CashflowItem, CategoryDistributionItem } from '@/types/api';
 import { api } from '@/lib/api';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
-import { Loader2 } from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { usePersistedState } from '@/hooks/usePersistedState';
+import { useState, useMemo, Suspense } from 'react';
+import { useQueryParamState } from '@/hooks/useQueryParamState';
 import CashflowChart, { type BarPeriod, type AnalyticsSeries } from '@/components/CashflowChart';
 import CategoryDonutChart, {
   type DonutPeriod,
   type CategoryType,
 } from '@/components/CategoryDonutChart';
 import AnalyticsSummary from '@/components/AnalyticsSummary';
+import Skeleton from '@/components/ui/Skeleton';
 
 const formatISOForBackend = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, '0');
@@ -64,28 +64,30 @@ const buildDonutDateRange = (period: DonutPeriod) => {
   };
 };
 
-export default function AnalyticsPage() {
+function AnalyticsPageContent() {
   // Decisión 11.1.1 (Fase 11): se pasa `currency` explícito a los endpoints de dashboard
   // aunque el backend ya defaultea a la moneda preferida — deja la intención explícita.
   const { data: user } = useCurrentUser();
-  const [barPeriod, setBarPeriod] = usePersistedState<BarPeriod>('analytics-barPeriod', '30d');
-  const [seriesMode, setSeriesMode] = usePersistedState<AnalyticsSeries>(
-    'analytics-seriesMode',
-    'both'
-  );
-  const [donutPeriod, setDonutPeriod] = usePersistedState<DonutPeriod>(
-    'analytics-donutPeriod',
-    'month'
-  );
-  const [categoryType, setCategoryType] = usePersistedState<CategoryType>(
-    'analytics-categoryType',
-    'expense'
-  );
-  const [netMode, setNetMode] = usePersistedState<boolean>('analytics-netMode', false);
+  // Fase 12 §12.1, Decisión 12.1.2: la vista vive en la URL, no en localStorage — se
+  // abandona usePersistedState (un link limpio vuelve a defaults; esa es la semántica
+  // esperada de un link compartible). hiddenCategories sigue en useState (Decisión 12.1.3).
+  const [barPeriod, setBarPeriod] = useQueryParamState('bar', '30d');
+  const [seriesMode, setSeriesMode] = useQueryParamState('series', 'both');
+  const [donutPeriod, setDonutPeriod] = useQueryParamState('donut', 'month');
+  const [categoryType, setCategoryType] = useQueryParamState('type', 'expense');
+  const [netModeRaw, setNetMode] = useQueryParamState('neto', 'false');
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
 
-  const barDateRange = useMemo(() => buildBarDateRange(barPeriod), [barPeriod]);
-  const donutDateRange = useMemo(() => buildDonutDateRange(donutPeriod), [donutPeriod]);
+  // La capa de URL comunica strings; los charts esperan uniones literales. Los setters se
+  // pasan tal cual (aceptan string, que cubre la unión); los valores se afinan al tipar.
+  const barPeriodTyped = barPeriod as BarPeriod;
+  const seriesModeTyped = seriesMode as AnalyticsSeries;
+  const donutPeriodTyped = donutPeriod as DonutPeriod;
+  const categoryTypeTyped = categoryType as CategoryType;
+  const netMode = netModeRaw === 'true';
+
+  const barDateRange = useMemo(() => buildBarDateRange(barPeriodTyped), [barPeriodTyped]);
+  const donutDateRange = useMemo(() => buildDonutDateRange(donutPeriodTyped), [donutPeriodTyped]);
 
   const {
     data: trendData,
@@ -119,7 +121,7 @@ export default function AnalyticsPage() {
     queryKey: queryKeys.analytics.categories(
       donutDateRange.start_date,
       donutDateRange.end_date,
-      categoryType,
+      categoryTypeTyped,
       netMode
     ),
     queryFn: async () => {
@@ -127,7 +129,7 @@ export default function AnalyticsPage() {
         params: {
           start_date: donutDateRange.start_date,
           end_date: donutDateRange.end_date,
-          type: netMode ? 'expense' : categoryType,
+          type: netMode ? 'expense' : categoryTypeTyped,
           neto: netMode || undefined,
           currency: user?.preferred_currency,
         },
@@ -149,10 +151,10 @@ export default function AnalyticsPage() {
   const visibleTrendData = useMemo(() => {
     return parsedTrendData.map((item) => ({
       ...item,
-      income: seriesMode === 'expense' ? 0 : item.income,
-      expense: seriesMode === 'income' ? 0 : item.expense,
+      income: seriesModeTyped === 'expense' ? 0 : item.income,
+      expense: seriesModeTyped === 'income' ? 0 : item.expense,
     }));
-  }, [parsedTrendData, seriesMode]);
+  }, [parsedTrendData, seriesModeTyped]);
 
   const totals = useMemo(() => {
     const totalIncome = parsedTrendData.reduce((sum, item) => sum + item.income, 0);
@@ -162,8 +164,9 @@ export default function AnalyticsPage() {
 
   if (loadingTrends && loadingCategories) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="text-info h-8 w-8 animate-spin" />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Skeleton className="h-96 rounded-2xl" />
+        <Skeleton className="h-96 rounded-2xl" />
       </div>
     );
   }
@@ -184,27 +187,36 @@ export default function AnalyticsPage() {
           data={visibleTrendData}
           isLoading={loadingTrends}
           isError={trendError}
-          barPeriod={barPeriod}
+          barPeriod={barPeriodTyped}
           onBarPeriodChange={setBarPeriod}
-          seriesMode={seriesMode}
+          seriesMode={seriesModeTyped}
           onSeriesModeChange={setSeriesMode}
-          periodType={barPeriod === '12m' ? 'month' : 'day'}
+          periodType={barPeriodTyped === '12m' ? 'month' : 'day'}
         />
 
         <CategoryDonutChart
           data={categoryData as CategoryDistributionItem[]}
           isFetching={fetchingCategories}
           isError={categoryError}
-          donutPeriod={donutPeriod}
+          donutPeriod={donutPeriodTyped}
           onDonutPeriodChange={setDonutPeriod}
-          categoryType={categoryType}
+          categoryType={categoryTypeTyped}
           onCategoryTypeChange={setCategoryType}
           netMode={netMode}
-          onNetModeChange={setNetMode}
+          onNetModeChange={(net) => setNetMode(String(net))}
           hiddenCategories={hiddenCategories}
           onHiddenCategoriesChange={setHiddenCategories}
         />
       </div>
     </div>
+  );
+}
+
+// Fase 12 §12.1: useSearchParams requiere Suspense (mismo patrón que login/reset-password).
+export default function AnalyticsPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-96 rounded-2xl" />}>
+      <AnalyticsPageContent />
+    </Suspense>
   );
 }

@@ -122,15 +122,15 @@ Usar `useState` para:
 
 - formularios;
 - modales;
-- filtros de pantalla;
-- selección temporal de fecha, cuenta o categoría.
+- selección temporal de fecha, cuenta o categoría dentro de un formulario.
 
-Ejemplos actuales:
+Los filtros de pantalla que deben ser compartibles por URL ya NO van en `useState`:
+usar `useQueryParamState` (ver sección de hooks). Ejemplos actuales de `useState`:
 
 - `TransactionModal`
-- filtros del feed de transacciones
 - formularios de cuentas, categorías y presupuestos
 - edición inline en detalles por cuenta y categoría
+- `hiddenCategories` en analytics (decisión explícita: no es estado compartible)
 
 ## Estado global de UI
 
@@ -165,6 +165,46 @@ Consecuencias para el estado:
 
 - Consulta `/api/users/me`.
 - Debe usarse en vistas autenticadas donde el nombre o identidad del usuario sea relevante.
+
+### `useQueryParamState` (Fase 12 §12.1)
+
+`hooks/useQueryParamState.ts` sincroniza un string con un query param de la URL:
+
+```ts
+const [categoryFilter, setCategoryFilter] = useQueryParamState('category', 'all');
+```
+
+Comportamiento:
+
+- El valor de la URL manda sobre el default: `searchParams.get(key) ?? defaultValue`.
+- El setter escribe con `router.replace(..., { scroll: false })` — shallow, sin historial
+  ni scroll jump. Un valor igual al default se elimina del query string (la URL canónica
+  solo lleva filtros activos).
+- Los links son la fuente de verdad de la vista: copiando la URL se reproduce el estado
+  exacto de filtros en cualquier navegador/sesión (Decisión 12.1.2: reemplaza
+  `usePersistedState` en analytics).
+
+Reglas:
+
+- **Requerido `<Suspense>`**: como consume `useSearchParams`, el componente debe envolverse
+  en `<Suspense>` (mismo requisito que login/reset-password). El default export de la página
+  es un wrapper que envuelve el contenido real.
+- La capa URL comunica strings: los consumidores que esperan uniones literales (p. ej.
+  `BarPeriod`) hacen un cast al tipar, p. ej. `const barPeriodTyped = barPeriod as BarPeriod;`.
+  Los setters se pasan tal cual (un string cubre la unión).
+- Valores booleanos en URL se serializan como `'true'`/`'false'` y se leen con
+  `raw === 'true'`; el setter recibe `String(value)`.
+- NO usar para estado que no deba ser compartible (p. ej. categorías ocultas en el donut se
+  quedan en `useState`, Decisión 12.1.3).
+- No duplicar: un valor que vive en la URL no debe copiarse además a `useState`.
+
+Uso actual:
+
+- `transactions`: `start`, `end`, `category` (default `'all'`), `account` (default `'all'`),
+  `preset` (default `'all'`). Un link con `?preset=month` sin `start`/`end` siembra las
+  fechas del preset al montar.
+- `analytics`: `bar` (`'30d'`), `series` (`'both'`), `donut` (`'month'`), `type`
+  (`'expense'`), `neto` (`'false'`).
 
 ## Patrones recomendados
 

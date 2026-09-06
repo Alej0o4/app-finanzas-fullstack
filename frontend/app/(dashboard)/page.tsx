@@ -144,7 +144,13 @@ export default function DashboardPage() {
         {loadingSummary ? (
           <Skeleton className="h-36 rounded-2xl" />
         ) : (
-          <SummaryCard label="Balance del mes" size="lg" trend={flowTrend} color={flowColor}>
+          <SummaryCard
+            label="Balance del mes"
+            size="lg"
+            elevated
+            trend={flowTrend}
+            color={flowColor}
+          >
             {flowBalanceValue !== null ? (
               <span className={flowIsPositive ? '' : 'text-danger'}>
                 {formatCurrency(flowBalanceValue, preferredCurrency)}
@@ -282,7 +288,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-surface border-border/70 overflow-hidden rounded-3xl border shadow-sm">
+        <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
           {isRecentLoading ? (
             <div className="divide-border/40 divide-y">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -320,7 +326,7 @@ export default function DashboardPage() {
                       </p>
                     </div>
                     <p
-                      className={`shrink-0 font-sans text-sm font-semibold sm:text-base ${isExpense ? 'text-text' : 'text-primary'}`}
+                      className={`shrink-0 font-sans text-sm font-semibold tabular-nums sm:text-base ${isExpense ? 'text-text' : 'text-primary'}`}
                     >
                       {isExpense ? '-' : '+'}
                       {formatCurrency(tx.amount, config.currency)}

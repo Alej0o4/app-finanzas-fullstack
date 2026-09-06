@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, MailCheck, Wallet } from 'lucide-react';
@@ -13,6 +13,9 @@ const GENERIC_SUCCESS_MESSAGE =
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
+  // Fase 12 §12.8: errores por campo (no globo nativo del navegador) + foco en el primero.
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string }>({});
+  const emailRef = useRef<HTMLInputElement>(null);
 
   const requestResetMutation = useMutation({
     mutationFn: async (payload: { email: string }) =>
@@ -21,6 +24,13 @@ export default function ForgotPasswordPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const errors: typeof fieldErrors = {};
+    if (!/^\S+@\S+\.\S+$/.test(email)) errors.email = 'Ingresa un correo válido.';
+    setFieldErrors(errors);
+
+    if (errors.email) return emailRef.current?.focus();
+
     requestResetMutation.mutate({ email });
   };
 
@@ -28,7 +38,7 @@ export default function ForgotPasswordPage() {
   // Solo tratamos como error los fallos genuinos de conexión/servidor.
   if (requestResetMutation.isSuccess) {
     return (
-      <div className="bg-surface border-border/70 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
+      <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
         <div className="mb-8 flex flex-col items-center">
           <div className="bg-success/10 text-success mb-4 flex h-12 w-12 items-center justify-center rounded-full">
             <MailCheck size={24} />
@@ -50,7 +60,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="bg-surface border-border/70 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
+    <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
       {/* Cabecera */}
       <div className="mb-8 flex flex-col items-center">
         <div className="bg-primary/10 text-primary mb-4 flex h-12 w-12 items-center justify-center rounded-full">
@@ -77,14 +87,16 @@ export default function ForgotPasswordPage() {
       )}
 
       {/* Formulario */}
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         <Input
+          ref={emailRef}
           label="Correo Electrónico"
           type="email"
           autoComplete="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          error={fieldErrors.email}
           className="bg-background py-3"
           placeholder="alejandro@ejemplo.com"
         />

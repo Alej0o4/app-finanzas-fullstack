@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Loader2, Edit2, Trash2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { getApiError } from '@/lib/utils';
@@ -11,6 +11,7 @@ import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
+import Skeleton from '@/components/ui/Skeleton';
 import Link from 'next/link';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import CategoryIcon from '@/components/ui/CategoryIcon';
@@ -37,6 +38,13 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [editCategoryName, setEditCategoryName] = useState('');
   const [editCategoryType, setEditCategoryType] = useState('expense');
+  // Fase 12 §12.8: errores por campo (no globo nativo del navegador) + foco en el primero.
+  // El editor está oculto tras CUSTOM_CATEGORY_EDITING_ENABLED (Fase 11 §11.6) pero la
+  // validación se agrega igual, para cuando el flag vuelva a true.
+  const [createErrors, setCreateErrors] = useState<{ name?: string }>({});
+  const [editErrors, setEditErrors] = useState<{ name?: string }>({});
+  const createNameRef = useRef<HTMLInputElement>(null);
+  const editNameRef = useRef<HTMLInputElement>(null);
 
   const { data: categories, isLoading } = useQuery<Category[]>({
     queryKey: queryKeys.categories.all(),
@@ -94,12 +102,24 @@ export default function CategoriesPage() {
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const errors: typeof createErrors = {};
+    if (!newCategoryName.trim()) errors.name = 'Ingresa un nombre para la categoría.';
+    setCreateErrors(errors);
+    if (errors.name) return createNameRef.current?.focus();
+
     createCategoryMutation.mutate({ name: newCategoryName, type: newCategoryType });
   };
 
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCategory) return;
+
+    const errors: typeof editErrors = {};
+    if (!editCategoryName.trim()) errors.name = 'Ingresa un nombre para la categoría.';
+    setEditErrors(errors);
+    if (errors.name) return editNameRef.current?.focus();
+
     updateCategoryMutation.mutate({
       id: editingCategory.id,
       data: { name: editCategoryName, type: editCategoryType },
@@ -117,13 +137,16 @@ export default function CategoriesPage() {
   const openEditModal = (category: Category) => {
     setEditCategoryName(category.name);
     setEditCategoryType(category.type);
+    setEditErrors({});
     setEditingCategory(category);
   };
 
   if (isLoading)
     return (
-      <div className="text-text-muted flex items-center gap-2 p-8">
-        <Loader2 className="animate-spin" /> Cargando categorías...
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-32 rounded-2xl" />
+        ))}
       </div>
     );
 
@@ -137,7 +160,14 @@ export default function CategoriesPage() {
           </p>
         </div>
         {CUSTOM_CATEGORY_EDITING_ENABLED && (
-          <Button variant="primary" onClick={() => setIsCreateModalOpen(true)} className="shrink-0">
+          <Button
+            variant="primary"
+            onClick={() => {
+              setIsCreateModalOpen(true);
+              setCreateErrors({});
+            }}
+            className="shrink-0"
+          >
             <Plus size={18} />
             <span className="hidden sm:inline">Nueva Categoría</span>
             <span className="sm:hidden">Nueva</span>
@@ -220,12 +250,14 @@ export default function CategoriesPage() {
           onClose={() => setIsCreateModalOpen(false)}
           title="Nueva Categoría"
         >
-          <form onSubmit={handleCreate} className="space-y-4">
+          <form onSubmit={handleCreate} className="space-y-4" noValidate>
             <Input
+              ref={createNameRef}
               label="Nombre"
               required
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
+              error={createErrors.name}
               className="bg-background"
               placeholder="Ej. Suscripciones"
             />
@@ -269,12 +301,14 @@ export default function CategoriesPage() {
           title="Editar Categoría"
         >
           {editingCategory && (
-            <form onSubmit={handleUpdate} className="space-y-4">
+            <form onSubmit={handleUpdate} className="space-y-4" noValidate>
               <Input
+                ref={editNameRef}
                 label="Nombre"
                 required
                 value={editCategoryName}
                 onChange={(e) => setEditCategoryName(e.target.value)}
+                error={editErrors.name}
                 className="bg-background"
               />
 

@@ -99,7 +99,7 @@ function VerifyEmailFooter() {
 
 export default function VerifyEmailPage() {
   return (
-    <div className="bg-surface border-border/70 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
+    <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
       <Suspense
         fallback={
           <div className="mb-8 flex flex-col items-center">

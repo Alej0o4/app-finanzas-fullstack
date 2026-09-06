@@ -9,6 +9,8 @@ interface SummaryCardProps {
   color?: string;
   /** 'lg' eleva la jerarquía visual de la card principal (Fase 11 §11.3). Default 'md'. */
   size?: 'md' | 'lg';
+  /** Eleva la card sobre sus pares para comunicar jerarquía (Fase 12 §12.2). Default false. */
+  elevated?: boolean;
 }
 
 export default function SummaryCard({
@@ -18,6 +20,7 @@ export default function SummaryCard({
   trend,
   color,
   size = 'md',
+  elevated = false,
 }: SummaryCardProps) {
   const isLarge = size === 'lg';
 
@@ -25,7 +28,7 @@ export default function SummaryCard({
     <div
       className={`border-border bg-surface rounded-2xl border transition-transform duration-200 hover:scale-[1.02] active:scale-100 max-sm:hover:scale-100 sm:hover:scale-[1.02] ${
         color ? 'border-l-4' : ''
-      } ${isLarge ? 'p-5 sm:p-7' : 'p-4'}`}
+      } ${isLarge ? 'p-5 sm:p-7' : 'p-4'} ${elevated ? 'shadow-background/20 shadow-sm' : ''}`}
       style={color ? { borderLeftColor: color } : undefined}
     >
       <p className={`text-text-muted ${isLarge ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'}`}>
@@ -34,7 +37,7 @@ export default function SummaryCard({
       <div className={`mt-1 flex min-w-0 items-center gap-2 ${isLarge ? 'sm:gap-3' : ''}`}>
         {children ? (
           <div
-            className={`text-text min-w-0 font-bold ${
+            className={`text-text min-w-0 font-bold tabular-nums ${
               isLarge ? 'text-3xl sm:text-4xl' : 'text-xl sm:text-2xl'
             }`}
           >
@@ -42,7 +45,7 @@ export default function SummaryCard({
           </div>
         ) : (
           <p
-            className={`text-text min-w-0 font-bold ${
+            className={`text-text min-w-0 font-bold tabular-nums ${
               isLarge ? 'text-3xl sm:text-4xl' : 'text-xl sm:text-2xl'
             }`}
           >

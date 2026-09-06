@@ -105,7 +105,7 @@ export default function Sidebar() {
 
         {/* Tooltip flotante si el sidebar está colapsado */}
         {!isSidebarOpen && (
-          <div className="bg-surface-elevated text-text border-border absolute left-24 z-50 origin-left scale-0 rounded-md border px-2.5 py-1.5 font-sans text-xs shadow-xl transition-[transform,opacity] duration-150 group-hover:scale-100">
+          <div className="bg-surface-elevated text-text border-border shadow-background/40 absolute left-24 z-50 origin-left scale-0 rounded-md border px-2.5 py-1.5 font-sans text-xs shadow-xl transition-[transform,opacity] duration-150 group-hover:scale-100">
             {item.name}
           </div>
         )}
@@ -167,35 +167,47 @@ export default function Sidebar() {
         {/* Parte Inferior: Perfil / Cerrar Sesión */}
         <div className="border-border/40 border-t p-3">
           {isSidebarOpen ? (
-            <div className="bg-background/40 border-border/40 flex items-center justify-between rounded-xl border p-2 px-3">
-              <div className="flex items-center space-x-3">
-                <div className="bg-surface-elevated border-border text-primary flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold uppercase">
-                  {user?.full_name
-                    ?.split(' ')
-                    .map((n: string) => n[0])
-                    .join('') || 'U'}
+            <>
+              <div className="bg-background/40 border-border/40 flex items-center justify-between rounded-xl border p-2 px-3">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-surface-elevated border-border text-primary flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold uppercase">
+                    {user?.full_name
+                      ?.split(' ')
+                      .map((n: string) => n[0])
+                      .join('') || 'U'}
+                  </div>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="text-text truncate text-xs font-medium">
+                      {user?.full_name || 'Usuario'}
+                    </span>
+                    <span className="text-text-muted truncate text-[10px] capitalize">
+                      {user?.email || ''}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex min-w-0 flex-col">
-                  <span className="text-text truncate text-xs font-medium">
-                    {user?.full_name || 'Usuario'}
-                  </span>
-                  <span className="text-text-muted truncate text-[10px] capitalize">
-                    {user?.email || ''}
-                  </span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <ThemeToggle />
+                  <button
+                    onClick={handleLogout}
+                    className="text-text-muted hover:text-danger cursor-pointer rounded-lg p-1.5 transition-colors active:scale-95"
+                    title="Cerrar sesión"
+                    aria-label="Cerrar sesión"
+                  >
+                    <LogOut size={16} />
+                  </button>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <ThemeToggle />
-                <button
-                  onClick={handleLogout}
-                  className="text-text-muted hover:text-danger cursor-pointer rounded-lg p-1.5 transition-colors active:scale-95"
-                  title="Cerrar sesión"
-                  aria-label="Cerrar sesión"
-                >
-                  <LogOut size={16} />
-                </button>
+              {/* Enlaces legales (Fase 12 §12.10): se ocultan con el sidebar colapsado, sin
+                  tooltip propio — no son wayfinding primario. */}
+              <div className="text-text-muted mt-2 flex items-center justify-between px-1 text-[11px]">
+                <Link href="/legal/privacidad" className="hover:text-text transition-colors">
+                  Privacidad
+                </Link>
+                <Link href="/legal/terminos" className="hover:text-text transition-colors">
+                  Términos
+                </Link>
               </div>
-            </div>
+            </>
           ) : (
             <div className="flex flex-col items-center gap-3">
               <div className="bg-surface-elevated border-border text-primary flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold uppercase">

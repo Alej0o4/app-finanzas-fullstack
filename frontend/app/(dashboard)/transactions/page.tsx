@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
   ArrowRightLeft,
   ArrowDownRight,
   ArrowUpRight,
-  Loader2,
   Trash2,
   Pencil,
   FilterX,
@@ -17,6 +16,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
+import { useQueryParamState } from '@/hooks/useQueryParamState';
 import { queryKeys } from '@/lib/queryKeys';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirmStore } from '@/store/useConfirmStore';
@@ -26,6 +26,7 @@ import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
+import Skeleton from '@/components/ui/Skeleton';
 import type {
   Account,
   Category,
@@ -73,15 +74,36 @@ const getPresetDates = (preset: Exclude<DatePreset, 'custom'>) => {
   };
 };
 
-export default function TransactionsPage() {
+function TransactionsPageContent() {
   const { config } = useAppConfig();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [accountFilter, setAccountFilter] = useState('all');
-  const [datePreset, setDatePreset] = useState<DatePreset>('all');
+  // Fase 12 §12.1: filtros sincronizados con la URL (start/end/category/account/preset).
+  // El estado por defecto nunca aparece en el query string; un link copiado con filtros
+  // activos reproduce la vista exacta en cualquier navegador/sesión.
+  const [startDate, setStartDate] = useQueryParamState('start', '');
+  const [endDate, setEndDate] = useQueryParamState('end', '');
+  const [categoryFilter, setCategoryFilter] = useQueryParamState('category', 'all');
+  const [accountFilter, setAccountFilter] = useQueryParamState('account', 'all');
+  const [datePreset, setDatePreset] = useQueryParamState('preset', 'all');
+
+  // Un link compartido puede traer solo `preset` explícito (ej. ?preset=month&category=3):
+  // se derivan las fechas del preset una sola vez al montar, para que la vista reproducida
+  // sea exactamente la misma que generó el link. Cuando la URL trae start/end, mandan ellos.
+  useEffect(() => {
+    if (
+      !startDate &&
+      !endDate &&
+      (datePreset === '7d' || datePreset === 'month' || datePreset === 'year')
+    ) {
+      const nextDates = getPresetDates(datePreset);
+      setStartDate(nextDates.startDate);
+      setEndDate(nextDates.endDate);
+    }
+    // Seed de montaje: refleja intencionalmente el preset de la URL inicial, no los cambios
+    // posteriores de filtros (que ya pasan por applyPreset/inputs y escriben start/end).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Edit modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -92,6 +114,19 @@ export default function TransactionsPage() {
   const [editDate, setEditDate] = useState(new Date().toISOString().split('T')[0]);
   const [editAccountId, setEditAccountId] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
+  // Fase 12 §12.8.3: errores por campo (no globo nativo del navegador) + foco en el primero.
+  const [editErrors, setEditErrors] = useState<{
+    amount?: string;
+    description?: string;
+    accountId?: string;
+    categoryId?: string;
+    date?: string;
+  }>({});
+  const editAmountRef = useRef<HTMLInputElement>(null);
+  const editDescriptionRef = useRef<HTMLInputElement>(null);
+  const editAccountRef = useRef<HTMLSelectElement>(null);
+  const editCategoryRef = useRef<HTMLSelectElement>(null);
+  const editDateRef = useRef<HTMLInputElement>(null);
 
   // Paginación
   const [skip, setSkip] = useState(0);
@@ -215,6 +250,7 @@ export default function TransactionsPage() {
     setEditDate(tx.date ? tx.date.split('T')[0] : new Date().toISOString().split('T')[0]);
     setEditAccountId(String(tx.account_id));
     setEditCategoryId(String(tx.category_id));
+    setEditErrors({});
     setIsEditModalOpen(true);
   };
 
@@ -222,10 +258,27 @@ export default function TransactionsPage() {
     e.preventDefault();
     if (!editingTransaction) return;
 
+    const errors: typeof editErrors = {};
+    const parsedAmount = Number(editAmount);
+    if (!editAmount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      errors.amount = 'Ingresa un monto mayor a cero.';
+    }
+    if (!editDescription.trim()) errors.description = 'Ingresa una descripción.';
+    if (!editAccountId) errors.accountId = 'Elige una cuenta.';
+    if (!editCategoryId) errors.categoryId = 'Elige una categoría.';
+    if (!editDate) errors.date = 'Ingresa una fecha válida.';
+    setEditErrors(errors);
+
+    if (errors.amount) return editAmountRef.current?.focus();
+    if (errors.description) return editDescriptionRef.current?.focus();
+    if (errors.accountId) return editAccountRef.current?.focus();
+    if (errors.categoryId) return editCategoryRef.current?.focus();
+    if (errors.date) return editDateRef.current?.focus();
+
     updateMutation.mutate({
       id: editingTransaction.id,
       description: editDescription,
-      amount: Number(editAmount),
+      amount: parsedAmount,
       type: editType as 'income' | 'expense',
       date: editDate,
       account_id: Number(editAccountId),
@@ -239,8 +292,10 @@ export default function TransactionsPage() {
 
   if (loadingInitial) {
     return (
-      <div className="text-text-muted flex items-center gap-2 p-8">
-        <Loader2 className="animate-spin" /> Cargando movimientos...
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-64 rounded-xl" />
+        <Skeleton className="h-40 rounded-2xl" />
+        <Skeleton className="h-96 rounded-3xl" />
       </div>
     );
   }
@@ -261,7 +316,7 @@ export default function TransactionsPage() {
         </Button>
       </div>
 
-      <div className="bg-surface border-border/70 min-w-0 space-y-4 overflow-x-hidden rounded-2xl border p-4 shadow-sm sm:p-5">
+      <div className="bg-surface border-border/70 shadow-background/20 min-w-0 space-y-4 overflow-x-hidden rounded-2xl border p-4 shadow-sm sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <div className="text-text-soft flex items-center gap-2 text-sm font-medium">
             <FilterX size={16} className="text-text-muted" />
@@ -359,7 +414,7 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      <div className="bg-surface border-border/70 overflow-hidden rounded-3xl border shadow-sm">
+      <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
         {allItems.length === 0 ? (
           <EmptyState
             icon={<ArrowRightLeft size={48} className="opacity-20" />}
@@ -404,7 +459,7 @@ export default function TransactionsPage() {
                     <div className="flex shrink-0 items-center gap-2 sm:gap-6">
                       <div className="text-right">
                         <p
-                          className={`font-sans text-sm font-semibold sm:text-base ${isExpense ? 'text-text' : 'text-primary'}`}
+                          className={`font-sans text-sm font-semibold tabular-nums sm:text-base ${isExpense ? 'text-text' : 'text-primary'}`}
                         >
                           {isExpense ? '-' : '+'}
                           {formatCurrency(tx.amount, tx.currency)}
@@ -477,7 +532,7 @@ export default function TransactionsPage() {
         title="Editar movimiento"
       >
         {editingTransaction && (
-          <form onSubmit={handleUpdate} className="space-y-4">
+          <form onSubmit={handleUpdate} className="space-y-4" noValidate>
             <div className="flex gap-4">
               <button
                 type="button"
@@ -495,88 +550,79 @@ export default function TransactionsPage() {
               </button>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-text-muted pl-1 text-xs font-medium tracking-wider uppercase">
-                Valor
-              </label>
-              <input
-                type="number"
-                required
-                value={editAmount}
-                onChange={(e) => setEditAmount(e.target.value)}
-                className="bg-background border-border/70 text-text focus:ring-primary/50 focus:border-primary w-full rounded-xl border px-4 py-2.5 text-sm transition-colors focus:ring-2 focus:outline-none"
-              />
-            </div>
+            <Input
+              ref={editAmountRef}
+              label="Valor"
+              type="number"
+              required
+              value={editAmount}
+              onChange={(e) => setEditAmount(e.target.value)}
+              error={editErrors.amount}
+              className="bg-background"
+            />
 
-            <div className="space-y-1.5">
-              <label className="text-text-muted pl-1 text-xs font-medium tracking-wider uppercase">
-                Descripción
-              </label>
-              <input
-                required
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                className="bg-background border-border/70 text-text focus:ring-primary/50 focus:border-primary w-full rounded-xl border px-4 py-2.5 text-sm transition-colors focus:ring-2 focus:outline-none"
-              />
-            </div>
+            <Input
+              ref={editDescriptionRef}
+              label="Descripción"
+              type="text"
+              required
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              error={editErrors.description}
+              className="bg-background"
+            />
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-text-muted pl-1 text-xs font-medium tracking-wider uppercase">
-                  Cuenta
-                </label>
-                <select
-                  required
-                  value={editAccountId}
-                  onChange={(e) => setEditAccountId(e.target.value)}
-                  className="bg-background border-border/70 text-text focus:ring-primary/50 w-full appearance-none rounded-xl border px-4 py-2.5 text-sm transition-colors focus:ring-2 focus:outline-none"
-                >
-                  <option value="" disabled>
-                    Selecciona...
+              <Select
+                ref={editAccountRef}
+                label="Cuenta"
+                required
+                value={editAccountId}
+                onChange={(e) => setEditAccountId(e.target.value)}
+                error={editErrors.accountId}
+                className="bg-background appearance-none"
+              >
+                <option value="" disabled>
+                  Selecciona...
+                </option>
+                {accounts?.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
                   </option>
-                  {accounts?.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
+                ))}
+              </Select>
+              <Select
+                ref={editCategoryRef}
+                label="Categoría"
+                required
+                value={editCategoryId}
+                onChange={(e) => setEditCategoryId(e.target.value)}
+                error={editErrors.categoryId}
+                className="bg-background appearance-none"
+              >
+                <option value="" disabled>
+                  Selecciona...
+                </option>
+                {categories
+                  ?.filter((c) => c.type === editType)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-text-muted pl-1 text-xs font-medium tracking-wider uppercase">
-                  Categoría
-                </label>
-                <select
-                  required
-                  value={editCategoryId}
-                  onChange={(e) => setEditCategoryId(e.target.value)}
-                  className="bg-background border-border/70 text-text focus:ring-primary/50 w-full appearance-none rounded-xl border px-4 py-2.5 text-sm transition-colors focus:ring-2 focus:outline-none"
-                >
-                  <option value="" disabled>
-                    Selecciona...
-                  </option>
-                  {categories
-                    ?.filter((c) => c.type === editType)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
+              </Select>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-text-muted pl-1 text-xs font-medium tracking-wider uppercase">
-                Fecha
-              </label>
-              <input
-                type="date"
-                required
-                value={editDate}
-                onChange={(e) => setEditDate(e.target.value)}
-                className="bg-background border-border/70 text-text focus:ring-primary/50 focus:border-primary w-full rounded-xl border px-4 py-2.5 text-sm transition-colors focus:ring-2 focus:outline-none"
-              />
-            </div>
+            <Input
+              ref={editDateRef}
+              label="Fecha"
+              type="date"
+              required
+              value={editDate}
+              onChange={(e) => setEditDate(e.target.value)}
+              error={editErrors.date}
+              className="bg-background"
+            />
 
             <div className="mt-6 flex gap-3">
               <Button
@@ -600,5 +646,14 @@ export default function TransactionsPage() {
         )}
       </ModalShell>
     </div>
+  );
+}
+
+// Fase 12 §12.1: useSearchParams requiere Suspense (mismo patrón que login/reset-password).
+export default function TransactionsPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-96 rounded-2xl" />}>
+      <TransactionsPageContent />
+    </Suspense>
   );
 }

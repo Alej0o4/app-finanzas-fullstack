@@ -36,7 +36,7 @@ export default function ChartControlsPopover({ children }: ChartControlsPopoverP
       </button>
 
       {open && (
-        <div className="border-border bg-surface-elevated absolute top-full right-0 z-50 mt-2 min-w-[180px] rounded-xl border p-3 shadow-xl backdrop-blur-sm">
+        <div className="border-border bg-surface-elevated shadow-background/40 absolute top-full right-0 z-50 mt-2 min-w-[180px] rounded-xl border p-3 shadow-xl backdrop-blur-sm">
           {children}
         </div>
       )}

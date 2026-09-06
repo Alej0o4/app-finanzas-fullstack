@@ -26,6 +26,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="bg-background min-h-screen">
+      {/* Fase 12 §12.7: único salto útil en el shell autenticado — (auth) y /capture no
+          tienen navegación previa que saltar. */}
+      <a
+        href="#main-content"
+        className="bg-primary text-background focus-visible:ring-primary/50 sr-only rounded-lg px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus-visible:ring-2 focus-visible:outline-none"
+      >
+        Saltar al contenido principal
+      </a>
       <Sidebar />
       <ConfirmDialog />
       <FabManager />
@@ -38,13 +46,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Hamburger móvil */}
         <button
           onClick={toggleSidebar}
-          className="bg-surface border-border/70 text-text-muted hover:text-text fixed top-4 left-4 z-30 cursor-pointer rounded-lg border p-2 shadow-md transition-colors sm:hidden"
+          className="bg-surface border-border/70 text-text-muted hover:text-text shadow-background/30 fixed top-4 left-4 z-30 cursor-pointer rounded-lg border p-2 shadow-md transition-colors sm:hidden"
           aria-label="Abrir menú"
         >
           <Menu size={20} />
         </button>
 
-        <main className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 overflow-x-hidden p-4 sm:p-8 lg:p-12">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 overflow-x-hidden p-4 sm:p-8 lg:p-12"
+        >
           {children}
         </main>
       </div>

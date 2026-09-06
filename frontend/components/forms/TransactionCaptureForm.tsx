@@ -45,6 +45,8 @@ export default function TransactionCaptureForm({
 
   const amountRef = useRef<HTMLInputElement>(null);
   const categoryFieldsetRef = useRef<HTMLFieldSetElement>(null);
+  // Fase 12 §12.8: errores por campo (no globo nativo del navegador) + foco en el primero.
+  const [fieldErrors, setFieldErrors] = useState<{ amount?: string; category?: string }>({});
 
   const { data: accounts } = useQuery<Account[]>({
     queryKey: queryKeys.accounts.all(),
@@ -100,29 +102,26 @@ export default function TransactionCaptureForm({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!amount && !categoryId) {
-      toast.error('Ingresa un monto y elige una categoría');
-      amountRef.current?.focus();
-      return;
+    const errors: typeof fieldErrors = {};
+    const parsedAmount = Number(amount);
+    if (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      errors.amount = 'Ingresa un monto mayor a cero.';
     }
+    if (!categoryId) errors.category = 'Elige una categoría.';
+    setFieldErrors(errors);
+
+    if (errors.amount) return amountRef.current?.focus();
+    if (errors.category) return categoryFieldsetRef.current?.focus();
+
     if (!effectiveAccountId) {
+      // Sin cuentas en la app no hay dónde registrar el monto — no es un error de un campo.
       toast.error('No tienes una cuenta disponible');
-      return;
-    }
-    if (!amount) {
-      toast.error('Ingresa un monto');
-      amountRef.current?.focus();
-      return;
-    }
-    if (!categoryId) {
-      toast.error('Elige una categoría');
-      categoryFieldsetRef.current?.focus();
       return;
     }
 
     createMutation.mutate({
       description,
-      amount: Number(amount),
+      amount: parsedAmount,
       type,
       account_id: Number(effectiveAccountId),
       category_id: Number(categoryId),
@@ -133,11 +132,12 @@ export default function TransactionCaptureForm({
   const handleTypeChange = (newType: 'income' | 'expense') => {
     setType(newType);
     setCategoryId('');
+    setFieldErrors((prev) => ({ ...prev, category: undefined }));
     onTypeChange?.(newType);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       <div className="flex gap-2">
         <button
           type="button"
@@ -171,6 +171,7 @@ export default function TransactionCaptureForm({
         autoFocus
         value={amount}
         onChange={(event) => setAmount(event.target.value)}
+        error={fieldErrors.amount}
         className="bg-background"
         placeholder="0"
       />
@@ -218,6 +219,7 @@ export default function TransactionCaptureForm({
             {categories ? 'No hay categorías para este tipo.' : 'Cargando categorías…'}
           </p>
         )}
+        {fieldErrors.category && <p className="text-danger mt-2 text-xs">{fieldErrors.category}</p>}
       </fieldset>
 
       <details className="group">

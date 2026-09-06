@@ -13,7 +13,7 @@ export default function CapturePage() {
   const router = useRouter();
 
   return (
-    <div className="bg-surface border-border/70 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
+    <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
       <TransactionCaptureForm onSuccess={() => router.push('/')} />
     </div>
   );

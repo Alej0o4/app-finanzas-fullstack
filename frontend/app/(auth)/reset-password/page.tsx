@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useMutation } from '@tanstack/react-query';
@@ -27,7 +27,7 @@ function extractErrorMessage(error: unknown, fallback: string): string {
 
 function InvalidLinkPanel() {
   return (
-    <div className="bg-surface border-border/70 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
+    <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
       <div className="mb-8 flex flex-col items-center">
         <div className="bg-danger/10 text-danger mb-4 flex h-12 w-12 items-center justify-center rounded-full">
           <ShieldAlert size={24} />
@@ -64,7 +64,15 @@ function ResetPasswordForm() {
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [formError, setFormError] = useState<string | null>(null);
+  // Fase 12 §12.8: errores por campo (no globo nativo del navegador) + foco en el primero.
+  // La comparación manual de contraseñas que antes vivía en formError se migra a
+  // fieldErrors.confirmPassword; el banner solo muestra errores de servidor ahora.
+  const [fieldErrors, setFieldErrors] = useState<{
+    password?: string;
+    confirmPassword?: string;
+  }>({});
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
 
   const resetMutation = useMutation({
     mutationFn: async (payload: { token: string; new_password: string }) =>
@@ -92,18 +100,20 @@ function ResetPasswordForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setFormError(null);
 
-    if (newPassword !== confirmPassword) {
-      setFormError('Las contraseñas no coinciden.');
-      return;
-    }
+    const errors: typeof fieldErrors = {};
+    if (newPassword.length < 10) errors.password = 'Debe tener al menos 10 caracteres.';
+    if (newPassword !== confirmPassword) errors.confirmPassword = 'Las contraseñas no coinciden.';
+    setFieldErrors(errors);
+
+    if (errors.password) return passwordRef.current?.focus();
+    if (errors.confirmPassword) return confirmRef.current?.focus();
 
     resetMutation.mutate({ token, new_password: newPassword });
   };
 
   return (
-    <div className="bg-surface border-border/70 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
+    <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
       {/* Cabecera */}
       <div className="mb-8 flex flex-col items-center">
         <div className="bg-primary/10 text-primary mb-4 flex h-12 w-12 items-center justify-center rounded-full">
@@ -117,21 +127,22 @@ function ResetPasswordForm() {
         </p>
       </div>
 
-      {/* Mensaje de error */}
-      {(formError || submissionError) && (
+      {/* Mensaje de error de servidor (el de validación por campo vive bajo cada Input) */}
+      {submissionError && (
         <div
           role="status"
           aria-live="polite"
           aria-atomic="true"
           className="bg-danger/10 border-danger/20 text-danger mb-6 rounded-xl border p-3 text-center text-sm"
         >
-          {formError || submissionError}
+          {submissionError}
         </div>
       )}
 
       {/* Formulario */}
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         <Input
+          ref={passwordRef}
           label="Nueva Contraseña"
           type="password"
           autoComplete="new-password"
@@ -139,17 +150,20 @@ function ResetPasswordForm() {
           minLength={10}
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
+          error={fieldErrors.password}
           className="bg-background py-3"
           placeholder="Mínimo 10 caracteres, letras y números"
         />
 
         <Input
+          ref={confirmRef}
           label="Confirmar Contraseña"
           type="password"
           autoComplete="new-password"
           required
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
+          error={fieldErrors.confirmPassword}
           className="bg-background py-3"
           placeholder="Repite la contraseña"
         />
@@ -180,7 +194,7 @@ function ResetPasswordForm() {
 
 function ResetPasswordFallback() {
   return (
-    <div className="bg-surface border-border/70 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
+    <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
       <div className="flex flex-col items-center">
         <div className="bg-primary/10 text-primary mb-4 flex h-12 w-12 items-center justify-center rounded-full">
           <Wallet size={24} />

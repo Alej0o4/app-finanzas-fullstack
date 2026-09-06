@@ -2,15 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowLeft,
-  Tag,
-  Loader2,
-  ArrowDownRight,
-  ArrowUpRight,
-  Pencil,
-  Trash2,
-} from 'lucide-react';
+import { ArrowLeft, Tag, ArrowDownRight, ArrowUpRight, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
@@ -18,6 +10,7 @@ import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import { queryKeys } from '@/lib/queryKeys';
 import ModalShell from '@/components/ui/ModalShell';
+import Skeleton from '@/components/ui/Skeleton';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
@@ -150,8 +143,10 @@ export default function CategoryDetailPage() {
 
   if (isLoading)
     return (
-      <div className="text-text-muted flex items-center gap-2 p-8">
-        <Loader2 className="animate-spin" /> Cargando historial de categoría...
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-64 rounded-xl" />
+        <Skeleton className="h-40 rounded-2xl" />
+        <Skeleton className="h-96 rounded-3xl" />
       </div>
     );
   if (!category)
@@ -181,7 +176,7 @@ export default function CategoryDetailPage() {
       <div className="space-y-4">
         <h2 className="text-text font-sans text-lg font-bold">Movimientos asociados</h2>
 
-        <div className="bg-surface border-border/70 overflow-hidden rounded-3xl border shadow-sm">
+        <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
           {!transactions || transactions.length === 0 ? (
             <div className="text-text-muted p-12 text-center text-sm">
               No hay movimientos clasificados en esta categoría aún.
@@ -212,7 +207,7 @@ export default function CategoryDetailPage() {
                     <div className="flex items-center gap-3">
                       <div className="text-right">
                         <p
-                          className={`font-sans font-semibold ${isExpense ? 'text-text' : 'text-primary'}`}
+                          className={`font-sans font-semibold tabular-nums ${isExpense ? 'text-text' : 'text-primary'}`}
                         >
                           {isExpense ? '-' : '+'}
                           {formatCurrency(tx.amount, tx.currency)}

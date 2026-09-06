@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Wallet } from 'lucide-react';
@@ -17,11 +17,24 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Fase 12 §12.8: errores por campo (no globo nativo del navegador) + foco en el primero.
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setError(null);
+
+    const errors: typeof fieldErrors = {};
+    if (!/^\S+@\S+\.\S+$/.test(username)) errors.email = 'Ingresa un correo válido.';
+    if (!password) errors.password = 'Ingresa tu contraseña.';
+    setFieldErrors(errors);
+
+    if (errors.email) return emailRef.current?.focus();
+    if (errors.password) return passwordRef.current?.focus();
+
+    setIsLoading(true);
 
     try {
       // OAuth2 exige enviar los datos como URLSearchParams (x-www-form-urlencoded)
@@ -56,7 +69,7 @@ function LoginForm() {
   };
 
   return (
-    <div className="bg-surface border-border/70 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
+    <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
       {/* Cabecera */}
       <div className="mb-8 flex flex-col items-center">
         <div className="bg-primary/10 text-primary mb-4 flex h-12 w-12 items-center justify-center rounded-full">
@@ -105,26 +118,30 @@ function LoginForm() {
       )}
 
       {/* Formulario */}
-      <form onSubmit={handleLogin} className="space-y-5">
+      <form onSubmit={handleLogin} className="space-y-5" noValidate>
         <Input
+          ref={emailRef}
           label="Correo Electrónico"
           type="email"
           autoComplete="email"
           required
           value={username}
           onChange={(e) => setUsername(e.target.value)}
+          error={fieldErrors.email}
           className="bg-background py-3"
           placeholder="alejandro@ejemplo.com"
         />
 
         <div className="space-y-1.5">
           <Input
+            ref={passwordRef}
             label="Contraseña"
             type="password"
             autoComplete="current-password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            error={fieldErrors.password}
             className="bg-background py-3"
             placeholder="••••••••"
           />

@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, PieChart, Loader2, Edit2, Trash2, CalendarDays, Repeat } from 'lucide-react';
+import { Plus, PieChart, Edit2, Trash2, CalendarDays, Repeat } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, getApiError } from '@/lib/utils';
 import { queryKeys } from '@/lib/queryKeys';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
+import Skeleton from '@/components/ui/Skeleton';
 import EmptyState from '@/components/ui/EmptyState';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
@@ -35,6 +36,15 @@ export default function BudgetsPage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
   const [monthYear, setMonthYear] = useState(getCurrentMonthYear);
+  // Fase 12 §12.8: errores por campo (no globo nativo del navegador) + foco en el primero.
+  const [fieldErrors, setFieldErrors] = useState<{
+    categoryId?: string;
+    amount?: string;
+    monthYear?: string;
+  }>({});
+  const categoryRef = useRef<HTMLSelectElement>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
+  const monthYearRef = useRef<HTMLInputElement>(null);
 
   const { data: budgets, isLoading: loadingBudgets } = useQuery<Budget[]>({
     queryKey: queryKeys.budgets.all(),
@@ -87,9 +97,23 @@ export default function BudgetsPage() {
     e.preventDefault();
     const [yearStr, monthStr] = monthYear.split('-');
 
+    const errors: typeof fieldErrors = {};
+    if (!categoryId) errors.categoryId = 'Elige una categoría.';
+    const parsedAmount = Number(amount);
+    if (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      errors.amount = 'Ingresa un monto mayor a cero.';
+    }
+    // Required nativo neutralizado por noValidate: el mes/año se reimplementa igual que el resto.
+    if (!monthYear) errors.monthYear = 'Elige un mes y año.';
+    setFieldErrors(errors);
+
+    if (errors.categoryId) return categoryRef.current?.focus();
+    if (errors.amount) return amountRef.current?.focus();
+    if (errors.monthYear) return monthYearRef.current?.focus();
+
     saveMutation.mutate({
       category_id: Number(categoryId),
-      amount_limit: Number(amount),
+      amount_limit: parsedAmount,
       month: Number(monthStr),
       year: Number(yearStr),
       is_recurring: isRecurring,
@@ -102,6 +126,7 @@ export default function BudgetsPage() {
     setAmount('');
     setIsRecurring(false);
     setMonthYear(getCurrentMonthYear());
+    setFieldErrors({});
     setIsModalOpen(true);
   };
 
@@ -112,6 +137,7 @@ export default function BudgetsPage() {
     setIsRecurring(budget.is_recurring);
     const formattedMonth = budget.month < 10 ? `0${budget.month}` : budget.month;
     setMonthYear(`${budget.year}-${formattedMonth}`);
+    setFieldErrors({});
     setIsModalOpen(true);
   };
 
@@ -122,8 +148,10 @@ export default function BudgetsPage() {
 
   if (loadingBudgets)
     return (
-      <div className="text-text-muted flex items-center gap-2 p-8">
-        <Loader2 className="animate-spin" /> Cargando presupuestos...
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-32 rounded-2xl" />
+        ))}
       </div>
     );
 
@@ -208,7 +236,7 @@ export default function BudgetsPage() {
                   <p className="text-text-muted mb-1 text-xs tracking-wider uppercase">
                     Límite mensual
                   </p>
-                  <p className="text-text font-sans text-2xl font-semibold">
+                  <p className="text-text font-sans text-2xl font-semibold tabular-nums">
                     {formatCurrency(budget.amount_limit, budget.currency)}
                   </p>
                 </div>
@@ -223,12 +251,14 @@ export default function BudgetsPage() {
         onClose={closeModal}
         title={editingBudget ? 'Editar Presupuesto' : 'Definir Presupuesto'}
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <Select
+            ref={categoryRef}
             label="Categoría a limitar"
             required
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
+            error={fieldErrors.categoryId}
             className="bg-background appearance-none"
           >
             <option value="" disabled>
@@ -242,21 +272,25 @@ export default function BudgetsPage() {
           </Select>
 
           <Input
+            ref={amountRef}
             label="Monto Máximo"
             type="number"
             required
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
+            error={fieldErrors.amount}
             className="bg-background"
             placeholder="0"
           />
 
           <Input
+            ref={monthYearRef}
             label="Mes y Año"
             type="month"
             required
             value={monthYear}
             onChange={(e) => setMonthYear(e.target.value)}
+            error={fieldErrors.monthYear}
             className="bg-background style-color-scheme-dark"
           />
 

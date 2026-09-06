@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Wallet, Loader2, Edit2, Trash2, Star } from 'lucide-react';
+import { Plus, Wallet, Edit2, Trash2, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, getApiError } from '@/lib/utils';
@@ -37,6 +37,12 @@ export default function AccountsPage() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editAccountName, setEditAccountName] = useState('');
   const [editAccountType, setEditAccountType] = useState('cash');
+  // Fase 12 §12.8: errores por campo (no globo nativo del navegador) + foco en el primero.
+  const [createErrors, setCreateErrors] = useState<{ name?: string; balance?: string }>({});
+  const [editErrors, setEditErrors] = useState<{ name?: string }>({});
+  const createNameRef = useRef<HTMLInputElement>(null);
+  const createBalanceRef = useRef<HTMLInputElement>(null);
+  const editNameRef = useRef<HTMLInputElement>(null);
 
   const { data: accounts, isLoading } = useQuery<Account[]>({
     queryKey: queryKeys.accounts.all(),
@@ -123,10 +129,22 @@ export default function AccountsPage() {
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const errors: typeof createErrors = {};
+    if (!newAccountName.trim()) errors.name = 'Ingresa un nombre para la cuenta.';
+    const parsedBalance = Number(initialBalance);
+    if (initialBalance && (Number.isNaN(parsedBalance) || parsedBalance < 0)) {
+      errors.balance = 'El saldo inicial no puede ser negativo.';
+    }
+    setCreateErrors(errors);
+
+    if (errors.name) return createNameRef.current?.focus();
+    if (errors.balance) return createBalanceRef.current?.focus();
+
     createAccountMutation.mutate({
       name: newAccountName,
       type: newAccountType as 'cash' | 'debit' | 'credit',
-      balance: Number(initialBalance) || 0,
+      balance: parsedBalance || 0,
       currency: newAccountCurrency,
     });
   };
@@ -134,6 +152,12 @@ export default function AccountsPage() {
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAccount) return;
+
+    const errors: typeof editErrors = {};
+    if (!editAccountName.trim()) errors.name = 'Ingresa un nombre para la cuenta.';
+    setEditErrors(errors);
+    if (errors.name) return editNameRef.current?.focus();
+
     updateAccountMutation.mutate({
       id: editingAccount.id,
       data: { name: editAccountName, type: editAccountType },
@@ -152,6 +176,7 @@ export default function AccountsPage() {
   const openEditModal = (account: Account) => {
     setEditAccountName(account.name);
     setEditAccountType(account.type);
+    setEditErrors({});
     setEditingAccount(account);
   };
 
@@ -172,8 +197,10 @@ export default function AccountsPage() {
   // round-trips en serie para mostrar cualquier contenido.
   if (isLoading)
     return (
-      <div className="text-text-muted flex items-center gap-2 p-8">
-        <Loader2 className="animate-spin" /> Cargando cuentas...
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-32 rounded-2xl" />
+        ))}
       </div>
     );
 
@@ -184,7 +211,14 @@ export default function AccountsPage() {
           <h1 className="text-text font-sans text-xl font-bold sm:text-2xl">Tus Cuentas</h1>
           <p className="text-text-muted text-xs sm:text-sm">Gestiona el origen de tus fondos.</p>
         </div>
-        <Button variant="primary" onClick={() => setIsCreateModalOpen(true)} className="shrink-0">
+        <Button
+          variant="primary"
+          onClick={() => {
+            setIsCreateModalOpen(true);
+            setCreateErrors({});
+          }}
+          className="shrink-0"
+        >
           <Plus size={18} />
           <span className="hidden sm:inline">Nueva Cuenta</span>
           <span className="sm:hidden">Nueva</span>
@@ -198,12 +232,12 @@ export default function AccountsPage() {
           <Skeleton className="h-24 rounded-2xl" />
         ) : balancesSummary && balancesSummary.length > 0 ? (
           balancesSummary.map((b) => (
-            <SummaryCard key={b.currency} label="Balance Total">
+            <SummaryCard key={b.currency} label="Balance Total" elevated>
               <p>{formatCurrency(b.total, b.currency)}</p>
             </SummaryCard>
           ))
         ) : (
-          <SummaryCard label="Balance Total">
+          <SummaryCard label="Balance Total" elevated>
             <p>{formatCurrency(0, user?.preferred_currency || 'COP')}</p>
           </SummaryCard>
         )}
@@ -234,7 +268,7 @@ export default function AccountsPage() {
               </div>
 
               <div className="border-border/40 mt-4 border-t pt-4">
-                <p className="text-text font-sans text-xl font-semibold sm:text-2xl">
+                <p className="text-text font-sans text-xl font-semibold tabular-nums sm:text-2xl">
                   {formatCurrency(account.balance, account.currency)}
                 </p>
               </div>
@@ -291,12 +325,14 @@ export default function AccountsPage() {
         onClose={() => setIsCreateModalOpen(false)}
         title="Añadir nueva cuenta"
       >
-        <form onSubmit={handleCreate} className="space-y-4">
+        <form onSubmit={handleCreate} className="space-y-4" noValidate>
           <Input
+            ref={createNameRef}
             label="Nombre"
             required
             value={newAccountName}
             onChange={(e) => setNewAccountName(e.target.value)}
+            error={createErrors.name}
             className="bg-background"
           />
 
@@ -323,11 +359,13 @@ export default function AccountsPage() {
           </Select>
 
           <Input
+            ref={createBalanceRef}
             label="Saldo Inicial"
             type="number"
             required
             value={initialBalance}
             onChange={(e) => setInitialBalance(e.target.value)}
+            error={createErrors.balance}
             className="bg-background"
             placeholder="0"
           />
@@ -359,12 +397,14 @@ export default function AccountsPage() {
         title="Editar cuenta"
       >
         {editingAccount && (
-          <form onSubmit={handleUpdate} className="space-y-4">
+          <form onSubmit={handleUpdate} className="space-y-4" noValidate>
             <Input
+              ref={editNameRef}
               label="Nombre"
               required
               value={editAccountName}
               onChange={(e) => setEditAccountName(e.target.value)}
+              error={editErrors.name}
               className="bg-background"
             />
 

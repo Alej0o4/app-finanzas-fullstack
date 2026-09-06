@@ -5,7 +5,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Wallet,
-  Loader2,
   ArrowDownRight,
   ArrowUpRight,
   Pencil,
@@ -21,6 +20,7 @@ import { queryKeys } from '@/lib/queryKeys';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import ModalShell from '@/components/ui/ModalShell';
+import Skeleton from '@/components/ui/Skeleton';
 import Button from '@/components/ui/Button';
 import { useState } from 'react';
 import CategoryIcon from '@/components/ui/CategoryIcon';
@@ -152,8 +152,10 @@ export default function AccountDetailPage() {
 
   if (isLoading)
     return (
-      <div className="text-text-muted flex items-center gap-2 p-8">
-        <Loader2 className="animate-spin" /> Cargando historial de cuenta...
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-64 rounded-xl" />
+        <Skeleton className="h-40 rounded-2xl" />
+        <Skeleton className="h-96 rounded-3xl" />
       </div>
     );
   if (!account)
@@ -182,7 +184,7 @@ export default function AccountDetailPage() {
         <p className="text-text-muted text-xs font-medium tracking-wider uppercase">
           Saldo disponible
         </p>
-        <p className="text-text mt-2 font-sans text-4xl font-bold">
+        <p className="text-text mt-2 font-sans text-4xl font-bold tabular-nums">
           {formatCurrency(account.balance, account.currency)}
         </p>
       </div>
@@ -190,7 +192,7 @@ export default function AccountDetailPage() {
       <div className="space-y-4">
         <h2 className="text-text font-sans text-lg font-bold">Historial de movimientos</h2>
 
-        <div className="bg-surface border-border/70 overflow-hidden rounded-3xl border shadow-sm">
+        <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
           {!transactions || transactions.length === 0 ? (
             <div className="text-text-muted p-12 text-center text-sm">
               No hay transacciones registradas con esta cuenta.
@@ -227,7 +229,7 @@ export default function AccountDetailPage() {
                     <div className="flex items-center gap-3">
                       <div className="text-right">
                         <p
-                          className={`font-sans font-semibold ${isExpense ? 'text-text' : 'text-primary'}`}
+                          className={`font-sans font-semibold tabular-nums ${isExpense ? 'text-text' : 'text-primary'}`}
                         >
                           {isExpense ? '-' : '+'}
                           {formatCurrency(tx.amount, tx.currency)}

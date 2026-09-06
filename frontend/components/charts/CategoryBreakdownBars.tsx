@@ -30,7 +30,7 @@ export default function CategoryBreakdownBars({ data, isLoading }: CategoryBreak
   const maxTotal = Math.max(...rows.map((row) => Number(row.total)), 1);
 
   return (
-    <div className="bg-surface border-border/70 rounded-2xl border p-6">
+    <div className="bg-surface border-border/70 shadow-background/20 rounded-2xl border p-6 shadow-sm">
       {isLoading ? (
         <div className="space-y-5">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -62,7 +62,7 @@ export default function CategoryBreakdownBars({ data, isLoading }: CategoryBreak
                     {item.category_name}
                   </span>
                 </span>
-                <span className="text-text shrink-0 text-sm font-semibold">
+                <span className="text-text shrink-0 text-sm font-semibold tabular-nums">
                   {formatCurrency(Number(item.total), config.currency)}
                 </span>
               </div>

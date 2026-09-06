@@ -55,7 +55,7 @@ export default function BudgetRing({
 
       <div className="relative flex h-24 w-24 items-center justify-center sm:h-32 sm:w-32">
         <div className="absolute flex flex-col items-center justify-center text-center">
-          <span className={`font-sans text-lg font-bold sm:text-xl ${ringColorClass}`}>
+          <span className={`font-sans text-lg font-bold tabular-nums sm:text-xl ${ringColorClass}`}>
             {percentage.toFixed(0)}%
           </span>
           <span className="text-text-muted text-[9px] tracking-wider uppercase sm:text-[10px]">
@@ -94,11 +94,11 @@ export default function BudgetRing({
           <h3 className="text-text truncate text-sm font-medium">{categoryName || 'Sin Nombre'}</h3>
         </div>
         <div className="mt-2 flex items-center justify-between text-xs">
-          <span className="text-text-muted">
+          <span className="text-text-muted tabular-nums">
             {formatCurrency(safeSpent, currency ?? config.currency)}
           </span>
           <span className="text-text-muted/60">/</span>
-          <span className="text-text">
+          <span className="text-text tabular-nums">
             {formatCurrency(
               safeBudget === 1 && budgetAmount === 0 ? 0 : safeBudget,
               currency ?? config.currency

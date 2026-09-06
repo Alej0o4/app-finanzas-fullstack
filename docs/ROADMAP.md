@@ -319,7 +319,7 @@ los mismos bugs en la UI nueva.
 
 ---
 
-## Fase 12 — Pulido visual y omisiones estratégicas
+## Fase 12 — Pulido visual y omisiones estratégicas ✅ completa (2026-09-05)
 
 **Objetivo:** cerrar lo que quedó de la auditoría de diseño después de que Fase 11 estabilice el
 dashboard de flujo — visibilidad de estado en URL, jerarquía visual entre tarjetas, y los huecos
@@ -327,36 +327,45 @@ dashboard de flujo — visibilidad de estado en URL, jerarquía visual entre tar
 rematar. Va antes de Fase 15 (onboarding) porque el onboarding es la primera impresión de un
 usuario nuevo.
 
-- [ ] **URL-sync de filtros en Transacciones y Analítica** — 1d
+> Implementación completa el 2026-09-05 — ver `docs/specs/fase_12_spec.md` para el desglose
+> técnico y las decisiones de diseño numeradas (12.1.1–12.10.2). Verificación: pytest backend
+> 91 passed, `pnpm lint`/`pnpm format:check`/`pnpm build` limpios, backend revisado por
+> `backend-engineer` (0 archivos backend tocados, contrato de API v1 intacto). Deuda anotada no
+> bloqueante: la URL es frontera de entrada sin validación de valores inválidos
+> (p. ej. `?category=abc` → 422), `usePersistedState.ts` quedó sin consumidores (deliberado,
+> Decisión 12.1.2) y la semántica `preset` vs `start`/`end` divergente post-montaje queda
+> documentada como intencional.
+
+- [x] **URL-sync de filtros en Transacciones y Analítica** — 1d *(2026-09-05, ver `docs/specs/fase_12_spec.md` §12.1 — hook `useQueryParamState`, `router.replace`, `<Suspense>` en ambas páginas)*
   - Hoy los filtros de fecha/cuenta/categoría viven en `useState`/`localStorage`, no en query
     params: se pierden al recargar o al compartir el link.
 
-- [ ] **Diferenciar visualmente las tarjetas** (elevación solo donde comunica jerarquía) — 4h
+- [x] **Diferenciar visualmente las tarjetas** (elevación solo donde comunica jerarquía) — 4h *(2026-09-05, ver §12.2 — prop `elevated` en `SummaryCard`, cierre del hueco en `CategoryBreakdownBars`, listas sin sombra a propósito)*
   - Hoy toda tarjeta usa el mismo patrón `border + shadow-sm + bg-surface` sin distinción entre
     la tarjeta de saldo destacado y una fila de lista.
 
-- [ ] **Tintar las sombras restantes con el color de fondo/acento** — 2h
+- [x] **Tintar las sombras restantes con el color de fondo/acento** — 2h *(2026-09-05, ver §12.3 — `shadow-background/NN` en ~21 lugares)*
   - Ya hay 2 ejemplos correctos (`shadow-primary/10` en el link activo del sidebar y en el FAB) —
     extender al resto de tarjetas y modales.
 
-- [ ] **Unificar estados de carga** — 4h
+- [x] **Unificar estados de carga** — 4h *(2026-09-05, ver §12.4 — los 7 archivos reales, no solo los 4 que nombra el ROADMAP)*
   - El dashboard usa `Skeleton` con la forma del contenido; Transacciones, Cuentas, Presupuestos
     y Categorías caen en un `Loader2` genérico.
 
-- [ ] **Favicon de marca + limpieza de assets de scaffold** — 2h
+- [x] **Favicon de marca + limpieza de assets de scaffold** — 2h *(2026-09-05, ver §12.5 — binario reemplazado, 5 SVGs borrados)*
   - `app/favicon.ico` sigue siendo el default de Next.js; `public/` todavía tiene `next.svg`,
     `vercel.svg`, `globe.svg`, `file.svg`, `window.svg` sin usar.
 
-- [ ] **Página 404 propia** (`app/not-found.tsx`) — 3h
+- [x] **Página 404 propia** (`app/not-found.tsx`) — 3h *(2026-09-05, ver §12.6 — solo raíz, sin 404 anidado en dashboard)*
 
-- [ ] **Skip-link para navegación por teclado** — 1h
+- [x] **Skip-link para navegación por teclado** — 1h *(2026-09-05, ver §12.7 — solo en el shell autenticado)*
 
-- [ ] **Validación de formularios por campo**, con foco en el primer error al hacer submit — 1d
+- [x] **Validación de formularios por campo**, con foco en el primer error al hacer submit — 1d *(2026-09-05, ver §12.8 — prop `error` de `Input`/`Select`, `noValidate`, migración del modal de edición de transacciones)*
   - Hoy los formularios solo tienen un banner de error genérico y validación nativa `required`.
 
-- [ ] **`tabular-nums` en cifras** (`SummaryCard`, `BudgetRing`, columnas de montos) — 2h
+- [x] **`tabular-nums` en cifras** (`SummaryCard`, `BudgetRing`, columnas de montos) — 2h *(2026-09-05, ver §12.9 — 9 sitios; tooltips Recharts fuera de alcance)*
 
-- [ ] **Enlaces legales (privacidad/términos)** en el shell autenticado — 4h
+- [x] **Enlaces legales (privacidad/términos)** en el shell autenticado — 4h *(2026-09-05, ver §12.10 — footer en `Sidebar.tsx`, páginas `/legal/*` públicas)*
   - No es solo diseño: el proyecto pivotó a producto público el 2026-08-22, esto ya no es opcional.
 
 - [ ] Opcional, no bloqueante: **evaluar reemplazar Lucide** por otra librería de iconos —
@@ -503,6 +512,7 @@ Estas estaban "fuera de scope" bajo el supuesto de un solo usuario. Ese supuesto
 | 2026-07-11 | **Fase 4B** — Docker: Dockerfiles, docker-compose.yml (postgres + backend + frontend), .dockerignore, seed en PostgreSQL |
 | 2026-07-14 | **Fase 6 Quick Wins** — Fix multi-moneda en `/summary`, sanitización de errores, headers de seguridad, README raíz, edición de transacciones, cuentas destacadas, iconos de categorías, ruff + prettier |
 | 2026-07-14 | **Fase 6 Responsive** — Dashboard, listados, formularios, modales y sidebar adaptados a móvil; estandarización de botones |
+| 2026-09-05 | **Fase 12** — Pulido visual: URL-sync (hook `useQueryParamState`), elevación selectiva de tarjetas, sombras tintadas `shadow-background/NN`, loading unificado con Skeleton (7 archivos), favicon de marca + limpieza de assets, 404 propio, skip-link, validación por campo con `noValidate`, `tabular-nums`, enlaces legales. Fase 100% frontend |
 
 ### Pendientes heredados de fases anteriores
 
@@ -513,7 +523,7 @@ Estas estaban "fuera de scope" bajo el supuesto de un solo usuario. Ese supuesto
 - [ ] Extraer custom hooks de queries (`useAccounts`, `useCategories`, `useTransactions`).
 - [ ] Migrar JWT de `localStorage` a cookies httpOnly (sube de prioridad al salir de Tailscale).
 - [ ] Crear capa `app/services/` y `app/core/exceptions.py`; partir `models.py` y `schemas.py` por dominio.
-- [ ] **`focus-visible` y `htmlFor`/`id` en el modal de edición manual de `transactions/page.tsx`** (Fase 9).
+- [x] **`focus-visible` y `htmlFor`/`id` en el modal de edición manual de `transactions/page.tsx`** (Fase 9). Resuelto en Fase 12 §12.8.3: el modal migró a los componentes `Input`/`Select` compartidos (con validación por campo y foco en el primer error).
   - El modal de editar transacción (líneas ~495-577) usa `<input>`/`<select>` crudos en vez de los
     componentes `Input`/`Select` ya corregidos en Fase 9 (§9.1/§9.2 de `docs/specs/fase_09_spec.md`):
     sus `<label>` siguen sin `htmlFor`, sus controles sin `id`, y el anillo de foco sigue activándose
