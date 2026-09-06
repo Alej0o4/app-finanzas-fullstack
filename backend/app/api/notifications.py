@@ -102,3 +102,42 @@ def marcar_todas_leidas(
     ).update({models.Notification.read_at: datetime.now(UTC)}, synchronize_session=False)
     db.commit()
     return {"count": 0}
+
+
+@router.delete("/read")
+def eliminar_leidas(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Vacía la bandeja de avisos YA LEÍDOS del usuario actual (Fase 13 §13.7) — las no
+    leídas nunca se borran por esta ruta, para no perder un aviso que el usuario no vio
+    todavía. Acompaña a "marcar todas": sin esto, la bandeja crece para siempre y no hay
+    forma de limpiarla una vez atendida."""
+    eliminadas = (
+        db.query(models.Notification)
+        .filter(
+            models.Notification.user_id == current_user.id,
+            models.Notification.read_at.isnot(None),
+        )
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return {"estado": "OK", "mensaje": f"Se eliminaron {eliminadas} notificaciones leídas."}
+
+
+@router.delete("/{notification_id}")
+def eliminar_notificacion(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Elimina una notificación puntual (Fase 13 §13.7). Ownership check → 404, mismo
+    patrón que el resto del archivo (nunca 403)."""
+    notificacion = db.query(models.Notification).filter(models.Notification.id == notification_id).first()
+
+    if not notificacion or notificacion.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="La notificación no existe o no tienes permisos.")
+
+    db.delete(notificacion)
+    db.commit()
+    return {"estado": "OK", "mensaje": "Notificación eliminada exitosamente."}

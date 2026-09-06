@@ -2,12 +2,14 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { Bell, CheckCheck, BellOff, Loader2 } from 'lucide-react';
+import { Bell, CheckCheck, BellOff, Loader2, X, Trash2 } from 'lucide-react';
 import {
   useNotifications,
   useUnreadCount,
   useMarkAsRead,
   useMarkAllAsRead,
+  useDeleteNotification,
+  useDeleteReadNotifications,
 } from '@/hooks/useNotifications';
 import PushOptIn from '@/components/PushOptIn';
 import type { AppNotification } from '@/types/api';
@@ -52,9 +54,12 @@ export default function NotificationBell() {
   const { data: notificationsData, isLoading, isError } = useNotifications();
   const markAsRead = useMarkAsRead();
   const markAllAsRead = useMarkAllAsRead();
+  const deleteNotification = useDeleteNotification();
+  const deleteRead = useDeleteReadNotifications();
 
   const unreadCount = unreadData?.count ?? 0;
   const notifications = notificationsData?.items ?? [];
+  const hasRead = notifications.some((n) => n.read_at !== null);
 
   useEffect(() => {
     if (!open) return;
@@ -99,17 +104,28 @@ export default function NotificationBell() {
 
       {open && (
         <div className="border-border bg-surface-elevated shadow-background/40 absolute bottom-full left-0 z-50 mb-2 flex max-h-[70vh] w-80 flex-col overflow-hidden rounded-xl border shadow-xl backdrop-blur-sm">
-          <div className="border-border/40 flex items-center justify-between gap-2 border-b px-3 py-2">
+          <div className="border-border/40 flex items-center justify-between gap-1 border-b px-3 py-2">
             <span className="text-text text-sm font-semibold">Notificaciones</span>
-            <button
-              type="button"
-              onClick={() => markAllAsRead.mutate()}
-              disabled={!hasUnread || markAllAsRead.isPending}
-              className="text-text-muted hover:text-text hover:bg-surface flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11px] transition-colors disabled:pointer-events-none disabled:opacity-40"
-            >
-              <CheckCheck size={12} />
-              Marcar todas
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => markAllAsRead.mutate()}
+                disabled={!hasUnread || markAllAsRead.isPending}
+                className="text-text-muted hover:text-text hover:bg-surface flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11px] transition-colors disabled:pointer-events-none disabled:opacity-40"
+              >
+                <CheckCheck size={12} />
+                Marcar todas
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteRead.mutate()}
+                disabled={!hasRead || deleteRead.isPending}
+                className="text-text-muted hover:text-danger hover:bg-surface flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11px] transition-colors disabled:pointer-events-none disabled:opacity-40"
+              >
+                <Trash2 size={12} />
+                Eliminar leídas
+              </button>
+            </div>
           </div>
 
           <div className="overflow-y-auto">
@@ -150,9 +166,22 @@ export default function NotificationBell() {
                             {notification.title}
                           </span>
                         )}
-                        {!notification.read_at && (
-                          <span className="bg-primary h-1.5 w-1.5 shrink-0 rounded-full" />
-                        )}
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {!notification.read_at && (
+                            <span className="bg-primary h-1.5 w-1.5 rounded-full" />
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteNotification.mutate(notification.id);
+                            }}
+                            aria-label="Eliminar notificación"
+                            className="text-text-muted hover:text-danger hover:bg-background cursor-pointer rounded p-0.5 transition-colors"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
                       </div>
                       <p className="text-text-muted text-xs leading-snug">{notification.body}</p>
                       <span className="text-text-muted/70 text-[10px]">

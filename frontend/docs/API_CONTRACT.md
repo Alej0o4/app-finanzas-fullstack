@@ -122,6 +122,11 @@ Todos requieren `Bearer` y devuelven los timestamps en ISO 8601.
   (`read_at = now()`). Idempotente. `404` si no existe o no es del usuario.
 - `PATCH /api/v1/notifications/read-all` — marca todas las no leídas y devuelve
   `{ "count": 0 }` (idempotente).
+- `DELETE /api/v1/notifications/read` (§13.7) — elimina las notificaciones ya leídas del
+  usuario; las no leídas nunca se tocan. Consumido por el botón "Eliminar leídas" del
+  popover, deshabilitado cuando no hay ninguna leída en la lista cargada.
+- `DELETE /api/v1/notifications/{notification_id}` (§13.7) — elimina una notificación
+  puntual. `404` si no existe o no es del usuario. Consumido por el ícono `X` de cada fila.
 
 ### Push web (Fase 13 §13.2)
 

@@ -494,6 +494,23 @@ Errores esperados:
 Marca todas las no leídas del usuario como leídas. Devuelve el nuevo conteo de no leídas
 (siempre `{"count": 0}` tras la acción) — idempotente.
 
+### `DELETE /api/v1/notifications/read` (Fase 13 §13.7)
+
+Elimina todas las notificaciones **ya leídas** del usuario autenticado — las no leídas nunca
+se tocan. Devuelve `{"estado": "OK", "mensaje": "Se eliminaron N notificaciones leídas."}`.
+
+> Nota de orden de rutas: esta ruta se registra ANTES de `DELETE /{notification_id}` — es
+> literal, no un parámetro, y FastAPI resuelve por orden de declaración.
+
+### `DELETE /api/v1/notifications/{notification_id}` (Fase 13 §13.7)
+
+Elimina una notificación puntual del usuario autenticado.
+
+Errores esperados:
+
+- `404` si la notificación no existe o no es del usuario autenticado (mismo criterio que el
+  resto del archivo: nunca `403`).
+
 ## Push web (Fase 13 §13.2)
 
 Suscripciones Web Push para avisos de presupuestos. Las claves del servidor se configuran con

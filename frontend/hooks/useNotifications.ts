@@ -68,3 +68,33 @@ export function useMarkAllAsRead() {
     },
   });
 }
+
+/** Elimina una notificación puntual (Fase 13 §13.7) e invalida lista + badge. */
+export function useDeleteNotification() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (notificationId: number) => {
+      await api.delete(`notifications/${notificationId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.unreadCount() });
+    },
+  });
+}
+
+/** Vacía las notificaciones YA LEÍDAS de la bandeja (Fase 13 §13.7, DELETE /notifications/read) — las no leídas nunca se tocan. */
+export function useDeleteReadNotifications() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      await api.delete('notifications/read');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.unreadCount() });
+    },
+  });
+}

@@ -400,6 +400,15 @@ usuario nuevo.
 
 *Más deuda de Fase 12 resuelta en el mismo hito: **13.6** validación read-time de query params (whitelist + fallback con tercer arg `validate` en `useQueryParamState`) — cierra la frontera de entrada donde un link `?category=abc` producía 422 y `?bar=foo` entraba con cast silencioso.*
 
+- [x] **Eliminar/descartar notificaciones de la bandeja** — 4h *(2026-09-06, §13.7 — `DELETE /notifications/{id}` + `DELETE /notifications/read` (solo leídas), ícono `X` por fila y botón "Eliminar leídas" en el popover)*
+  - Hasta este ítem no existía ninguna ruta `DELETE` en `notifications.py`: ni el usuario
+    de prueba ni un usuario real podían vaciar la bandeja, que crecía para siempre.
+  - Encontrado en pruebas manuales en vivo de Fase 13 (2026-09-06): repetir una prueba
+    sobre el mismo presupuesto/período no genera un aviso nuevo (correcto, es la
+    idempotencia de §13.3 funcionando) pero tampoco había forma de limpiar los avisos
+    viejos para verificar de nuevo — la ausencia de borrado, no un bug del motor, es lo
+    que hacía parecer roto el toast nuevo de la campana.
+
 ---
 
 ## Fase 14 — Resumen semanal automático
@@ -515,7 +524,7 @@ Estas estaban "fuera de scope" bajo el supuesto de un solo usuario. Ese supuesto
 | 2026-07-14 | **Fase 6 Quick Wins** — Fix multi-moneda en `/summary`, sanitización de errores, headers de seguridad, README raíz, edición de transacciones, cuentas destacadas, iconos de categorías, ruff + prettier |
 | 2026-07-14 | **Fase 6 Responsive** — Dashboard, listados, formularios, modales y sidebar adaptados a móvil; estandarización de botones |
 | 2026-09-05 | **Fase 12** — Pulido visual: URL-sync (hook `useQueryParamState`), elevación selectiva de tarjetas, sombras tintadas `shadow-background/NN`, loading unificado con Skeleton (7 archivos), favicon de marca + limpieza de assets, 404 propio, skip-link, validación por campo con `noValidate`, `tabular-nums`, enlaces legales. Fase 100% frontend |
-| 2026-09-06 | **Fase 13** — Presupuestos con alertas + notificaciones: tabla `notifications` + motor de umbrales 80/100 (síncrono post-commit, idempotente por `(budget_id, type)`, `spent` compartido con dashboard), campana in-app con badge (poll 60s, "marcar todas"), PWA instalable (manifest + `sw.js` manual, íconos 192/512, prompt con fallback iOS), push web (`pywebpush`, VAPID dev, upsert por endpoint, limpieza 410), BudgetRing alineado a 80/100. Más 13.6: validación read-time de query params (deuda de Fase 12). 17 tests nuevos |
+| 2026-09-06 | **Fase 13** — Presupuestos con alertas + notificaciones: tabla `notifications` + motor de umbrales 80/100 (síncrono post-commit, idempotente por `(budget_id, type)`, `spent` compartido con dashboard), campana in-app con badge (poll 60s, "marcar todas"), PWA instalable (manifest + `sw.js` manual, íconos 192/512, prompt con fallback iOS), push web (`pywebpush`, VAPID dev, upsert por endpoint, limpieza 410), BudgetRing alineado a 80/100. Más 13.6: validación read-time de query params (deuda de Fase 12) y 13.7: borrado de notificaciones (`DELETE /notifications/{id}` y `/read`), encontrado en pruebas manuales en vivo el mismo día. 22 tests nuevos |
 
 ### Pendientes heredados de fases anteriores
 

@@ -160,3 +160,83 @@ class TestNotificationsBandeja:
 
         # El leído ajeno no alteró el estado del dueño
         assert client.get("/api/v1/notifications/unread-count", headers=auth_headers).json() == {"count": 1}
+
+
+class TestNotificationsEliminar:
+    def test_delete_own_notification_removes_it_from_list(self, client, auth_headers, make_account, make_category):
+        notificacion = _crear_notificacion_via_umbral(client, auth_headers, make_account, make_category)
+
+        response = client.delete(f"/api/v1/notifications/{notificacion['id']}", headers=auth_headers)
+        assert response.status_code == 200, response.text
+
+        bandeja = client.get("/api/v1/notifications/", headers=auth_headers).json()
+        assert bandeja == {"items": [], "total": 0, "page": 1, "page_size": 50}
+
+    def test_delete_foreign_notification_returns_404(
+        self, client, auth_headers, other_user, make_account, make_category
+    ):
+        notificacion = _crear_notificacion_via_umbral(client, auth_headers, make_account, make_category)
+
+        response = client.delete(f"/api/v1/notifications/{notificacion['id']}", headers=other_user["headers"])
+        assert response.status_code == 404
+
+        # No se borró: sigue en la bandeja del dueño real
+        bandeja = client.get("/api/v1/notifications/", headers=auth_headers).json()
+        assert bandeja["total"] == 1
+
+    def test_delete_nonexistent_notification_returns_404(self, client, auth_headers):
+        response = client.delete("/api/v1/notifications/999999", headers=auth_headers)
+        assert response.status_code == 404
+
+    def test_delete_read_removes_only_read_ones_and_keeps_unread_count(
+        self, client, auth_headers, make_account, make_category
+    ):
+        leida = _crear_notificacion_via_umbral(client, auth_headers, make_account, make_category)
+        client.patch(f"/api/v1/notifications/{leida['id']}/read", headers=auth_headers)
+
+        categoria2 = make_category(auth_headers, name="Ropa", type="expense")
+        cuenta = make_account(auth_headers, name="Cuenta 2", balance="100000.00")
+        month, year = _now_month_year()
+        client.post(
+            "/api/v1/budgets/",
+            json={
+                "amount_limit": "1000.00",
+                "currency": "COP",
+                "month": month,
+                "year": year,
+                "category_id": categoria2["id"],
+            },
+            headers=auth_headers,
+        )
+        client.post(
+            "/api/v1/transactions/",
+            json={
+                "amount": "900.00",
+                "type": "expense",
+                "account_id": cuenta["id"],
+                "category_id": categoria2["id"],
+            },
+            headers=auth_headers,
+        )
+        # Una leída (la de arriba) + una sin leer (esta) en la bandeja
+        assert client.get("/api/v1/notifications/", headers=auth_headers).json()["total"] == 2
+
+        response = client.delete("/api/v1/notifications/read", headers=auth_headers)
+        assert response.status_code == 200, response.text
+
+        bandeja = client.get("/api/v1/notifications/", headers=auth_headers).json()
+        assert bandeja["total"] == 1
+        assert bandeja["items"][0]["id"] != leida["id"]
+        # La no leída no se tocó: el conteo sigue en 1
+        assert client.get("/api/v1/notifications/unread-count", headers=auth_headers).json() == {"count": 1}
+
+    def test_delete_read_only_affects_current_user(self, client, auth_headers, other_user, make_account, make_category):
+        notificacion = _crear_notificacion_via_umbral(client, auth_headers, make_account, make_category)
+        client.patch(f"/api/v1/notifications/{notificacion['id']}/read", headers=auth_headers)
+
+        response = client.delete("/api/v1/notifications/read", headers=other_user["headers"])
+        assert response.status_code == 200
+
+        # La leída del dueño real sigue intacta
+        bandeja = client.get("/api/v1/notifications/", headers=auth_headers).json()
+        assert bandeja["total"] == 1
