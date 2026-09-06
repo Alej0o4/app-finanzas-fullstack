@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Plus,
   ArrowRightLeft,
   ArrowDownRight,
   ArrowUpRight,
@@ -16,11 +15,10 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
-import { useQueryParamState } from '@/hooks/useQueryParamState';
+import { useQueryParamState, useQueryParamsBatch } from '@/hooks/useQueryParamState';
 import { queryKeys } from '@/lib/queryKeys';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirmStore } from '@/store/useConfirmStore';
-import TransactionModal from '@/components/modals/TransactionModal';
 import CategoryIcon from '@/components/ui/CategoryIcon';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
@@ -91,20 +89,20 @@ const validateDateParam = (raw: string) => (/^\d{4}-\d{2}-\d{2}$/.test(raw) ? ra
 function TransactionsPageContent() {
   const { config } = useAppConfig();
   const queryClient = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
   // Fase 12 §12.1: filtros sincronizados con la URL (start/end/category/account/preset).
   // El estado por defecto nunca aparece en el query string; un link copiado con filtros
   // activos reproduce la vista exacta en cualquier navegador/sesión. Fase 13 §13.6: cada
   // valor pasa por su validator a lectura (whitelist / formato), los seeds quedan normalizados.
-  const [startDate, setStartDate] = useQueryParamState('start', '', validateDateParam);
-  const [endDate, setEndDate] = useQueryParamState('end', '', validateDateParam);
+  const [startDate] = useQueryParamState('start', '', validateDateParam);
+  const [endDate] = useQueryParamState('end', '', validateDateParam);
   const [categoryFilter, setCategoryFilter] = useQueryParamState(
     'category',
     'all',
     validateIdOrAll
   );
   const [accountFilter, setAccountFilter] = useQueryParamState('account', 'all', validateIdOrAll);
-  const [datePreset, setDatePreset] = useQueryParamState('preset', 'all', validatePreset);
+  const [datePreset] = useQueryParamState('preset', 'all', validatePreset);
+  const setFilterParams = useQueryParamsBatch();
 
   // Un link compartido puede traer solo `preset` explícito (ej. ?preset=month&category=3):
   // se derivan las fechas del preset una sola vez al montar, para que la vista reproducida
@@ -116,8 +114,7 @@ function TransactionsPageContent() {
       (datePreset === '7d' || datePreset === 'month' || datePreset === 'year')
     ) {
       const nextDates = getPresetDates(datePreset);
-      setStartDate(nextDates.startDate);
-      setEndDate(nextDates.endDate);
+      setFilterParams({ start: nextDates.startDate || null, end: nextDates.endDate || null });
     }
     // Seed de montaje: refleja intencionalmente el preset de la URL inicial, no los cambios
     // posteriores de filtros (que ya pasan por applyPreset/inputs y escriben start/end).
@@ -204,18 +201,16 @@ function TransactionsPageContent() {
   const applyPreset = (preset: Exclude<DatePreset, 'custom'>) => {
     const nextDates = getPresetDates(preset);
     resetPagination();
-    setStartDate(nextDates.startDate);
-    setEndDate(nextDates.endDate);
-    setDatePreset(preset);
+    setFilterParams({
+      start: nextDates.startDate || null,
+      end: nextDates.endDate || null,
+      preset: preset === 'all' ? null : preset,
+    });
   };
 
   const clearFilters = () => {
     resetPagination();
-    setStartDate('');
-    setEndDate('');
-    setCategoryFilter('all');
-    setAccountFilter('all');
-    setDatePreset('all');
+    setFilterParams({ start: null, end: null, category: null, account: null, preset: null });
   };
 
   const deleteMutation = useMutation({
@@ -328,11 +323,6 @@ function TransactionsPageContent() {
             El registro histórico de tus movimientos.
           </p>
         </div>
-        <Button variant="primary" onClick={() => setIsModalOpen(true)} className="shrink-0">
-          <Plus size={18} />
-          <span className="hidden sm:inline">Nuevo Movimiento</span>
-          <span className="sm:hidden">Nuevo</span>
-        </Button>
       </div>
 
       <div className="bg-surface border-border/70 shadow-background/20 min-w-0 space-y-4 overflow-x-hidden rounded-2xl border p-4 shadow-sm sm:p-5">
@@ -378,8 +368,7 @@ function TransactionsPageContent() {
               value={startDate}
               onChange={(event) => {
                 resetPagination();
-                setStartDate(event.target.value);
-                setDatePreset('custom');
+                setFilterParams({ start: event.target.value || null, preset: 'custom' });
               }}
               className="bg-background"
             />
@@ -390,8 +379,7 @@ function TransactionsPageContent() {
               value={endDate}
               onChange={(event) => {
                 resetPagination();
-                setEndDate(event.target.value);
-                setDatePreset('custom');
+                setFilterParams({ end: event.target.value || null, preset: 'custom' });
               }}
               className="bg-background"
             />
@@ -536,14 +524,6 @@ function TransactionsPageContent() {
           </>
         )}
       </div>
-
-      <TransactionModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() })}
-        title="Registrar movimiento"
-        defaultType="expense"
-      />
 
       <ModalShell
         isOpen={isEditModalOpen && !!editingTransaction}
