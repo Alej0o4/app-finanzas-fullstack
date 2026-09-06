@@ -613,6 +613,73 @@ no aplica porque no hay contrato de API compartido que haya cambiado).
 
 ---
 
+## 15.7 Correcciones post-lanzamiento (2026-09-06, mismo día)
+
+Encontradas por el usuario recorriendo el onboarding real en el navegador — ninguna apareció en
+la verificación original (checklist de §Testing arriba, hecha contra la API sin UI). Registro para
+que quede a la par de §15.6 como parte del historial técnico de la fase.
+
+**15.7.1 — Fechas naive interpretadas como UTC (bug preexistente de Fase 11/12, no de esta fase).**
+`formatISOForBackend` en `(dashboard)/page.tsx` y `analytics/page.tsx` armaba `start_date`/
+`end_date` con los getters locales del navegador (`getHours()` etc.) sin sufijo de zona horaria.
+Con el servidor en `America/Bogota` (UTC-5) y la sesión de Postgres en UTC, ese string sin offset
+se interpretaba como si ya fuera UTC — "ahora" llegaba recortado 5 horas antes del real, excluyendo
+sistemáticamente las últimas ~5 horas de transacciones de `dashboard/category-distribution` y de
+todos los rangos de Analítica. Verificado directo en la base (`date <= '...sin offset...'` daba
+`false` para una transacción de hace segundos). Fase 15 lo hizo evidente porque el primer gasto del
+onboarding se registra "ahora mismo", pero afecta a cualquier usuario, en cualquier momento, desde
+que existe el helper. Reemplazado por `date.toISOString()` en ambos archivos — mismo cálculo de
+fecha local, serialización correcta.
+
+**15.7.2 — El ingreso declarado no aportaba plata real a la cuenta.** `monthly_income` solo
+alimentaba `monthly_flow_balance` (Fase 11 §11.3); la cuenta por defecto nunca recibía ese monto.
+Un usuario que declaraba $2.600.000 de ingreso y registraba un gasto de $80.000 veía "Ingresos del
+Mes" en $0 y el saldo de su cuenta en -$80.000 — matemáticamente correcto dado el modelo de datos,
+pero rompía la primera impresión del producto. `OnboardingIncomeStep` ahora crea, además de fijar
+`monthly_income`, una `Transaction` real de tipo `income` (categoría de sistema "Salario",
+descripción "Ingreso mensual declarado") en la cuenta por defecto — mismo `POST /transactions/` que
+ya usa la captura guiada, cero cambios de backend. Best-effort (`try/catch` sin bloquear
+`onDone()`): si falla, `monthly_income` ya quedó guardado y el onboarding sigue.
+
+Alcance deliberadamente acotado: la card inline de "fijar ingreso mensual" del dashboard (Decisión
+11.3.2, `useSetMonthlyIncome`) **no** siembra transacción — solo `OnboardingIncomeStep` lo hace. Si
+la card del dashboard también sembrara, un usuario existente actualizando su ingreso declarado (le
+subieron el sueldo) se encontraría con un ingreso fantasma cada vez que edita ese campo.
+
+**15.7.3 — Revisión de la Decisión 15.0.1, forzada por 15.7.2.** La transacción semilla de 15.7.2
+pasa a ser la "primera" transacción del usuario, así que la captura guiada del primer gasto ya es
+la *segunda* — el trigger original del aha moment (`recentTransactionsData.total === 1`, Decisión
+15.0.1) dejaba de dispararse en cuanto el usuario declaraba un ingreso mayor a cero (el camino más
+común). Reemplazado por el mismo mecanismo que ya usa `/capture` (`?onboarding=1`, Decisión 15.0.2):
+`TransactionCaptureForm.onSuccess` en `capture/page.tsx` ahora redirige a `/?onboarding=1` en vez de
+`/` cuando `isOnboarding` es cierto, y `(dashboard)/page.tsx` lee ese param con `useSearchParams()`
+(requirió envolver la página en `<Suspense>`, mismo patrón que `capture/page.tsx` y
+`analytics/page.tsx`). Más robusto que el conteo: no depende de cuántas transacciones existan, solo
+de si el usuario acaba de terminar la captura guiada.
+
+**15.7.4 — Cuenta por defecto renombrada a "Cuenta principal" (débito).** "Efectivo"/`cash`
+(Fase 8 §5) no representa cómo opera la mayoría de usuarios nuevos. Cambio de dos líneas en
+`crear_usuario` (`backend/app/api/users.py`) — `type="debit"` ya era un valor soportado en el resto
+de la app (`accounts/page.tsx` ya lo ofrecía en el selector). Actualizados `test_auth.py` (dos
+asserts) y el comentario de `test_soft_delete.py`; la migración histórica de Fase 8 que hizo el
+backfill de "Efectivo" para usuarios ya existentes en ese momento (`f8c1e5a7d902`) no se toca — es
+un registro de lo que pasó, no la fuente de verdad del alta actual.
+
+**15.7.5 — Desborde de íconos en el footer del sidebar.** Con nombre o correo largos, la campana,
+el toggle de tema y el botón de logout se salían del borde derecho del sidebar (encontrado por el
+usuario en captura de pantalla real, sin relación con los bugs de fecha). Causa: al bloque
+avatar+nombre de `Sidebar.tsx` le faltaba `min-w-0` — sin eso, un elemento flex no puede encogerse
+más allá del ancho de su contenido aunque el texto tenga `truncate`, así que la fila entera se
+desbordaba en vez de truncar el nombre. Un `min-w-0` en ese contenedor (más un `gap-2` en la fila
+para separar el texto truncado del cluster de íconos) resuelve el desborde.
+
+Verificado de punta a punta con Playwright contra el stack real en Docker (no solo contra pytest):
+registro → paso de ingreso → gasto guiado → dashboard, comparando las respuestas JSON de red antes
+y después de cada fix, y una comprobación de layout (`getBoundingClientRect()`) del sidebar. pytest
+backend 122 passed sin regresiones, `pnpm lint`/`format:check` limpios.
+
+---
+
 ## Cierre
 
 Este documento no implementa ningún cambio en el repositorio — es el desglose ejecutable de la

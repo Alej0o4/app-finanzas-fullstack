@@ -452,17 +452,50 @@ Depende de Fases 8, 10 y 11.
 > (`model_dump(mode="json")`), lo que dejaba la card "Balance del mes" en fallback cuando un
 > usuario fija su ingreso — corregido normalizando con `Number(...)` en `page.tsx:101`.
 
+> **Correcciones post-lanzamiento (2026-09-06, mismo día, tras probar el onboarding real en
+> vivo)** — cinco hallazgos que no aparecían en pruebas contra la API pero sí al recorrer el
+> flujo completo en el navegador:
+> 1. **Fechas naive interpretadas como UTC** en `(dashboard)/page.tsx` y `analytics/page.tsx`:
+>    `formatISOForBackend` armaba `start_date`/`end_date` con la hora local del navegador sin
+>    sufijo de zona horaria; con el servidor en `America/Bogota` (UTC-5) y Postgres en UTC, eso
+>    excluía sistemáticamente las últimas ~5 horas de transacciones de "Gastos por Categoría" y
+>    de toda Analítica — bug preexistente desde Fase 11/12, no introducido por Fase 15, pero
+>    visible siempre en el onboarding porque el primer gasto se registra "ahora mismo". Reemplazado
+>    por `date.toISOString()`.
+> 2. **El ingreso declarado no aportaba plata real**: solo alimentaba `monthly_flow_balance`
+>    (Fase 11 §11.3), así que "Ingresos del Mes" quedaba en $0 y la cuenta arrancaba en negativo
+>    apenas se registraba el primer gasto. `OnboardingIncomeStep` ahora también siembra una
+>    `Transaction` de tipo income (categoría de sistema "Salario", descripción "Ingreso mensual
+>    declarado") — solo desde el onboarding, nunca desde la card inline del dashboard (Decisión
+>    11.3.2 intacta).
+> 3. Efecto colateral de (2): la transacción semilla pasa a ser la "primera" del usuario, así que
+>    el trigger original del aha moment (`total === 1`) dejaba de dispararse. Reemplazado por el
+>    query param `?onboarding=1` que ya usa `/capture` (Decisión 15.0.2) — `dashboard/page.tsx`
+>    ahora también lee `useSearchParams()` (requirió envolverla en `<Suspense>`).
+> 4. **Cuenta por defecto renombrada** de "Efectivo"/`cash` a "Cuenta principal"/`debit` — la
+>    mayoría de usuarios nuevos no maneja plata en efectivo puro. Cambio de dos líneas en
+>    `crear_usuario` (`type="debit"` ya era un valor soportado en el resto de la app).
+> 5. **Desborde de íconos en el footer del sidebar** con nombre/correo largos (campana/tema/logout
+>    empujados fuera del borde): al bloque avatar+nombre le faltaba `min-w-0`, así que no podía
+>    encogerse para dejarle espacio al cluster de íconos de ancho fijo. Encontrado por el usuario
+>    en captura de pantalla real, no relacionado con el bug de fechas.
+>
+> Verificado end-to-end con Playwright contra el stack real (Docker, no solo pytest): registro →
+> paso de ingreso → gasto guiado → dashboard, con capturas de red antes/después de cada fix.
+> pytest backend 122 passed, `pnpm lint`/`format:check` limpios.
+
 - [x] **Minuto 0–1: registro sin fricción** — 1d *(2026-09-06, ver `docs/specs/fase_15_spec.md` §15.1/15.3 — auto-login post-registro con degradación explícita, Decisión 15.0.3)*
   - Solo email (decisión 2026-08-22). Sin formularios largos.
   - Una sola pregunta: *"¿Cuál es tu ingreso mensual aproximado?"* → `User.monthly_income`
     (paso `OnboardingIncomeStep` dentro de `/capture?onboarding=1`, condicionado a
-    `monthly_income == null`, Decisión 15.3.2).
+    `monthly_income == null`, Decisión 15.3.2). Desde la corrección post-lanzamiento también
+    siembra una transacción de ingreso real (ver arriba).
 
 - [x] **Minuto 1–2: primer gasto guiado** — 1d *(2026-09-06, ver `docs/specs/fase_15_spec.md` §15.4 — wizard de 2 pasos activado por query param efímero `?onboarding=1`, Decisión 15.0.2)*
   - Redirección directa a la captura con instrucción explícita.
-  - Requiere la cuenta por defecto de Fase 8.
+  - Requiere la cuenta por defecto de Fase 8 (renombrada a "Cuenta principal"/`debit` el mismo día).
 
-- [x] **Minuto 2–3: el "aha moment"** — 1d *(2026-09-06, ver `docs/specs/fase_15_spec.md` §15.5 — banner derivado de `total === 1` sin estado persistido, 2 variantes de mensaje, Decisión 15.0.1/15.5.1)*
+- [x] **Minuto 2–3: el "aha moment"** — 1d *(2026-09-06, ver `docs/specs/fase_15_spec.md` §15.5 — banner disparado por `?onboarding=1` desde la corrección post-lanzamiento, antes `total === 1`; 2 variantes de mensaje, Decisión 15.0.1/15.5.1)*
   - Redirección al dashboard mostrando el impacto: *"Has gastado X de tu ingreso mensual."*
 
 ---
