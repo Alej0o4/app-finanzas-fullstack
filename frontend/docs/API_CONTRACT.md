@@ -42,6 +42,14 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
 - `PUT /api/v1/accounts/{account_id}`
 - `PATCH /api/v1/accounts/{account_id}/highlighted`
 - `DELETE /api/v1/accounts/{account_id}`
+- `POST /api/v1/accounts/{account_id}/reconcile` (Fase 16 §16.4) — recalcula `balance` desde
+  `opening_balance` + historial de transacciones no eliminadas y aplica la corrección de
+  inmediato (sin preview). Devuelve `AccountReconcileResponse` con `account_id`,
+  `previous_balance`, `recalculated_balance`, `discrepancy` (los montos llegan como `string`,
+  consistente con la serialización `Decimal` → string) y `opening_balance`. El frontend solo
+  muestra el resultado ("El saldo está correcto" si `discrepancy` es 0 o
+  "Se corrigió una diferencia de $X") e invalida las queries que leen el saldo
+  (`account`, `accounts`, `accounts-summary`, `dashboardSummary`).
 
 ### Categorías
 
@@ -73,6 +81,21 @@ El endpoint devuelve una respuesta paginada:
 - `total`: `int` — total de resultados sin paginación
 - `page`: `int` — página actual
 - `page_size`: `int` — items por página
+
+Body de creación (`POST`) desde Fase 16 §16.2:
+
+- `category_id` e `account_id` ya no son obligatorios.
+- `category` (nombre, `string`, opcional) es una alternativa a `category_id` — **XOR**: se
+  debe enviar exactamente uno de `category_id` o `category`. La resolución por nombre es
+  case/acento-insensible, filtra por `type` y da precedencia a las categorías propias sobre
+  las de sistema. `404` si el nombre no existe; `409` si el usuario tiene más de una
+  categoría propia con ese nombre (usar `category_id` en ese caso).
+- `account_id` opcional: si se omite y el usuario tiene exactamente una cuenta, se usa esa;
+  con más de una cuenta, el backend responde `400` pidiendo `account_id` explícito.
+
+> Nota: `TransactionCreate` tipado por codegen (§16.3) refleja esta forma — ver
+> `types/generated/api.ts`. El frontend web no usa estos campos opcionales todavía; el
+> `TransactionCaptureForm` sigue enviando `category_id` + `account_id`.
 
 Header opcional en `POST`:
 
@@ -146,6 +169,35 @@ auth: string } }` — el shape exacto de `subscription.toJSON()`. Upsert por `en
   no existe o no es del usuario. El frontend no lo consume todavía: el backend limpia las
   suscripciones caducadas solo al fallar el envío (404/410 Gone), sin acción del cliente.
 
+### API keys (Fase 16 §16.1)
+
+Claves personales revocables para automatizaciones que no pueden hacer el flujo OAuth2
+password + refresh (Shortcuts de iOS/Android, scripts). Se autentican con el mismo header
+`Authorization: Bearer <token>` usando el prefijo `oikos_pat_`. El frontend web no las usa
+para autenticarse (sigue con JWT) — solo las gestiona desde `/settings`.
+
+- `GET /api/v1/api-keys/` — lista las keys del usuario (incluidas las revocadas, con
+  `revoked_at` seteado, para auditoría). Devuelve `ApiKeyResponse[]`: `id`, `name`,
+  `key_prefix` (primeros 12 caracteres — no es secreto, solo distingue keys en la lista),
+  `last_used_at` (`string | null`), `revoked_at` (`string | null`), `created_at`.
+  **Nunca expone la key completa.**
+- `POST /api/v1/api-keys/` — body `{ name }` (`string`, 1–100 chars). Devuelve
+  `ApiKeyCreateResponse` con la key **en texto plano** (`key`) — aparece una sola vez en la
+  respuesta; el frontend la muestra con un botón "Copiar" y advierte que no se volverá a
+  mostrar (los `last_used_at`/`revoked_at` no viajan en esta respuesta).
+- `DELETE /api/v1/api-keys/{api_key_id}` — revoca (marca `revoked_at`, no borra la fila).
+  Efectiva en el siguiente request con esa key (401). `404` si no existe o ya fue revocada.
+  El frontend pide confirmación (`ConfirmDialog` con etiqueta "Revocar") y no permite revocar
+  dos veces (filas revocadas muestran tag "Revocada").
+
+Reglas de consumo:
+
+- La key en texto plano SOLO se recibe en la respuesta del POST — no persistirla; el usuario
+  es quien decide dónde guardarla.
+- Los timestamps llegan en ISO 8601; el frontend muestra `last_used_at` como tiempo relativo
+  ("Nunca" si es `null`).
+- Mutaciones (crear/revocar) invalidan la query `['apiKeys']`.
+
 ## Contratos de datos importantes
 
 ### Usuario autenticado
@@ -187,6 +239,9 @@ El frontend asume:
 - `balance`
 - `currency`
 - `user_id`
+- `opening_balance` (Fase 16 §16.4) — saldo de apertura, inmutable tras la creación de la
+  cuenta. En los tipos generados es `string` (serialización `Decimal`); el tipo manual
+  `Account` en `types/api.ts` lo tipa como `number`.
 
 Reglas:
 

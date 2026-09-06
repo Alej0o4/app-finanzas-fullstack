@@ -79,6 +79,17 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+# 5.1 FUNCIONES PARA API KEYS (Fase 16 §16.1)
+# Prefijo reconocible para distinguir "esto es una API key" de "esto es un JWT" con una
+# comparación de string barata, ANTES de intentar jwt.decode(...) — el branching no se apoya
+# en capturar JWTError como mecanismo de control de flujo (Decisión 16.1.2).
+API_KEY_PREFIX = "oikos_pat_"
+
+
+def generate_api_key() -> str:
+    return API_KEY_PREFIX + secrets.token_urlsafe(32)
+
+
 # 6. EL GUARDIA DE SEGURIDAD (Dependencia para las rutas protegidas)
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
@@ -86,6 +97,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         detail="No se pudieron validar las credenciales",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    if token.startswith(API_KEY_PREFIX):
+        return _get_user_from_api_key(token, db, credentials_exception)
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -99,4 +113,24 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if user is None:
         raise credentials_exception
 
+    return user
+
+
+def _get_user_from_api_key(token: str, db: Session, credentials_exception: HTTPException) -> models.User:
+    api_key = (
+        db.query(models.ApiKey)
+        .filter(models.ApiKey.key_hash == hash_token(token), models.ApiKey.revoked_at.is_(None))
+        .first()
+    )
+    if api_key is None:
+        raise credentials_exception
+    # Decisión 16.1.4: última fecha de uso, sin throttling de escritura — el volumen de
+    # llamadas esperado (automatizaciones personales, no tráfico masivo) no lo justifica.
+    # Revolcar es efectivo en el siguiente request: cada llamada consulta `revoked_at
+    # IS NULL` — ventana de gracia cero, a diferencia del JWT (sin blacklist).
+    api_key.last_used_at = datetime.now(UTC)
+    db.commit()
+    user = db.query(models.User).filter(models.User.id == api_key.user_id).first()
+    if user is None:
+        raise credentials_exception
     return user

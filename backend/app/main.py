@@ -15,6 +15,7 @@ from starlette.responses import Response
 
 from app.api import (
     accounts,
+    api_keys,
     auth,
     budgets,
     categories,
@@ -183,6 +184,7 @@ app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboar
 app.include_router(preferences.router, prefix="/api/v1/users", tags=["Preferencias"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notificaciones"])
 app.include_router(push.router, prefix="/api/v1/push", tags=["Push"])
+app.include_router(api_keys.router, prefix="/api/v1/api-keys", tags=["API keys"])
 
 
 @app.on_event("startup")

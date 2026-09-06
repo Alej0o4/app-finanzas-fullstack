@@ -31,6 +31,9 @@ import type {
   UpdateTransactionPayload,
   PaginatedResponse,
 } from '@/types/api';
+import type { components } from '@/types/generated/api';
+
+type AccountReconcileResponse = components['schemas']['AccountReconcileResponse'];
 
 export default function AccountDetailPage() {
   const { config } = useAppConfig();
@@ -122,6 +125,31 @@ export default function AccountDetailPage() {
     },
   });
 
+  // Fase 16 §16.4: recalcula `balance` desde opening_balance + historial de transacciones
+  // (POST accounts/{id}/reconcile). El backend aplica la corrección de inmediato y devuelve
+  // la discrepancia encontrada — el frontend solo la muestra (Decisión 16.4.2, sin preview).
+  const reconcileMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post(`accounts/${id}/reconcile`);
+      return response.data as AccountReconcileResponse;
+    },
+    onSuccess: (data) => {
+      const discrepancy = Number(data.discrepancy);
+      toast.success(
+        discrepancy === 0
+          ? 'El saldo está correcto'
+          : `Se corrigió una diferencia de ${formatCurrency(discrepancy, account?.currency || 'COP')}`
+      );
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts.byId(id as string) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
+    },
+    onError: (error: unknown) => {
+      toast.error(getApiError(error));
+    },
+  });
+
   const openEditModal = (tx: Transaction) => {
     setSelectedTransaction(tx);
     setDescription(tx.description || '');
@@ -187,6 +215,20 @@ export default function AccountDetailPage() {
         <p className="text-text mt-2 font-sans text-4xl font-bold tabular-nums">
           {formatCurrency(account.balance, account.currency)}
         </p>
+        {/* Saldo de apertura (Fase 16 §16.4): ancla para el recálculo, inmutable tras la
+            creación de la cuenta — el backend lo entrega y acá solo se muestra. */}
+        <p className="text-text-muted mt-1 text-xs">
+          Saldo inicial: {formatCurrency(account.opening_balance, account.currency)}
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => reconcileMutation.mutate()}
+          loading={reconcileMutation.isPending}
+          className="mt-4"
+        >
+          Recalcular saldo
+        </Button>
       </div>
 
       <div className="space-y-4">

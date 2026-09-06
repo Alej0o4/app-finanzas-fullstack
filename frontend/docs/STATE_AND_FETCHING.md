@@ -45,6 +45,8 @@ Las claves deben mantenerse consistentes entre páginas y componentes.
 - `accounts-summary` (Fase 11 §11.5)
 - `notifications` (Fase 13 §13.5)
 - `notifications-unread-count` (Fase 13 §13.5)
+- `apiKeys` (Fase 16 §16.1) — lista de API keys propias (`GET /api-keys/`); se invalida tras
+  `POST /api-keys/` (crear) y `DELETE /api-keys/{id}` (revocar).
 
 ### Vista específica
 
@@ -174,6 +176,43 @@ Consecuencias para el estado:
 
 - La sesión expirada se resuelve limpiando el token y dejando que la app vuelva al login.
 - No se debe construir otra capa paralela de auth en páginas individuales.
+
+## Tipos generados desde OpenAPI (Fase 16 §16.3)
+
+Desde Fase 16 conviven dos fuentes de tipos (Decisión 16.3.2/16.3.3 del spec de Fase 16):
+
+- `types/generated/api.ts` — **tipos exactos del contrato**, generados con
+  `pnpm gen:types` desde el `openapi.json` del backend local
+  (`http://localhost:8000/openapi.json`, NO bajo `/api/v1/`). Es la fuente de verdad para
+  **código nuevo**: campos y endpoints que no existían antes de Fase 16
+  (API keys, reconciliación de saldos) se tipan con
+  `components['schemas']['...']`, no a mano.
+- `types/api.ts` — tipos manuales **existentes** (interfaces ergonómicas para el código que
+  ya las consume). Se mantienen tal cual; no se migran call sites existentes en este ítem.
+  Si se toca por otra razón, se puede migrar oportunistamente.
+
+Reglas:
+
+- **Código nuevo usa tipos generados** (`import type { components } from '@/types/generated/api'`).
+- **Código existente sigue usando tipos manuales** — no mezclar en el mismo call site salvo
+  que el campo nuevo solo exista en el schema generado.
+- **Regenerar y commitear** `types/generated/api.ts` como parte del mismo PR que cambie un
+  schema del backend, mismo criterio manual que `API_REFERENCE.md`/`API_CONTRACT.md`. El
+  archivo generado se commitea: un clon fresco sin backend corriendo necesita compilar.
+- **Drift conocido**: los campos monetarios (`amount`, `balance`, `spent`, `discrepancy`,
+  etc.) son `string` en los tipos generados — así los serializa el backend (`Decimal` →
+  string). Los tipos manuales los tipan como `number`; al leer datos nuevos tipados como
+  `string`, convertir con `Number(...)` donde el código existente espera número (p. ej.
+  `formatCurrency`).
+
+Comando de regeneración (desde `frontend/`):
+
+```sh
+pnpm gen:types
+```
+
+Requiere un backend corriendo en local; sin backend, el comando falla y el archivo
+commiteado sigue siendo válido para compilar.
 
 ## Hooks compartidos
 

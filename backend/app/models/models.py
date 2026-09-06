@@ -45,7 +45,12 @@ class Account(Base, SoftDeleteMixin):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     type = Column(String)
-    balance = Column(Numeric(14, 2), default=0)  # 🔁 antes: Float
+    balance = Column(
+        Numeric(14, 2), default=0
+    )  # 🔁 antes: Float  # saldo actual — sin cambios de nombre ni de semántica
+    # Fase 16 §16.4: saldo de apertura, inmutable tras la creación de la cuenta. Ancla para
+    # recalcular `balance` desde el historial de transacciones (ver reconciliar_cuenta).
+    opening_balance = Column(Numeric(14, 2), nullable=False, default=0, server_default=text("0"))
     currency = Column(String(3), default="COP", nullable=False)
     highlighted = Column(Boolean, default=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now())
@@ -277,3 +282,37 @@ class PushSubscription(Base):
     # (cierre de sesión y re-login en el mismo dispositivo), se actualiza la fila en vez
     # de duplicar (upsert por endpoint, Decisión 13.2.3 del spec).
     __table_args__ = (Index("uq_push_subscriptions_endpoint", "endpoint", unique=True),)
+
+
+class ApiKey(Base):
+    """API key personal revocable (Fase 16 §16.1). Habilita clientes que no pueden hacer el
+    flujo OAuth2 password + refresh (Shortcuts de iOS/Android; en el futuro, la nota de voz
+    de v1.2, ver backlog del ROADMAP).
+
+    Sin scopes en v1 (Decisión 16.1.1): una API key tiene exactamente los mismos permisos
+    que el JWT del mismo usuario — la autorización real ya vive en cada router, filtrada por
+    `user_id` (ver `transactions.py`, `accounts.py`, etc.), no en el tipo de token. Agregar
+    scopes ahora sería anticipar una necesidad no pedida por el ROADMAP.
+
+    Sin SoftDeleteMixin, mismo criterio que `RefreshToken`/`PasswordResetToken`/
+    `EmailVerificationToken`/`IdempotencyKey` (Decisión 16.1.1): es credencial/bitácora
+    técnica, no un dato de dominio que el usuario liste como historial — "revocada" ya es un
+    estado representable con `revoked_at`.
+    """
+
+    __tablename__ = "api_keys"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)  # etiqueta elegida por el usuario, ej. "Shortcut iPhone"
+    key_hash = Column(String, nullable=False, index=True)  # sha256, mismo helper que RefreshToken
+    # Primeros 12 caracteres de la key en texto plano — NO es secreto por sí solo (no tiene
+    # entropía suficiente), solo permite distinguir keys en la lista sin volver a mostrar la
+    # key completa (mismo patrón que un PAT de GitHub: "ghp_A1b2***"). Decisión 16.1.2.
+    key_prefix = Column(String(12), nullable=False)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    owner = relationship("User", backref="api_keys")
+
+    __table_args__ = (Index("ix_api_keys_user_id_revoked_at", "user_id", "revoked_at"),)

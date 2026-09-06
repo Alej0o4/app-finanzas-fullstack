@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -16,7 +17,13 @@ router = APIRouter()
 def crear_cuenta(
     cuenta: schemas.AccountCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
-    nueva_cuenta = models.Account(**cuenta.model_dump(), user_id=current_user.id)
+    # Fase 16 §16.4 (Decisión 16.4.1): `AccountCreate.balance` es el saldo de apertura —
+    # alimenta AMBAS columnas al crear; `opening_balance` queda inmutable tras la creación.
+    nueva_cuenta = models.Account(
+        **cuenta.model_dump(),
+        user_id=current_user.id,
+        opening_balance=cuenta.balance,
+    )
     db.add(nueva_cuenta)
     db.commit()
     db.refresh(nueva_cuenta)
@@ -52,6 +59,56 @@ def obtener_resumen_saldos(db: Session = Depends(get_db), current_user: models.U
         .all()
     )
     return [{"currency": r.currency, "total": r.total} for r in rows]
+
+
+# ⚠️ Declarado ANTES de GET /{account_id} (mismo criterio de orden que /summary arriba):
+# FastAPI resuelve rutas en orden de declaración y el patrón /{account_id}/reconcile es
+# más específico que /{account_id}.
+@router.post("/{account_id}/reconcile", response_model=schemas.AccountReconcileResponse)
+def reconciliar_cuenta(
+    account_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Reconcilia el saldo de una cuenta (Fase 16 §16.4, Decisión 16.4.2): recalcula
+    `balance` desde `opening_balance` + historial de transacciones no eliminadas y aplica
+    la corrección de inmediato (sin preview — la operación es explícita y no destructiva).
+    """
+    cuenta = (
+        db.query(models.Account)
+        .filter(models.Account.id == account_id, models.Account.user_id == current_user.id)
+        .first()
+    )
+    if not cuenta:
+        raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+
+    neto = (
+        db.query(
+            func.sum(
+                case(
+                    (models.Transaction.type == "income", models.Transaction.amount),
+                    else_=-models.Transaction.amount,
+                )
+            )
+        )
+        .filter(models.Transaction.account_id == account_id, models.Transaction.deleted_at.is_(None))
+        .scalar()
+    ) or Decimal("0.00")
+
+    saldo_recalculado = cuenta.opening_balance + neto
+    saldo_anterior = cuenta.balance
+    discrepancia = saldo_recalculado - saldo_anterior
+
+    cuenta.balance = saldo_recalculado
+    db.commit()
+
+    return {
+        "account_id": cuenta.id,
+        "previous_balance": saldo_anterior,
+        "recalculated_balance": saldo_recalculado,
+        "discrepancy": discrepancia,
+        "opening_balance": cuenta.opening_balance,
+    }
 
 
 @router.get("/{account_id}", response_model=schemas.AccountResponse)

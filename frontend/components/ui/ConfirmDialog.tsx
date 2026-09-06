@@ -5,7 +5,7 @@ import { useConfirmStore } from '@/store/useConfirmStore';
 import Button from '@/components/ui/Button';
 
 export default function ConfirmDialog() {
-  const { isOpen, message, onConfirm, cancel } = useConfirmStore();
+  const { isOpen, message, confirmLabel, onConfirm, cancel } = useConfirmStore();
 
   useEscapeToClose(isOpen, cancel);
 
@@ -26,7 +26,7 @@ export default function ConfirmDialog() {
               cancel();
             }}
           >
-            Eliminar
+            {confirmLabel || 'Eliminar'}
           </Button>
         </div>
       </div>

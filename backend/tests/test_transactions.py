@@ -8,6 +8,8 @@ from decimal import Decimal
 
 from fastapi.testclient import TestClient
 
+from app.models import models
+
 
 def _get_account(client: TestClient, headers: dict, account_id: int) -> dict:
     response = client.get(f"/api/v1/accounts/{account_id}", headers=headers)
@@ -531,3 +533,238 @@ class TestIdempotencyKeyHeader:
         saldo_b = _get_account(client, other_user["headers"], cuenta_b["id"])
         assert Decimal(str(saldo_a["balance"])) == Decimal("900.00")
         assert Decimal(str(saldo_b["balance"])) == Decimal("1950.00")
+
+
+class TestCapturaRapidaPorNombre:
+    """Fase 16 §16.2 (Decisiones 16.2.1/16.2.2/16.2.4): `category` alternativo por nombre
+    y `account_id` opcional en el MISMO endpoint de creación (y actualización)."""
+
+    def _cuenta_por_defecto(self, client: TestClient, headers: dict) -> dict:
+        """La cuenta única que el registro crea por defecto (Fase 8 §5)."""
+        cuentas = client.get("/api/v1/accounts/", headers=headers).json()
+        assert len(cuentas) == 1
+        return cuentas[0]
+
+    def test_category_name_resolves_case_and_accent_insensitive(
+        self, client, auth_headers, make_account, make_category
+    ):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Alimentación", type="expense")
+
+        response = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category="alimentacion",  # sin acento y en minúsculas
+        )
+        assert response.status_code == 200, response.text
+        # Se resolvió a la categoría "Alimentación" propia (id conocido).
+        assert response.json()["category_id"] == categoria["id"]
+        # La respuesta serializa bien pese a que `category` no es un atributo escalar
+        # del ORM (regresión de la relación Transaction.category vs el campo nuevo).
+        assert response.json()["category"] is None
+
+    def test_update_with_category_name_resolves_case_insensitive(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """La resolución por nombre aplica TAMBIÉN en actualizar_transaccion (mismo body
+        TransactionBase/TransactionCreate — XOR idéntico)."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria_vieja = make_category(auth_headers, name="Comida", type="expense")
+        categoria_nueva = make_category(auth_headers, name="Transporte", type="expense")
+
+        creada = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria_vieja["id"],
+        ).json()
+
+        update_payload = {
+            "amount": "100.00",
+            "currency": "COP",
+            "type": "expense",
+            "description": "reclasificada por nombre",
+            "account_id": cuenta["id"],
+            "category": "TRANSPORTE",
+        }
+        update_response = client.put(f"/api/v1/transactions/{creada['id']}", json=update_payload, headers=auth_headers)
+        assert update_response.status_code == 200, update_response.text
+        assert update_response.json()["category_id"] == categoria_nueva["id"]
+
+    def test_unknown_category_name_returns_404_with_valid_names_of_right_type(
+        self, client, auth_headers, make_account, make_category
+    ):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        # Sin fuzzy match (Decisión 16.2.2): el 404 lista los nombres válidos del mismo
+        # tipo. Las categorías de sistema no existen en tests (el lifespan no corre),
+        # así que "válidas" son las propias del tipo pedido.
+        make_category(auth_headers, name="Comida", type="expense")
+        make_category(auth_headers, name="Salario", type="income")
+
+        response = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category="Inexistente",
+        )
+        assert response.status_code == 404
+        assert "Categoría 'Inexistente' no encontrada" in response.json()["detail"]
+        assert "Válidas para expense" in response.json()["detail"]
+        # Solo categorías del tipo correcto se ofrecen como alternativas.
+        assert "Comida" in response.json()["detail"]
+        assert "Salario" not in response.json()["detail"]
+
+    def test_category_name_of_wrong_type_returns_404(self, client, auth_headers, make_account, make_category):
+        """El filtro por `type` elimina la ambigüedad cruzada gasto/ingreso: una categoría
+        de ingreso llamada igual que el nombre pedido (expense) NO matchea."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        make_category(auth_headers, name="Salario", type="income")
+
+        response = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category="Salario",
+        )
+        assert response.status_code == 404
+
+    def test_duplicate_own_categories_same_name_returns_409(self, client, auth_headers, make_account, make_category):
+        """Hallazgo 3 del spec: la API cruda permite crear dos categorías propias con el
+        mismo nombre+tipo (la UI no, pero el cliente crudo sí) — la resolución por nombre
+        no adivina: 409 (Decisión 16.2.2)."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        make_category(auth_headers, name="Comida", type="expense")
+        make_category(auth_headers, name="Comida", type="expense")  # duplicado vía API
+
+        response = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category="comida",
+        )
+        assert response.status_code == 409
+        assert "Usá category_id" in response.json()["detail"]
+
+    def test_own_category_precedes_system_category(self, client, auth_headers, db_session, make_account, make_category):
+        """Decisión 16.2.2: la categoría propia reemplaza/oculta la de sistema con el
+        mismo nombre (no es un error de ambigüedad entre ambas)."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        # Categoría de sistema sembrada directo en la sesión (no hay ruta API para ellas).
+        db_session.add(models.Category(name="Alimentación", type="expense", user_id=None))
+        db_session.commit()
+        propia = make_category(auth_headers, name="Alimentación", type="expense")
+
+        response = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category="ALIMENTACIÓN",
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["category_id"] == propia["id"]
+
+    def test_account_id_omitted_resolves_to_single_account(self, client, test_user, make_category):
+        """Decisión 16.2.4: sin account_id, se usa la única cuenta del usuario (la
+        "Cuenta principal" que crea el registro)."""
+        user = test_user
+        categoria = make_category(user["headers"], name="Comida", type="expense")
+        cuenta_por_defecto = self._cuenta_por_defecto(client, user["headers"])
+
+        response = _create_transaction(
+            client,
+            user["headers"],
+            amount="100.00",
+            type="expense",
+            category_id=categoria["id"],
+            # sin account_id
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["account_id"] == cuenta_por_defecto["id"]
+
+        saldo = _get_account(client, user["headers"], cuenta_por_defecto["id"])
+        assert Decimal(str(saldo["balance"])) == Decimal("-100.00")
+
+    def test_account_id_omitted_with_multiple_accounts_returns_400(
+        self, client, auth_headers, make_account, make_category
+    ):
+        make_account(auth_headers, balance="1000.00")  # la 2ª cuenta (la 1ª es la default)
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        response = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            category_id=categoria["id"],
+        )
+        assert response.status_code == 400
+        assert "Especificá account_id" in response.json()["detail"]
+
+    def test_update_with_account_id_omitted_resolves_to_single_account(self, client, auth_headers, make_category):
+        """Mismo fallback de cuenta única en actualizar_transaccion."""
+        # Sin make_account: el usuario solo tiene la cuenta por defecto del registro.
+        cuentas = client.get("/api/v1/accounts/", headers=auth_headers).json()
+        assert len(cuentas) == 1
+        cuenta = cuentas[0]
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        creada = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+        ).json()
+
+        update_payload = {
+            "amount": "150.00",
+            "currency": "COP",
+            "type": "expense",
+            "description": "solo monto, sin account_id",
+            "category_id": categoria["id"],
+        }
+        update_response = client.put(f"/api/v1/transactions/{creada['id']}", json=update_payload, headers=auth_headers)
+        assert update_response.status_code == 200, update_response.text
+        assert update_response.json()["account_id"] == cuenta["id"]
+
+    def test_xor_rejects_both_category_id_and_category_name(self, client, auth_headers, make_account, make_category):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        response = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+            category="Comida",
+        )
+        assert response.status_code == 422
+
+    def test_xor_rejects_neither_category_id_nor_category_name(self, client, auth_headers, make_account):
+        cuenta = make_account(auth_headers, balance="1000.00")
+
+        response = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+        )
+        assert response.status_code == 422
+        assert "Especificar exactamente uno" in response.text

@@ -8,12 +8,38 @@
 - El JWT identifica al usuario mediante `sub`.
 - El login usa `OAuth2PasswordRequestForm` y recibe el correo en el campo `username`.
 
+### API keys (Fase 16 §16.1)
+
+- Una API key identifica exactamente a un usuario y **no tiene scopes en v1**: tiene los
+  mismos permisos que el JWT de su dueño (la autorización real vive en cada router, filtrada
+  por `user_id`).
+- Es indistingible del JWT en el contrato: viaja en el mismo `Authorization: Bearer <key>`,
+  con prefijo `oikos_pat_` que la distingue internamente.
+- La key en texto plano se muestra **una sola vez**, en la respuesta de su creación; el
+  backend solo guarda `key_hash` (sha256) y `key_prefix` (primeros 12 caracteres, no secreto).
+- **Revocación inmediata**: `revoked_at` se valida en cada request — la siguiente petición con
+  una key revocada falla con `401` (sin ventana de gracia, a diferencia del JWT).
+- No hay expiración obligatoria en v1 (criterio de PAT); la revisión de seguridad de la
+  Decisión 16.1.8 del spec está pendiente de resolver (ver `docs/TODO.md`).
+- Rate limiting: las peticiones autenticadas con API key están sujetas al límite de
+  `POST /transactions` (60/min) keyed por la key, no por IP.
+
 ## Cuentas
 
 - Una cuenta pertenece a un único usuario.
 - `balance` puede definirse al crear la cuenta, pero solo como saldo inicial.
 - En edición, `balance` no debe ser modificable por el Frontend.
-- El saldo real se deriva de transacciones e impactos contables.
+- `opening_balance` (Fase 16 §16.4) captura el saldo de apertura en la creación y es
+  **inmutable** desde entonces. `balance` es el saldo actual, mutado por las operaciones de
+  transacciones; la verificación de que ambos cuadran (`balance == opening_balance + neto de
+  transacciones`) es el endpoint `POST /accounts/{id}/reconcile`.
+- El saldo real se deriva de transacciones e impactos contables — el mecanismo verificable
+  de esa afirmación es la reconciliación (§16.4).
+- **Límite honesto del backfill (§16.4.4):** la columna `opening_balance` se pobló en la
+  migración con `balance_actual − neto(transacciones)`, de modo que en el momento de migrar
+  toda cuenta cuadra con discrepancia `0.00`. Eso establece una línea de base limpia hacia
+  adelante, pero **no detecta desviaciones que ya hayan ocurrido antes de la migración** — no
+  existe un snapshot histórico del saldo para auditar el pasado.
 - `highlighted` marca una cuenta como destacada para el dashboard. Si no hay cuentas destacadas, el dashboard muestra todas.
 
 ## Categorías
@@ -28,6 +54,18 @@
 - Cada transacción debe pertenecer al usuario autenticado.
 - La cuenta asociada debe pertenecer al mismo usuario.
 - La categoría asociada debe ser propia del usuario o una categoría base.
+- Resolución de categoría por nombre (Fase 16 §16.2): `category` y `category_id` son
+  mutuamente excluyentes (exactamente uno de los dos). Al resolver por nombre:
+  - el match es case y acento-insensible y se filtra por `type` (una categoría de gasto y
+    otra de ingreso con el mismo nombre no se pisan);
+  - **precedencia propia > sistema**: la categoría personal del usuario con ese nombre
+    prevalece sobre la de sistema (asume que la personal reemplaza/oculta la de sistema);
+  - `409` si el usuario tiene **más de una** categoría propia con el mismo nombre+tipo (error
+    de datos real, posible por API cruda; no se adivina con dinero);
+  - `404` si no matchea ninguna, listando las categorías válidas del tipo.
+- `account_id` es opcional (Fase 16 §16.2): si se omite y el usuario tiene exactamente una
+  cuenta, se usa esa; si tiene más de una → `400` (no se adivina cuál); si no tiene ninguna
+  → `400`. No se resuelve `account` por nombre en v1.
 - `income` suma al saldo de la cuenta.
 - `expense` resta del saldo de la cuenta.
 - Al borrar una transacción se revierte su impacto sobre la cuenta.

@@ -1,15 +1,17 @@
 import hashlib
 import json
 import logging
+import unicodedata
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy import desc, func, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.budget_alerts import evaluate_budget_thresholds_safely
 from app.core.database import get_db
+from app.core.rate_limit import key_func_por_usuario_o_ip, limiter
 
 # 🔒 Importamos a nuestro Guardia de Seguridad
 from app.core.security import get_current_user
@@ -20,9 +22,85 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+# --- Helpers de resolución por nombre (Fase 16 §16.2) ---
+def _normalizar_nombre_categoria(nombre: str) -> str:
+    """Normaliza un nombre de categoría para comparar sin acentos ni mayúsculas
+    (Decisión 16.2.2) — "Alimentación" == "alimentacion" == "ALIMENTACIÓN"."""
+    sin_acentos = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode()
+    return sin_acentos.strip().lower()
+
+
+def _resolver_categoria_por_nombre(db: Session, user_id: int, nombre: str, tipo: str) -> models.Category:
+    """Resuelve una categoría por nombre (Fase 16 §16.2, Decisión 16.2.2).
+
+    Reglas: filtrado por `type` (elimina ambigüedad cruzada gasto/ingreso), precedencia de
+    categoría propia sobre categoría de sistema si ambas matchean, y `409` si hay más de un
+    match dentro del mismo alcance (propio o sistema). Sin match → `404` con la lista de
+    nombres válidos para ese tipo (sin fuzzy match, a propósito).
+    """
+    objetivo = _normalizar_nombre_categoria(nombre)
+    candidatas = (
+        db.query(models.Category)
+        .filter(
+            or_(models.Category.user_id.is_(None), models.Category.user_id == user_id),
+            models.Category.type == tipo,
+        )
+        .all()
+    )
+    matches = [c for c in candidatas if _normalizar_nombre_categoria(c.name) == objetivo]
+    propias = [c for c in matches if c.user_id == user_id]
+    sistema = [c for c in matches if c.user_id is None]
+
+    if propias:
+        if len(propias) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Tenés más de una categoría propia llamada '{nombre}'. Usá category_id.",
+            )
+        return propias[0]
+    if sistema:
+        if len(sistema) > 1:  # no debería pasar hoy (DEFAULT_CATEGORIES no tiene duplicados), defensivo
+            raise HTTPException(status_code=409, detail=f"Categoría '{nombre}' ambigua.")
+        return sistema[0]
+
+    nombres_validos = sorted({c.name for c in candidatas})
+    raise HTTPException(
+        status_code=404,
+        detail=f"Categoría '{nombre}' no encontrada. Válidas para {tipo}: {', '.join(nombres_validos)}.",
+    )
+
+
+def _resolver_cuenta(db: Session, user_id: int, account_id: int | None) -> models.Account:
+    """Resuelve la cuenta destino (Fase 16 §16.2, Decisión 16.2.4): si el cliente omite
+    `account_id`, se usa la única cuenta del usuario; con más de una se responde `400`
+    (no se adivina cuál — mismo criterio de "no adivinar con dinero" que la decisión de
+    categorías ambiguas). Con `account_id` explícito, valida que exista y pertenezca."""
+    if account_id is not None:
+        cuenta = (
+            db.query(models.Account).filter(models.Account.id == account_id, models.Account.user_id == user_id).first()
+        )
+        if not cuenta:
+            raise HTTPException(status_code=404, detail="La cuenta especificada no existe o no te pertenece.")
+        return cuenta
+
+    cuentas_usuario = db.query(models.Account).filter(models.Account.user_id == user_id).all()
+    if len(cuentas_usuario) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Especificá account_id: tenés más de una cuenta."
+                if cuentas_usuario
+                else "No tenés ninguna cuenta activa."
+            ),
+        )
+    return cuentas_usuario[0]
+
+
 # --- RUTA PROTEGIDA ---
 @router.post("/", response_model=schemas.TransactionResponse)
+@limiter.limit("60/minute", key_func=key_func_por_usuario_o_ip)
 def crear_transaccion(
+    request: Request,
     transaccion: schemas.TransactionCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -63,7 +141,20 @@ def crear_transaccion(
                 )
             return transaccion_previa
 
-    # 🔒 1. Verificar que la cuenta de destino exista y PERTENEZCA al usuario
+    # 🔒 1. Resolución de la cuenta (Fase 16 §16.2, Decisión 16.2.4 — ver
+    # _resolver_cuenta). Aplica ANTES de la verificación de pertenencia de abajo: una vez
+    # resuelto, el resto del endpoint no cambia una sola línea.
+    cuenta = _resolver_cuenta(db, current_user.id, transaccion.account_id)
+    transaccion.account_id = cuenta.id
+
+    # 🔒 2. Resolución de la categoría por nombre (Fase 16 §16.2, Decisión 16.2.2). El XOR
+    # del schema garantiza que si `category_id` es None, `category` trae un nombre.
+    if transaccion.category_id is None:
+        categoria = _resolver_categoria_por_nombre(db, current_user.id, transaccion.category, transaccion.type.value)
+        transaccion.category_id = categoria.id
+        transaccion.category = None  # nunca llega al model_dump (exclude_none)
+
+    # 🔒 3. Verificar que la cuenta de destino exista y PERTENEZCA al usuario
     cuenta = (
         db.query(models.Account)
         .filter(models.Account.id == transaccion.account_id, models.Account.user_id == current_user.id)
@@ -261,6 +352,18 @@ def actualizar_transaccion(
     # mes distinto) — el ROADMAP no pide retirar avisos ya emitidos, solo evaluar.
     categoria_vieja_id = transaccion_db.category_id
     fecha_vieja_original = transaccion_db.date
+
+    # 1.1 Resolución Fase 16 §16.2 — misma lógica que en crear_transaccion: `account_id`
+    # opcional (fallback a la única cuenta) y `category` por nombre → `category_id`.
+    cuenta_resuelta = _resolver_cuenta(db, current_user.id, transaccion_actualizada.account_id)
+    transaccion_actualizada.account_id = cuenta_resuelta.id
+
+    if transaccion_actualizada.category_id is None:
+        categoria_resuelta = _resolver_categoria_por_nombre(
+            db, current_user.id, transaccion_actualizada.category, transaccion_actualizada.type.value
+        )
+        transaccion_actualizada.category_id = categoria_resuelta.id
+        transaccion_actualizada.category = None  # nunca llega al model_dump (exclude_none)
 
     # 2. Buscamos las cuentas (la vieja y la nueva, por si el usuario movió el gasto a otra cuenta)
     cuenta_vieja = db.query(models.Account).filter(models.Account.id == transaccion_db.account_id).first()

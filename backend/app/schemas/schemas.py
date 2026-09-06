@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class PaginatedResponse[T](BaseModel):
@@ -128,10 +128,17 @@ class TransactionBase(BaseModel):
     currency: str = "COP"
     type: TransactionType
     description: str | None = Field(None, max_length=500)
-    account_id: int
-    category_id: int
+    account_id: int | None = None  # antes: obligatorio (Fase 16 §16.2, Decisión 16.2.4)
+    category_id: int | None = None  # antes: obligatorio
+    category: str | None = Field(None, max_length=100)  # alternativa por nombre (Decisión 16.2.2)
     date: datetime | None = None
     payment_method: PaymentMethod | None = None
+
+    @model_validator(mode="after")
+    def category_id_xor_category_name(self) -> "TransactionBase":
+        if (self.category_id is None) == (self.category is None):
+            raise ValueError("Especificar exactamente uno de 'category_id' o 'category'.")
+        return self
 
 
 class TransactionCreate(TransactionBase):
@@ -145,6 +152,20 @@ class TransactionResponse(TransactionBase):
 
     class Config:
         from_attributes = True
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def _categoria_relacion_orm_a_none(cls, v):
+        """`models.Transaction` ya tiene una RELACIÓN (`category` → objeto `Category`),
+        que colisiona con el campo de texto `category` de Fase 16 §16.2. Al serializar
+        desde el ORM (`from_attributes`), Pydantic leería ese objeto y fallaría la
+        validación de `str | None` — este validator solo aplica al RESPONSE (no a los
+        schemas de request): cualquier valor no-string se normaliza a None. El campo
+        `category` es de entrada (nombre a resolver en el router); en respuestas siempre
+        es None, tal como `TransactionResponse` lo declara."""
+        if v is None or isinstance(v, str):
+            return v
+        return None
 
 
 # --- CUENTAS ---
@@ -173,9 +194,20 @@ class AccountResponse(AccountBase):
     id: int
     user_id: int
     balance: Decimal  # 🔁 antes: float
+    opening_balance: Decimal  # Fase 16 §16.4: saldo de apertura, inmutable tras la creación
 
     class Config:
         from_attributes = True
+
+
+class AccountReconcileResponse(BaseModel):
+    """Resultado de POST /accounts/{account_id}/reconcile (Fase 16 §16.4.3)."""
+
+    account_id: int
+    previous_balance: Decimal
+    recalculated_balance: Decimal
+    discrepancy: Decimal  # recalculated_balance - previous_balance; 0.00 si no había desviación
+    opening_balance: Decimal
 
 
 # --- CATEGORÍAS --- (sin cambios, no maneja dinero)
@@ -341,6 +373,31 @@ class PushSubscriptionDelete(BaseModel):
 class PushSubscriptionResponse(BaseModel):
     id: int
     endpoint: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- API KEYS (Fase 16 §16.1) ---
+class ApiKeyCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class ApiKeyCreateResponse(BaseModel):
+    id: int
+    name: str
+    key: str  # texto plano — SOLO aparece en esta respuesta (Decisión 16.1.5)
+    key_prefix: str
+    created_at: datetime
+
+
+class ApiKeyResponse(BaseModel):
+    id: int
+    name: str
+    key_prefix: str
+    last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
     created_at: datetime
 
     class Config:

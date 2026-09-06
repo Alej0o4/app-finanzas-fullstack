@@ -42,4 +42,6 @@ export const queryKeys = {
      *  la query de lista completa. */
     unreadCount: () => ['notifications-unread-count'] as const,
   },
+  /** API keys personales revocables (Fase 16 §16.1) — GET/POST /api-keys/, DELETE /api-keys/{id}. */
+  apiKeys: () => ['apiKeys'] as const,
 };

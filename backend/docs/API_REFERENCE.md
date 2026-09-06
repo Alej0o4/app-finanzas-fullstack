@@ -3,9 +3,13 @@
 ## Convenciones generales
 
 - Base path: `/api/v1`
-- Autenticación: `Authorization: Bearer <token>` en rutas protegidas.
+- Autenticación: `Authorization: Bearer <token>` en rutas protegidas. Además del JWT del
+  flujo OAuth2, se aceptan **API keys personales** con prefijo `oikos_pat_` en el mismo
+  header (Fase 16 §16.1) — ver sección "API keys" abajo.
 - Content type esperado: `application/json`, excepto login, que usa formulario OAuth2.
-- Rate limiting: `/api/v1/auth/login`, `POST /api/v1/users/` y `/api/v1/auth/password-reset/request` (5 req/min por IP via `slowapi`).
+- Rate limiting: `/api/v1/auth/login`, `POST /api/v1/users/` y `/api/v1/auth/password-reset/request`
+  (5 req/min por IP via `slowapi`), y `POST /api/v1/transactions/` (60 req/min — keyed por
+  API key cuando la autenticación es con API key, por IP en el resto, Fase 16 §16.1).
 - CORS: orígenes permitidos vía `ALLOWED_ORIGINS` (env) + regex para IPs de Tailscale (100.x.x.x).
 - Uvicorn escucha en `0.0.0.0` para soportar acceso remoto via Tailscale.
 - Borrado lógico (Fase 8): los endpoints `DELETE` de cuentas/categorías/transacciones/presupuestos marcan
@@ -116,6 +120,67 @@ Errores esperados:
 
 - `400` si el token es inválido, ya fue usado o expiró.
 
+## API keys (Fase 16 §16.1)
+
+API keys personales revocables que habilitan clientes que no pueden hacer el flujo OAuth2
+password + refresh (shortcuts de iOS/Android; en el futuro, la nota de voz con IA). Se envían
+en el mismo header `Authorization: Bearer <key>` que el JWT, pero con prefijo
+`oikos_pat_` (el backend las distingue del JWT por ese prefijo antes de intentar decodificar).
+
+Características:
+
+- **Sin scopes en v1**: una API key tiene exactamente los mismos permisos que el JWT del
+  mismo usuario — la autorización real vive en cada router, filtrada por `user_id`.
+- **Revocación inmediata**: `revoked_at` se valida en cada request; la siguiente petición con
+  una key revocada falla con `401` (a diferencia del JWT, que vive hasta 15 min sin blacklist).
+- **Sin expiración obligatoria en v1** (mismo criterio que un PAT de GitHub). La revisión de
+  seguridad recomendada por la Decisión 16.1.8 del spec sigue pendiente (ver `docs/TODO.md`).
+- La key en texto plano **solo** se devuelve en la respuesta del `POST` — nunca se puede
+  volver a consultar.
+
+### `POST /api/v1/api-keys/`
+
+Crea una API key nueva para el usuario autenticado.
+
+Entrada:
+
+- `name`: etiqueta elegida por el usuario (1–100 chars), p. ej. `"Shortcut iPhone"`.
+
+Salida (`ApiKeyCreateResponse`):
+
+- `id`
+- `name`
+- `key`: **la key en texto plano — SOLO aparece en esta respuesta.** Prefijo `oikos_pat_`
+  + 43 caracteres urlsafe.
+- `key_prefix`: primeros 12 caracteres de la key (no es secreto — solo discrimina keys en
+  la lista).
+- `created_at`
+
+### `GET /api/v1/api-keys/`
+
+Lista las API keys del usuario autenticado (incluidas las revocadas, para auditar "¿se usó
+recientemente una key comprometida?").
+
+Salida: array de `ApiKeyResponse`:
+
+- `id`
+- `name`
+- `key_prefix`
+- `last_used_at` (`null` si nunca se usó)
+- `revoked_at` (`null` si sigue activa)
+- `created_at`
+
+**Nunca** expone `key` ni `key_hash`.
+
+### `DELETE /api/v1/api-keys/{api_key_id}`
+
+Revoca una API key (marca `revoked_at`, no borra la fila — conserva `last_used_at` para
+auditoría).
+
+Errores esperados:
+
+- `404` si la key no existe, no pertenece al usuario o ya fue revocada.
+
 ## Usuarios
 
 ### `POST /api/v1/users/`
@@ -212,7 +277,8 @@ Entrada:
 
 - `name`
 - `type`: `cash | debit | credit`
-- `balance`: saldo inicial permitido solo en creación.
+- `balance`: saldo inicial permitido solo en creación (Fase 16 §16.4: alimenta las dos
+  columnas `balance` y `opening_balance` al mismo valor — `opening_balance` queda inmutable).
 - `currency`: código de moneda (default `"COP"`). Ej: `"COP"`, `"USD"`, `"EUR"`.
 - `highlighted`: si la cuenta es destacada (default `false`).
 
@@ -221,7 +287,8 @@ Salida:
 - `id`
 - `name`
 - `type`
-- `balance`
+- `balance` — saldo actual (mutado por las operaciones de transacciones)
+- `opening_balance` — saldo de apertura, inmutable tras la creación (Fase 16 §16.4)
 - `currency`
 - `highlighted`
 - `user_id`
@@ -244,13 +311,33 @@ Lista las cuentas del usuario autenticado.
 
 ### `PUT /api/v1/accounts/{account_id}`
 
-Actualiza nombre, tipo y destacada de la cuenta.
+Actualiza nombre, tipo y destacada de la cuenta. Nunca modifica `balance` ni `opening_balance`
+(regla de negocio: el saldo solo lo mueven las transacciones).
 
 ### `PATCH /api/v1/accounts/{account_id}/highlighted`
 
 Alterna el estado `highlighted` de una cuenta (toggle).
 
 Salida: `AccountResponse` actualizada.
+
+### `POST /api/v1/accounts/{account_id}/reconcile` (Fase 16 §16.4)
+
+Recalcula el saldo de la cuenta desde `opening_balance` + el historial de transacciones NO
+eliminadas (`SUM(ingresos) - SUM(gastos)`) y aplica la corrección de inmediato, sin paso de
+confirmación previo. Útil para detectar/corregir cuentas desviadas por un bug o una
+intervención manual que haya mutado `balance` fuera de los endpoints de transacciones.
+
+Salida (`AccountReconcileResponse`):
+
+- `account_id`
+- `previous_balance`: saldo que tenía antes del recálculo.
+- `recalculated_balance`: valor corregido.
+- `discrepancy`: `recalculated_balance - previous_balance` — `0.00` si no había desviación.
+- `opening_balance`
+
+Errores esperados:
+
+- `404` si la cuenta no existe o no pertenece al usuario autenticado.
 
 ### `DELETE /api/v1/accounts/{account_id}`
 
@@ -287,7 +374,8 @@ Elimina una categoría personalizada solo si no tiene transacciones ni presupues
 
 ### `POST /api/v1/transactions/`
 
-Registra un ingreso o gasto y actualiza el saldo de la cuenta asociada.
+Registra un ingreso o gasto y actualiza el saldo de la cuenta asociada. Rate limit:
+60 req/min (Fase 16 §16.1).
 
 Entrada:
 
@@ -295,8 +383,15 @@ Entrada:
 - `type`: `income | expense`
 - `description`: opcional.
 - `date`: fecha de la transación (formato ISO, default: ahora).
-- `account_id`
-- `category_id`
+- `account_id` **opcional** (Fase 16 §16.2): si se omite, se usa la única cuenta del usuario.
+  Con más de una cuenta y sin `account_id` → `400` (no se adivina cuál).
+- `category_id` **o** `category`: exactamente uno de los dos (Fase 16 §16.2).
+  - `category_id`: el ID de la categoría (comportamiento histórico).
+  - `category`: nombre de la categoría, resuelto por el backend. Match case y
+    acento-insensible, filtrado por `type` (una categoría de gasto y una de ingreso con el
+    mismo nombre no se pisan). Precedencia: categoría propia del usuario > categoría de
+    sistema. `409` si hay más de una categoría propia con el mismo nombre+tipo; `404` si no
+    matchea ninguna (la respuesta lista las categorías válidas del tipo).
 - `payment_method` (opcional): tag de método de pago — `cash | card | transfer`. Es un dato
   de la transacción, independiente del `type` de la cuenta asociada (Fase 8 §2).
 

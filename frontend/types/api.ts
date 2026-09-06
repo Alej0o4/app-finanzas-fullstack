@@ -3,6 +3,9 @@ export interface Account {
   name: string;
   type: 'cash' | 'debit' | 'credit';
   balance: number;
+  /** Saldo de apertura, inmutable tras la creación (Fase 16 §16.4). Ancla para el
+   *  endpoint de reconciliación. */
+  opening_balance: number;
   currency: string;
   user_id: number;
   highlighted: boolean;
