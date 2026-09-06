@@ -22,11 +22,13 @@ interface TransactionCaptureFormProps {
   onTypeChange?: (type: 'income' | 'expense') => void;
 }
 
-const paymentMethodOptions: Array<{ value: PaymentMethod; label: string }> = [
-  { value: 'cash', label: 'Efectivo' },
-  { value: 'card', label: 'Tarjeta' },
-  { value: 'transfer', label: 'Transferencia' },
-];
+// El método de pago se hereda del tipo de cuenta elegida — antes era un selector manual
+// independiente que permitía combinaciones sin sentido (ej. cuenta "crédito" + "efectivo").
+const accountTypeToPaymentMethod: Record<Account['type'], PaymentMethod> = {
+  cash: 'cash',
+  debit: 'card',
+  credit: 'card',
+};
 
 export default function TransactionCaptureForm({
   onSuccess,
@@ -40,7 +42,6 @@ export default function TransactionCaptureForm({
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [description, setDescription] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   const amountRef = useRef<HTMLInputElement>(null);
@@ -90,7 +91,6 @@ export default function TransactionCaptureForm({
       setAmount('');
       setCategoryId('');
       setDescription('');
-      setPaymentMethod('cash');
       setIdempotencyKey(crypto.randomUUID());
       onSuccess();
     },
@@ -118,6 +118,11 @@ export default function TransactionCaptureForm({
       toast.error('No tienes una cuenta disponible');
       return;
     }
+
+    const selectedAccount = accounts?.find((a) => String(a.id) === effectiveAccountId);
+    const paymentMethod = selectedAccount
+      ? accountTypeToPaymentMethod[selectedAccount.type]
+      : 'cash';
 
     createMutation.mutate({
       description,
@@ -236,25 +241,6 @@ export default function TransactionCaptureForm({
             className="bg-background"
             placeholder="Opcional"
           />
-          <div>
-            <span className="text-text-soft mb-1.5 block text-sm font-medium">Método de pago</span>
-            <div className="flex gap-2">
-              {paymentMethodOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setPaymentMethod(option.value)}
-                  className={`flex-1 cursor-pointer rounded-xl border py-2 text-sm font-medium transition-colors ${
-                    paymentMethod === option.value
-                      ? 'bg-background border-border text-text'
-                      : 'text-text-muted hover:text-text border-transparent'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </details>
 
