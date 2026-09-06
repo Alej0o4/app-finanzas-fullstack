@@ -14,6 +14,7 @@ import {
   ArrowLeftRight,
   PieChart,
   Tags,
+  Settings,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -71,6 +72,9 @@ export default function Sidebar() {
     { name: 'Analítica', href: '/analytics', icon: TrendingUp },
     { name: 'Cuentas', href: '/accounts', icon: Wallet },
     { name: 'Categorías', href: '/categories', icon: Tags },
+    // Fase 14 §14.6.2: página de configuración infrecuente, no parte del flujo diario —
+    // vive en el bloque secundario junto a la analítica/cuentas/categorías.
+    { name: 'Ajustes', href: '/settings', icon: Settings },
   ];
 
   const renderNavItem = (item: (typeof primaryNavItems)[number]) => {

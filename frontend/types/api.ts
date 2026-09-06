@@ -94,12 +94,14 @@ export interface PreferencesUpdatePayload {
   preferred_currency?: string;
   preferred_locale?: string;
   preferred_theme?: string;
+  weekly_summary_enabled?: boolean;
 }
 
 export interface UserPreferences {
   preferred_currency: string;
   preferred_locale: string;
-  theme: string;
+  preferred_theme: string;
+  weekly_summary_enabled: boolean;
 }
 
 export interface CreateTransactionPayload {
@@ -151,13 +153,16 @@ export interface PaginatedResponse<T> {
 
 export interface AppNotification {
   id: number;
-  /** `budget_threshold_80` | `budget_threshold_100` (Fase 14 agrega `weekly_summary`). */
+  /** `budget_threshold_80` | `budget_threshold_100` | `weekly_summary` (Fase 14). */
   type: string;
   title: string;
   body: string;
   /** Referencia opcional al presupuesto que originó el aviso; el frontend enlaza
    *  "Ver presupuesto" cuando no es null. */
   budget_id: number | null;
+  /** Clave de período que originó el aviso (Fase 14, p. ej. "2026-W37" para el
+   *  resumen semanal). Null para alertas de presupuesto (Fase 13). */
+  period_key: string | null;
   read_at: string | null;
   created_at: string;
 }

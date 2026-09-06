@@ -4,7 +4,8 @@ Suscribir/desuscribir, upsert por endpoint (multi-dispositivo, Decisión 13.2.3)
 cleanup de suscripciones caducadas (WebPushException 404/410) sin romper el resto del
 flujo. El envío real a un navegador real queda fuera de lo que pytest puede cubrir
 (misma limitación que el email real de Fase 7, ver docs/TODO.md) — aquí se mockea
-`pywebpush.webpush` en `app.core.budget_alerts`.
+`pywebpush.webpush` en `app.core.notification_dispatch` (donde vive el helper compartido
+tras la extracción de Fase 14 §14.2).
 """
 
 from datetime import UTC, datetime
@@ -119,7 +120,7 @@ class TestPushSendFromBudgetAlerts:
                 raise WebPushException("Suscripción receptora no encontrada (410)", response=_FakeResponse())
             return None
 
-        monkeypatch.setattr("app.core.budget_alerts.webpush", _fake_webpush)
+        monkeypatch.setattr("app.core.notification_dispatch.webpush", _fake_webpush)
 
         cuenta = make_account(auth_headers, balance="100000.00")
         categoria = make_category(auth_headers, name="Comida", type="expense")

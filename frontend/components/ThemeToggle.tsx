@@ -3,10 +3,7 @@
 import { Sun, Moon, Monitor } from 'lucide-react';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useEffect, useCallback, useRef } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { queryKeys } from '@/lib/queryKeys';
-import type { PreferencesUpdatePayload } from '@/types/api';
+import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 
 type Theme = 'dark' | 'light' | 'system';
 
@@ -35,19 +32,12 @@ function resolveTheme(theme: Theme): 'dark' | 'light' {
 
 export default function ThemeToggle() {
   const { config, updateConfig } = useAppConfig();
+  // Mutación compartida con la página de Ajustes (Fase 14 §14.6.2): misma ruta
+  // PATCH + invalidación de `userPreferences` que antes vivía duplicada aquí.
+  const { updatePreferences } = useUserPreferences();
   const theme = (config.theme as Theme) ?? 'dark';
   const initialised = useRef(false);
   const prevTheme = useRef(theme);
-  const queryClient = useQueryClient();
-
-  const patchTheme = useMutation({
-    mutationFn: async (body: PreferencesUpdatePayload) => {
-      await api.patch('users/me/preferences', body);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.userPreferences() });
-    },
-  });
 
   const applyTheme = useCallback((t: Theme) => {
     document.documentElement.setAttribute('data-theme', resolveTheme(t));
@@ -87,7 +77,7 @@ export default function ThemeToggle() {
     localStorage.setItem('oikos_theme', next);
     applyTheme(next);
     if (typeof window !== 'undefined' && localStorage.getItem('jwt_token')) {
-      patchTheme.mutate({ preferred_theme: next });
+      updatePreferences.mutate({ preferred_theme: next });
     }
   };
 

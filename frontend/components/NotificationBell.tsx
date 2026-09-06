@@ -2,7 +2,16 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { Bell, CheckCheck, BellOff, Loader2, X, Trash2 } from 'lucide-react';
+import {
+  Bell,
+  CheckCheck,
+  BellOff,
+  Loader2,
+  X,
+  Trash2,
+  CalendarDays,
+  AlertTriangle,
+} from 'lucide-react';
 import {
   useNotifications,
   useUnreadCount,
@@ -38,6 +47,19 @@ function formatRelativeTime(iso: string): string {
 
   const years = Math.floor(days / 365);
   return `hace ${years} año${years > 1 ? 's' : ''}`;
+}
+
+/**
+ * Ícono de la fila según el tipo de aviso (Fase 14 §14.5.1, cosmético): calendario para
+ * el resumen semanal, alerta para los umbrales de presupuesto de Fase 13.
+ */
+function NotificationTypeIcon({ type }: { type: string }) {
+  const Icon = type === 'weekly_summary' ? CalendarDays : AlertTriangle;
+  return (
+    <span className="text-text-muted shrink-0" aria-hidden="true">
+      <Icon size={14} />
+    </span>
+  );
 }
 
 /**
@@ -154,18 +176,21 @@ export default function NotificationBell() {
                       onClick={() => handleRowClick(notification)}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        {notification.budget_id !== null ? (
-                          <Link
-                            href="/budgets"
-                            className="text-text hover:text-primary min-w-0 truncate text-xs font-semibold transition-colors"
-                          >
-                            {notification.title}
-                          </Link>
-                        ) : (
-                          <span className="text-text min-w-0 truncate text-xs font-semibold">
-                            {notification.title}
-                          </span>
-                        )}
+                        <div className="flex min-w-0 items-center gap-2">
+                          <NotificationTypeIcon type={notification.type} />
+                          {notification.budget_id !== null ? (
+                            <Link
+                              href="/budgets"
+                              className="text-text hover:text-primary min-w-0 truncate text-xs font-semibold transition-colors"
+                            >
+                              {notification.title}
+                            </Link>
+                          ) : (
+                            <span className="text-text min-w-0 truncate text-xs font-semibold">
+                              {notification.title}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                           {!notification.read_at && (
                             <span className="bg-primary h-1.5 w-1.5 rounded-full" />

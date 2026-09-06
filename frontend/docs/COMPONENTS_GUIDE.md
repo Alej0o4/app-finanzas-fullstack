@@ -87,6 +87,23 @@ Reglas:
 - No pasarle cadenas sin convertir a número.
 - No depender de variables CSS dentro de SVG si el render es inestable; preferir colores compatibles con SVG/Recharts.
 
+### `components/ui/Switch.tsx`
+
+Responsabilidad:
+
+- Toggle booleano accesible: un `<input type="checkbox" role="switch">` estilizado (Fase 14 §14.6.2, primera página de Ajustes).
+
+Props principales:
+
+- `label?: string`
+- `description?: string`
+- Hereda todas las props estándar de input incluyendo `checked`, `onChange`, `disabled` e `id`.
+
+Reglas:
+
+- Para estados binarios de preferencias (p. ej. `weekly_summary_enabled`), no para acción destructiva.
+- Mientras una mutación persiste el cambio, pasar `disabled` para evitar toggles encadenados; si la mutación falla, revertir al valor confirmado por el servidor y mostrar error.
+
 ## Componentes por dominio
 
 ### Dashboard

@@ -3,6 +3,8 @@ import os
 import time
 import uuid
 
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -26,6 +28,7 @@ from app.api import (
 from app.core.database import SessionLocal
 from app.core.logging_config import configure_logging, request_id_var
 from app.core.rate_limit import limiter
+from app.core.weekly_summary import run_weekly_summary_job
 from app.models import models
 
 configure_logging()
@@ -34,6 +37,11 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="API de Finanzas Personales", description="Backend para gestión de ingresos, gastos y presupuestos."
 )
+
+# Scheduler del resumen semanal (Fase 14 §14.4, Decisión 14.4.1) — in-process, single
+# worker (el deployment es un solo proceso uvicorn sin --workers). Se arranca en startup
+# y se apaga en shutdown.
+scheduler = BackgroundScheduler()
 
 DEFAULT_CATEGORIES = [
     {"name": "Alimentación", "type": "expense", "icon": "UtensilsCrossed"},
@@ -180,6 +188,22 @@ app.include_router(push.router, prefix="/api/v1/push", tags=["Push"])
 @app.on_event("startup")
 def initialize_shared_data():
     seed_default_categories()
+    # Resumen semanal automático (Fase 14 §14.4): cada lunes 07:00 America/Bogota.
+    # BackgroundScheduler in-process, single worker (Decisión 14.4.1).
+    scheduler.add_job(
+        run_weekly_summary_job,
+        trigger=CronTrigger(day_of_week="mon", hour=7, minute=0, timezone="America/Bogota"),
+        id="weekly_summary",
+        replace_existing=True,
+    )
+    scheduler.start()
+
+
+@app.on_event("shutdown")
+def shutdown_scheduler():
+    # Decisión 14.4.2: sin este hook, cada reload de --reload deja un hilo de scheduler
+    # huérfano.
+    scheduler.shutdown(wait=False)
 
 
 @app.get("/")

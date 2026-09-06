@@ -6,18 +6,16 @@ Se invoca después de confirmar el movimiento contable de una transacción de ti
 no reintroducir el bug de mezclar monedas que ya se corrigió una vez ahí.
 """
 
-import json
 import logging
-import os
 from calendar import monthrange
 from datetime import datetime
 from decimal import Decimal
 
-from pywebpush import WebPushException, webpush
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.budget_recurrence import ensure_recurring_budgets_for_period
+from app.core.notification_dispatch import crear_y_enviar_notificacion
 from app.models import models
 
 logger = logging.getLogger(__name__)
@@ -138,94 +136,23 @@ def evaluate_budget_thresholds_for_category(db: Session, user_id: int, category_
 def _crear_notificacion(
     db: Session, presupuesto: models.Budget, tipo: str, plantilla_titulo: str, porcentaje: float
 ) -> models.Notification:
-    """Persiste el aviso en la bandeja in-app y dispara el push sobre la misma fila
-    (Decisión 13.2.3: el push es un canal adicional sobre el aviso, no una tabla
-    paralela — no hay manera de que un aviso llegue por push sin existir en la bandeja).
-    Un fallo aquí es un fallo del motor — el caller lo envuelve en su propio try/except
-    (Decisión 13.3.4) y la transacción contable ya fue confirmada antes."""
+    """Persiste el aviso en la bandeja in-app y dispara el push sobre la misma fila.
+
+    La persistencia y el push viven en `app.core.notification_dispatch` (Decisión
+    14.2.1, compartido con el resumen semanal de Fase 14). Un fallo aquí es un fallo
+    del motor — el caller lo envuelve en su propio try/except (Decisión 13.3.4) y la
+    transacción contable ya fue confirmada antes."""
     nombre_categoria = presupuesto.category.name if presupuesto.category else "sin categoría"
     titulo = plantilla_titulo.format(category=nombre_categoria)
     body = (
         f"Ya vas por el {porcentaje:.0f}% del presupuesto de {nombre_categoria} "
         f"(límite {presupuesto.amount_limit:,.2f} {presupuesto.currency})."
     )
-
-    notificacion = models.Notification(
+    return crear_y_enviar_notificacion(
+        db,
         user_id=presupuesto.user_id,
         type=tipo,
         title=titulo,
         body=body,
         budget_id=presupuesto.id,
     )
-    db.add(notificacion)
-    db.commit()
-    _enviar_push(db, notificacion)
-    return notificacion
-
-
-def _enviar_push(db: Session, notificacion: models.Notification) -> None:
-    """Envía el aviso por Web Push a todas las suscripciones del usuario.
-
-    Fallo silencioso con log si VAPID no está configurado (mismo criterio que
-    `app/core/email.py` con SMTP): NUNCA debe romper la creación de transacciones —
-    el aviso ya quedó en la bandeja in-app y el push es un canal adicional.
-    Cada suscripción se envuelve en su propio try/except (Decisión 13.2.3): una
-    suscripción caducada (WebPushException 404/410) se borra y se continúa con las
-    demás; el resto de fallos solo se loguean.
-    """
-    public_key = os.getenv("VAPID_PUBLIC_KEY")
-    private_key = os.getenv("VAPID_PRIVATE_KEY")
-    subject = os.getenv("VAPID_SUBJECT")
-    if not public_key or not private_key or not subject:
-        logger.warning(
-            "VAPID no configurado (faltan VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT) — "
-            "push no enviado; el aviso queda en la bandeja in-app"
-        )
-        return
-
-    suscripciones = (
-        db.query(models.PushSubscription).filter(models.PushSubscription.user_id == notificacion.user_id).all()
-    )
-    if not suscripciones:
-        return
-
-    payload = json.dumps(
-        {
-            "title": notificacion.title,
-            "body": notificacion.body,
-            "budget_id": notificacion.budget_id,
-            "url": "/budgets",
-        }
-    )
-
-    for suscripcion in suscripciones:
-        try:
-            webpush(
-                subscription_info={
-                    "endpoint": suscripcion.endpoint,
-                    "keys": {"p256dh": suscripcion.p256dh_key, "auth": suscripcion.auth_key},
-                },
-                data=payload,
-                vapid_private_key=private_key,
-                vapid_claims={"sub": subject},
-                # El push es un canal adicional, best-effort, sobre un request que ya
-                # confirmó el movimiento contable (Decisión 13.2.3) — un push service lento
-                # o colgado no debe demorar la respuesta HTTP indefinidamente.
-                timeout=5,
-            )
-        except WebPushException as exc:
-            status = exc.response.status_code if exc.response is not None else None
-            if status in (404, 410):
-                # Suscripción caducada/revocada por el navegador: se limpia esa fila
-                # específica y se sigue con las demás (Decisión 13.2.3).
-                logger.warning(
-                    "Suscripción push %s eliminada por respuesta %s del push service",
-                    suscripcion.id,
-                    status,
-                )
-                db.delete(suscripcion)
-                db.commit()
-            else:
-                logger.exception("Error WebPush al enviar a la suscripción %s", suscripcion.id)
-        except Exception:
-            logger.exception("Error al enviar push a la suscripción %s", suscripcion.id)

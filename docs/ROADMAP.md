@@ -418,10 +418,16 @@ usuario nuevo.
 > El template es barato; **el canal de entrega no**. Hoy no existe scheduler ni servicio de envío.
 > Presupuestar como infraestructura, no como detalle.
 
-- [ ] **Scheduler** (APScheduler o cron externo) — 1d
-- [ ] **Cálculo del resumen semanal** — total gastado, categoría principal, comparación con la semana anterior — 1d
-- [ ] **Envío vía push** + entrada en la bandeja in-app — 1d
-- [ ] **Preferencia de usuario para activar/desactivar** el resumen — 4h
+> Spec detallada: ver `docs/specs/fase_14_spec.md` (2026-09-06, evaluación arquitectónica del
+> agente `software-architect`). Redefine el orden de ejecución real (el ítem "Envío" del ROADMAP
+> se disuelve en "Cálculo"; hace falta un paso previo de modelo de datos + un refactor del módulo
+> de notificaciones de Fase 13 que el ROADMAP no lista) y ajusta el total a ~5.9d — el mayor
+> ajuste es "Preferencia de usuario" (4h → 1.5d): no existe hoy ninguna página de Ajustes en el
+> frontend de la que partir.
+
+- [ ] **Scheduler** (APScheduler in-process, ver spec §14.4) — 1d
+- [ ] **Cálculo del resumen semanal** — total gastado, categoría principal, comparación con la semana anterior — 1.5d
+- [ ] **Preferencia de usuario para activar/desactivar** el resumen — 1.5d (incluye primera página de Ajustes del frontend, ver spec §14.6)
 
 ---
 

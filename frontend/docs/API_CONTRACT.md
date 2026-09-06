@@ -167,8 +167,15 @@ auth: string } }` — el shape exacto de `subscription.toJSON()`. Upsert por `en
 - `preferred_currency`: string
 - `preferred_locale`: string
 - `preferred_theme`: string
+- `weekly_summary_enabled`: boolean (Fase 14 §14.6.1; opt-out, default `true`)
 
-`PATCH /api/v1/users/me/preferences` acepta campos opcionales: `preferred_currency`, `preferred_locale`, `preferred_theme`.
+`PATCH /api/v1/users/me/preferences` acepta campos opcionales: `preferred_currency`, `preferred_locale`, `preferred_theme`, `weekly_summary_enabled`.
+
+El frontend escribe estas preferencias desde dos lugares: `ThemeToggle.tsx` (tema, con
+aplicación inmediata en cliente + persistencia) y la página de Ajustes
+(`/settings`, Fase 14 §14.6.2 — único control: el resumen semanal). Ambos pasan por la
+mutación compartida de `useUserPreferences` (`updatePreferences`), que invalida la query
+`userPreferences` tras el `PATCH`.
 
 ### Cuenta
 
@@ -269,12 +276,18 @@ Los endpoints de series (`cashflow-series`, `category-distribution`) devuelven u
 `GET /api/v1/notifications/` devuelve `PaginatedResponse<AppNotification>`; cada ítem:
 
 - `id` — int
-- `type` — string (`budget_threshold_80` | `budget_threshold_100`; Fase 14 agrega `weekly_summary`)
+- `type` — string (`budget_threshold_80` | `budget_threshold_100` | `weekly_summary` desde Fase 14)
 - `title` — string (título del aviso, listo para pintar)
 - `body` — string (cuerpo, listo para pintar)
 - `budget_id` — `number | null`; si no es `null`, el frontend enlaza el título a `/budgets`
+- `period_key` — `string | null` (Fase 14: semana ISO, p. ej. `"2026-W37"`, que originó un
+  `weekly_summary`; `null` para las alertas de presupuesto de Fase 13)
 - `read_at` — `string | null` (ISO 8601; `null` = no leída)
 - `created_at` — string (ISO 8601, usada para el tiempo relativo del popover)
+
+El popover diferencia el ícono de cada fila según `type` (Decisión 14.5.1): calendario
+para `weekly_summary`, alerta para `budget_threshold_*`. Las notificaciones con
+`budget_id != null` enlazan a `/budgets`; las de `weekly_summary` no enlazan.
 
 Reglas:
 

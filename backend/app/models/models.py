@@ -24,6 +24,8 @@ class User(Base, SoftDeleteMixin):
     preferred_currency = Column(String(3), default="COP")
     preferred_locale = Column(String(10), default="es-CO")
     preferred_theme = Column(String(10), default="dark")
+    # Fase 14 §14.1.1: toggle opt-out (default=True) para el resumen semanal automático.
+    weekly_summary_enabled = Column(Boolean, nullable=False, default=True)
     email_verified = Column(Boolean, nullable=False, default=False)
     monthly_income = Column(Numeric(14, 2), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -211,6 +213,11 @@ class Notification(Base):
     # enlazar "Ver presupuesto" — nullable porque Fase 14 (resumen semanal) no apunta a
     # un presupuesto puntual.
     budget_id = Column(Integer, ForeignKey("budgets.id"), nullable=True)
+    # `period_key` (Fase 14, p. ej. "2026-W37" vía `date.isocalendar()`) identifica el
+    # período que originó un aviso sin ligarlo a una entidad de dominio como
+    # `budget_id` — nullable porque las notificaciones de Fase 13 (alertas de
+    # presupuesto) no tienen período semanal.
+    period_key = Column(String(10), nullable=True)
     read_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -231,6 +238,18 @@ class Notification(Base):
             unique=True,
             postgresql_where=text("budget_id IS NOT NULL"),
             sqlite_where=text("budget_id IS NOT NULL"),
+        ),
+        # Fase 14: un `weekly_summary` por usuario y semana ISO — mismo idioma que el
+        # índice de arriba, con `period_key` en vez de `budget_id` como discriminador
+        # de período (Decisión 14.1.2).
+        Index(
+            "uq_notifications_user_type_period_active",
+            "user_id",
+            "type",
+            "period_key",
+            unique=True,
+            postgresql_where=text("period_key IS NOT NULL"),
+            sqlite_where=text("period_key IS NOT NULL"),
         ),
     )
 

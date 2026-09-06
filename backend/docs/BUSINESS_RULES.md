@@ -56,3 +56,22 @@
 - El resumen usa datos agregados del backend.
 - El progreso de presupuestos ya sale calculado para uso directo del Frontend.
 - El dashboard expone además serie temporal de flujo de caja y distribución por categoría.
+
+## Notificaciones (Fase 13 §13.5 / Fase 14 §14.7)
+
+- Hay dos tipos de aviso: **alertas de presupuesto** (`budget_threshold_80`,
+  `budget_threshold_100`) y **resumen semanal** (`weekly_summary`).
+- Un aviso se persiste primero en la bandeja in-app (`notifications`); el push es
+  best-effort sobre la misma fila (el aviso nunca "existe" en push sin existir en la
+  bandeja, ni al revés).
+- Idempotencia — "un aviso por evento/periodo" — es una garantía de base de datos, no
+  solo de aplicación, vía índices únicos parciales:
+  - alertas de presupuesto: una por `(budget_id, type)` para filas con presupuesto
+    (`uq_notifications_budget_type_active`);
+  - resumen semanal: uno por `(user_id, type, period_key)` para filas con período ISO
+    (`uq_notifications_user_type_period_active`).
+- Un fallo del envío push nunca rompe la operación que lo originó (transacción o job);
+  el aviso ya quedó en la bandeja. Sin VAPID configurado, el push se omite en silencio
+  (con log) y solo queda la bandeja.
+- El resumen semanal es opt-out (`User.weekly_summary_enabled`, default `true`); se
+  calcula cada lunes en `America/Bogota` sobre la moneda preferida del usuario.

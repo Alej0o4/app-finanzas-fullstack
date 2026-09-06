@@ -15,6 +15,7 @@ def get_preferences(current_user: models.User = Depends(get_current_user)):
         "preferred_currency": current_user.preferred_currency,
         "preferred_locale": current_user.preferred_locale,
         "preferred_theme": current_user.preferred_theme,
+        "weekly_summary_enabled": current_user.weekly_summary_enabled,
     }
 
 
@@ -33,4 +34,5 @@ def update_preferences(
         "preferred_currency": current_user.preferred_currency,
         "preferred_locale": current_user.preferred_locale,
         "preferred_theme": current_user.preferred_theme,
+        "weekly_summary_enabled": current_user.weekly_summary_enabled,
     }

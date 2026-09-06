@@ -98,6 +98,7 @@ class PreferencesUpdate(BaseModel):
     preferred_currency: str | None = None
     preferred_locale: str | None = None
     preferred_theme: str | None = None
+    weekly_summary_enabled: bool | None = None  # Fase 14
 
 
 class UserProfileUpdate(BaseModel):
@@ -299,6 +300,7 @@ class CategoryDistributionData(BaseModel):
 class NotificationType(str, Enum):
     budget_threshold_80 = "budget_threshold_80"
     budget_threshold_100 = "budget_threshold_100"
+    weekly_summary = "weekly_summary"  # Fase 14
 
 
 class NotificationResponse(BaseModel):
@@ -307,6 +309,7 @@ class NotificationResponse(BaseModel):
     title: str
     body: str
     budget_id: int | None = None
+    period_key: str | None = None  # Fase 14
     read_at: datetime | None = None
     created_at: datetime
 

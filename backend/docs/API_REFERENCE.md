@@ -187,6 +187,8 @@ Salida:
 - `preferred_currency`: string (default `"COP"`)
 - `preferred_locale`: string (default `"es-CO"`)
 - `preferred_theme`: string (default `"dark"`)
+- `weekly_summary_enabled`: bool (default `true`, Fase 14) — si el usuario recibe el
+  resumen semanal automático
 
 ### `PATCH /api/v1/users/me/preferences`
 
@@ -197,6 +199,7 @@ Entrada (campos opcionales):
 - `preferred_currency`: string
 - `preferred_locale`: string
 - `preferred_theme`: string
+- `weekly_summary_enabled`: bool (Fase 14)
 
 ## Cuentas
 
@@ -457,10 +460,11 @@ Salida:
 
 ## Notificaciones (Fase 13 §13.5)
 
-Las notificaciones las escribe el motor de alertas de presupuestos (`GET /api/v1/budgets/` +
-transacciones de gasto que cruzan el 80 %/100 % del límite, ver §13.3); estos endpoints solo
-leen/escriben el estado de la bandeja. Auth: `Bearer`, sin rate limiting (mismo criterio que
-budgets/dashboard).
+Las notificaciones las escriben el motor de alertas de presupuestos (`GET /api/v1/budgets/` +
+transacciones de gasto que cruzan el 80 %/100 % del límite, ver §13.3) y el resumen semanal
+automático (Fase 14 §14.3, un `weekly_summary` por usuario y semana ISO cada lunes). Estos
+endpoints solo leen/escriben el estado de la bandeja. Auth: `Bearer`, sin rate limiting
+(mismo criterio que budgets/dashboard).
 
 ### `GET /api/v1/notifications/`
 
@@ -470,8 +474,9 @@ Lista las notificaciones del usuario actual, más recientes primero, con paginac
 Salida (paginada):
 
 - `items`: array de notificaciones con `id`, `type` (`budget_threshold_80` |
-  `budget_threshold_100`), `title`, `body`, `budget_id` (nullable), `read_at` (nullable),
-  `created_at`
+  `budget_threshold_100` | `weekly_summary`), `title`, `body`, `budget_id` (nullable),
+  `period_key` (nullable, Fase 14 — semana ISO como `"2026-W37"` para
+  `weekly_summary`), `read_at` (nullable), `created_at`
 - `total`, `page`, `page_size`
 
 ### `GET /api/v1/notifications/unread-count`
