@@ -53,7 +53,24 @@ export default function RegisterPage() {
         password,
       });
 
-      router.push('/login?registered=true');
+      // Decisión 15.0.3: login automático reusando /auth/login (mismo patrón que ya
+      // ejercita `register_and_login` en backend/tests/conftest.py, hallazgo 3 — no es
+      // una secuencia nueva para el backend). Evita que el usuario reescriba sus
+      // credenciales que acaba de definir 10 segundos antes. Degradación explícita: si
+      // el auto-login falla, se cae al flujo manual anterior.
+      try {
+        const formData = new URLSearchParams();
+        formData.append('username', email);
+        formData.append('password', password);
+        const loginResponse = await api.post('auth/login', formData, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
+        localStorage.setItem('jwt_token', loginResponse.data.access_token);
+        localStorage.setItem('refresh_token', loginResponse.data.refresh_token);
+        router.push('/capture?onboarding=1');
+      } catch {
+        router.push('/login?registered=true');
+      }
     } catch (err: unknown) {
       const error = err as {
         response?: { status?: number; data?: { detail?: string | { msg: string }[] } };

@@ -1,11 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PieChart, Tags } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
+import { useSetMonthlyIncome } from '@/lib/hooks/useSetMonthlyIncome';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useState } from 'react';
 import BudgetRing from '@/components/charts/BudgetRing';
@@ -89,16 +90,7 @@ export default function DashboardPage() {
 
   // Fase 11 §11.3, Decisión 11.3.2: vía de escape inline para fijar el ingreso mensual sin
   // salir del dashboard (el flujo guiado completo llega con el onboarding de Fase 15).
-  const setMonthlyIncomeMutation = useMutation({
-    mutationFn: async (monthly_income: number) =>
-      (await api.patch('users/me', { monthly_income })).data,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.currentUser() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
-      toast.success('Ingreso mensual guardado');
-    },
-    onError: (error: unknown) => toast.error(getApiError(error)),
-  });
+  const setMonthlyIncomeMutation = useSetMonthlyIncome();
 
   const isLoading = loadingSummary || loadingBudgets;
   const isRecentLoading = loadingRecentTransactions;
@@ -106,8 +98,10 @@ export default function DashboardPage() {
   // Balance del mes calculado POR EL BACKEND (summary.monthly_flow_balance). Nunca se resta
   // en el cliente. Tres estados distinguidos: undefined = query en carga/error, null = el
   // usuario no ha fijado monthly_income, number = valor listo para pintar.
+  // Fase 15 §15.6: normaliza Decimal→string que el backend serializa en JSON (Decisión 15.6).
+  // Destraba la card "Balance del mes" cuando el onboarding fija ingresos.
   const flowBalance = summary?.monthly_flow_balance;
-  const flowBalanceValue = typeof flowBalance === 'number' ? flowBalance : null;
+  const flowBalanceValue = flowBalance == null ? null : Number(flowBalance);
   const flowIsPositive = (flowBalanceValue ?? 0) >= 0;
   const flowTrend =
     flowBalanceValue === null ? undefined : flowIsPositive ? ('up' as const) : ('down' as const);
@@ -118,8 +112,33 @@ export default function DashboardPage() {
         ? 'var(--color-success)'
         : 'var(--color-danger)';
 
+  // Fase 15 §15.5, Decisión 15.0.1: `total === 1` es cierto exactamente una vez en la
+  // vida del usuario — la primera transacción registrada — sin ningún flag que apagar.
+  const isFirstEverTransaction = recentTransactionsData?.total === 1;
+  const preferredExpense =
+    summary?.monthly_expense_by_currency.find((b) => b.currency === preferredCurrency)?.total ?? 0;
+
   return (
     <div className="space-y-6 pb-10 sm:space-y-10">
+      {/* Aha moment (Fase 15 §15.5, Decisión 15.5.1) — se muestra solo mientras total === 1;
+          desaparece solo con la segunda transacción, sin estado adicional que mantener.
+          Los montos Decimal llegan como string (Decisión 15.6), de ahí los Number(...). */}
+      {isFirstEverTransaction && (
+        <div
+          role="status"
+          className="bg-primary/10 border-primary/20 text-text rounded-2xl border p-4 text-sm"
+        >
+          {user?.monthly_income != null ? (
+            <>
+              Has gastado {formatCurrency(Number(preferredExpense), preferredCurrency)} de tus{' '}
+              {formatCurrency(Number(user.monthly_income), preferredCurrency)} de ingreso mensual.
+            </>
+          ) : (
+            '¡Registraste tu primer movimiento! Define tu ingreso mensual abajo para ver cuánto te queda cada mes.'
+          )}
+        </div>
+      )}
+
       {/* Encabezado */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
@@ -163,7 +182,10 @@ export default function DashboardPage() {
                   const parsed = Number(monthlyIncomeInput);
                   if (monthlyIncomeInput.trim() === '' || Number.isNaN(parsed) || parsed < 0)
                     return;
-                  setMonthlyIncomeMutation.mutate(parsed);
+                  setMonthlyIncomeMutation.mutate(parsed, {
+                    onSuccess: () => toast.success('Ingreso mensual guardado'),
+                    onError: (error) => toast.error(getApiError(error)),
+                  });
                 }}
               >
                 <p className="text-text-muted text-sm font-normal">

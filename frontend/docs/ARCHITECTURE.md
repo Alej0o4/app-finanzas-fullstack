@@ -153,6 +153,17 @@ Las páginas del dashboard deben limitarse a composición, fetching y UX local.
 - `app/capture/page.tsx`: pantalla de captura rápida (punto de entrada post-login). Solo
   compone `TransactionCaptureForm`; al guardar navega a `/`.
 
+## Onboarding de 3 minutos (Fase 15)
+
+- El registro con auto-login (§15.1) aterriza en `/capture?onboarding=1` con un JWT recién
+  emitido, sin pasar por `/login`. Esa URL activa un wizard de dos pasos del lado del cliente
+  (Decisión 15.0.2): primero el paso de ingreso mensual `OnboardingIncomeStep` (si
+  `monthly_income` sigue null) y después `TransactionCaptureForm` con copy guiado. Un login
+  genérico (Decisión 10.1.4) nunca lleva el parámetro y sigue viendo `/capture` normal.
+- La señal de "primera vez" del aha moment en el dashboard deriva de `total === 1` de
+  `GET /transactions/` (Decisión 15.0.1) — no hay estado persistido ni columna alguna; el banner
+  se apaga solo con la segunda transacción.
+
 ## Reglas de arquitectura
 
 - Las páginas deben componer componentes y queries, no contener lógica de negocio financiera.
