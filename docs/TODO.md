@@ -56,13 +56,19 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🟡 Integridad y escala
 
-- [ ] **Revisión de seguridad de API keys pendiente (Fase 16 §16.1, Decisión 16.1.8).**
-  - Primer mecanismo de autenticación alternativo del proyecto, compartido por todos los
-    routers protegidos vía `get_current_user`. El spec recomienda una pasada de
-    `security-reviewer` antes del merge; el agente no estaba disponible en el entorno de
-    implementación → se avanzó con las defensas ya diseñadas y se documenta la deuda aquí.
-  - Puntos a revisar: ausencia de TTL obligatorio, ausencia de scopes en v1, y el diseño
-    del `key_func` del rate limit de `POST /transactions` (keyed por hash de la key).
+- [ ] **API keys: TTL opcional y scopes siguen siendo decisiones de producto abiertas
+  (revisión de seguridad 2026-09-06, ver Resueltos más abajo para lo ya corregido).**
+  - **TTL obligatorio**: sigue sin haber expiración forzada (criterio PAT de GitHub). El
+    fix de revocación en reset de contraseña (ver Resueltos) reduce el escenario de mayor
+    riesgo (persistencia tras un incidente detectado), pero no cubre una key filtrada en
+    un canal que el usuario nunca conecta con "mi cuenta está comprometida" (ej. un backup
+    de iCloud del Shortcut expuesto). Sugerido para v2 si se prioriza: TTL opcional con
+    default largo (ej. 1 año) en vez de "nunca".
+  - **Scopes**: se mantiene sin scopes en v1 (mismos permisos que el JWT). Dado que el
+    caso de uso principal (Shortcuts/apps de terceros) es exactamente el que más se
+    beneficiaría de un scope angosto ("solo crear transacciones"), vale la pena
+    reconsiderar si el catálogo de integraciones crece más allá de 1-2 automatizaciones
+    personales por usuario.
 
 - [ ] **Rate limiting en memoria (`slowapi`), sin backend distribuido.**
   - No funciona con múltiples workers ni múltiples instancias — pero hoy el backend corre en
@@ -131,7 +137,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 | Fecha | Item |
 |-------|------|
 | 2026-09-06 | Saldos de cuenta sin reconciliación posible — resuelto en Fase 16 §16.4: `opening_balance` inmutable (con backfill en la migración `e460a42926d7`) + `POST /accounts/{id}/reconcile`. Nota: el backfill solo establece línea de base hacia adelante, no audita desviaciones históricas (ver `BUSINESS_RULES.md`) |
-| 2026-09-06 | API keys personales revocables (Fase 16 §16.1): tabla `api_keys` (migración `6c9bbf3564cc`), auth alternativa `oikos_pat_*` en `get_current_user`, CRUD `/api/v1/api-keys/`, rate limit 60/min en `POST /transactions` keyed por key, UI en `/settings`. Revisión `security-reviewer` pendiente — ver 🟡 más arriba |
+| 2026-09-06 | API keys personales revocables (Fase 16 §16.1): tabla `api_keys` (migración `6c9bbf3564cc`), auth alternativa `oikos_pat_*` en `get_current_user`, CRUD `/api/v1/api-keys/`, UI en `/settings` |
+| 2026-09-06 | Revisión de seguridad de API keys (Decisión 16.1.8) corrida y sus hallazgos accionables corregidos: reset de contraseña ahora revoca también las API keys activas (antes solo revocaba refresh tokens, dejando una key minteada durante un compromiso viva para siempre — `auth.py`); el rate limit de `POST /transactions` pasó de clavear por hash de la key a clavear por `user_id` resuelto en DB (antes un usuario con N keys multiplicaba por N su cuota real de 60/min — `rate_limit.py`); `POST /api-keys/` ganó rate limit `5/minute` + tope de 20 keys activas por usuario (antes no tenía ninguno de los dos — `api_keys.py`). TTL obligatorio y scopes quedan como recomendaciones de producto sin implementar, ver 🟡 |
 | 2026-08-23 | Idempotencia en `POST /transactions` (`Idempotency-Key` + tabla `idempotency_keys`) — resuelto en Fase 10, ver `docs/ROADMAP.md` §10.4. Entrada corregida el 2026-09-06 al detectarse desactualizada durante el análisis de la Fase 16 (`docs/specs/fase_16_spec.md`, hallazgo 12) |
 | 2026-08-23 | Fase 11 — bugs multi-moneda del dashboard: `budgets-progress` agrupa el gasto por `(categoría, moneda)` y expone `currency`; `cashflow-series` y `category-distribution` filtran por una sola moneda (param `currency`, default la preferida) — ver `docs/specs/fase_11_spec.md` §11.1 |
 | 2026-08-23 | Bug `actualizar_transaccion` no actualizaba `currency`: ahora siempre hereda la moneda de la cuenta destino, igual que en la creación (Fase 11 §11.2) |

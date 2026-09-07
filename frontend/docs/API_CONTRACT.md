@@ -184,7 +184,10 @@ para autenticarse (sigue con JWT) — solo las gestiona desde `/settings`.
 - `POST /api/v1/api-keys/` — body `{ name }` (`string`, 1–100 chars). Devuelve
   `ApiKeyCreateResponse` con la key **en texto plano** (`key`) — aparece una sola vez en la
   respuesta; el frontend la muestra con un botón "Copiar" y advierte que no se volverá a
-  mostrar (los `last_used_at`/`revoked_at` no viajan en esta respuesta).
+  mostrar (los `last_used_at`/`revoked_at` no viajan en esta respuesta). Puede devolver `429`
+  (más de 5 intentos por minuto) o `400` (ya hay 20 keys activas, el máximo) — ambos casos ya
+  caen en el `onError` genérico del formulario (`getApiError`), sin manejo especial (agregado
+  en la revisión de seguridad post-16.1, ver `docs/TODO.md`).
 - `DELETE /api/v1/api-keys/{api_key_id}` — revoca (marca `revoked_at`, no borra la fila).
   Efectiva en el siguiente request con esa key (401). `404` si no existe o ya fue revocada.
   El frontend pide confirmación (`ConfirmDialog` con etiqueta "Revocar") y no permite revocar

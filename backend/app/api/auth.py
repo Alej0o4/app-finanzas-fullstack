@@ -187,6 +187,18 @@ def confirmar_restablecimiento_contrasena(
         models.RefreshToken.revoked_at.is_(None),
     ).update({"revoked_at": datetime.now(UTC)})
 
+    # Revisión de seguridad post-Fase 16 §16.1 (Decisión 16.1.8, ver docs/TODO.md): las API
+    # keys no expiran solas (a diferencia del JWT/refresh token) y hasta este fix sobrevivían
+    # sin cambios a un reset de contraseña — si alguien mintió una API key durante una
+    # ventana de compromiso (p. ej. un JWT robado por XSS, válido 15 min), el reset de
+    # contraseña la dejaba activa para siempre, contradiciendo la razón de ser de este mismo
+    # bloque ("dejar sesiones viejas vivas sería contradictorio"). Se revocan también todas
+    # las API keys activas del usuario.
+    db.query(models.ApiKey).filter(
+        models.ApiKey.user_id == user.id,
+        models.ApiKey.revoked_at.is_(None),
+    ).update({"revoked_at": datetime.now(UTC)})
+
     db.commit()
 
     return {"estado": "OK", "mensaje": "Contraseña actualizada exitosamente. Iniciá sesión nuevamente."}

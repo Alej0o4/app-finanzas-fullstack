@@ -19,10 +19,21 @@
   backend solo guarda `key_hash` (sha256) y `key_prefix` (primeros 12 caracteres, no secreto).
 - **Revocación inmediata**: `revoked_at` se valida en cada request — la siguiente petición con
   una key revocada falla con `401` (sin ventana de gracia, a diferencia del JWT).
-- No hay expiración obligatoria en v1 (criterio de PAT); la revisión de seguridad de la
-  Decisión 16.1.8 del spec está pendiente de resolver (ver `docs/TODO.md`).
+- No hay expiración obligatoria en v1 (criterio de PAT) — decisión de producto revisada y
+  mantenida en la revisión de seguridad de la Decisión 16.1.8 (ver `docs/TODO.md`), no un
+  olvido; sigue como recomendación abierta para v2 si el caso de uso lo justifica.
 - Rate limiting: las peticiones autenticadas con API key están sujetas al límite de
-  `POST /transactions` (60/min) keyed por la key, no por IP.
+  `POST /transactions` (60/min) keyed por `user_id` (resuelto contra la DB) — todas las
+  keys activas de un mismo usuario comparten un único balde, corregido en la revisión de
+  seguridad post-16.1 (antes clavaba por la key, permitiendo multiplicar la cuota real
+  creando más keys).
+- `POST /api-keys/` (creación) lleva su propio rate limit (5/min por IP, mismo patrón que
+  login/registro/reset) y un tope de 20 API keys activas por usuario — agregado en la
+  misma revisión para que un JWT robado de corta vida no alcance para mintear un número
+  arbitrario de credenciales de larga vida.
+- Un reset de contraseña exitoso revoca también todas las API keys activas del usuario,
+  igual que ya hacía con los refresh tokens (agregado en la misma revisión: antes una key
+  minteada durante una ventana de compromiso sobrevivía sin cambios a esa acción).
 
 ## Cuentas
 

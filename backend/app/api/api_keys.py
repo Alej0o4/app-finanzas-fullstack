@@ -8,24 +8,49 @@ auditar incidentes.
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core import security
 from app.core.database import get_db
+from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
 
 router = APIRouter()
 
+# Revisión de seguridad post-Fase 16 §16.1 (Decisión 16.1.8, ver docs/TODO.md): sin este
+# tope, un JWT robado (válido 15 min) alcanza para mintear un número arbitrario de API
+# keys de larga vida antes de que la víctima note algo — cada key sobrevive un reset de
+# contraseña salvo que se revoque a mano. El límite es generoso (ninguna automatización
+# personal legítima necesita más de unas pocas keys activas a la vez) y no bloquea crear
+# una key nueva si antes se revocan viejas.
+MAX_ACTIVE_API_KEYS_POR_USUARIO = 20
+
 
 @router.post("/", response_model=schemas.ApiKeyCreateResponse)
+@limiter.limit("5/minute")
 def crear_api_key(
+    request: Request,
     body: schemas.ApiKeyCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    activas = (
+        db.query(models.ApiKey)
+        .filter(models.ApiKey.user_id == current_user.id, models.ApiKey.revoked_at.is_(None))
+        .count()
+    )
+    if activas >= MAX_ACTIVE_API_KEYS_POR_USUARIO:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Ya tenés {MAX_ACTIVE_API_KEYS_POR_USUARIO} API keys activas, el máximo "
+                "permitido. Revocá alguna que ya no uses antes de crear una nueva."
+            ),
+        )
+
     raw_key = security.generate_api_key()
     nueva = models.ApiKey(
         user_id=current_user.id,

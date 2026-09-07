@@ -2,10 +2,15 @@
 
 Cubre: creación con exposición única de la key en texto plano (Decisión 16.1.5),
 listado que nunca expone `key`/`key_hash`, revocación efectiva en el siguiente request
-(Decisión 16.1.4), 404 en DELETE de key ajena/ya revocada, regresión del flujo JWT, y el
+(Decisión 16.1.4), 404 en DELETE de key ajena/ya revocada, regresión del flujo JWT, el
 rate limit por usuario de `POST /transactions` cuando la auth es API key (Decisión
-16.1.7 — keyed por hash del token, no por IP).
+16.1.7, corregida en la revisión de seguridad post-16.1 — keyed por `user_id` resuelto en
+DB, no por hash del token crudo), y las correcciones de la revisión de seguridad
+(Decisión 16.1.8 / docs/TODO.md): revocación de API keys al confirmar un reset de
+contraseña, y el tope + rate limit sobre la creación de API keys.
 """
+
+import re
 
 from fastapi.testclient import TestClient
 
@@ -16,6 +21,12 @@ def _crear_api_key(client: TestClient, headers: dict, name: str = "Shortcut iPho
     response = client.post(API_KEYS_URL, json={"name": name}, headers=headers)
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def _extract_token_from_email(html_body: str) -> str:
+    match = re.search(r"token=([^\"&\s]+)", html_body)
+    assert match, f"No se encontró un token en el cuerpo del email: {html_body!r}"
+    return match.group(1)
 
 
 class TestCreacionYListado:
@@ -153,10 +164,15 @@ class TestRateLimitPorUsuario:
         sixty_first = client.post("/api/v1/transactions/", json=payload, headers=key_headers)
         assert sixty_first.status_code == 429
 
-    def test_rate_limit_counter_is_per_api_key(self, client, test_user, make_account, make_category):
-        """Dos keys distintas (dos usuarios distintos a efectos prácticos: cada key
-        pertenece a un usuario) no comparten contador — el key_func clavea por el hash
-        del token, no por IP."""
+    def test_rate_limit_counter_is_per_user_shared_across_own_keys(
+        self, client, test_user, make_account, make_category
+    ):
+        """Revisión de seguridad post-16.1 (docs/TODO.md): la primera versión clavaba el
+        contador por hash de la key, así que dos keys del mismo usuario tenían contadores
+        independientes — un usuario podía crear N keys y multiplicar por N su cuota real
+        de 60/min, justo la automatización sin freno que la Decisión 16.1.7 buscaba evitar.
+        Corregido: el `key_func` resuelve el `user_id` real contra la DB, así que dos keys
+        del MISMO usuario comparten un único balde."""
         cuenta = make_account(test_user["headers"], balance="1000.00")
         categoria = make_category(test_user["headers"], name="Ingreso B", type="income")
 
@@ -172,12 +188,156 @@ class TestRateLimitPorUsuario:
             "category_id": categoria["id"],
         }
 
-        # key A consume 60 de su propio contador.
+        # key A consume las 60 del balde... que es el balde del USUARIO, no de la key.
         for _ in range(60):
             response = client.post("/api/v1/transactions/", json=payload, headers=headers_a)
             assert response.status_code == 200, response.text
         assert client.post("/api/v1/transactions/", json=payload, headers=headers_a).status_code == 429
 
-        # key B (token distinto → contra distinto) sigue sin tocar su límite.
-        first_b = client.post("/api/v1/transactions/", json=payload, headers=headers_b)
-        assert first_b.status_code == 200, first_b.text
+        # key B es una key DISTINTA pero del MISMO usuario → mismo balde, ya agotado.
+        # Antes del fix esto devolvía 200 (bug: multiplicaba la cuota real por N keys).
+        also_limited = client.post("/api/v1/transactions/", json=payload, headers=headers_b)
+        assert also_limited.status_code == 429, also_limited.text
+
+    def test_rate_limit_counter_is_independent_across_different_users(
+        self, client, test_user, other_user, make_account, make_category
+    ):
+        """Dos usuarios distintos (cada uno con su propia key) sí tienen baldes
+        independientes — el fix clavea por usuario, no colapsa a un balde global."""
+        cuenta = make_account(test_user["headers"], balance="1000.00")
+        categoria = make_category(test_user["headers"], name="Ingreso A", type="income")
+        cuenta_otro = make_account(other_user["headers"], balance="1000.00")
+        categoria_otro = make_category(other_user["headers"], name="Ingreso ajeno", type="income")
+
+        key_propia = _crear_api_key(client, test_user["headers"], name="propia")
+        key_ajena = _crear_api_key(client, other_user["headers"], name="ajena")
+        headers_propia = {"Authorization": f"Bearer {key_propia['key']}"}
+        headers_ajena = {"Authorization": f"Bearer {key_ajena['key']}"}
+
+        payload_propio = {
+            "amount": "1.00",
+            "type": "income",
+            "account_id": cuenta["id"],
+            "category_id": categoria["id"],
+        }
+        payload_ajeno = {
+            "amount": "1.00",
+            "type": "income",
+            "account_id": cuenta_otro["id"],
+            "category_id": categoria_otro["id"],
+        }
+
+        for _ in range(60):
+            response = client.post("/api/v1/transactions/", json=payload_propio, headers=headers_propia)
+            assert response.status_code == 200, response.text
+        assert client.post("/api/v1/transactions/", json=payload_propio, headers=headers_propia).status_code == 429
+
+        # El otro usuario no comparte balde — su primera llamada sigue pasando.
+        first_ajeno = client.post("/api/v1/transactions/", json=payload_ajeno, headers=headers_ajena)
+        assert first_ajeno.status_code == 200, first_ajeno.text
+
+
+class TestRevisionSeguridadPost161:
+    """Hallazgos de la revisión de seguridad de la Decisión 16.1.8 (ver docs/TODO.md),
+    corregidos directamente en el código en vez de quedar solo documentados."""
+
+    def test_password_reset_confirm_revokes_active_api_keys(self, client, register_and_login, captured_emails):
+        """Antes de este fix, confirmar un reset de contraseña revocaba los refresh
+        tokens del usuario pero dejaba viva cualquier API key existente — una key
+        minteada durante una ventana de compromiso (p. ej. un JWT robado, válido 15 min)
+        sobrevivía indefinidamente a la acción que el usuario toma específicamente para
+        recuperar el control de su cuenta, contradiciendo la razón de ser del bloque que
+        ya revocaba los refresh tokens ("dejar sesiones viejas vivas sería
+        contradictorio", `auth.py`)."""
+        user = register_and_login(email="con-api-key@example.com")
+        captured_emails.clear()  # descarta el email de verificación del registro
+
+        creada = _crear_api_key(client, user["headers"], name="Shortcut comprometido")
+        key_headers = {"Authorization": f"Bearer {creada['key']}"}
+        assert client.get("/api/v1/users/me", headers=key_headers).status_code == 200
+
+        client.post("/api/v1/auth/password-reset/request", json={"email": user["email"]})
+        raw_token = _extract_token_from_email(captured_emails[-1]["html_body"])
+        confirm = client.post(
+            "/api/v1/auth/password-reset/confirm",
+            json={"token": raw_token, "new_password": "OtraContrasena99"},
+        )
+        assert confirm.status_code == 200, confirm.text
+
+        # La API key minteada antes del reset ya no debería autenticar.
+        after_reset = client.get("/api/v1/users/me", headers=key_headers)
+        assert after_reset.status_code == 401
+
+        # Y queda marcada como revocada en el listado (login nuevo con la contraseña
+        # actualizada, ya que el reset también invalidó los refresh tokens viejos).
+        login = client.post(
+            "/api/v1/auth/login",
+            data={"username": user["email"], "password": "OtraContrasena99"},
+        )
+        assert login.status_code == 200, login.text
+        nuevo_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        lista = client.get(API_KEYS_URL, headers=nuevo_headers).json()
+        assert len(lista) == 1
+        assert lista[0]["revoked_at"] is not None
+
+    def test_password_reset_confirm_does_not_touch_other_users_api_keys(
+        self, client, register_and_login, other_user, captured_emails
+    ):
+        """La revocación masiva del fix anterior está filtrada por `user_id` — un reset de
+        contraseña de un usuario no debe tocar las keys de otro."""
+        user = register_and_login(email="con-api-key-2@example.com")
+        captured_emails.clear()
+        key_ajena = _crear_api_key(client, other_user["headers"], name="No debería tocarse")
+
+        client.post("/api/v1/auth/password-reset/request", json={"email": user["email"]})
+        raw_token = _extract_token_from_email(captured_emails[-1]["html_body"])
+        client.post(
+            "/api/v1/auth/password-reset/confirm",
+            json={"token": raw_token, "new_password": "OtraContrasena99"},
+        )
+
+        lista_ajena = client.get(API_KEYS_URL, headers=other_user["headers"]).json()
+        assert len(lista_ajena) == 1
+        assert lista_ajena[0]["id"] == key_ajena["id"]
+        assert lista_ajena[0]["revoked_at"] is None
+
+    def test_create_api_key_endpoint_is_rate_limited(self, client, test_user):
+        """`POST /api-keys/` no tenía ningún rate limit: con un JWT válido (p. ej. uno
+        robado, de 15 min de vida) se podían mintear tantas API keys de larga vida como se
+        quisiera, sin fricción. Ahora lleva el mismo `5/minute` que login/registro/reset."""
+        for _ in range(5):
+            response = client.post(API_KEYS_URL, json={"name": "key"}, headers=test_user["headers"])
+            assert response.status_code == 200, response.text
+
+        sexta = client.post(API_KEYS_URL, json={"name": "key"}, headers=test_user["headers"])
+        assert sexta.status_code == 429
+
+    def test_create_api_key_enforces_max_active_keys_per_user(self, client, test_user, monkeypatch):
+        """Tope defensivo sobre el número de API keys activas por usuario — sin él, minteo
+        masivo de keys (dentro de la ventana del rate limit de creación, o a lo largo del
+        tiempo) multiplica sin límite la cantidad de credenciales de larga vida que
+        sobreviven incluso a un reset de contraseña si el usuario no las revoca a mano una
+        por una. Se baja el tope a 2 vía monkeypatch para no chocar con el rate limit de
+        creación (5/minute) probado aparte."""
+        monkeypatch.setattr("app.api.api_keys.MAX_ACTIVE_API_KEYS_POR_USUARIO", 2)
+
+        _crear_api_key(client, test_user["headers"], name="uno")
+        _crear_api_key(client, test_user["headers"], name="dos")
+
+        tercera = client.post(API_KEYS_URL, json={"name": "tres"}, headers=test_user["headers"])
+        assert tercera.status_code == 400
+        assert "máximo" in tercera.json()["detail"] or "2" in tercera.json()["detail"]
+
+    def test_revoking_a_key_frees_a_slot_under_the_cap(self, client, test_user, monkeypatch):
+        """Revocar una key libera cupo bajo el tope — el tope cuenta keys ACTIVAS, no el
+        histórico total creado."""
+        monkeypatch.setattr("app.api.api_keys.MAX_ACTIVE_API_KEYS_POR_USUARIO", 1)
+
+        primera = _crear_api_key(client, test_user["headers"], name="uno")
+        bloqueada = client.post(API_KEYS_URL, json={"name": "dos"}, headers=test_user["headers"])
+        assert bloqueada.status_code == 400
+
+        client.delete(f"{API_KEYS_URL}/{primera['id']}", headers=test_user["headers"])
+
+        despues_de_revocar = client.post(API_KEYS_URL, json={"name": "dos"}, headers=test_user["headers"])
+        assert despues_de_revocar.status_code == 200, despues_de_revocar.text

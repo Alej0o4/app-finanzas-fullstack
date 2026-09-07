@@ -7,9 +7,11 @@
   flujo OAuth2, se aceptan **API keys personales** con prefijo `oikos_pat_` en el mismo
   header (Fase 16 §16.1) — ver sección "API keys" abajo.
 - Content type esperado: `application/json`, excepto login, que usa formulario OAuth2.
-- Rate limiting: `/api/v1/auth/login`, `POST /api/v1/users/` y `/api/v1/auth/password-reset/request`
-  (5 req/min por IP via `slowapi`), y `POST /api/v1/transactions/` (60 req/min — keyed por
-  API key cuando la autenticación es con API key, por IP en el resto, Fase 16 §16.1).
+- Rate limiting: `/api/v1/auth/login`, `POST /api/v1/users/`, `/api/v1/auth/password-reset/request`
+  y `POST /api/v1/api-keys/` (5 req/min por IP via `slowapi`), y `POST /api/v1/transactions/`
+  (60 req/min — keyed por usuario cuando la autenticación es con API key, resuelto contra la
+  DB para que todas las keys de un mismo usuario compartan un balde; por IP en el resto,
+  Fase 16 §16.1, corregido en la revisión de seguridad post-16.1 — ver `docs/TODO.md`).
 - CORS: orígenes permitidos vía `ALLOWED_ORIGINS` (env) + regex para IPs de Tailscale (100.x.x.x).
 - Uvicorn escucha en `0.0.0.0` para soportar acceso remoto via Tailscale.
 - Borrado lógico (Fase 8): los endpoints `DELETE` de cuentas/categorías/transacciones/presupuestos marcan
@@ -133,8 +135,16 @@ Características:
   mismo usuario — la autorización real vive en cada router, filtrada por `user_id`.
 - **Revocación inmediata**: `revoked_at` se valida en cada request; la siguiente petición con
   una key revocada falla con `401` (a diferencia del JWT, que vive hasta 15 min sin blacklist).
-- **Sin expiración obligatoria en v1** (mismo criterio que un PAT de GitHub). La revisión de
-  seguridad recomendada por la Decisión 16.1.8 del spec sigue pendiente (ver `docs/TODO.md`).
+- **Sin expiración obligatoria en v1** (mismo criterio que un PAT de GitHub) — decisión de
+  producto revisada y mantenida explícitamente en la revisión de seguridad de la Decisión
+  16.1.8 (ver `docs/TODO.md`), no un olvido.
+- **Máximo 20 API keys activas por usuario** y `POST /api/v1/api-keys/` limitado a 5 req/min
+  por IP (mismo patrón que login/registro/reset) — agregado en la revisión de seguridad
+  post-16.1 para que un JWT de corta vida robado no alcance para mintear un número
+  arbitrario de credenciales de larga vida.
+- **Un reset de contraseña revoca también todas las API keys activas del usuario**, igual que
+  ya hacía con los refresh tokens — agregado en la misma revisión (antes una key sobrevivía
+  sin cambios a la acción que el usuario toma para recuperar el control de su cuenta).
 - La key en texto plano **solo** se devuelve en la respuesta del `POST` — nunca se puede
   volver a consultar.
 
@@ -155,6 +165,11 @@ Salida (`ApiKeyCreateResponse`):
 - `key_prefix`: primeros 12 caracteres de la key (no es secreto — solo discrimina keys en
   la lista).
 - `created_at`
+
+Errores esperados:
+
+- `400` si el usuario ya tiene 20 API keys activas (revocá alguna antes de crear otra).
+- `429` si se exceden 5 intentos por minuto (rate limiting).
 
 ### `GET /api/v1/api-keys/`
 
