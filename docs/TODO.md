@@ -9,6 +9,14 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 > **Contexto del cambio:** varios items estaban clasificados como baja prioridad bajo el
 > supuesto "solo lo uso yo, en red privada Tailscale". Ese supuesto ya no aplica.
 
+> **2026-09-06 — Tailscale Funnel activado para uso personal diario.** Oikos ahora es
+> alcanzable en `https://<host>.<tailnet>.ts.net` desde fuera de la red privada (celular,
+> datos móviles), no solo desde IPs `100.x.x.x` del tailnet. Sigue siendo de un solo usuario
+> (vos), así que los bloqueantes de abajo no aplican todavía en el sentido estricto de
+> "usuario que no seas vos" — pero el tráfico ya no está contenido a una VPN privada, así que
+> vale la pena no postergar demasiado el envío real de email (recuperación de contraseña si
+> perdés acceso) y el cron de backup.
+
 ---
 
 ## 🔴 Bloqueantes — antes de que exista un usuario que no seas tú
