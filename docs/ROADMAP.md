@@ -592,12 +592,92 @@ tokens, así que **no hay que rehacer nada** — solo agregar las piezas que fal
 
 ---
 
+## Fase 17 — Análisis por cuenta y presupuestos multi-moneda
+
+**Objetivo:** hoy el dashboard agrega todas las cuentas por diseño (Fase 11) y `accounts/[id]` no
+tiene ningún gráfico — solo saldo, historial plano y el botón de recalcular saldo. Por separado,
+`Budget` ya tiene su propia columna `currency` (Fase 3) pero el formulario nunca la expone ni la
+envía, así que en la práctica todo presupuesto se crea en COP. Depende de Fase 8 (`Account.currency`,
+`Budget.currency`) y Fase 11 (componentes de gráficos reutilizables).
+
+> Decidido en sesión de grilling del 2026-09-12, a partir de una semana de uso real desde celular.
+> No requiere ninguna migración de compatibilidad — el proyecto sigue sin usuarios reales.
+
+- [ ] **Analítica por cuenta en `accounts/[id]`** — reutilizar los mismos componentes de gráficos
+      del dashboard general (`CategoryDonutChart`, `CategoryBreakdownBars`, `BudgetRing`),
+      filtrados a esa cuenta.
+  - El dashboard principal no cambia: sigue agregando todas las cuentas (decisión ya tomada en
+    Fase 11, reafirmada aquí) — no se agrega un selector de cuenta ahí.
+  - Incluye su propio "balance del mes" (ingreso − gasto de esa cuenta), con el mismo componente
+    que rediseña Fase 19 más abajo.
+- [ ] **Selector de moneda en el formulario de presupuestos** — hoy `budgets/page.tsx` no tiene
+      campo de moneda ni lo envía en el payload; `Budget.currency` (default `"COP"`) nunca se
+      toca desde la UI.
+  - Opciones derivadas de las monedas presentes en las cuentas del usuario — no se agrega
+    `account_id` a `Budget`; se mantiene el filtrado estricto por moneda que ya existe en el
+    cálculo de progreso (`dashboard.py`).
+  - En la vista por cuenta del ítem anterior, los presupuestos se filtran por la moneda de esa cuenta.
+
+---
+
+## Fase 18 — Categorías personalizables
+
+**Objetivo:** ampliar el catálogo curado de categorías (hoy 11, ver Fase 8 "Categorías default
+ampliadas a 8–10"), dejar que cada usuario decida su propio nivel de detalle, y activar el editor
+de categorías personalizado que ya existe en el código — backend con CRUD completo para
+categorías `user_id` no nulo, frontend apagado desde Fase 11 detrás de un flag.
+
+> Decidido en sesión de grilling del 2026-09-12. Sin usuarios reales todavía, no hace falta
+> ninguna ruta de migración con compatibilidad — se puede re-sembrar directamente.
+
+- [ ] **Ampliar el pool de categorías default** — agregar Mercado, Pareja, Regalos, Restaurantes,
+      Gastos hormiga, Uber, Carro, Transporte público (lista final a cerrar en la spec).
+  - No reemplaza "Transporte" genérica — conviven ambos niveles de detalle, cada usuario elige
+    el suyo.
+- [ ] **Selección de categorías en el registro** — un set base razonable viene pre-marcado (ej.
+      Mercado, Transporte, Vivienda, Salud, Entretenimiento, Otro); el resto queda visible para
+      agregar cuando el usuario quiera.
+- [ ] **Concepto nuevo: categorías "ocultas para mí"** — por usuario, no modifica ni borra
+      categorías del sistema (siguen siendo compartidas e inmutables vía API, sin cambios).
+      Ocultar solo afecta el selector al crear una transacción nueva; no esconde transacciones
+      históricas ni datos de analíticas.
+- [ ] **Activar el editor de categorías personalizadas** — quitar
+      `CUSTOM_CATEGORY_EDITING_ENABLED = false` en `categories/page.tsx:24`; el backend ya
+      soporta CRUD completo de categorías user-owned desde antes de Fase 11.
+  - Se retira del backlog priorizado (ver tabla abajo) — pasa a programado aquí.
+
+---
+
+## Fase 19 — Fricción post-onboarding y analítica de ingreso
+
+**Objetivo:** cerrar tres fricciones encontradas en una semana de uso real desde celular.
+
+> Decidido en sesión de grilling del 2026-09-12.
+
+- [ ] **Redirección de login condicionada al uso real, no solo al onboarding** — hoy
+      `login/page.tsx:58` redirige siempre a `/capture`, sin condición. Se agrega
+      `has_transactions` (o equivalente) a la respuesta de login/`/users/me`; con 2 o más
+      transacciones, el login redirige directo a `/dashboard`.
+  - Esto resuelve la Decisión 10.1.4 de Fase 10, documentada ahí mismo como riesgo a validar con
+    datos de uso reales una vez hubiera usuarios recurrentes — ya se validó: genera exactamente
+    la fricción medible que esa decisión anticipaba.
+- [ ] **Rediseño de la card "Balance del mes"** — hoy es redundante junto a "Ingresos del Mes" /
+      "Gastos del Mes" (ver Fase 11, "Reordenar la jerarquía de las summary cards del
+      dashboard"): las mismas 3 cifras en 3 tarjetas separadas. Se fusiona en una fila compacta
+      sin eliminar el dato — sigue siendo el titular del pivote a flujo (Cambio de enfoque,
+      2026-08-22).
+- [ ] **Nueva métrica "% del ingreso por categoría" en Analítica** — complementaria a la dona
+      existente (que reparte el 100% de los *gastos*, no del ingreso). Se implementa como
+      pestaña ("Ver como % de: Gastos | Ingresos") que cambia el marco de referencia de toda la
+      vista, no como dos números combinados en la misma fila.
+
+---
+
 ## Backlog priorizado (después del MVP)
 
 | Prioridad | Feature | Nota |
 |---|---|---|
 | Alta | **Automatización de ingresos/gastos recurrentes** | Feature de retención del mes 2, no de adquisición del día 1. Requiere scheduler (ya existirá tras Fase 14). |
-| Alta | **Editor de categorías personalizable** | Segunda semana post-lanzamiento. El código ya existe, solo está oculto. |
 | Alta | **Sinking funds** (gastos distribuidos en cuotas mensuales virtuales) | Diferenciador potencial para v1.1. Validado por YNAB. Feature de usuario avanzado. |
 | Media | **Registro por nota de voz con IA** | v1.2. Feature de marketing / efecto "wow". Depende de la captura por nombre (Fase 16). |
 | Media | **Google OAuth** | Aplazado en la decisión del 2026-08-22. |
