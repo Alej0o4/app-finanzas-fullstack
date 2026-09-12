@@ -1,3 +1,4 @@
+import calendar
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -108,6 +109,63 @@ def reconciliar_cuenta(
         "recalculated_balance": saldo_recalculado,
         "discrepancy": discrepancia,
         "opening_balance": cuenta.opening_balance,
+    }
+
+
+# ⚠️ Declarado antes de GET /{account_id}: agrupa las sub-rutas de una cuenta puntual
+# junto a /{account_id}/reconcile, por legibilidad (Hallazgo 8 del spec de Fase 17);
+# con dos segmentos no colisiona con /{account_id} (de un segmento) — mismo criterio
+# de orden documentado arriba para /summary.
+@router.get("/{account_id}/monthly-summary", response_model=schemas.AccountMonthlySummary)
+def obtener_resumen_mensual_cuenta(
+    account_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
+
+    `ingreso_del_mes - gasto_del_mes` calculado SOLO con transacciones reales de esa
+    cuenta en el mes en curso (no eliminadas) — a diferencia de
+    `DashboardSummary.monthly_flow_balance`, no depende de ningún valor declarado
+    por el usuario, así que el balance nunca es `null`. Misma verificación de
+    pertenencia que `reconciliar_cuenta` (404 si no existe o no es del usuario).
+    """
+    cuenta = (
+        db.query(models.Account)
+        .filter(models.Account.id == account_id, models.Account.user_id == current_user.id)
+        .first()
+    )
+    if not cuenta:
+        raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+
+    hoy = datetime.now(UTC)
+    primer_dia = datetime(hoy.year, hoy.month, 1)
+    ultimo_dia_mes = calendar.monthrange(hoy.year, hoy.month)[1]
+    ultimo_dia = datetime(hoy.year, hoy.month, ultimo_dia_mes, 23, 59, 59)
+
+    def _total(tipo: str) -> Decimal:
+        """Suma del mes de las transacciones de un tipo, ignorando borradas (mismo
+        criterio `deleted_at.is_(None)` que reconciliar_cuenta — Fase 16 §16.4)."""
+        return (
+            db.query(func.sum(models.Transaction.amount))
+            .filter(
+                models.Transaction.account_id == account_id,
+                models.Transaction.type == tipo,
+                models.Transaction.date >= primer_dia,
+                models.Transaction.date <= ultimo_dia,
+                models.Transaction.deleted_at.is_(None),
+            )
+            .scalar()
+        ) or Decimal("0.00")
+
+    ingreso = _total("income")
+    gasto = _total("expense")
+
+    return {
+        "currency": cuenta.currency,
+        "monthly_income": ingreso,
+        "monthly_expense": gasto,
+        "monthly_flow_balance": ingreso - gasto,
     }
 
 

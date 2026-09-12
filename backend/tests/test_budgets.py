@@ -269,3 +269,132 @@ class TestRecurringBudgets:
         )
         assert response.status_code == 200, response.text
         assert response.json()["is_recurring"] is False
+
+
+class TestBudgetMultiCurrency:
+    """Fase 17 §17.2: presupuestos multi-moneda.
+
+    El índice único ensanchado a `(user_id, category_id, month, year, currency)`
+    (§17.2.2) permite un presupuesto por (categoría, período) POR moneda; el PUT
+    asigna `currency` y gana try/except IntegrityError (§17.2.5).
+    """
+
+    def test_same_category_and_period_in_different_currencies_both_allowed(self, client, auth_headers, make_category):
+        """Dos presupuestos de la misma categoría/mes/año en monedas distintas → ambos
+        200 (hoy el segundo choca con el 400 del duplicado)."""
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        month, year = _now_month_year()
+        payload_base = {
+            "amount_limit": "500000.00",
+            "month": month,
+            "year": year,
+            "category_id": categoria["id"],
+        }
+
+        cop = client.post(
+            "/api/v1/budgets/",
+            json={**payload_base, "currency": "COP"},
+            headers=auth_headers,
+        )
+        assert cop.status_code == 200, cop.text
+
+        usd = client.post(
+            "/api/v1/budgets/",
+            json={**payload_base, "currency": "USD"},
+            headers=auth_headers,
+        )
+        assert usd.status_code == 200, usd.text
+
+        listado = client.get("/api/v1/budgets/", params={"month": month, "year": year}, headers=auth_headers)
+        assert listado.status_code == 200
+        coincidencias = [b for b in listado.json() if b["category_id"] == categoria["id"]]
+        assert len(coincidencias) == 2
+        assert {b["currency"] for b in coincidencias} == {"COP", "USD"}
+
+    def test_identical_budget_in_all_four_dimensions_still_400(self, client, auth_headers, make_category):
+        """Presupuesto idéntico en las 4 dimensiones (categoría/mes/año/moneda):
+        sigue siendo 400 — no se rompe el caso de duplicado real."""
+        categoria = make_category(auth_headers, name="Ocio", type="expense")
+        month, year = _now_month_year()
+        payload = {
+            "amount_limit": "200000.00",
+            "currency": "COP",
+            "month": month,
+            "year": year,
+            "category_id": categoria["id"],
+        }
+
+        first = client.post("/api/v1/budgets/", json=payload, headers=auth_headers)
+        assert first.status_code == 200, first.text
+
+        second = client.post("/api/v1/budgets/", json=payload, headers=auth_headers)
+        assert second.status_code == 400
+        assert second.status_code != 500
+
+    def test_edit_budget_to_already_occupied_currency_returns_400_not_500(self, client, auth_headers, make_category):
+        """Editar `currency` a una que YA tiene otro presupuesto para esa
+        categoría/período → 400, no 500 (ejercita el try/except nuevo del PUT)."""
+        categoria = make_category(auth_headers, name="Gimnasio", type="expense")
+        month, year = _now_month_year()
+        payload_base = {
+            "amount_limit": "100000.00",
+            "month": month,
+            "year": year,
+            "category_id": categoria["id"],
+        }
+
+        cop = client.post(
+            "/api/v1/budgets/",
+            json={**payload_base, "currency": "COP"},
+            headers=auth_headers,
+        )
+        assert cop.status_code == 200, cop.text
+        usd = client.post(
+            "/api/v1/budgets/",
+            json={**payload_base, "currency": "USD"},
+            headers=auth_headers,
+        )
+        assert usd.status_code == 200, usd.text
+
+        edicion = client.put(
+            f"/api/v1/budgets/{usd.json()['id']}",
+            json={**payload_base, "amount_limit": "120000.00", "currency": "COP"},
+            headers=auth_headers,
+        )
+        assert edicion.status_code == 400
+        assert edicion.status_code != 500
+
+    def test_edit_budget_without_changing_currency_persists_value(self, client, auth_headers, make_category):
+        """Editar SIN cambiar `currency` (se envía el mismo valor): persiste sin
+        cambios — regresión de la línea `presupuesto_db.currency = ...` nueva."""
+        categoria = make_category(auth_headers, name="Suscripciones", type="expense")
+        month, year = _now_month_year()
+
+        creado = client.post(
+            "/api/v1/budgets/",
+            json={
+                "amount_limit": "50000.00",
+                "currency": "COP",
+                "month": month,
+                "year": year,
+                "category_id": categoria["id"],
+            },
+            headers=auth_headers,
+        )
+        assert creado.status_code == 200, creado.text
+        budget_id = creado.json()["id"]
+
+        edicion = client.put(
+            f"/api/v1/budgets/{budget_id}",
+            json={
+                "amount_limit": "60000.00",
+                "currency": "COP",
+                "month": month,
+                "year": year,
+                "category_id": categoria["id"],
+            },
+            headers=auth_headers,
+        )
+        assert edicion.status_code == 200, edicion.text
+        assert edicion.json()["currency"] == "COP"
+        assert Decimal(str(edicion.json()["amount_limit"])) == Decimal("60000.00")

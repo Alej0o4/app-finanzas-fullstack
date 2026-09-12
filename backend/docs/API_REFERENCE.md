@@ -354,6 +354,26 @@ Errores esperados:
 
 - `404` si la cuenta no existe o no pertenece al usuario autenticado.
 
+### `GET /api/v1/accounts/{account_id}/monthly-summary` (Fase 17 §17.1.4)
+
+Balance del mes en curso de una sola cuenta (Decisión 17.1.4): `ingreso_del_mes −
+gasto_del_mes` calculado con las transacciones reales de **esa cuenta** en el mes actual
+(no eliminadas). Vive en `accounts.py` porque usa la misma verificación de pertenencia que
+`reconciliar_cuenta`. A diferencia de `GET /api/v1/dashboard/summary`, NO usa
+`User.monthly_income` (un valor declarado, global) — el resultado se deriva íntegramente de
+transacciones, así que **nunca es `null`** (mínimo `0.00`).
+
+Salida (`AccountMonthlySummary`):
+
+- `currency`: moneda de la cuenta.
+- `monthly_income`: suma de ingresos de la cuenta en el mes en curso.
+- `monthly_expense`: suma de gastos de la cuenta en el mes en curso.
+- `monthly_flow_balance`: `monthly_income - monthly_expense` — nunca `null`.
+
+Errores esperados:
+
+- `404` si la cuenta no existe o no pertenece al usuario autenticado.
+
 ### `DELETE /api/v1/accounts/{account_id}`
 
 Elimina la cuenta si no tiene transacciones asociadas.
@@ -457,7 +477,7 @@ Elimina (lógicamente) una transacción y revierte el impacto sobre el saldo de 
 
 ### `POST /api/v1/budgets/`
 
-Crea un presupuesto por categoría, mes y año.
+Crea un presupuesto por categoría, mes, año y moneda.
 
 Entrada:
 
@@ -475,7 +495,7 @@ Entrada:
 
 Errores esperados:
 
-- `400` si ya existe un presupuesto (activo) para la misma categoría, mes y año.
+- `400` si ya existe un presupuesto (activo) para la misma categoría, mes, año y moneda.
 
 ### `GET /api/v1/budgets/`
 
@@ -492,7 +512,13 @@ sin generar nada.
 
 ### `PUT /api/v1/budgets/{budget_id}`
 
-Actualiza un presupuesto existente (incluido `is_recurring`).
+Actualiza un presupuesto existente (incluido `is_recurring` y `currency` — Fase 17 §17.2.5).
+
+Errores esperados:
+
+- `400` si el cambio deja `currency`/categoría/período ocupados por otro presupuesto activo
+  (misma categoría, mes, año y moneda).
+- `404` si el presupuesto no existe o no pertenece al usuario autenticado.
 
 ### `DELETE /api/v1/budgets/{budget_id}`
 
@@ -528,6 +554,13 @@ Devuelve progreso de presupuestos del mes actual con:
 - `currency` — moneda del presupuesto (`Budget.currency`); `spent` solo suma los gastos
   de esa misma moneda (Fase 11 §11.1)
 
+Parámetros:
+
+- `currency` (opcional, Fase 17 §17.2.3): si se pasa, solo devuelve los presupuestos de esa
+  moneda. **Solo filtra filas — no recalcula `spent`**: cada fila filtrada conserva el
+  mismo `spent` (agregado de todas las cuentas del usuario en esa moneda) que sin el
+  filtro (Decisión P4 del spec de Fase 17).
+
 Antes de calcular, genera las filas de presupuestos recurrentes pendientes del mes en
 curso — por eso los presupuestos "reaparecen" solos cada mes al entrar al dashboard.
 
@@ -562,6 +595,11 @@ Parámetros:
 - `currency` (opcional): moneda a filtrar; por defecto la preferida del usuario. Se aplica
   en ambas ramas (`neto=true` y `neto=false`) — los totales nunca mezclan monedas
   (Fase 11 §11.1).
+- `account_id` (opcional, Fase 17 §17.1.3): filtra a las transacciones de una sola cuenta,
+  aplicado en ambas ramas (`neto=true` y `neto=false`). `currency` y `account_id` son
+  ortogonales: pasar `account_id` NO deriva la moneda de la cuenta — si se quieren ambos,
+  pasá `currency=account.currency` explícitamente. `404` si la cuenta no existe o no
+  pertenece al usuario autenticado.
 
 Salida:
 

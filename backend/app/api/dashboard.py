@@ -124,7 +124,11 @@ def obtener_resumen(db: Session = Depends(get_db), current_user: models.User = D
 
 
 @router.get("/budgets-progress", response_model=list[schemas.BudgetProgress])
-def obtener_progreso_presupuestos(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def obtener_progreso_presupuestos(
+    currency: str | None = Query(None, description="Si se pasa, solo devuelve presupuestos en esa moneda"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     hoy = datetime.now(UTC)
 
     # El dashboard es la página de aterrizaje: genera aquí los presupuestos recurrentes
@@ -169,6 +173,11 @@ def obtener_progreso_presupuestos(db: Session = Depends(get_db), current_user: m
             }
         )
 
+    # Fase 17 §17.2.3 (Decisión P4): el filtro por moneda se aplica sobre la lista YA
+    # calculada — no recalcula `spent` ni toca la query SQL (el `spent` de cada fila
+    # sigue siendo el agregado de todas las cuentas del usuario en esa moneda).
+    if currency is not None:
+        progreso_lista = [p for p in progreso_lista if p["currency"] == currency]
     return progreso_lista
 
 
@@ -228,10 +237,34 @@ def obtener_distribucion_categorias(
     type: str = Query("expense", pattern="^(income|expense)$", description="Filtrar por tipo de transacción"),
     neto: bool = Query(False, description="Si es True, calcula gasto neto (expense - income) por categoría"),
     currency: str | None = Query(None, description="Moneda a filtrar; por defecto la preferida del usuario"),
+    account_id: int | None = Query(None, description="Filtra a las transacciones de una sola cuenta"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    # Fase 17 §17.1.3: `account_id` requiere que la cuenta exista y pertenezca al
+    # usuario — método de 404 idéntico al de accounts.py (nunca 403).
+    if account_id is not None:
+        cuenta = (
+            db.query(models.Account)
+            .filter(models.Account.id == account_id, models.Account.user_id == current_user.id)
+            .first()
+        )
+        if not cuenta:
+            raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+
     filtro_moneda = currency or current_user.preferred_currency or "COP"
+    filtros = [
+        models.Transaction.user_id == current_user.id,
+        models.Transaction.currency == filtro_moneda,
+        models.Transaction.date >= start_date,
+        models.Transaction.date <= end_date,
+    ]
+    if account_id is not None:
+        # `currency` y `account_id` son ortogonales: filtrar por cuenta NO deriva su
+        # moneda — el caller pasa `currency=account.currency` explícitamente si quiere
+        # ambos (Decisión 17.1.3).
+        filtros.append(models.Transaction.account_id == account_id)
+
     if neto:
         sum_expense = func.sum(case((models.Transaction.type == "expense", models.Transaction.amount), else_=0))
         sum_income = func.sum(case((models.Transaction.type == "income", models.Transaction.amount), else_=0))
@@ -244,12 +277,7 @@ def obtener_distribucion_categorias(
                 net_total.label("total"),
             )
             .join(models.Category, models.Category.id == models.Transaction.category_id)
-            .filter(
-                models.Transaction.user_id == current_user.id,
-                models.Transaction.currency == filtro_moneda,
-                models.Transaction.date >= start_date,
-                models.Transaction.date <= end_date,
-            )
+            .filter(*filtros)
             .group_by(
                 models.Transaction.category_id,
                 models.Category.name,
@@ -266,13 +294,7 @@ def obtener_distribucion_categorias(
                 func.sum(models.Transaction.amount).label("total"),
             )
             .join(models.Category, models.Category.id == models.Transaction.category_id)
-            .filter(
-                models.Transaction.user_id == current_user.id,
-                models.Transaction.type == type,
-                models.Transaction.currency == filtro_moneda,
-                models.Transaction.date >= start_date,
-                models.Transaction.date <= end_date,
-            )
+            .filter(*filtros, models.Transaction.type == type)
             .group_by(
                 models.Transaction.category_id,
                 models.Category.name,

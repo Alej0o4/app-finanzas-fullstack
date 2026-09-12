@@ -111,6 +111,76 @@ class TestBudgetsProgressCurrency:
         # Y la fila expone la moneda real del presupuesto (Decisión 11.1.2)
         assert progreso["currency"] == "COP"
 
+    def test_currency_param_filters_rows_without_recalculating_spent(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """Fase 17 §17.2.3 (Decisión P4): `currency` SOLO filtra filas — NO recalcula
+        `spent`. Dos presupuestos de la misma categoría en monedas distintas con gastos
+        en ambas: `?currency=USD` devuelve solo la fila USD, con el mismo `spent` que la
+        misma fila sin filtro."""
+        cuenta_cop, cuenta_usd = _create_cop_and_usd_accounts(make_account, auth_headers)
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        month, year = _now_month_year()
+
+        cop = client.post(
+            "/api/v1/budgets/",
+            json={
+                "amount_limit": "200000.00",
+                "currency": "COP",
+                "month": month,
+                "year": year,
+                "category_id": categoria["id"],
+            },
+            headers=auth_headers,
+        )
+        usd = client.post(
+            "/api/v1/budgets/",
+            json={
+                "amount_limit": "1000.00",
+                "currency": "USD",
+                "month": month,
+                "year": year,
+                "category_id": categoria["id"],
+            },
+            headers=auth_headers,
+        )
+        assert cop.status_code == 200, cop.text
+        assert usd.status_code == 200, usd.text
+        budget_usd_id = usd.json()["id"]
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="50000.00",
+            type="expense",
+            account_id=cuenta_cop["id"],
+            category_id=categoria["id"],
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="300.00",
+            type="expense",
+            account_id=cuenta_usd["id"],
+            category_id=categoria["id"],
+        )
+
+        # Sin filtro: ambas filas, cada una con el spent de SU moneda
+        completo = client.get("/api/v1/dashboard/budgets-progress", headers=auth_headers)
+        assert completo.status_code == 200, completo.text
+        assert len(completo.json()) == 2
+        fila_usd_sin_filtro = next(p for p in completo.json() if p["budget_id"] == budget_usd_id)
+        assert Decimal(str(fila_usd_sin_filtro["spent"])) == Decimal("300.00")
+
+        # Con filtro USD: solo la fila USD, con el MISMO spent (sin recálculo)
+        filtrado = client.get("/api/v1/dashboard/budgets-progress", params={"currency": "USD"}, headers=auth_headers)
+        assert filtrado.status_code == 200, filtrado.text
+        filas = filtrado.json()
+        assert len(filas) == 1
+        assert filas[0]["budget_id"] == budget_usd_id
+        assert Decimal(str(filas[0]["spent"])) == Decimal("300.00")
+        assert filas[0]["spent"] == fila_usd_sin_filtro["spent"]
+
 
 class TestCashflowSeriesCurrency:
     def test_default_series_corresponds_only_to_preferred_currency(
@@ -385,6 +455,70 @@ class TestCategoryDistributionCurrency:
         filas = response.json()
         assert len(filas) == 1
         assert Decimal(str(filas[0]["total"])) == Decimal("50.00")
+
+
+class TestCategoryDistributionAccountFilter:
+    """Fase 17 §17.1.3: `account_id` opcional en category-distribution, validado
+    contra la propiedad de la cuenta (404 si es ajena). `currency` y `account_id`
+    son ortogonales; los tests usan transacciones de la MISMA moneda para aislar
+    el filtro por cuenta sin tocar el de moneda."""
+
+    def test_account_id_returns_only_that_account_total(self, client, auth_headers, make_account, make_category):
+        cuenta_a = make_account(auth_headers, name="Cuenta A", currency="COP", balance="1000000.00")
+        cuenta_b = make_account(auth_headers, name="Cuenta B", currency="COP", balance="1000000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="70000.00",
+            type="expense",
+            account_id=cuenta_a["id"],
+            category_id=categoria["id"],
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="20000.00",
+            type="expense",
+            account_id=cuenta_b["id"],
+            category_id=categoria["id"],
+        )
+
+        rango = _current_month_range_params()
+
+        solo_a = client.get(
+            "/api/v1/dashboard/category-distribution",
+            params={**rango, "account_id": cuenta_a["id"]},
+            headers=auth_headers,
+        )
+        assert solo_a.status_code == 200, solo_a.text
+        filas_a = solo_a.json()
+        assert len(filas_a) == 1
+        assert filas_a[0]["category_name"] == "Comida"
+        assert Decimal(str(filas_a[0]["total"])) == Decimal("70000.00")
+
+        solo_b = client.get(
+            "/api/v1/dashboard/category-distribution",
+            params={**rango, "account_id": cuenta_b["id"]},
+            headers=auth_headers,
+        )
+        assert solo_b.status_code == 200, solo_b.text
+        filas_b = solo_b.json()
+        assert len(filas_b) == 1
+        assert filas_b[0]["category_name"] == "Comida"
+        assert Decimal(str(filas_b[0]["total"])) == Decimal("20000.00")
+
+    def test_foreign_account_id_returns_404(self, client, auth_headers, other_user, make_account):
+        cuenta_ajena = make_account(other_user["headers"], balance="1000.00")
+        rango = _current_month_range_params()
+
+        response = client.get(
+            "/api/v1/dashboard/category-distribution",
+            params={**rango, "account_id": cuenta_ajena["id"]},
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
 
 
 class TestMonthlyFlowBalance:

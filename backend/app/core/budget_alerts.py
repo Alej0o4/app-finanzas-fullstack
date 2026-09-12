@@ -103,7 +103,7 @@ def evaluate_budget_thresholds_for_category(db: Session, user_id: int, category_
     # sin este paso el aviso de ese mes nunca se dispararía hasta visitar el dashboard.
     ensure_recurring_budgets_for_period(db, user_id, month, year)
 
-    presupuesto = (
+    presupuestos = (
         db.query(models.Budget)
         .filter(
             models.Budget.user_id == user_id,
@@ -111,26 +111,29 @@ def evaluate_budget_thresholds_for_category(db: Session, user_id: int, category_
             models.Budget.month == month,
             models.Budget.year == year,
         )
-        .first()
+        .all()  # Fase 17 §17.2.2: con `currency` en el índice único puede haber más de un
+        # presupuesto por (categoría, período) — evaluar umbrales para CADA uno (antes
+        # `.first()` dejaba al segundo en silencio, sin aviso de 80% ni de 100%).
     )
-    if not presupuesto or presupuesto.amount_limit <= 0:
-        return  # sin presupuesto para esta categoría/período, nada que evaluar
+    for presupuesto in presupuestos:
+        if presupuesto.amount_limit <= 0:
+            continue  # sin presupuesto válido para esta categoría/período, nada que evaluar
 
-    gastado = _spent_for_budget(db, presupuesto)  # mismo query pattern que dashboard.py
-    porcentaje = float(gastado / presupuesto.amount_limit) * 100
+        gastado = _spent_for_budget(db, presupuesto)  # mismo query pattern que dashboard.py
+        porcentaje = float(gastado / presupuesto.amount_limit) * 100
 
-    for umbral, tipo, plantilla_titulo in THRESHOLDS:
-        if porcentaje < umbral:
-            continue
-        ya_existe = (
-            db.query(models.Notification)
-            .filter(models.Notification.budget_id == presupuesto.id, models.Notification.type == tipo)
-            .first()
-        )
-        if ya_existe:
-            break  # este umbral ya se avisó en este período — tampoco evaluar los menores
-        _crear_notificacion(db, presupuesto, tipo, plantilla_titulo, porcentaje)
-        break  # si ya cruzó el 100%, no evaluar también el 80% en la misma pasada
+        for umbral, tipo, plantilla_titulo in THRESHOLDS:
+            if porcentaje < umbral:
+                continue
+            ya_existe = (
+                db.query(models.Notification)
+                .filter(models.Notification.budget_id == presupuesto.id, models.Notification.type == tipo)
+                .first()
+            )
+            if ya_existe:
+                break  # este umbral ya se avisó en este período — tampoco evaluar los menores
+            _crear_notificacion(db, presupuesto, tipo, plantilla_titulo, porcentaje)
+            break  # si ya cruzó el 100%, no evaluar también el 80% en la misma pasada
 
 
 def _crear_notificacion(

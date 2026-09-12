@@ -210,6 +210,21 @@ class AccountReconcileResponse(BaseModel):
     opening_balance: Decimal
 
 
+class AccountMonthlySummary(BaseModel):
+    """Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
+
+    A diferencia de `DashboardSummary.monthly_flow_balance` (que puede ser `null` si el
+    usuario no fijó `monthly_income`), este balance SIEMPRE se calcula: se deriva
+    íntegramente de transacciones reales de la cuenta en el mes en curso, sin ningún
+    dato declarado de por medio — `monthly_flow_balance` nunca es `None`, mínimo 0.00.
+    """
+
+    currency: str
+    monthly_income: Decimal
+    monthly_expense: Decimal
+    monthly_flow_balance: Decimal  # monthly_income - monthly_expense; nunca None
+
+
 # --- CATEGORÍAS --- (sin cambios, no maneja dinero)
 class CategoryType(str, Enum):
     income = "income"

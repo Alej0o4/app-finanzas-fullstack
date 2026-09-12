@@ -115,6 +115,8 @@ class Budget(Base, SoftDeleteMixin):
     # Índice único PARCIAL (Decisión 6.2): las filas soft-deleted no ocupan slot de
     # unicidad — borrar un presupuesto y crear otro para la misma categoría/período
     # debe funcionar. Sustituye al UniqueConstraint de Fase 7.
+    # Fase 17 §17.2.2: `currency` agregada al índice — permite un presupuesto por
+    # (categoría, período) POR moneda, no uno total sin importar la moneda.
     __table_args__ = (
         Index(
             "uq_budgets_user_category_period_active",
@@ -122,6 +124,7 @@ class Budget(Base, SoftDeleteMixin):
             "category_id",
             "month",
             "year",
+            "currency",
             unique=True,
             postgresql_where=text("deleted_at IS NULL"),
             sqlite_where=text("deleted_at IS NULL"),

@@ -83,6 +83,16 @@ export interface CategoryDistributionItem {
   total: number;
 }
 
+/** Balance del mes de una cuenta puntual (GET /accounts/{id}/monthly-summary, Fase 17 §17.1).
+ *  Los montos Decimal pueden llegar serializados como `string` en JSON (Decisión 15.6) —
+ *  normalizar con `Number(...)` al pintar. */
+export interface AccountMonthlySummary {
+  currency: string;
+  monthly_income: number;
+  monthly_expense: number;
+  monthly_flow_balance: number;
+}
+
 export interface UserResponse {
   id: number;
   email: string;

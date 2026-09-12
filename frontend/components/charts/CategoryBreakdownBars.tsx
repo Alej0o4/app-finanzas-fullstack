@@ -11,6 +11,9 @@ import { useAppConfig } from '@/providers/AppConfigProvider';
 interface CategoryBreakdownBarsProps {
   data: CategoryDistributionItem[] | undefined;
   isLoading: boolean;
+  /** Moneda para formatear los montos. Si se omite, cae a la preferida global (retrocompatible
+   *  con el dashboard, Fase 17 §17.1 — la vista por cuenta pasa la moneda real de la cuenta). */
+  currency?: string;
 }
 
 /**
@@ -21,7 +24,11 @@ interface CategoryBreakdownBarsProps {
  * (GET /dashboard/category-distribution ordena descendente — no se reordena aquí) y no tiene
  * controles de filtro propios; esos viven en Analítica (CategoryDonutChart).
  */
-export default function CategoryBreakdownBars({ data, isLoading }: CategoryBreakdownBarsProps) {
+export default function CategoryBreakdownBars({
+  data,
+  isLoading,
+  currency,
+}: CategoryBreakdownBarsProps) {
   const { config } = useAppConfig();
   const rows = data ?? [];
 
@@ -63,7 +70,7 @@ export default function CategoryBreakdownBars({ data, isLoading }: CategoryBreak
                   </span>
                 </span>
                 <span className="text-text shrink-0 text-sm font-semibold tabular-nums">
-                  {formatCurrency(Number(item.total), config.currency)}
+                  {formatCurrency(Number(item.total), currency ?? config.currency)}
                 </span>
               </div>
               <div className="bg-surface-elevated h-2 w-full overflow-hidden rounded-full">

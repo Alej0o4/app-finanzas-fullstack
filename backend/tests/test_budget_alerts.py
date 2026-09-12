@@ -251,3 +251,30 @@ class TestBudgetAlertsEngine:
         # el 95%-sin-notificar de A/mes-siguiente no debe dispararse por esta acción.
         budget_ids_notificados = {n["budget_id"] for n in _notificaciones(client, auth_headers)}
         assert presupuesto_a_siguiente["id"] not in budget_ids_notificados
+
+    def test_two_budgets_same_period_different_currencies_both_cross_80_generate_own_notifications(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """Regresión directa del fix de Hallazgo 4 (Fase 17 §17.2.2): con `currency` en
+        el índice único, dos presupuestos de la misma categoría/período conviven — el
+        motor debe evaluar umbrales para AMBOS. Antes del fix, `.first()` evaluaba solo
+        uno y el otro nunca disparaba aviso (ni 80% ni 100%), sin ningún error visible."""
+        cuenta_cop = make_account(auth_headers, name="COP", currency="COP", balance="1000000.00")
+        cuenta_usd = make_account(auth_headers, name="USD", currency="USD", balance="1000000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        month, year = _now_month_year()
+
+        presupuesto_cop = _crear_presupuesto(client, auth_headers, categoria["id"], "1000.00", "COP", month, year)
+        presupuesto_usd = _crear_presupuesto(client, auth_headers, categoria["id"], "1000.00", "USD", month, year)
+
+        # 850 COP / 1000 COP = 85% → umbral 80 del presupuesto COP
+        _crear_gasto(client, auth_headers, cuenta_cop["id"], categoria["id"], "850.00")
+        # 900 USD / 1000 USD = 90% → umbral 80 del presupuesto USD
+        _crear_gasto(client, auth_headers, cuenta_usd["id"], categoria["id"], "900.00")
+
+        notificaciones = _notificaciones(client, auth_headers)
+        assert len(notificaciones) == 2
+
+        por_budget = {n["budget_id"]: n["type"] for n in notificaciones}
+        assert por_budget[presupuesto_cop["id"]] == "budget_threshold_80"
+        assert por_budget[presupuesto_usd["id"]] == "budget_threshold_80"

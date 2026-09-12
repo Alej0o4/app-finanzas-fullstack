@@ -38,12 +38,16 @@ def crear_presupuesto(
             models.Budget.category_id == presupuesto.category_id,
             models.Budget.month == presupuesto.month,
             models.Budget.year == presupuesto.year,
+            # Fase 17 §17.2.5: la unicidad es por (categoría, mes, año) POR moneda —
+            # sin este filtro el pre-chequeo rechazaría un segundo presupuesto en otra
+            # moneda para el mismo período aunque el índice de la base ya lo permita.
+            models.Budget.currency == presupuesto.currency,
         )
         .first()
     )
 
     if presupuesto_existente:
-        raise HTTPException(status_code=400, detail="Ya existe un presupuesto para esta categoría en este mes y año.")
+        raise HTTPException(status_code=400, detail="Ya existe un presupuesto para esta categoría, moneda, mes y año.")
 
     nuevo_presupuesto = models.Budget(**presupuesto.model_dump(), user_id=current_user.id)
     try:
@@ -53,7 +57,7 @@ def crear_presupuesto(
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail="Ya existe un presupuesto para esta categoría en este mes y año.",
+            detail="Ya existe un presupuesto para esta categoría, moneda, mes y año.",
         ) from None
     db.refresh(nuevo_presupuesto)
     return nuevo_presupuesto
@@ -126,8 +130,21 @@ def actualizar_presupuesto(
     presupuesto_db.month = presupuesto_actualizado.month
     presupuesto_db.year = presupuesto_actualizado.year
     presupuesto_db.category_id = presupuesto_actualizado.category_id
+    # Fase 17 §17.2.5: `currency` se asignaba en silencio desde Fase 11 pero el handler
+    # nunca la aplicaba — mismo patrón de bug que AccountUpdate.currency (TODO.md).
+    presupuesto_db.currency = presupuesto_actualizado.currency
     presupuesto_db.is_recurring = presupuesto_actualizado.is_recurring
 
-    db.commit()
+    # Editar la moneda puede chocar con el índice único ensanchado (otro presupuesto
+    # activo para la misma categoría/período en la moneda nueva) — sin este try/except
+    # ese choque terminaría en un 500 no manejado (Fase 17 §17.2.5).
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Ya existe un presupuesto para esta categoría, moneda, mes y año.",
+        ) from None
     db.refresh(presupuesto_db)
     return presupuesto_db

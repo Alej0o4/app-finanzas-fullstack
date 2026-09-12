@@ -38,6 +38,14 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
 - `GET /api/v1/accounts/`
 - `GET /api/v1/accounts/summary` — saldo total por moneda de **TODAS** las cuentas del usuario, sin filtro de destacadas (Fase 11 §11.5). Devuelve `BalanceByCurrency[]`. Es distinto de `GET /dashboard/summary`, cuyo array `balances` sí filtra por cuentas destacadas cuando existen; este endpoint alimenta el encabezado de `accounts/page.tsx`, cuya lista tampoco filtra, para que el total coincida con las tarjetas listadas.
 - `GET /api/v1/accounts/{account_id}`
+- `GET /api/v1/accounts/{account_id}/monthly-summary` (Fase 17 §17.1.2, Decisión 17.1.2) —
+  saldo/balance del mes de **una sola cuenta**, derivado de sus transacciones del mes actual
+  (`monthly_income − monthly_expense`). A diferencia del `monthly_flow_balance` del dashboard
+  (que usa ingreso declarado y puede ser `null`), este endpoint **nunca** devuelve `null` para
+  `monthly_flow_balance`: sin transacciones devuelve `0`. Responde `AccountMonthlySummary`:
+  `{ currency, monthly_income, monthly_expense, monthly_flow_balance }`. Los montos
+  `Decimal` llegan serializados como `string` (Decisión 15.6) — el frontend los normaliza
+  con `Number(...)` antes de formatear (ver `AccountMonthlyBalanceCard`).
 - `POST /api/v1/accounts/`
 - `PUT /api/v1/accounts/{account_id}`
 - `PATCH /api/v1/accounts/{account_id}/highlighted`
@@ -124,9 +132,19 @@ ignoran.
 ### Dashboard
 
 - `GET /api/v1/dashboard/summary` — incluye `monthly_flow_balance: number | null` desde Fase 11 §11.3 (ver "Contratos de datos" abajo)
-- `GET /api/v1/dashboard/budgets-progress` — cada fila incluye `currency` desde Fase 11 §11.1
+- `GET /api/v1/dashboard/budgets-progress` — cada fila incluye `currency` desde Fase 11 §11.1.
+  Desde Fase 17 §17.2.3 acepta además un query param opcional `currency: string` (Decisión
+  17.2.3): si se pasa, el backend filtra las filas a esa moneda **sin recalcular `spent`**
+  (el gasto de cada presupuesto es la suma cruzada de todas las cuentas del usuario en esa
+  moneda — filtrar cambia qué filas se muestran, nunca cuánto gastó cada una). El frontend
+  lo usa en `accounts/[id]` (las queries propias por cuenta pasan la moneda de la cuenta,
+  no la preferida global). Si se omite, se devuelven todas las monedas.
 - `GET /api/v1/dashboard/cashflow-series` — parámetro opcional `currency` (Fase 11 §11.1): filtra la serie a una sola moneda; si se omite, el backend usa `preferred_currency` del usuario. El frontend lo pasa explícito (Decisión 11.1.1 del spec de Fase 11)
-- `GET /api/v1/dashboard/category-distribution` — mismo parámetro opcional `currency` que cashflow-series; soporta además `neto=true` para calcular gasto neto por categoría
+- `GET /api/v1/dashboard/category-distribution` — mismo parámetro opcional `currency` que cashflow-series; soporta además `neto=true` para calcular gasto neto por categoría. Desde
+  Fase 17 §17.1.3 acepta `account_id: int` (Decisión 17.1.3) para restringir el desglose a
+  las transacciones de una sola cuenta — el frontend de `accounts/[id]` pasa `account_id` y
+  `currency` **ambos explícitos** (son ortogonales: la moneda de una cuenta no tiene por qué
+  coincidir con la preferida global). `404` si la cuenta no existe o no es del usuario.
 
 ### Notificaciones (Fase 13 §13.5)
 

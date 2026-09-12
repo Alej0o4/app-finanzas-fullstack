@@ -6,6 +6,14 @@ export const queryKeys = {
     byId: (id: string | number) => ['account', id] as const,
     /** Saldo total por moneda de TODAS las cuentas (GET /accounts/summary, Fase 11 §11.5). */
     summary: () => ['accounts-summary'] as const,
+    /** Balance del mes de una cuenta puntual (GET /accounts/{id}/monthly-summary, Fase 17 §17.1)
+     *  — clave propia por cuenta, no reutiliza la del dashboard. */
+    monthlySummary: (id: string | number) => ['account-monthly-summary', id] as const,
+    /** Desglose de gastos del mes por categoría restringido a una cuenta (Fase 17 §17.1). */
+    categoryBreakdown: (id: string | number) => ['account-category-breakdown', id] as const,
+    /** Progreso de presupuestos filtrado a la moneda de una cuenta (Fase 17 §17.1, Decisión
+     *  17.1.3/P4 — el prefijo también matchea la invalidación por prefix desde budgets). */
+    budgetsProgress: (id: string | number) => ['account-budgets-progress', id] as const,
   },
   categories: {
     all: () => ['categories'] as const,

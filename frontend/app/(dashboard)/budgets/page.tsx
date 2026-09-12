@@ -15,7 +15,7 @@ import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import Label from '@/components/ui/Label';
 import { useConfirmStore } from '@/store/useConfirmStore';
-import type { Category, Budget, BudgetPayload } from '@/types/api';
+import type { Category, Budget, BudgetPayload, Account } from '@/types/api';
 
 const getMonthName = (month: number, year: number) => {
   const date = new Date(year, month - 1);
@@ -30,6 +30,10 @@ export default function BudgetsPage() {
 
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
+  // Fase 17 §17.2.4 (Decisión 17.2.4): moneda del presupuesto, derivada de las cuentas reales
+  // del usuario (never una lista fija). Se setea al abrir el modal; default 'COP' mientras las
+  // cuentas no cargaron.
+  const [currency, setCurrency] = useState('COP');
   const [isRecurring, setIsRecurring] = useState(false);
   const getCurrentMonthYear = () => {
     const now = new Date();
@@ -56,6 +60,14 @@ export default function BudgetsPage() {
     queryFn: async () => (await api.get('categories/')).data,
   });
 
+  // Fase 17 §17.2.4: las monedas del selector salen de las cuentas reales del usuario
+  // (misma queryKey que accounts/, ya cacheada por QueryProvider si otra página la cargó).
+  const { data: accounts } = useQuery<Account[]>({
+    queryKey: queryKeys.accounts.all(),
+    queryFn: async () => (await api.get('accounts/')).data,
+  });
+  const availableCurrencies = Array.from(new Set(accounts?.map((a) => a.currency) ?? []));
+
   const expenseCategories = categories?.filter((c) => c.type === 'expense') || [];
 
   const saveMutation = useMutation({
@@ -70,6 +82,9 @@ export default function BudgetsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.budgets.all() });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
       queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() });
+      // Fase 17 §17.2.4: progreso por cuenta (vista accounts/[id]) también depende de
+      // presupuestos — el prefijo matchea todas las claves ['account-budgets-progress', id].
+      queryClient.invalidateQueries({ queryKey: ['account-budgets-progress'] });
       toast.success('Presupuesto guardado');
       closeModal();
     },
@@ -86,6 +101,7 @@ export default function BudgetsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.budgets.all() });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
       queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() });
+      queryClient.invalidateQueries({ queryKey: ['account-budgets-progress'] });
       toast.success('Presupuesto eliminado');
     },
     onError: (error: unknown) => {
@@ -114,6 +130,9 @@ export default function BudgetsPage() {
     saveMutation.mutate({
       category_id: Number(categoryId),
       amount_limit: parsedAmount,
+      // Fase 17 §17.2.4: BudgetPayload.currency ya existía en types/api.ts; el formulario
+      // ahora lo envía siempre (Decisión 17.2.4 — el backend no valida contra las cuentas).
+      currency,
       month: Number(monthStr),
       year: Number(yearStr),
       is_recurring: isRecurring,
@@ -124,6 +143,9 @@ export default function BudgetsPage() {
     setEditingBudget(null);
     setCategoryId('');
     setAmount('');
+    // Fase 17 §17.2.4: default a la primera moneda disponible entre las cuentas (COP si aún
+    // no cargaron) — nunca una lista fija de monedas.
+    setCurrency(availableCurrencies[0] ?? 'COP');
     setIsRecurring(false);
     setMonthYear(getCurrentMonthYear());
     setFieldErrors({});
@@ -134,6 +156,7 @@ export default function BudgetsPage() {
     setEditingBudget(budget);
     setCategoryId(budget.category_id.toString());
     setAmount(budget.amount_limit.toString());
+    setCurrency(budget.currency);
     setIsRecurring(budget.is_recurring);
     const formattedMonth = budget.month < 10 ? `0${budget.month}` : budget.month;
     setMonthYear(`${budget.year}-${formattedMonth}`);
@@ -268,6 +291,22 @@ export default function BudgetsPage() {
             {expenseCategories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+              </option>
+            ))}
+          </Select>
+
+          {/* Fase 17 §17.2.4 (Decisión 17.2.4): se muestra SIEMPRE, aunque solo haya una
+              moneda — sin casos de UI oculta. Derivado de las cuentas reales del usuario. */}
+          <Select
+            label="Moneda"
+            required
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            className="bg-background appearance-none"
+          >
+            {availableCurrencies.map((c) => (
+              <option key={c} value={c}>
+                {c}
               </option>
             ))}
           </Select>

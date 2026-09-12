@@ -184,3 +184,77 @@ class TestReconcile:
         body = response.json()
         assert Decimal(str(body["discrepancy"])) == Decimal("0.00")
         assert Decimal(str(body["recalculated_balance"])) == Decimal("1000.00")
+
+
+class TestMonthlySummary:
+    """Fase 17 §17.1.4: GET /accounts/{id}/monthly-summary.
+
+    Balance del mes de una sola cuenta, derivado íntegramente de transacciones reales
+    de esa cuenta en el mes en curso — a diferencia de `/dashboard/summary`, no usa
+    ningún valor declarado, así que `monthly_flow_balance` nunca es `null`.
+    """
+
+    def _crear_transaccion(self, client, headers, **overrides) -> dict:
+        payload = {"amount": "100.00", "type": "expense", "description": "tx monthly summary"}
+        payload.update(overrides)
+        response = client.post("/api/v1/transactions/", json=payload, headers=headers)
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    def test_flow_balance_equals_income_minus_expense_in_account_currency(
+        self, client, auth_headers, make_account, make_category
+    ):
+        cuenta = make_account(auth_headers, name="Ahorros USD", currency="USD", balance="1000.00")
+        categoria_ingreso = make_category(auth_headers, name="Salario", type="income")
+        categoria_gasto = make_category(auth_headers, name="Comida", type="expense")
+
+        self._crear_transaccion(
+            client,
+            auth_headers,
+            amount="500.00",
+            type="income",
+            account_id=cuenta["id"],
+            category_id=categoria_ingreso["id"],
+        )
+        self._crear_transaccion(
+            client,
+            auth_headers,
+            amount="120.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria_gasto["id"],
+        )
+
+        response = client.get(f"/api/v1/accounts/{cuenta['id']}/monthly-summary", headers=auth_headers)
+        assert response.status_code == 200, response.text
+        resumen = response.json()
+
+        assert resumen["currency"] == "USD"
+        assert Decimal(str(resumen["monthly_income"])) == Decimal("500.00")
+        assert Decimal(str(resumen["monthly_expense"])) == Decimal("120.00")
+        assert Decimal(str(resumen["monthly_flow_balance"])) == Decimal("380.00")
+        assert Decimal(str(resumen["monthly_flow_balance"])) == Decimal(str(resumen["monthly_income"])) - Decimal(
+            str(resumen["monthly_expense"])
+        )
+
+    def test_account_without_transactions_this_month_returns_zeros(self, client, auth_headers, make_account):
+        cuenta = make_account(auth_headers, name="Sin movimientos", currency="COP", balance="1000.00")
+
+        response = client.get(f"/api/v1/accounts/{cuenta['id']}/monthly-summary", headers=auth_headers)
+        assert response.status_code == 200, response.text
+
+        resumen = response.json()
+        assert resumen["currency"] == "COP"
+        for campo in ("monthly_income", "monthly_expense", "monthly_flow_balance"):
+            assert Decimal(str(resumen[campo])) == Decimal("0.00")
+        assert resumen["monthly_flow_balance"] is not None
+
+    def test_foreign_account_returns_404(self, client, auth_headers, other_user, make_account):
+        cuenta_ajena = make_account(other_user["headers"], balance="1000.00")
+
+        response = client.get(f"/api/v1/accounts/{cuenta_ajena['id']}/monthly-summary", headers=auth_headers)
+        assert response.status_code == 404
+
+    def test_nonexistent_account_returns_404(self, client, auth_headers):
+        response = client.get("/api/v1/accounts/999999/monthly-summary", headers=auth_headers)
+        assert response.status_code == 404
