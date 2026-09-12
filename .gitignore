@@ -29,3 +29,6 @@ backups/
 .idea/
 .DS_Store
 .playwright-mcp/
+
+# Grafo de conocimiento de graphify - regenerable con `graphify update .`
+graphify-out/
