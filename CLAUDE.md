@@ -110,6 +110,16 @@ This repo maintains its own detailed docs — check them before inferring behavi
 - `docs/ROADMAP.md` — **read this first for anything architectural.** Records the 2026-08-22 pivot, the five MVP components, the phased plan (Phases 7–14), the prioritized backlog, and what remains genuinely out of scope (broker integrations, credit-card rewards engines, dynamic themes, i18n).
 - `docs/specs/` — detailed per-phase implementation specs (file-level tasks, design decisions) written before implementing a phase. `fase_07_spec.md` covers everything implemented in Phase 7.
 
+## Agent skills
+
+### Issue tracker
+
+Local markdown, not GitHub Issues despite the GitHub remote: specs at `docs/specs/fase_NN_spec.md` (existing per-phase convention), tickets/wayfinder tracking under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` + `docs/adr/` (neither exists yet — created lazily by `/domain-modeling`, not upfront). See `docs/agents/domain.md`.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
