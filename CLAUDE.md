@@ -109,3 +109,13 @@ This repo maintains its own detailed docs — check them before inferring behavi
 - `docs/TODO.md` — technical debt and confirmed bugs, tagged by urgency, with resolution dates. Reprioritized 2026-08-22 for the multi-user pivot.
 - `docs/ROADMAP.md` — **read this first for anything architectural.** Records the 2026-08-22 pivot, the five MVP components, the phased plan (Phases 7–14), the prioritized backlog, and what remains genuinely out of scope (broker integrations, credit-card rewards engines, dynamic themes, i18n).
 - `docs/specs/` — detailed per-phase implementation specs (file-level tasks, design decisions) written before implementing a phase. `fase_07_spec.md` covers everything implemented in Phase 7.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
