@@ -603,14 +603,14 @@ envía, así que en la práctica todo presupuesto se crea en COP. Depende de Fas
 > Decidido en sesión de grilling del 2026-09-12, a partir de una semana de uso real desde celular.
 > No requiere ninguna migración de compatibilidad — el proyecto sigue sin usuarios reales.
 
-- [ ] **Analítica por cuenta en `accounts/[id]`** — reutilizar los mismos componentes de gráficos
+- [x] **Analítica por cuenta en `accounts/[id]`** — reutilizar los mismos componentes de gráficos
       del dashboard general (`CategoryDonutChart`, `CategoryBreakdownBars`, `BudgetRing`),
       filtrados a esa cuenta.
   - El dashboard principal no cambia: sigue agregando todas las cuentas (decisión ya tomada en
     Fase 11, reafirmada aquí) — no se agrega un selector de cuenta ahí.
   - Incluye su propio "balance del mes" (ingreso − gasto de esa cuenta), con el mismo componente
     que rediseña Fase 19 más abajo.
-- [ ] **Selector de moneda en el formulario de presupuestos** — hoy `budgets/page.tsx` no tiene
+- [x] **Selector de moneda en el formulario de presupuestos** — hoy `budgets/page.tsx` no tiene
       campo de moneda ni lo envía en el payload; `Budget.currency` (default `"COP"`) nunca se
       toca desde la UI.
   - Opciones derivadas de las monedas presentes en las cuentas del usuario — no se agrega
