@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { getApiError } from '@/lib/utils';
@@ -94,6 +94,25 @@ export default function CategoriesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.categories.all() });
       toast.success('Categoría eliminada');
+    },
+    onError: (error: unknown) => {
+      toast.error(getApiError(error));
+    },
+  });
+
+  // Fase 18 §18.3: ocultar/mostrar "para mí" (POST crea la fila marcadora, DELETE la quita —
+  // mismo patrón que push_subscriptions). No depende del form; solo invalida la query.
+  const toggleHiddenMutation = useMutation({
+    mutationFn: async (category: Category) => {
+      if (category.is_hidden) {
+        await api.delete(`categories/${category.id}/hide`);
+      } else {
+        await api.post(`categories/${category.id}/hide`);
+      }
+    },
+    onSuccess: (_data, category) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.categories.all() });
+      toast.success(category.is_hidden ? 'Categoría visible' : 'Categoría ocultada');
     },
     onError: (error: unknown) => {
       toast.error(getApiError(error));
@@ -211,34 +230,51 @@ export default function CategoriesPage() {
                 </div>
               </Link>
 
-              {!isSystemCategory && CUSTOM_CATEGORY_EDITING_ENABLED && (
-                <div className="bg-surface absolute top-4 right-4 z-10 flex gap-2 rounded-lg pl-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      openEditModal(category);
-                    }}
-                    className="text-text-muted hover:text-primary p-1 transition-colors active:scale-95"
-                    title="Editar categoría"
-                    aria-label="Editar categoría"
-                  >
-                    <Edit2 size={16} />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleDelete(category.id, category.name);
-                    }}
-                    className="text-text-muted hover:text-danger p-1 transition-colors active:scale-95"
-                    title="Eliminar categoría"
-                    aria-label="Eliminar categoría"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              )}
+              {/* Fase 18 §18.3: ocultar/mostrar se renderiza incondicionalmente (Decisión
+                  Q6 — alcanza categorías de sistema y propias); editar/eliminar sigue
+                  reservado a categorías propias (Fase 11 §11.6, ahora activo vía 18.4). */}
+              <div className="bg-surface absolute top-4 right-4 z-10 flex gap-2 rounded-lg pl-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleHiddenMutation.mutate(category);
+                  }}
+                  className="text-text-muted hover:text-text p-1 transition-colors active:scale-95"
+                  title={category.is_hidden ? 'Mostrar categoría' : 'Ocultar categoría'}
+                  aria-label={category.is_hidden ? 'Mostrar categoría' : 'Ocultar categoría'}
+                >
+                  {category.is_hidden ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+                {!isSystemCategory && CUSTOM_CATEGORY_EDITING_ENABLED && (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openEditModal(category);
+                      }}
+                      className="text-text-muted hover:text-primary p-1 transition-colors active:scale-95"
+                      title="Editar categoría"
+                      aria-label="Editar categoría"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDelete(category.id, category.name);
+                      }}
+                      className="text-text-muted hover:text-danger p-1 transition-colors active:scale-95"
+                      title="Eliminar categoría"
+                      aria-label="Eliminar categoría"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           );
         })}

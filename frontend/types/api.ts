@@ -30,6 +30,9 @@ export interface Category {
   type: 'income' | 'expense';
   user_id: number | null;
   icon?: string;
+  /** Oculta para mí (Fase 18 §18.3): computado por usuario en el backend; solo filtra el
+   *  selector de captura, no históricos ni analítica. */
+  is_hidden: boolean;
 }
 
 export interface Budget {
