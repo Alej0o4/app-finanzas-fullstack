@@ -1,8 +1,8 @@
 """Tests de autenticación y ciclo de vida de cuenta (Fase 7, §4.2 del spec).
 
 Cubre: registro, login, refresh, logout, rate limiting, `get_current_user`, y — dado que ya
-están implementados — password reset, verificación de email y el TTL de 15 min del access
-token (§2.1/§2.2/§2.5).
+están implementados — password reset, verificación de email, el TTL de 15 min del access
+token (§2.1/§2.2/§2.5) y el login con Google (Fase 20 §20.3).
 """
 
 import re
@@ -470,6 +470,146 @@ class TestCuentaPorDefecto:
 
         saldo = client.get(f"/api/v1/accounts/{cuenta_efectivo['id']}", headers=user["headers"]).json()
         assert Decimal(str(saldo["balance"])) == Decimal("50000.00")
+
+
+# --- Login con Google (Fase 20 §20.3) -------------------------------------------
+
+
+class TestLoginGoogle:
+    """Login/registro con ID token de Google (Decisión 20.3.5).
+
+    La única pieza que se mockea es la llamada de red a Google
+    (`verify_oauth2_token`) vía monkeypatch — misma política de la suite offline
+    contra SQLite en memoria. Todo lo demás (creación de usuario, auto-link,
+    emisión de tokens, rate limiting) se prueba contra el flujo real.
+    """
+
+    GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com"
+
+    def _login_google(self, client, monkeypatch, *, email="nueva@example.com", email_verified=True):
+        monkeypatch.setattr(security, "GOOGLE_CLIENT_ID", self.GOOGLE_CLIENT_ID)
+        claims = {
+            "email": email,
+            "email_verified": email_verified,
+            "sub": f"google-sub:{email}",
+            "name": "Persona de Google",
+        }
+        monkeypatch.setattr(
+            "app.api.auth.google_id_token.verify_oauth2_token",
+            lambda token, request, audience: claims,
+        )
+        return client.post("/api/v1/auth/google", json={"id_token": "idtoken-falso"})
+
+    def test_new_email_creates_verified_user_with_default_account(self, client, monkeypatch, db_session):
+        response = self._login_google(client, monkeypatch, email="google-nueva@example.com")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["access_token"]
+        assert body["refresh_token"]
+        assert body["token_type"] == "bearer"
+
+        user = db_session.query(models.User).filter(models.User.email == "google-nueva@example.com").first()
+        assert user is not None
+        assert user.email_verified is True  # Google ya verificó el correo (Decisión P4)
+        assert user.password_hash is None  # cuenta solo-Google: no hay hash que fabricar
+        assert user.google_id == "google-sub:google-nueva@example.com"
+        assert user.full_name == "Persona de Google"
+
+        # Regresión Hallazgo 4/Decisión 20.3.3: el helper compartido crea la cuenta por
+        # defecto — exactamente 1, no 0 (bug de "usuario nuevo con 0 cuentas") ni 2.
+        cuentas = client.get("/api/v1/accounts/", headers={"Authorization": f"Bearer {body['access_token']}"})
+        assert cuentas.status_code == 200, cuentas.text
+        assert len(cuentas.json()) == 1
+        assert cuentas.json()[0]["name"] == "Cuenta principal"
+
+    def test_existing_unverified_password_account_is_autolinked(self, client, monkeypatch, db_session):
+        # Cuenta con contraseña y email sin verificar (estado de un registro real).
+        register_response = client.post(
+            "/api/v1/users/",
+            json={"email": "auto-link@example.com", "full_name": "Contraseña", "password": "Contrasena10"},
+        )
+        assert register_response.status_code == 200, register_response.text
+
+        user = db_session.query(models.User).filter(models.User.email == "auto-link@example.com").first()
+        assert user.email_verified is False
+        user_id_before = user.id
+        users_before = db_session.query(models.User).count()
+
+        response = self._login_google(client, monkeypatch, email="auto-link@example.com")
+        assert response.status_code == 200, response.text
+
+        db_session.refresh(user)
+        # P3: no se creó un segundo usuario — se vinculó el existente.
+        assert user.id == user_id_before
+        assert db_session.query(models.User).count() == users_before
+        assert user.google_id == "google-sub:auto-link@example.com"
+        # P4: el correo de Google ya estaba verificado por Google → la cuenta queda activa.
+        assert user.email_verified is True
+        # La contraseña sigue intacta — no se tocó el hash al vincular.
+        assert user.password_hash is not None
+
+    def test_existing_verified_password_account_is_idempotent_and_autolinked(
+        self, client, monkeypatch, db_session, register_and_login
+    ):
+        user = register_and_login(email="auto-link-verificado@example.com")
+        stored = db_session.query(models.User).filter(models.User.email == user["email"]).one()
+        assert stored.email_verified is True
+
+        response = self._login_google(client, monkeypatch, email=user["email"])
+        assert response.status_code == 200, response.text
+
+        stored = db_session.query(models.User).filter(models.User.email == user["email"]).one()
+        assert stored.google_id == f"google-sub:{user['email']}"  # se setea igual
+        assert stored.email_verified is True
+        assert db_session.query(models.User).count() == 1  # sin duplicados, sin romper nada
+
+    def test_unverified_email_claim_returns_403_and_creates_no_user(self, client, monkeypatch, db_session):
+        response = self._login_google(client, monkeypatch, email="no-verificado@example.com", email_verified=False)
+        assert response.status_code == 403
+        # Google reportó el correo como no verificado → no se confía en el token ni se
+        # registra nada (Historia de usuario 13).
+        assert db_session.query(models.User).filter(models.User.email == "no-verificado@example.com").first() is None
+
+    def test_password_login_against_google_only_account_returns_403(self, client, monkeypatch, db_session):
+        google_login = self._login_google(client, monkeypatch, email="solo-google@example.com")
+        assert google_login.status_code == 200
+
+        # Guard nuevo en login() (Fase 20 §20.3): password_hash=None → 403 genérico,
+        # no 500 de passlib (que lanza excepción sobre un hash nulo, no devuelve False).
+        response = client.post(
+            "/api/v1/auth/login",
+            data={"username": "solo-google@example.com", "password": "Contrasena10"},
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Credenciales Inválidas"
+
+    def test_missing_google_client_id_returns_503(self, client, monkeypatch):
+        monkeypatch.setattr(security, "GOOGLE_CLIENT_ID", None)
+        response = client.post("/api/v1/auth/google", json={"id_token": "idtoken-falso"})
+        assert response.status_code == 503
+        assert "no está configurado" in response.json()["detail"]
+
+    def test_invalid_id_token_returns_401(self, client, monkeypatch):
+        monkeypatch.setattr(security, "GOOGLE_CLIENT_ID", self.GOOGLE_CLIENT_ID)
+
+        def _reject(token, request, audience):
+            raise ValueError("firma o audiencia inválida")
+
+        monkeypatch.setattr("app.api.auth.google_id_token.verify_oauth2_token", _reject)
+        response = client.post("/api/v1/auth/google", json={"id_token": "idtoken-malo"})
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Token de Google inválido."
+
+    def test_sixth_google_login_request_in_a_minute_returns_429(self, client, monkeypatch):
+        # Mismo patrón que test_sixth_login_request_in_a_minute_returns_429: 5 llamadas
+        # completan el límite de 5/minute; la sexta rebota. Emails distintos por llamada
+        # para no chocar contra la unicidad de google_id.
+        for i in range(5):
+            response = self._login_google(client, monkeypatch, email=f"rate-google-{i}@example.com")
+            assert response.status_code == 200, response.text
+
+        sixth_response = client.post("/api/v1/auth/google", json={"id_token": "idtoken-falso"})
+        assert sixth_response.status_code == 429
 
 
 def test_jwt_created_with_expired_delta_is_rejected_by_jose_directly():

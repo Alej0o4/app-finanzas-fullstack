@@ -7,6 +7,7 @@ import { ArrowRight, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
+import GoogleAuthButton from '@/components/auth/GoogleAuthButton';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -180,6 +181,10 @@ export default function RegisterPage() {
           {!isLoading && <ArrowRight size={16} />}
         </Button>
       </form>
+
+      {/* Fase 20 §20.3 (P7): después de la acción principal, arriba del link cruzado —
+          mismo lugar visual que en login (Historia de usuario 12). */}
+      <GoogleAuthButton />
 
       <p className="text-text-muted mt-6 text-center text-sm">
         ¿Ya tienes cuenta?{' '}
