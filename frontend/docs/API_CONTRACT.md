@@ -144,12 +144,18 @@ ignoran.
   moneda — filtrar cambia qué filas se muestran, nunca cuánto gastó cada una). El frontend
   lo usa en `accounts/[id]` (las queries propias por cuenta pasan la moneda de la cuenta,
   no la preferida global). Si se omite, se devuelven todas las monedas.
-- `GET /api/v1/dashboard/cashflow-series` — parámetro opcional `currency` (Fase 11 §11.1): filtra la serie a una sola moneda; si se omite, el backend usa `preferred_currency` del usuario. El frontend lo pasa explícito (Decisión 11.1.1 del spec de Fase 11)
+- `GET /api/v1/dashboard/cashflow-series` — parámetro opcional `currency` (Fase 11 §11.1): filtra la serie a una sola moneda; si se omite, el backend usa `preferred_currency` del usuario. El frontend lo pasa explícito (Decisión 11.1.1 del spec de Fase 11). Desde la corrección UX
+  post-Fase 19 acepta también `account_id: int`, mismo contrato que en `category-distribution`
+  (ortogonal a `currency`, `404` si la cuenta es ajena).
 - `GET /api/v1/dashboard/category-distribution` — mismo parámetro opcional `currency` que cashflow-series; soporta además `neto=true` para calcular gasto neto por categoría. Desde
   Fase 17 §17.1.3 acepta `account_id: int` (Decisión 17.1.3) para restringir el desglose a
   las transacciones de una sola cuenta — el frontend de `accounts/[id]` pasa `account_id` y
   `currency` **ambos explícitos** (son ortogonales: la moneda de una cuenta no tiene por qué
   coincidir con la preferida global). `404` si la cuenta no existe o no es del usuario.
+  `/analytics` (corrección UX post-Fase 19) usa el mismo patrón para su selector de cuenta,
+  pasando `account_id` + `currency=account.currency` a ambos endpoints (`cashflow-series` y
+  `category-distribution`) — si solo se pasara `account_id` sin la moneda de esa cuenta, el
+  backend cae a `preferred_currency` y una cuenta en otra moneda muestra $0 en todo.
 
 ### Notificaciones (Fase 13 §13.5)
 

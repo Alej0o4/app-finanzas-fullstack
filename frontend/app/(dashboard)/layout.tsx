@@ -59,7 +59,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <main
           id="main-content"
           tabIndex={-1}
-          className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 overflow-x-hidden p-4 sm:p-8 lg:p-12"
+          // pt-16/pb-24 en mobile reservan el espacio de los dos FABs fijos (hamburguesa
+          // arriba-izquierda, "+" nueva transacción abajo-derecha) para que nunca floten
+          // sobre el título de la página ni sobre la última fila de una lista con scroll —
+          // el estándar es reservar el hueco en el contenedor, no dejar el FAB flotando
+          // sobre contenido que se desplaza debajo.
+          className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 overflow-x-hidden p-4 pt-16 pb-24 sm:p-8 lg:p-12"
         >
           {children}
         </main>

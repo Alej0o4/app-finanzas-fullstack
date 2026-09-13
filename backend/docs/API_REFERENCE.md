@@ -613,6 +613,10 @@ Parámetros:
 - `period`: `day | month`
 - `currency` (opcional): moneda a filtrar; por defecto la preferida del usuario. La serie
   nunca mezcla monedas — se filtra por una sola, no se agrupa (Fase 11 §11.1).
+- `account_id` (opcional, corrección UX post-Fase 19): filtra a las transacciones de una
+  sola cuenta — mismo contrato que en `category-distribution` (ortogonal a `currency`,
+  `404` si la cuenta no existe o no pertenece al usuario autenticado). Agregado para que
+  Analítica pueda mostrar el flujo de una cuenta específica en vez de solo la agregada.
 
 Salida:
 

@@ -14,7 +14,9 @@ import CategoryDonutChart, {
 } from '@/components/CategoryDonutChart';
 import AnalyticsSummary from '@/components/AnalyticsSummary';
 import Input from '@/components/ui/Input';
+import Select from '@/components/ui/Select';
 import Skeleton from '@/components/ui/Skeleton';
+import type { Account } from '@/types/api';
 
 export type AnalyticsPeriod = 'week' | 'month' | 'year' | 'custom';
 
@@ -116,6 +118,9 @@ const validateReferenceMode = (raw: string): ReferenceMode =>
 
 const validateNeto = (raw: string): 'true' | 'false' => (raw === 'true' ? 'true' : 'false');
 
+// 'all' o un id numérico de cuenta como string; cualquier otro valor cae a 'all'.
+const validateAccountParam = (raw: string) => (raw === 'all' || /^\d+$/.test(raw) ? raw : 'all');
+
 function AnalyticsPageContent() {
   // Decisión 11.1.1 (Fase 11): se pasa `currency` explícito a los endpoints de dashboard
   // aunque el backend ya defaultea a la moneda preferida — deja la intención explícita.
@@ -141,8 +146,28 @@ function AnalyticsPageContent() {
     validateReferenceMode
   );
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
+  // Fase de correcciones post-onboarding: antes analítica no tenía forma de elegir cuenta y
+  // siempre agregaba todas — ahora es explícito y en la URL (link compartible, mismo criterio
+  // de Decisión 12.1.2 que el resto de los filtros de esta página).
+  const [accountFilter, setAccountFilter] = useQueryParamState(
+    'account',
+    'all',
+    validateAccountParam
+  );
 
   const netMode = netoRaw === 'true';
+  const accountId = accountFilter !== 'all' ? Number(accountFilter) : undefined;
+
+  const { data: accounts } = useQuery<Account[]>({
+    queryKey: queryKeys.accounts.all(),
+    queryFn: async () => (await api.get('accounts/')).data,
+  });
+
+  // `currency` y `account_id` son ortogonales en el backend (Fase 17 §17.1.3) — al
+  // filtrar por una cuenta hay que pasar SU moneda explícita, si no la vista se queda
+  // pidiendo la moneda preferida del usuario y una cuenta en otra moneda siempre da $0.
+  const selectedAccount = accounts?.find((account) => account.id === accountId);
+  const effectiveCurrency = selectedAccount?.currency ?? user?.preferred_currency;
 
   // Un solo rango de fechas para las 3 secciones (KPIs, barras, dona) — ver buildDateRange.
   const dateRange = useMemo(
@@ -166,15 +191,23 @@ function AnalyticsPageContent() {
     queryKey: queryKeys.analytics.cashflow(
       dateRange.start_date,
       dateRange.end_date,
-      dateRange.granularity
+      dateRange.granularity,
+      accountFilter,
+      effectiveCurrency
     ),
+    // Espera a que `effectiveCurrency` esté resuelto (depende de /users/me y /accounts/,
+    // que llegan en paralelo) — si no, el primer fetch sale sin `currency` y el backend
+    // cae a COP por defecto aunque la cuenta elegida sea en otra moneda (bug detectado en
+    // verificación manual: seleccionar una cuenta USD mostraba $0 en todo).
+    enabled: !!effectiveCurrency,
     queryFn: async () => {
       const res = await api.get('dashboard/cashflow-series', {
         params: {
           start_date: dateRange.start_date,
           end_date: dateRange.end_date,
           period: dateRange.granularity,
-          currency: user?.preferred_currency,
+          currency: effectiveCurrency,
+          account_id: accountId,
         },
       });
       return res.data;
@@ -191,8 +224,11 @@ function AnalyticsPageContent() {
       dateRange.start_date,
       dateRange.end_date,
       categoryType,
-      netMode
+      netMode,
+      accountFilter,
+      effectiveCurrency
     ),
+    enabled: !!effectiveCurrency,
     queryFn: async () => {
       const res = await api.get('dashboard/category-distribution', {
         params: {
@@ -200,7 +236,8 @@ function AnalyticsPageContent() {
           end_date: dateRange.end_date,
           type: netMode ? 'expense' : categoryType,
           neto: netMode || undefined,
-          currency: user?.preferred_currency,
+          currency: effectiveCurrency,
+          account_id: accountId,
         },
       });
       return res.data;
@@ -293,6 +330,20 @@ function AnalyticsPageContent() {
             />
           </div>
         )}
+
+        <Select
+          value={accountFilter}
+          onChange={(event) => setAccountFilter(event.target.value)}
+          className="bg-background"
+          aria-label="Cuenta"
+        >
+          <option value="all">Todas las cuentas</option>
+          {accounts?.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.name}
+            </option>
+          ))}
+        </Select>
       </div>
 
       <AnalyticsSummary totalIncome={totals.totalIncome} totalExpense={totals.totalExpense} />

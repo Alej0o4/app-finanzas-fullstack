@@ -37,10 +37,16 @@ export const queryKeys = {
     categoryBreakdown: () => ['dashboard-category-breakdown'] as const,
   },
   analytics: {
-    cashflow: (start: string, end: string, period: string) =>
-      ['analytics-cashflow', start, end, period] as const,
-    categories: (start: string, end: string, type: string, neto?: boolean) =>
-      ['analytics-categories', start, end, type, neto] as const,
+    cashflow: (start: string, end: string, period: string, accountId?: string, currency?: string) =>
+      ['analytics-cashflow', start, end, period, accountId, currency] as const,
+    categories: (
+      start: string,
+      end: string,
+      type: string,
+      neto?: boolean,
+      accountId?: string,
+      currency?: string
+    ) => ['analytics-categories', start, end, type, neto, accountId, currency] as const,
   },
   notifications: {
     /** Lista paginada de la bandeja in-app (GET /notifications, Fase 13 §13.5). */

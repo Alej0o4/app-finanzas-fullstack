@@ -2,7 +2,17 @@
 
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Eye, EyeOff } from 'lucide-react';
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  ArrowUpRight,
+  ArrowDownRight,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { getApiError } from '@/lib/utils';
@@ -26,6 +36,112 @@ const categoryTypeTranslations: Record<string, string> = {
   expense: 'Gasto',
 };
 
+function CategoryCard({
+  category,
+  dimmed,
+  isPending,
+  onToggleHidden,
+  onEdit,
+  onDelete,
+}: {
+  category: Category;
+  dimmed: boolean;
+  isPending: boolean;
+  onToggleHidden: (category: Category) => void;
+  onEdit: (category: Category) => void;
+  onDelete: (id: number, name: string) => void;
+}) {
+  const isSystemCategory = category.user_id === null;
+  const isExpense = category.type === 'expense';
+
+  return (
+    <div
+      className={`bg-surface border-border/70 hover:border-border group animate-fade-in relative flex h-28 flex-col justify-between rounded-2xl border p-3 transition-all duration-200 ease-out sm:h-32 sm:p-4 ${
+        isPending
+          ? 'pointer-events-none scale-95 opacity-0'
+          : dimmed
+            ? 'opacity-45 grayscale hover:opacity-75'
+            : 'scale-100 opacity-100'
+      }`}
+    >
+      <Link
+        href={`/categories/${category.id}`}
+        className="block flex h-full w-full cursor-pointer flex-col justify-between transition-transform duration-200 active:scale-[0.99]"
+      >
+        <div className="flex items-start justify-between">
+          <div
+            className={`bg-background border-border/60 rounded-xl border p-2 ${isExpense ? 'text-text-muted' : 'text-primary'}`}
+          >
+            <CategoryIcon
+              icon={category.icon}
+              size={18}
+              fallback={isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
+            />
+          </div>
+          {dimmed && (
+            <span className="border-border/60 text-text-muted rounded-full border px-2 py-0.5 text-[10px] font-medium">
+              Oculta
+            </span>
+          )}
+        </div>
+
+        <div>
+          <h3 className="text-text truncate pr-16 text-sm font-medium">{category.name}</h3>
+          <p className="text-text-muted mt-0.5 text-xs">
+            {categoryTypeTranslations[category.type] || category.type}
+          </p>
+        </div>
+      </Link>
+
+      {/* Fase 18 §18.3: ocultar/mostrar se renderiza incondicionalmente (Decisión
+          Q6 — alcanza categorías de sistema y propias); editar/eliminar sigue
+          reservado a categorías propias (Fase 11 §11.6, ahora activo vía 18.4). */}
+      <div className="bg-surface absolute top-4 right-4 z-10 flex gap-2 rounded-lg pl-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggleHidden(category);
+          }}
+          className="text-text-muted hover:text-text p-1 transition-colors active:scale-95"
+          title={category.is_hidden ? 'Mostrar categoría' : 'Ocultar categoría'}
+          aria-label={category.is_hidden ? 'Mostrar categoría' : 'Ocultar categoría'}
+        >
+          {category.is_hidden ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+        {!isSystemCategory && CUSTOM_CATEGORY_EDITING_ENABLED && (
+          <>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onEdit(category);
+              }}
+              className="text-text-muted hover:text-primary p-1 transition-colors active:scale-95"
+              title="Editar categoría"
+              aria-label="Editar categoría"
+            >
+              <Edit2 size={16} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDelete(category.id, category.name);
+              }}
+              className="text-text-muted hover:text-danger p-1 transition-colors active:scale-95"
+              title="Eliminar categoría"
+              aria-label="Eliminar categoría"
+            >
+              <Trash2 size={16} />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function CategoriesPage() {
   const queryClient = useQueryClient();
 
@@ -43,6 +159,12 @@ export default function CategoriesPage() {
   const [editErrors, setEditErrors] = useState<{ name?: string }>({});
   const createNameRef = useRef<HTMLInputElement>(null);
   const editNameRef = useRef<HTMLInputElement>(null);
+
+  const [showHidden, setShowHidden] = useState(false);
+  // Categorías en transición de ocultar/mostrar: se marcan aquí antes de disparar la
+  // mutación para que la card alcance a animar su salida (fade + scale) antes de que
+  // el refetch la mueva de sección.
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
 
   const { data: categories, isLoading } = useQuery<Category[]>({
     queryKey: queryKeys.categories.all(),
@@ -110,12 +232,29 @@ export default function CategoriesPage() {
     },
     onSuccess: (_data, category) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.categories.all() });
+      setPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(category.id);
+        return next;
+      });
       toast.success(category.is_hidden ? 'Categoría visible' : 'Categoría ocultada');
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, category) => {
+      setPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(category.id);
+        return next;
+      });
       toast.error(getApiError(error));
     },
   });
+
+  const handleToggleHidden = (category: Category) => {
+    setPendingIds((prev) => new Set(prev).add(category.id));
+    window.setTimeout(() => {
+      toggleHiddenMutation.mutate(category);
+    }, 200);
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,6 +306,8 @@ export default function CategoriesPage() {
       </div>
     );
 
+  const hiddenCategories = categories?.filter((category) => category.is_hidden) ?? [];
+
   return (
     <div className="relative space-y-6">
       <div className="flex items-center justify-between gap-3">
@@ -193,90 +334,51 @@ export default function CategoriesPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {categories?.map((category) => {
-          const isSystemCategory = category.user_id === null;
-          const isExpense = category.type === 'expense';
-
-          return (
-            <div
+        {categories
+          ?.filter((category) => !category.is_hidden)
+          .map((category) => (
+            <CategoryCard
               key={category.id}
-              className="bg-surface border-border/70 hover:border-border group relative flex h-28 flex-col justify-between rounded-2xl border p-3 transition-colors sm:h-32 sm:p-4"
-            >
-              <Link
-                href={`/categories/${category.id}`}
-                className="block flex h-full w-full cursor-pointer flex-col justify-between transition-transform duration-200 active:scale-[0.99]"
-              >
-                <div className="flex items-start justify-between">
-                  <div
-                    className={`bg-background border-border/60 rounded-xl border p-2 ${isExpense ? 'text-text-muted' : 'text-primary'}`}
-                  >
-                    <CategoryIcon
-                      icon={category.icon}
-                      size={18}
-                      fallback={
-                        isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-text truncate pr-16 text-sm font-medium">{category.name}</h3>
-                  <p className="text-text-muted mt-0.5 text-xs">
-                    {categoryTypeTranslations[category.type] || category.type}
-                  </p>
-                </div>
-              </Link>
-
-              {/* Fase 18 §18.3: ocultar/mostrar se renderiza incondicionalmente (Decisión
-                  Q6 — alcanza categorías de sistema y propias); editar/eliminar sigue
-                  reservado a categorías propias (Fase 11 §11.6, ahora activo vía 18.4). */}
-              <div className="bg-surface absolute top-4 right-4 z-10 flex gap-2 rounded-lg pl-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toggleHiddenMutation.mutate(category);
-                  }}
-                  className="text-text-muted hover:text-text p-1 transition-colors active:scale-95"
-                  title={category.is_hidden ? 'Mostrar categoría' : 'Ocultar categoría'}
-                  aria-label={category.is_hidden ? 'Mostrar categoría' : 'Ocultar categoría'}
-                >
-                  {category.is_hidden ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-                {!isSystemCategory && CUSTOM_CATEGORY_EDITING_ENABLED && (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openEditModal(category);
-                      }}
-                      className="text-text-muted hover:text-primary p-1 transition-colors active:scale-95"
-                      title="Editar categoría"
-                      aria-label="Editar categoría"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleDelete(category.id, category.name);
-                      }}
-                      className="text-text-muted hover:text-danger p-1 transition-colors active:scale-95"
-                      title="Eliminar categoría"
-                      aria-label="Eliminar categoría"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
+              category={category}
+              dimmed={false}
+              isPending={pendingIds.has(category.id)}
+              onToggleHidden={handleToggleHidden}
+              onEdit={openEditModal}
+              onDelete={handleDelete}
+            />
+          ))}
       </div>
+
+      {hiddenCategories.length > 0 && (
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() => setShowHidden((prev) => !prev)}
+            className="text-text-muted hover:text-text flex items-center gap-1.5 text-sm font-medium transition-colors"
+          >
+            {showHidden ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            {showHidden
+              ? 'Ocultar categorías ocultas'
+              : `Mostrar categorías ocultas (${hiddenCategories.length})`}
+          </button>
+
+          {showHidden && (
+            <div className="animate-fade-in grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {hiddenCategories.map((category) => (
+                <CategoryCard
+                  key={category.id}
+                  category={category}
+                  dimmed={true}
+                  isPending={pendingIds.has(category.id)}
+                  onToggleHidden={handleToggleHidden}
+                  onEdit={openEditModal}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {CUSTOM_CATEGORY_EDITING_ENABLED && (
         <ModalShell

@@ -102,6 +102,17 @@
   }
 }
 
+/* Safari/iOS renderiza <input type="date"> como un elemento reemplazado con ancho
+   intrínseco propio que puede ignorar `width: 100%` del wrapper (w-full/min-w-0 en
+   Input.tsx no alcanza) y desbordar la tarjeta contenedora en mobile. */
+input[type='date'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *:not(.animate-spin),
   *:not(.animate-spin)::before,

@@ -187,9 +187,21 @@ def obtener_serie_flujo_caja(
     end_date: datetime,
     period: str = Query("day", pattern="^(day|month)$", description="Agrupar por 'day' o 'month'"),
     currency: str | None = Query(None, description="Moneda a filtrar; por defecto la preferida del usuario"),
+    account_id: int | None = Query(None, description="Filtra a las transacciones de una sola cuenta"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    # Mismo patrón de ownership que category-distribution (Fase 17 §17.1.3): 404 si la
+    # cuenta no existe o no es del usuario, nunca 403.
+    if account_id is not None:
+        cuenta = (
+            db.query(models.Account)
+            .filter(models.Account.id == account_id, models.Account.user_id == current_user.id)
+            .first()
+        )
+        if not cuenta:
+            raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+
     filtro_moneda = currency or current_user.preferred_currency or "COP"
     try:
         dialect = db.bind.dialect.name
@@ -199,6 +211,15 @@ def obtener_serie_flujo_caja(
         else:
             fmt = "%Y-%m" if period == "month" else "%Y-%m-%d"
             date_label = func.strftime(fmt, models.Transaction.date).label("date_label")
+
+        filtros = [
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.currency == filtro_moneda,
+            models.Transaction.date >= start_date,
+            models.Transaction.date <= end_date,
+        ]
+        if account_id is not None:
+            filtros.append(models.Transaction.account_id == account_id)
 
         rows = (
             db.query(
@@ -210,12 +231,7 @@ def obtener_serie_flujo_caja(
                     case((models.Transaction.type == "expense", models.Transaction.amount), else_=Decimal("0.00"))
                 ).label("expense"),
             )
-            .filter(
-                models.Transaction.user_id == current_user.id,
-                models.Transaction.currency == filtro_moneda,
-                models.Transaction.date >= start_date,
-                models.Transaction.date <= end_date,
-            )
+            .filter(*filtros)
             .group_by(date_label)
             .order_by(date_label)
             .all()

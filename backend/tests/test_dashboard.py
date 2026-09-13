@@ -265,6 +265,67 @@ class TestCashflowSeriesCurrency:
         assert Decimal(str(serie[0]["income"])) == Decimal("0")
 
 
+class TestCashflowSeriesAccountFilter:
+    """Corrección UX post-Fase 19: analítica no tenía forma de ver el flujo de una sola
+    cuenta. `account_id` opcional en cashflow-series, mismo patrón de ownership que
+    category-distribution (Fase 17 §17.1.3) — 404 si la cuenta es ajena."""
+
+    def test_account_id_returns_only_that_account_series(self, client, auth_headers, make_account, make_category):
+        cuenta_a = make_account(auth_headers, name="Cuenta A", currency="COP", balance="1000000.00")
+        cuenta_b = make_account(auth_headers, name="Cuenta B", currency="COP", balance="1000000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="70000.00",
+            type="expense",
+            account_id=cuenta_a["id"],
+            category_id=categoria["id"],
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="20000.00",
+            type="expense",
+            account_id=cuenta_b["id"],
+            category_id=categoria["id"],
+        )
+
+        rango = _current_month_range_params()
+
+        solo_a = client.get(
+            "/api/v1/dashboard/cashflow-series",
+            params={**rango, "account_id": cuenta_a["id"]},
+            headers=auth_headers,
+        )
+        assert solo_a.status_code == 200, solo_a.text
+        serie_a = solo_a.json()
+        assert len(serie_a) == 1
+        assert Decimal(str(serie_a[0]["expense"])) == Decimal("70000.00")
+
+        solo_b = client.get(
+            "/api/v1/dashboard/cashflow-series",
+            params={**rango, "account_id": cuenta_b["id"]},
+            headers=auth_headers,
+        )
+        assert solo_b.status_code == 200, solo_b.text
+        serie_b = solo_b.json()
+        assert len(serie_b) == 1
+        assert Decimal(str(serie_b[0]["expense"])) == Decimal("20000.00")
+
+    def test_foreign_account_id_returns_404(self, client, auth_headers, other_user, make_account):
+        cuenta_ajena = make_account(other_user["headers"], balance="1000.00")
+        rango = _current_month_range_params()
+
+        response = client.get(
+            "/api/v1/dashboard/cashflow-series",
+            params={**rango, "account_id": cuenta_ajena["id"]},
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+
+
 class TestCategoryDistributionCurrency:
     def test_neto_false_default_filters_to_preferred_currency(self, client, auth_headers, make_account, make_category):
         cuenta_cop, cuenta_usd = _create_cop_and_usd_accounts(make_account, auth_headers)
