@@ -25,6 +25,7 @@ docker compose up -d --build                                          # producti
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up      # dev, hot-reload
 docker compose logs -f backend                                        # logs
 docker compose exec backend python -c "from app.core.seed import run_seed; run_seed()"  # seed data
+docker compose exec backend python -c "from app.core.database import SessionLocal; from app.core.user_deletion import delete_user_by_email; db = SessionLocal(); print(delete_user_by_email(db, 'email@ejemplo.com')); db.close()"  # delete user by email (Fase 21, Decisión 21.2.5)
 ```
 
 ### Run (without Docker)

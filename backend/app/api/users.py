@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import security
@@ -10,6 +11,7 @@ from app.core.default_categories import BASE_REGISTRATION_CATEGORY_NAMES
 from app.core.email import render_email_html, send_email
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user, get_password_hash
+from app.core.user_deletion import delete_user_cascade
 from app.models import models
 from app.schemas import schemas
 
@@ -115,3 +117,28 @@ def actualizar_perfil(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+# Fase 21 §21.2 (Decisión A4): primera acción destructiva e irreversible del sistema — exige
+# reingresar la contraseña (cierra la ventana de "JWT/API key robada = cuenta borrada", Hallazgo
+# 5 de la spec) y lleva el mismo rate limit de 5/min que login/registro.
+@router.delete("/me", status_code=204)
+@limiter.limit("5/minute")
+def eliminar_cuenta_propia(
+    request: Request,
+    body: schemas.UserDeleteRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not security.verify_password(body.password, current_user.password_hash):
+        raise HTTPException(status_code=403, detail="Contraseña incorrecta.")
+
+    try:
+        delete_user_cascade(db, current_user)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo eliminar la cuenta. Contactá soporte.",
+        ) from None

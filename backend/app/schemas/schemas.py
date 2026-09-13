@@ -112,6 +112,12 @@ class UserProfileUpdate(BaseModel):
     monthly_income: Decimal | None = Field(None, ge=0, decimal_places=2)
 
 
+class UserDeleteRequest(BaseModel):
+    """Reconfirmación de contraseña para `DELETE /users/me` (Fase 21 §21.2, Decisión A4)."""
+
+    password: str
+
+
 # --- TRANSACCIONES ---
 class TransactionType(str, Enum):
     income = "income"

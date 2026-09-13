@@ -1,26 +1,34 @@
 'use client';
 
 import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Check, Copy, KeyRound, Plus } from 'lucide-react';
+import { Check, Copy, KeyRound, Plus, Trash2 } from 'lucide-react';
 import Switch from '@/components/ui/Switch';
 import Skeleton from '@/components/ui/Skeleton';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import ModalShell from '@/components/ui/ModalShell';
 import EmptyState from '@/components/ui/EmptyState';
+import Select from '@/components/ui/Select';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@/lib/hooks/useApiKeys';
+import { api } from '@/lib/api';
+import { queryKeys } from '@/lib/queryKeys';
 import { getApiError } from '@/lib/utils';
 import type { components } from '@/types/generated/api';
 
 type ApiKey = components['schemas']['ApiKeyResponse'];
 type ApiKeyCreateResponse = components['schemas']['ApiKeyCreateResponse'];
+// Código nuevo usa tipos generados (Decisión 16.3.2): AccountResponse, no el Account
+// manual de types/api.ts que budgets/page.tsx todavía usa.
+type Account = components['schemas']['AccountResponse'];
 
-// Fase 14 §14.6.2: primera superficie de ajustes del producto. Fase 16 §16.1 extiende la
-// página con una segunda sección (gestión de API keys) — ver Decisión 16.1.6. No es el
-// lugar para anticipar ajustes de cuenta (contraseña, email, etc.) que ninguna fase pide.
+// Fase 14 §14.6.2: primera superficie de ajustes del producto. Fase 16 §16.1 agrega la
+// gestión de API keys — ver Decisión 16.1.6. Fase 21 §21.1/§21.2 suma la moneda principal
+// y la baja de cuenta — ver docs/specs/fase_21_spec.md.
 export default function SettingsPage() {
   const {
     preferences,
@@ -51,6 +59,52 @@ export default function SettingsPage() {
         },
       }
     );
+  };
+
+  // Fase 21 §21.1 (Decisión 21.1.1): monedas del selector derivadas de las cuentas
+  // reales del usuario (misma queryKey que accounts/, ya en cache si visitó /accounts
+  // o /budgets antes) — nunca una lista fija.
+  const { data: accounts } = useQuery<Account[]>({
+    queryKey: queryKeys.accounts.all(),
+    queryFn: async () => (await api.get('accounts/')).data,
+  });
+  const availableCurrencies = Array.from(new Set(accounts?.map((a) => a.currency) ?? []));
+
+  // --- Baja de cuenta (Fase 21 §21.2) ---------------------------------------------
+
+  const queryClient = useQueryClient();
+  const router = useRouter();
+
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  const deleteAccount = useMutation({
+    mutationFn: async (password: string) => {
+      await api.delete('users/me', { data: { password } });
+    },
+    onSuccess: () => {
+      localStorage.removeItem('jwt_token');
+      localStorage.removeItem('refresh_token');
+      // queryClient.clear(), no invalidar: no debe quedar ningún dato del usuario
+      // borrado accesible en memoria aunque el navegador quede abierto.
+      queryClient.clear();
+      toast.success('Tu cuenta fue eliminada.');
+      router.push('/login');
+    },
+    onError: (err) => setPasswordError(getApiError(err)),
+  });
+
+  const closeDeleteModal = () => {
+    setIsDeleteOpen(false);
+    setPassword('');
+    setPasswordError('');
+  };
+
+  const handleDeleteSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
+    deleteAccount.mutate(password);
   };
 
   // --- API keys (Fase 16 §16.1) ------------------------------------------------
@@ -149,6 +203,35 @@ export default function SettingsPage() {
       </section>
 
       <section className="bg-surface border-border/70 rounded-2xl border p-4 sm:p-5">
+        <div className="mb-4">
+          <h2 className="text-text font-sans text-base font-semibold">Cuenta</h2>
+          <p className="text-text-muted mt-0.5 text-xs sm:text-sm">
+            La moneda que usás para ver tus balances y métricas del dashboard.
+          </p>
+        </div>
+        {/* Fase 21 §21.1 (Decisión 21.1.1): se muestra siempre, aunque haya una sola
+            moneda — mismo criterio que el selector de presupuestos (17.2.4). */}
+        <Select
+          label="Moneda principal"
+          value={preferences?.preferred_currency ?? ''}
+          onChange={(e) =>
+            updatePreferences.mutate(
+              { preferred_currency: e.target.value },
+              { onError: (err) => toast.error(getApiError(err)) }
+            )
+          }
+          disabled={updatePreferences.isPending}
+          className="bg-background"
+        >
+          {availableCurrencies.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </Select>
+      </section>
+
+      <section className="bg-surface border-border/70 rounded-2xl border p-4 sm:p-5">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-text font-sans text-base font-semibold">API keys</h2>
@@ -217,6 +300,27 @@ export default function SettingsPage() {
         )}
       </section>
 
+      {/* Zona de peligro (Fase 21 §21.2, Decisión 21.2.6) — al final, después de API keys */}
+      <section className="bg-surface border-border/70 rounded-2xl border p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-text font-sans text-base font-semibold">Zona de peligro</h2>
+            <p className="text-text-muted mt-0.5 text-xs sm:text-sm">
+              Acciones irreversibles sobre tu cuenta.
+            </p>
+          </div>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => setIsDeleteOpen(true)}
+            className="shrink-0"
+          >
+            <Trash2 size={16} />
+            Eliminar mi cuenta
+          </Button>
+        </div>
+      </section>
+
       <ModalShell isOpen={isCreateOpen} onClose={closeCreateModal} title="Nueva API key">
         {createdKey ? (
           <div className="space-y-4">
@@ -275,6 +379,44 @@ export default function SettingsPage() {
             </div>
           </form>
         )}
+      </ModalShell>
+
+      <ModalShell isOpen={isDeleteOpen} onClose={closeDeleteModal} title="Eliminar mi cuenta">
+        <form onSubmit={handleDeleteSubmit} className="space-y-4" noValidate>
+          <div className="bg-danger/10 border-danger/30 rounded-xl border p-3">
+            <p className="text-danger text-xs leading-relaxed">
+              Esta acción es <strong>irreversible</strong>: se van a eliminar tus cuentas,
+              transacciones, presupuestos y categorías propias de forma permanente.
+            </p>
+          </div>
+          <Input
+            label="Contraseña"
+            type="password"
+            placeholder="Confirmá tu contraseña"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              if (passwordError) setPasswordError('');
+            }}
+            error={passwordError}
+            autoFocus
+            className="bg-background"
+          />
+          <div className="mt-6 flex gap-3">
+            <Button type="button" variant="ghost" onClick={closeDeleteModal} className="flex-1">
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              variant="danger"
+              loading={deleteAccount.isPending}
+              disabled={!password}
+              className="flex-1"
+            >
+              Eliminar definitivamente
+            </Button>
+          </div>
+        </form>
       </ModalShell>
     </div>
   );

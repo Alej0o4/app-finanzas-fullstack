@@ -284,6 +284,26 @@ Limitación conocida: el endpoint ignora campos `null` (`exclude_none`), así qu
 
 Salida: `UserResponse` actualizada (mismo shape que `GET /me`).
 
+### `DELETE /api/v1/users/me`
+
+Elimina físicamente (hard delete) la cuenta del usuario autenticado y todos sus datos —
+cuentas, transacciones, presupuestos, categorías propias, API keys y tokens — vía
+`delete_user_cascade()` (misma función que el script de limpieza, Fase 21 §21.2). Es
+irreversible, y el email queda disponible para un registro nuevo. Requiere reingresar la
+contraseña como fricción deliberada y lleva rate limit de 5 intentos por minuto.
+
+Entrada:
+
+- `password`: contraseña actual del usuario (obligatoria).
+
+Respuestas:
+
+- `204` — cuenta eliminada (sin cuerpo de respuesta).
+- `401` — sin token o token inválido.
+- `403` — contraseña incorrecta (no se elimina nada).
+- `500` — fallo de base de datos a mitad de la cascada; la transacción hace `rollback` y
+  el usuario queda intacto.
+
 ### `GET /api/v1/users/me/preferences`
 
 Devuelve las preferencias del usuario autenticado.
