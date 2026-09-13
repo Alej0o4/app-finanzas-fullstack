@@ -15,7 +15,25 @@ import type { Account, Category } from '@/types/api';
  * backend/app/main.py) — nunca la crea ni la borra el usuario. */
 const SEED_INCOME_CATEGORY_NAME = 'Salario';
 
-export default function OnboardingIncomeStep({ onDone }: { onDone: () => void }) {
+// Fase 22 §22.1 (Decisión A3): solo placeholders de UI a una escala razonable por moneda —
+// sin tasas de cambio, no son cálculos.
+const PLACEHOLDER_BY_CURRENCY: Record<string, string> = {
+  COP: 'Ej. 3000000',
+  USD: 'Ej. 3000',
+  EUR: 'Ej. 2800',
+  MXN: 'Ej. 50000',
+  ARS: 'Ej. 900000',
+};
+
+export default function OnboardingIncomeStep({
+  currency,
+  onDone,
+}: {
+  // Fase 22 §22.1 (Decisión A6): la moneda ya elegida en el paso anterior (o la preferida
+  // del usuario) — llega por prop desde el wizard, no se lee de cache react-query.
+  currency: string;
+  onDone: () => void;
+}) {
   const [value, setValue] = useState('');
   const queryClient = useQueryClient();
   const setIncomeMutation = useSetMonthlyIncome();
@@ -107,7 +125,7 @@ export default function OnboardingIncomeStep({ onDone }: { onDone: () => void })
         value={value}
         onChange={(event) => setValue(event.target.value)}
         className="bg-background"
-        placeholder="Ej. 3000000"
+        placeholder={PLACEHOLDER_BY_CURRENCY[currency] ?? 'Ej. 3000000'}
       />
       <div className="flex gap-3 pt-2">
         <Button type="button" variant="ghost" onClick={onDone} className="flex-1">

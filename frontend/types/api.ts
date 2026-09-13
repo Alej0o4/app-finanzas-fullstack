@@ -107,6 +107,10 @@ export interface UserResponse {
   /** Fase 19 §19.1 — true si el usuario tiene 2+ transacciones (usuario recurrente); solo se
    *  calcula en GET /users/me, nunca en los otros endpoints que devuelven UserResponse. */
   has_transaction_history: boolean;
+  /** Fase 22 §22.4 — true si el usuario tiene contraseña (cuenta híbrida o por password);
+   *  false para cuentas creadas solo con Google. Computado server-side desde
+   *  `password_hash is not None` (Decisión D4), sin migración. */
+  has_password: boolean;
 }
 
 export interface PreferencesUpdatePayload {
@@ -114,6 +118,10 @@ export interface PreferencesUpdatePayload {
   preferred_locale?: string;
   preferred_theme?: string;
   weekly_summary_enabled?: boolean;
+  /** Fase 22 §22.1 (Decisiones A2/A5) — instrucción por-request: además de actualizar la
+   *  preferencia, cascadear la moneda a la cuenta por defecto si sigue virgen (nombre
+   *  "Cuenta principal", balance 0, sin transacciones). No persiste en el usuario. */
+  apply_to_default_account?: boolean;
 }
 
 export interface UserPreferences {

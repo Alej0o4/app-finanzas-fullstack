@@ -52,6 +52,12 @@ export function useUserPreferences() {
         queryClient.invalidateQueries({ queryKey: queryKeys.currentUser() });
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() });
       }
+      if (body.apply_to_default_account) {
+        // Fase 22 §22.1 (Decisión 22.1.6): la cuenta por defecto pudo cambiar de moneda
+        // server-side; `accounts.all()` alimenta el selector de Settings (Decisión 21.1.1)
+        // y `TransactionCaptureForm`, que la leen del mismo cache.
+        queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
+      }
       if (body.preferred_theme) {
         updateConfig({ theme: body.preferred_theme });
       }
