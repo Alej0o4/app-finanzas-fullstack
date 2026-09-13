@@ -66,6 +66,11 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
 - `POST /api/v1/categories/`
 - `PUT /api/v1/categories/{category_id}`
 - `DELETE /api/v1/categories/{category_id}`
+- `POST /api/v1/categories/{category_id}/hide` (Fase 18 §18.3) — oculta la categoría "para
+  mí" (204, idempotente; afecta solo el selector de captura, no históricos ni analítica).
+  Válido tanto para categorías de sistema como propias (Decisión Q6 de la spec de Fase 18).
+- `DELETE /api/v1/categories/{category_id}/hide` (Fase 18 §18.3) — la vuelve visible (204,
+  idempotente).
 
 ### Transacciones
 
@@ -278,12 +283,20 @@ El frontend asume:
 - `name`
 - `type`
 - `user_id`
+- `icon` (`string | undefined`)
+- `is_hidden` (`boolean`, Fase 18 §18.3) — computado por usuario en el backend; cada
+  categoría de `GET /api/v1/categories/` (y de los handlers puntuales) la trae explícita.
+  Solo filtra el selector de captura (`TransactionCaptureForm`); el filtro y la edición de
+  `/transactions`, el selector de `/budgets` y la resolución por nombre (Fase 16 §16.2)
+  siguen viendo todas las categorías.
 
 Reglas:
 
 - `user_id = null` significa categoría compartida del sistema.
 - Las categorías base no se editan ni eliminan desde el frontend.
 - El detalle de categoría debe funcionar tanto para categorías base como personalizadas.
+- Ocultar/mostrar no es editar los campos de la categoría: el toggle (`POST`/`DELETE
+/categories/{id}/hide`) está disponible para categorías de sistema y propias por igual.
 
 ### Transacción
 

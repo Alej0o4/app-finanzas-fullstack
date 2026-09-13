@@ -59,6 +59,18 @@
 - Las categorías personalizadas pertenecen a un usuario específico.
 - Las categorías base no se pueden editar ni borrar desde la API.
 - Al iniciar la aplicación se siembran categorías base y se corrigen nombres heredados de categorías base antiguas.
+- **Ocultar una categoría ("oculta para mí", Fase 18):** el flag `is_hidden` de
+  `GET /categories/` es una preferencia estrictamente **por usuario**, persistida en
+  `hidden_categories` (una fila por par user-categoría), nunca en `Category` — ocultarla
+  para mí no la oculta para ningún otro usuario y **no modifica ni borra** la categoría
+  (ni las de sistema ni las propias). Ocultar solo afecta al selector de captura al crear
+  una transacción nueva; **no esconde históricos ni analítica** (transacciones pasadas,
+  filtros de `/transactions`, presupuestos y el dashboard siguen viendo la categoría). La
+  resolución por nombre de Fase 16 §16.2 (`category` en `POST /transactions`) **no se ve
+  afectada**: una categoría oculta sigue resolviéndose por nombre (Decisión Q7 — los
+  atajos móviles existen para saltarse el selector visual). Los endpoints
+  `POST`/`DELETE /categories/{id}/hide` aplican a categorías propias **y** de sistema,
+  sin rama de ownership (Decisión 18.3.4).
 
 ## Transacciones
 

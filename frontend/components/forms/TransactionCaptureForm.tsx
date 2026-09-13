@@ -60,7 +60,7 @@ export default function TransactionCaptureForm({
   });
 
   const filteredCategories = useMemo(
-    () => categories?.filter((c) => c.type === type) || [],
+    () => categories?.filter((c) => c.type === type && !c.is_hidden) || [],
     [categories, type]
   );
 

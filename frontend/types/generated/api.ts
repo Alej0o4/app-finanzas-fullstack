@@ -247,6 +247,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/accounts/{account_id}/monthly-summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Obtener Resumen Mensual Cuenta
+     * @description Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
+     *
+     *     `ingreso_del_mes - gasto_del_mes` calculado SOLO con transacciones reales de esa
+     *     cuenta en el mes en curso (no eliminadas) — a diferencia de
+     *     `DashboardSummary.monthly_flow_balance`, no depende de ningún valor declarado
+     *     por el usuario, así que el balance nunca es `null`. Misma verificación de
+     *     pertenencia que `reconciliar_cuenta` (404 si no existe o no es del usuario).
+     */
+    get: operations['obtener_resumen_mensual_cuenta_api_v1_accounts__account_id__monthly_summary_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/accounts/{account_id}': {
     parameters: {
       query?: never;
@@ -315,6 +341,33 @@ export interface paths {
     post?: never;
     /** Eliminar Categoria */
     delete: operations['eliminar_categoria_api_v1_categories__category_id__delete'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/categories/{category_id}/hide': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Ocultar Categoria
+     * @description Fase 18 (§18.3.3, Decisión 18.3.4): marca "oculta para mí" una categoría propia o de
+     *     sistema. Idempotente: la PK compuesta de `hidden_categories` garantiza una sola fila por
+     *     par, y el guard `if not _esta_oculta(...)` evita el IntegrityError del duplicado.
+     */
+    post: operations['ocultar_categoria_api_v1_categories__category_id__hide_post'];
+    /**
+     * Mostrar Categoria
+     * @description Fase 18 (§18.3.3): des-oculta. Idempotente y no-op si no había fila — el DELETE sin
+     *     condición previa cubre ambos casos.
+     */
+    delete: operations['mostrar_categoria_api_v1_categories__category_id__hide_delete'];
     options?: never;
     head?: never;
     patch?: never;
@@ -701,6 +754,25 @@ export interface components {
       balance: number | string;
     };
     /**
+     * AccountMonthlySummary
+     * @description Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
+     *
+     *     A diferencia de `DashboardSummary.monthly_flow_balance` (que puede ser `null` si el
+     *     usuario no fijó `monthly_income`), este balance SIEMPRE se calcula: se deriva
+     *     íntegramente de transacciones reales de la cuenta en el mes en curso, sin ningún
+     *     dato declarado de por medio — `monthly_flow_balance` nunca es `None`, mínimo 0.00.
+     */
+    AccountMonthlySummary: {
+      /** Currency */
+      currency: string;
+      /** Monthly Income */
+      monthly_income: string;
+      /** Monthly Expense */
+      monthly_expense: string;
+      /** Monthly Flow Balance */
+      monthly_flow_balance: string;
+    };
+    /**
      * AccountReconcileResponse
      * @description Resultado de POST /accounts/{account_id}/reconcile (Fase 16 §16.4.3).
      */
@@ -974,6 +1046,11 @@ export interface components {
       user_id?: number | null;
       /** Icon */
       icon?: string | null;
+      /**
+       * Is Hidden
+       * @default false
+       */
+      is_hidden: boolean;
     };
     /**
      * CategoryType
@@ -1827,6 +1904,37 @@ export interface operations {
       };
     };
   };
+  obtener_resumen_mensual_cuenta_api_v1_accounts__account_id__monthly_summary_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        account_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountMonthlySummary'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
   obtener_cuenta_api_v1_accounts__account_id__get: {
     parameters: {
       query?: never;
@@ -2105,6 +2213,64 @@ export interface operations {
       };
     };
   };
+  ocultar_categoria_api_v1_categories__category_id__hide_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        category_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  mostrar_categoria_api_v1_categories__category_id__hide_delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        category_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
   obtener_presupuestos_api_v1_budgets__get: {
     parameters: {
       query?: {
@@ -2258,7 +2424,10 @@ export interface operations {
   };
   obtener_progreso_presupuestos_api_v1_dashboard_budgets_progress_get: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Si se pasa, solo devuelve presupuestos en esa moneda */
+        currency?: string | null;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -2272,6 +2441,15 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['BudgetProgress'][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
         };
       };
     };
@@ -2323,6 +2501,8 @@ export interface operations {
         neto?: boolean;
         /** @description Moneda a filtrar; por defecto la preferida del usuario */
         currency?: string | null;
+        /** @description Filtra a las transacciones de una sola cuenta */
+        account_id?: number | null;
       };
       header?: never;
       path?: never;

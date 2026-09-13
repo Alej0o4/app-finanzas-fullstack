@@ -393,17 +393,51 @@ Entrada:
 - `name`
 - `type`: `income | expense`
 
+Respuesta (`CategoryResponse`):
+
+- `id`, `name`, `type`, `user_id`
+- `icon`: opcional.
+- `is_hidden`: `false` siempre al crear (una categoría recién creada nunca puede estar ya oculta) — Fase 18.
+
 ### `GET /api/v1/categories/`
 
-Lista categorías base del sistema y categorías propias del usuario.
+Lista categorías base del sistema y categorías propias del usuario. Cada fila incluye
+`is_hidden` (Fase 18): bandera por usuario computada desde `hidden_categories`, no
+persistida en `Category`. Las categorías ocultas **no se filtran** de esta lista — cada
+consumidor decide qué hacer con el flag.
+
+### `GET /api/v1/categories/{category_id}`
+
+Devuelve una categoría propia o del sistema. Incluye `is_hidden` computado para el
+usuario autenticado (Fase 18). `404` si no existe o no es del usuario.
 
 ### `PUT /api/v1/categories/{category_id}`
 
-Actualiza una categoría personalizada.
+Actualiza una categoría personalizada. `403` sobre categorías de sistema. La respuesta
+incluye `is_hidden` computado (Fase 18) — editar una categoría propia que estaba oculta
+la mantiene oculta en la respuesta.
 
 ### `DELETE /api/v1/categories/{category_id}`
 
 Elimina una categoría personalizada solo si no tiene transacciones ni presupuestos asociados.
+
+### `POST /api/v1/categories/{category_id}/hide`
+
+Marca "oculta para mí" una categoría (Fase 18). Idempotente: repetir el POST sobre una
+categoría ya oculta devuelve `204` sin duplicar la fila. Alcance estrictamente por
+usuario — no afecta a otros usuarios ni modifica/borra la categoría (aplica tanto a
+categorías de sistema como propias). `404` si la categoría no existe o no es propia ni
+de sistema.
+
+- Respuesta: `204 No Content`.
+
+### `DELETE /api/v1/categories/{category_id}/hide`
+
+Des-oculta una categoría (Fase 18). Idempotente: sobre una categoría no oculta devuelve
+`204` como no-op. Misma regla de visibilidad que el listado (propia o de sistema); como
+`POST`, es un toggle por usuario.
+
+- Respuesta: `204 No Content`.
 
 ## Transacciones
 
