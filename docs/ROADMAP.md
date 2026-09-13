@@ -690,6 +690,63 @@ categorías `user_id` no nulo, frontend apagado desde Fase 11 detrás de un flag
 
 ---
 
+## Parada — Correcciones de UX post-Fase 19 ✅ completa (2026-09-12)
+
+**Objetivo:** cerrar cuatro fricciones de UX detectadas en uso real desde celular sobre lo
+entregado en Fases 17–19, antes de seguir con cualquier fase nueva. No es una fase numerada del
+MVP — es una parada de mantenimiento, mismo criterio que la "Parada — Correcciones de UX
+post-pivote" entre Fase 15 y 16 más arriba.
+
+> Implementado en la rama `worktree-fase-ux-fixes` (commit `354026c` al momento de escribir esto,
+> pendiente merge a `main`). Verificado en navegador con Playwright contra un backend/frontend
+> aislados (SQLite local, seed manual vía API, sin tocar el stack de Docker en uso) — no solo
+> contra el build. `pytest`: 190 passed (2 nuevos en `test_dashboard.py`). `ruff check`/`format`,
+> `pnpm lint`/`format:check` y `tsc --noEmit` limpios.
+
+- [x] **Categorías ocultas sin señal visual en `/categories`** — *(2026-09-12)*
+  - Fase 18 decidió a propósito que ocultar una categoría solo afectara el selector de captura de
+    transacciones (ver Fase 18 más arriba: "Ocultar solo afecta el selector al crear una
+    transacción nueva"), pero en uso real esa decisión resultó confusa: el botón Eye/EyeOff
+    cambiaba de ícono sin que la card cambiara de aspecto, así que no había forma de notar que
+    "ocultar" hubiera hecho algo. **Cambio de alcance respecto a la decisión original de Fase
+    18**: ahora las categorías ocultas se filtran del grid principal (con animación de salida,
+    fade + scale) y se agrupan bajo un botón "Mostrar categorías ocultas (N)", atenuadas
+    (grayscale + badge "Oculta"). El modelo de datos no cambió (`HiddenCategory`, `is_hidden`
+    sigue computado, no persistido en `Category`).
+
+- [x] **Analítica sin selector de cuenta** — *(2026-09-12)*
+  - Fase 17 llevó los gráficos por cuenta a `accounts/[id]` a propósito sin tocar el dashboard
+    principal (ver Fase 17 más arriba: "el dashboard principal no cambia... no se agrega un
+    selector de cuenta ahí") — pero esa decisión dejó `/analytics` sin ninguna forma de aislar una
+    sola cuenta: siempre agregaba todas. Se agregó un selector de cuenta a `/analytics`
+    (persistido en la URL, mismo criterio que el resto de sus filtros), reutilizando el contrato
+    ortogonal `account_id`/`currency` que ya tenía `category-distribution` (Fase 17 §17.1.3) —
+    ese mismo `account_id` se agregó ahora también a `cashflow-series`.
+  - **Bug real encontrado en la propia verificación manual de este cambio**: seleccionar una
+    cuenta en una moneda distinta a la preferida del usuario (ej. USD con preferida COP) mostraba
+    $0 en todo. Causa: `currency` y `account_id` son ortogonales en el backend y el frontend no
+    pasaba la moneda de la cuenta elegida; además el primer fetch podía salir sin moneda resuelta
+    (antes de que `/users/me` y `/accounts/` completaran) y, como la query key no incluía
+    `currency`, TanStack Query no volvía a pedirlo. Corregido pasando `currency=account.currency`
+    explícito y agregando `enabled`/`currency` a las query keys de ambos endpoints.
+
+- [x] **FABs fijos tapando contenido en móvil** — *(2026-09-12)*
+  - El botón hamburguesa (`fixed top-4 left-4`) tapaba el título de la página apenas cargaba (en
+    Transacciones, "Transacciones" se leía "sacciones"); el FAB de nueva transacción (`fixed
+    right-6 bottom-6`) tapaba los íconos de editar/eliminar de la última fila visible de
+    cualquier lista. Se reserva el espacio en el layout (`pt-16`/`pb-24` en
+    `(dashboard)/layout.tsx`, solo en móvil, vía `sm:hidden`/breakpoints existentes) en vez de
+    dejar el contenido fluir debajo de los botones fijos — mismo patrón que cualquier FAB/bottom
+    bar de la industria: reservar el safe-area en el contenedor, no mover el botón.
+
+- [x] **Inputs de fecha desbordando su tarjeta en Safari/iOS** — *(2026-09-12)*
+  - `<input type="date">` en `transactions/page.tsx` y `analytics/page.tsx` se salía del borde
+    derecho de su contenedor en mobile Safari pese a `w-full`/`min-w-0` ya presentes en
+    `Input.tsx` — bug conocido de ancho intrínseco del control nativo de fecha. Corregido con
+    `appearance: none` + `box-sizing: border-box` en `globals.css`, sin tocar `Input.tsx`.
+
+---
+
 ## Backlog priorizado (después del MVP)
 
 | Prioridad | Feature | Nota |
