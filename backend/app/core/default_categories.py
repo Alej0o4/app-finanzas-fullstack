@@ -39,3 +39,21 @@ LEGACY_DEFAULT_CATEGORY_NAMES = {
     ("income", "Otro"): "Otro (Ingreso)",
     ("expense", "Entretenimiento"): "Ocio",
 }
+
+# Set base pre-marcado del registro (Fase 18 §18.2, Decisión Q2): las categorías de sistema
+# FUERA de este set se pre-siembran ocultas al registrar un usuario nuevo ("el resto queda
+# visible para agregar cuando el usuario quiera" del ROADMAP = oculto hasta que se
+# des-oculte — un solo mecanismo, sin reconciliar dos conceptos).
+# Incluye Salario/Otros ingresos (no nombrados en el ROADMAP, que solo da ejemplos de
+# gasto) porque dejar el lado de ingreso vacío por defecto sería peor primera experiencia
+# que la que el ítem 2 busca — es una interpretación, no una cita literal del ROADMAP.
+BASE_REGISTRATION_CATEGORY_NAMES = {
+    "Mercado",
+    "Transporte",
+    "Vivienda",
+    "Salud",
+    "Entretenimiento",
+    "Otro",
+    "Salario",
+    "Otros ingresos",
+}

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core import security
 from app.core.database import get_db
+from app.core.default_categories import BASE_REGISTRATION_CATEGORY_NAMES
 from app.core.email import send_email
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user, get_password_hash
@@ -64,6 +65,16 @@ def crear_usuario(request: Request, usuario: schemas.UserCreate, db: Session = D
         highlighted=True,
     )
     db.add(cuenta_por_defecto)
+
+    # Fase 18 §18.2 (Decisión 18.2.1/Q2/Q3): pre-siembra silenciosa de `hidden_categories`.
+    # Las categorías de sistema fuera del set base quedan ocultas por defecto en el selector
+    # de captura, sin pantalla nueva de registro. Mismo commit que el usuario y la cuenta:
+    # o existen los tres, o ninguno. El query pasa por el listener global de soft-delete,
+    # así que categorías de sistema borradas lógicamente no entran al loop.
+    categorias_sistema = db.query(models.Category).filter(models.Category.user_id.is_(None)).all()
+    for categoria in categorias_sistema:
+        if categoria.name not in BASE_REGISTRATION_CATEGORY_NAMES:
+            db.add(models.HiddenCategory(user_id=nuevo_usuario.id, category_id=categoria.id))
 
     db.commit()
     db.refresh(nuevo_usuario)

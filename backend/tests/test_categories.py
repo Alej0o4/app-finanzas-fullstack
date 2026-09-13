@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.transactions import _normalizar_nombre_categoria
-from app.core.default_categories import DEFAULT_CATEGORIES
+from app.core.default_categories import BASE_REGISTRATION_CATEGORY_NAMES, DEFAULT_CATEGORIES
 from app.models import models
 
 
@@ -96,6 +96,42 @@ def _post_hide(client: TestClient, headers: dict, category_id: int):
 
 def _delete_hide(client: TestClient, headers: dict, category_id: int):
     return client.delete(f"/api/v1/categories/{category_id}/hide", headers=headers)
+
+
+class TestPreSiembraRegistro:
+    """§18.2 — pre-siembra de `hidden_categories` en el registro (Decisión 18.2.1/Q2).
+
+    Los tests registran un usuario NUEVO (`register_and_login` con email propio) DESPUÉS de
+    sembrar las categorías de sistema, porque el pre-marcado ocurre dentro de
+    `crear_usuario` (`users.py`) al leer las categorías de sistema ya presentes en la DB.
+    """
+
+    def test_registration_pre_seeds_hidden_for_non_base_system_categories(
+        self, client, db_session, register_and_login, seed_system_categories
+    ):
+        seed_system_categories()
+        usuario = register_and_login(email="nuevo-registro@example.com")
+
+        categorias = _get_categorias(client, usuario["headers"])
+        sistema = [c for c in categorias if c["user_id"] is None]
+        assert len(sistema) == len(DEFAULT_CATEGORIES)
+
+        ocultas = {c["name"] for c in sistema if c["is_hidden"]}
+        visibles = {c["name"] for c in sistema if not c["is_hidden"]}
+
+        assert ocultas == {c["name"] for c in DEFAULT_CATEGORIES} - BASE_REGISTRATION_CATEGORY_NAMES
+        assert visibles == BASE_REGISTRATION_CATEGORY_NAMES
+
+    def test_registration_pre_seed_does_not_hide_own_categories(
+        self, client, db_session, register_and_login, seed_system_categories, make_category
+    ):
+        seed_system_categories()
+        usuario = register_and_login(email="nuevo-propia@example.com")
+        propia = make_category(usuario["headers"], name="Freelance", type="income")
+
+        categorias = _get_categorias(client, usuario["headers"])
+        propia_resp = next(c for c in categorias if c["id"] == propia["id"])
+        assert propia_resp["is_hidden"] is False
 
 
 class TestHiddenCategories:
