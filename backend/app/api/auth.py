@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.users import enviar_email_verificacion
 from app.core import security
 from app.core.database import get_db
-from app.core.email import send_email
+from app.core.email import render_email_html, send_email
 from app.core.rate_limit import limiter
 from app.models import models
 from app.schemas import schemas
@@ -149,11 +149,15 @@ def solicitar_restablecimiento_contrasena(
         send_email(
             to=user.email,
             subject="Recuperación de contraseña — Oikos",
-            html_body=(
-                f"<p>Solicitaste restablecer tu contraseña de Oikos. Este enlace expira en "
-                f"{security.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES} minutos:</p>"
-                f'<p><a href="{reset_link}">{reset_link}</a></p>'
-                f"<p>Si no fuiste vos, podés ignorar este correo — tu contraseña actual sigue funcionando.</p>"
+            html_body=render_email_html(
+                heading="Restablecé tu contraseña",
+                intro_html=(
+                    f"Solicitaste restablecer tu contraseña de Oikos. Este enlace expira en "
+                    f"{security.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES} minutos."
+                ),
+                cta_text="Restablecer contraseña",
+                cta_link=reset_link,
+                footer_note="Si no fuiste vos, podés ignorar este correo — tu contraseña actual sigue funcionando.",
             ),
         )
 

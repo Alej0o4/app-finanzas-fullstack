@@ -177,7 +177,7 @@ function LoginForm() {
           onChange={(e) => setUsername(e.target.value)}
           error={fieldErrors.email}
           className="bg-background py-3"
-          placeholder="alejandro@ejemplo.com"
+          placeholder="juan@ejemplo.com"
         />
 
         <div className="space-y-1.5">
