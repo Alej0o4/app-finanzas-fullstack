@@ -930,6 +930,23 @@ ni bloqueo.
   incumplen el guard de la Decisión A2: el usuario las corrige manualmente en `/accounts`, mismo
   criterio ya aceptado por la Decisión A2.
 
+> **Corrección de revisión pre-merge (2026-09-13):** el punto anterior ("el usuario las corrige
+> manualmente en `/accounts`") asumía una vía de corrección que no existe para 2 de las 5
+> monedas originales. La revisión pre-merge (`code-review` + verificación manual contra
+> `accounts/page.tsx:356-358`) encontró que el dropdown de creación de cuentas solo ofrece
+> COP/USD/EUR y que editar una cuenta no expone ningún campo de moneda (`AccountUpdate.currency`
+> llega al schema pero `accounts.py` lo ignora en silencio — TODO heredado, ver ROADMAP). Elegir
+> MXN/ARS en el onboarding habría dejado a un usuario sin ninguna forma de crear una segunda
+> cuenta en esa moneda ni de corregir a mano una cascada salteada por el guard — exactamente el
+> escape hatch que este ítem de Out of scope da por hecho. Se acotó `CURRENCY_OPTIONS` en
+> `OnboardingCurrencyStep.tsx` a **COP, USD, EUR** (las 3 que el resto de la app soporta de
+> punta a punta); ampliar a las 5 originales queda condicionado a resolver el TODO de
+> `AccountUpdate.currency`. Ningún otro archivo de esta fase cambió por esta corrección — el
+> backend sigue aceptando `preferred_currency` como `str` libre sin validar contra ninguna
+> lista, tal como ya fijaba este mismo punto de Out of scope. De paso se agregó manejo de error
+> (`try`/`catch` + toast) a `OnboardingCurrencyStep.handleSubmit`, que no lo tenía — el resto de
+> las mutaciones nuevas de esta fase sí lo tienen.
+
 ---
 
 ## Further notes

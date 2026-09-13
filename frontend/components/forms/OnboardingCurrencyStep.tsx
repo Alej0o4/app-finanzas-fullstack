@@ -1,13 +1,22 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import Select from '@/components/ui/Select';
 import Button from '@/components/ui/Button';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
+import { getApiError } from '@/lib/utils';
 
-// Fase 22 §22.1 (Hallazgo 3): lista fija de 5 monedas — el backend sigue aceptando
-// `preferred_currency` como str libre; la lista vive solo acá, en la UI.
-const CURRENCY_OPTIONS = ['COP', 'USD', 'EUR', 'MXN', 'ARS'] as const;
+// Fase 22 §22.1 (Hallazgo 3, ajustado en revisión pre-merge del 2026-09-13): la lista
+// original de la spec tenía 5 monedas (+ MXN/ARS), pero el resto de la app hoy solo
+// soporta 3 — `accounts/page.tsx` no ofrece MXN/ARS al crear una cuenta y no tiene
+// ningún campo de moneda al editar una (`AccountUpdate.currency` existe en el schema
+// pero `accounts.py` lo ignora silenciosamente, ver TODO en `docs/ROADMAP.md`). Elegir
+// MXN/ARS acá dejaría al usuario sin ninguna forma de crear una segunda cuenta en esa
+// moneda ni de corregir a mano una cascada que el guard de `preferences.py` saltee.
+// Acotada a las 3 que el resto de la app ya soporta de punta a punta; ampliar cuando se
+// resuelva ese TODO.
+const CURRENCY_OPTIONS = ['COP', 'USD', 'EUR'] as const;
 
 export default function OnboardingCurrencyStep({
   onDone,
@@ -21,13 +30,19 @@ export default function OnboardingCurrencyStep({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updatePreferences.mutateAsync({
-      preferred_currency: currency,
-      // Única diferencia con el uso de Settings (Fase 21): pide la cascada a la cuenta
-      // por defecto en el mismo PATCH (Decisiones A2/A5, mismo commit del handler).
-      apply_to_default_account: true,
-    });
-    onDone(currency);
+    try {
+      await updatePreferences.mutateAsync({
+        preferred_currency: currency,
+        // Única diferencia con el uso de Settings (Fase 21): pide la cascada a la cuenta
+        // por defecto en el mismo PATCH (Decisiones A2/A5, mismo commit del handler).
+        apply_to_default_account: true,
+      });
+      onDone(currency);
+    } catch (error) {
+      // Sin esto el usuario quedaba varado en el paso sin ninguna señal (encontrado en
+      // revisión pre-merge): el spinner se apaga, pero nada avisa que no se guardó nada.
+      toast.error(getApiError(error));
+    }
   };
 
   return (

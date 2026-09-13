@@ -861,15 +861,28 @@ propio usuario ni tiene ningún tratamiento especial en el código.
 > `ruff check`/`format` limpios; frontend `pnpm lint`/`format:check`/`build` + `tsc --noEmit`
 > limpios (un fix de ciclo de re-render en el prerender de `/settings` durante el build).
 > 22.2 (categorías) sin tareas — se reafirma la Decisión 18.2.1 de Fase 18.
+>
+> **Corrección de revisión pre-merge (2026-09-13):** la lista de monedas del onboarding se
+> acotó de 5 a **3 (COP, USD, EUR)** — la revisión (`code-review` + verificación manual)
+> encontró que `frontend/app/(dashboard)/accounts/page.tsx` (dropdown de creación) solo
+> soporta esas 3 y que editar la moneda de una cuenta ya existente no tiene ningún campo en
+> la UI (`AccountUpdate.currency` llega al schema pero `accounts.py` lo ignora en silencio,
+> ver el pendiente heredado más abajo). Elegir MXN/ARS en el onboarding habría dejado al
+> usuario sin ninguna forma de crear una segunda cuenta en esa moneda ni de corregir a mano
+> una cascada que el guard de `preferences.py` salteara — contradiciendo la propia premisa de
+> la Decisión A2 ("dejar que el usuario la corrija manualmente en Cuentas"). Se agregaron
+> además `try`/`catch` + toast de error en `OnboardingCurrencyStep.tsx`, que no los tenía.
+> Ampliar de nuevo a 5 cuando se resuelva el TODO de `AccountUpdate.currency`.
 
 - [x] **Paso de moneda antes del paso de ingreso mensual en el onboarding
       (`app/capture/page.tsx` / `OnboardingIncomeStep.tsx`).** Hoy el input de salario tiene un
       placeholder hardcodeado en escala COP (`"Ej. 3000000"`) sin preguntar nunca la moneda —
       `User.preferred_currency` queda en su default `"COP"` salvo que el usuario la cambie después
       a mano en Settings (Fase 21).
-  - **Lista curada de 5 monedas** (no hay ningún precedente de lista fija/`Enum` en el código —
-    `currency`/`preferred_currency` es `str` libre en todo el backend, ver Fase 21 §17.2.4/21
-    Hallazgo 6): **COP, USD, EUR, MXN, ARS**.
+  - **Lista curada, acotada a 3 monedas en la revisión pre-merge** (no hay ningún precedente de
+    lista fija/`Enum` en el código — `currency`/`preferred_currency` es `str` libre en todo el
+    backend, ver Fase 21 §17.2.4/21 Hallazgo 6): **COP, USD, EUR** (la sesión de grilling había
+    elegido 5 — ver nota de corrección arriba para por qué se recortó a 3 antes de mergear).
   - **La cuenta por defecto también debe quedar en la moneda elegida.** `inicializar_datos_usuario_
     nuevo` (`backend/app/api/users.py:56`) ya crea la cuenta con `currency=usuario.preferred_
     currency or "COP"`, pero eso corre en el mismo commit que el registro — *antes* de que el
@@ -971,6 +984,11 @@ Estas estaban "fuera de scope" bajo el supuesto de un solo usuario. Ese supuesto
 - [ ] Seed automático tras el primer startup en Docker (Fase 4B).
 - [ ] Script `scripts/deploy.sh` (git pull → docker compose up --build -d) (Fase 4B).
 - [ ] Decidir `AccountUpdate.currency` — el schema hereda el campo pero `accounts.py` lo ignora silenciosamente.
+  Sube de prioridad tras Fase 22: es la razón por la que el onboarding se acotó a 3 monedas
+  (COP/USD/EUR) en vez de las 5 que decidió la sesión de grilling — sin poder editar la
+  moneda de una cuenta, MXN/ARS quedarían sin forma de corregirse si el guard de la cascada
+  las saltea. Resolver esto (y ampliar el dropdown de creación en `accounts/page.tsx`) es
+  prerrequisito para volver a las 5 monedas originales.
 - [ ] Extraer custom hooks de queries (`useAccounts`, `useCategories`, `useTransactions`).
 - [ ] Migrar JWT de `localStorage` a cookies httpOnly (sube de prioridad al salir de Tailscale).
 - [ ] Crear capa `app/services/` y `app/core/exceptions.py`; partir `models.py` y `schemas.py` por dominio.
