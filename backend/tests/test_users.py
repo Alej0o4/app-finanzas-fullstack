@@ -7,6 +7,7 @@ Primer test de `users.py` fuera del registro. `UserProfileUpdate` es un schema s
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from app.core import security
 from app.models import models
 
 
@@ -261,3 +262,29 @@ class TestEliminarCuenta:
     def test_delete_me_without_token_returns_401(self, client):
         response = client.request("DELETE", "/api/v1/users/me", json={"password": "Cualquiera99"})
         assert response.status_code == 401
+
+    def test_delete_me_on_google_only_account_skips_password_check(self, client, monkeypatch):
+        """Regresión encontrada al mergear Fase 21 con Fase 20 (login con Google, que hizo
+        `password_hash` nullable): sin el guard `password_hash is not None` en
+        `eliminar_cuenta_propia`, `verify_password(cualquier_cosa, None)` da `False` para
+        cualquier valor — una cuenta solo-Google nunca podría borrarse a sí misma, dejando el
+        botón "Eliminar mi cuenta" permanentemente inútil para ese segmento de usuarios.
+        Mismo mock de Google que `TestLoginGoogle._login_google` en test_auth.py."""
+        monkeypatch.setattr(security, "GOOGLE_CLIENT_ID", "test-client-id.apps.googleusercontent.com")
+        claims = {
+            "email": "solo-google-baja@example.com",
+            "email_verified": True,
+            "sub": "google-sub:solo-google-baja@example.com",
+            "name": "Persona de Google",
+        }
+        monkeypatch.setattr(
+            "app.api.auth.google_id_token.verify_oauth2_token",
+            lambda token, request, audience: claims,
+        )
+        google_login = client.post("/api/v1/auth/google", json={"id_token": "idtoken-falso"})
+        assert google_login.status_code == 200, google_login.text
+        headers = {"Authorization": f"Bearer {google_login.json()['access_token']}"}
+
+        # Sin contraseña real que reconfirmar: cualquier valor en el body debe bastar.
+        response = client.request("DELETE", "/api/v1/users/me", json={"password": "lo-que-sea"}, headers=headers)
+        assert response.status_code == 204, response.text
