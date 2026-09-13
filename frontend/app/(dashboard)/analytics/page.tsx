@@ -169,6 +169,14 @@ function AnalyticsPageContent() {
   const selectedAccount = accounts?.find((account) => account.id === accountId);
   const effectiveCurrency = selectedAccount?.currency ?? user?.preferred_currency;
 
+  // "Todas las cuentas" no es literal: sigue agregando en una sola moneda (nunca se
+  // mezclan, Fase 11 §11.1) — cualquier cuenta en otra moneda que la preferida queda
+  // afuera en silencio. Se lo hacemos explícito al usuario en vez de dejarlo implícito.
+  const excludedCurrencyAccounts = useMemo(() => {
+    if (accountFilter !== 'all' || !accounts || !effectiveCurrency) return [];
+    return accounts.filter((account) => account.currency !== effectiveCurrency);
+  }, [accountFilter, accounts, effectiveCurrency]);
+
   // Un solo rango de fechas para las 3 secciones (KPIs, barras, dona) — ver buildDateRange.
   const dateRange = useMemo(
     () => buildDateRange(period, customStart, customEnd),
@@ -337,14 +345,29 @@ function AnalyticsPageContent() {
           className="bg-background"
           aria-label="Cuenta"
         >
-          <option value="all">Todas las cuentas</option>
+          <option value="all">
+            Todas las cuentas{user?.preferred_currency ? ` (${user.preferred_currency})` : ''}
+          </option>
           {accounts?.map((account) => (
             <option key={account.id} value={account.id}>
-              {account.name}
+              {account.name} ({account.currency})
             </option>
           ))}
         </Select>
       </div>
+
+      {/* "Todas las cuentas" nunca mezcla monedas (Fase 11 §11.1) — si el usuario tiene
+          cuentas en otra moneda que la preferida, quedan afuera del agregado sin que se
+          note; se lo hacemos explícito acá en vez de dejarlo implícito. */}
+      {excludedCurrencyAccounts.length > 0 && (
+        <p className="text-text-muted -mt-4 text-xs">
+          Mostrando solo en {effectiveCurrency}: {excludedCurrencyAccounts.length}{' '}
+          {excludedCurrencyAccounts.length === 1 ? 'cuenta' : 'cuentas'} en otra moneda (
+          {[...new Set(excludedCurrencyAccounts.map((account) => account.currency))].join(', ')}) no{' '}
+          {excludedCurrencyAccounts.length === 1 ? 'está incluida' : 'están incluidas'} — elegila en
+          el selector para verla.
+        </p>
+      )}
 
       <AnalyticsSummary totalIncome={totals.totalIncome} totalExpense={totals.totalExpense} />
 

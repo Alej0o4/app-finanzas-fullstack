@@ -729,6 +729,12 @@ post-pivote" entre Fase 15 y 16 más arriba.
     (antes de que `/users/me` y `/accounts/` completaran) y, como la query key no incluía
     `currency`, TanStack Query no volvía a pedirlo. Corregido pasando `currency=account.currency`
     explícito y agregando `enabled`/`currency` a las query keys de ambos endpoints.
+  - **Ambigüedad de moneda detectada al revisar el propio cambio con el usuario**: "Todas las
+    cuentas" nunca mezcla monedas (regla de una-sola-moneda de Fase 11 §11.1) — sigue agregando
+    solo en la preferida del usuario, así que una cuenta en otra moneda queda afuera en silencio.
+    Se hace explícito: cada opción del selector muestra su moneda (`Cuenta (COP)`, `Cuenta (USD)`),
+    "Todas las cuentas" muestra la preferida (`Todas las cuentas (COP)`), y si hay cuentas en otra
+    moneda excluidas aparece un aviso contándolas y nombrando la moneda.
 
 - [x] **FABs fijos tapando contenido en móvil** — *(2026-09-12)*
   - El botón hamburguesa (`fixed top-4 left-4`) tapaba el título de la página apenas cargaba (en
