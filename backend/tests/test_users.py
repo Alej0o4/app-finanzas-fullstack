@@ -288,3 +288,52 @@ class TestEliminarCuenta:
         # Sin contraseña real que reconfirmar: cualquier valor en el body debe bastar.
         response = client.request("DELETE", "/api/v1/users/me", json={"password": "lo-que-sea"}, headers=headers)
         assert response.status_code == 204, response.text
+
+
+class TestHasPassword:
+    """Fase 22 §22.4 (Decisión D4): `has_password` se computa en `UserResponse` vía
+    `model_validator(mode="before")`, no copiando el patrón de asignación manual por
+    endpoint que usa `has_transaction_history` — a diferencia de ese campo, el `default`
+    sería incorrecto para un usuario recién registrado por contraseña (sí tiene
+    `password_hash` desde el primer instante), así que el cómputo no puede depender de
+    que cada handler se acuerde de asignarlo."""
+
+    def test_password_registered_user_has_password_true(self, client, register_and_login):
+        user = register_and_login(email="has-password-true@example.com")
+
+        me = client.get("/api/v1/users/me", headers=user["headers"])
+        assert me.status_code == 200, me.text
+        assert me.json()["has_password"] is True
+
+    def test_google_only_user_has_password_false(self, client, monkeypatch):
+        """Mismo mock de Google que `TestEliminarCuenta.
+        test_delete_me_on_google_only_account_skips_password_check`: una cuenta nacida
+        del login con Google no tiene `password_hash`."""
+        monkeypatch.setattr(security, "GOOGLE_CLIENT_ID", "test-client-id.apps.googleusercontent.com")
+        claims = {
+            "email": "solo-google-has-password@example.com",
+            "email_verified": True,
+            "sub": "google-sub:solo-google-has-password@example.com",
+            "name": "Persona de Google",
+        }
+        monkeypatch.setattr(
+            "app.api.auth.google_id_token.verify_oauth2_token",
+            lambda token, request, audience: claims,
+        )
+        google_login = client.post("/api/v1/auth/google", json={"id_token": "idtoken-falso"})
+        assert google_login.status_code == 200, google_login.text
+        headers = {"Authorization": f"Bearer {google_login.json()['access_token']}"}
+
+        me = client.get("/api/v1/users/me", headers=headers)
+        assert me.status_code == 200, me.text
+        assert me.json()["has_password"] is False
+
+    def test_patch_me_response_keeps_has_password_true(self, client, register_and_login):
+        """Regresión directa contra la alternativa descartada en la Decisión D4: la
+        respuesta de `actualizar_perfil` (que no asigna nada a mano) también computa
+        `has_password` vía el validador."""
+        user = register_and_login(email="has-password-patch@example.com")
+
+        response = client.patch("/api/v1/users/me", json={"monthly_income": "3500000.50"}, headers=user["headers"])
+        assert response.status_code == 200, response.text
+        assert response.json()["has_password"] is True
