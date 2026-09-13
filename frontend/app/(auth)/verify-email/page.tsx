@@ -68,7 +68,8 @@ function VerifyEmailContent() {
           )}
         </p>
         <p className="text-text-muted mt-1 text-center text-sm">
-          Podés iniciar sesión igualmente; te pediremos verificar tu correo más adelante.
+          Necesitás un correo verificado para iniciar sesión — pedí un enlace nuevo desde la
+          pantalla de inicio de sesión.
         </p>
       </div>
     );

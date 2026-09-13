@@ -19,7 +19,9 @@ Si el backend responde `401`, el frontend intenta renovar el token via `POST /ap
 
 El access token expira en 15 min (bajado de 60 min en Fase 7, §2.5 de `docs/specs/fase_07_spec.md`) — el interceptor de refresh de `lib/api.ts` se dispara ~4 veces más seguido que antes. El código actual ya tiene protección contra refreshes concurrentes (flag `isRefreshing` + cola `failedQueue`), verificado como parte de Fase 7.
 
-El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api/v1/auth/password-reset/confirm` y `GET /api/v1/auth/verify-email` (Fase 7, §2.1/§2.2) — **el frontend todavía no tiene pantallas que los consuman**, quedan documentados en `backend/docs/API_REFERENCE.md` para cuando se construya esa UI.
+El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api/v1/auth/password-reset/confirm` y `GET /api/v1/auth/verify-email` (Fase 7, §2.1/§2.2), consumidos por `app/(auth)/forgot-password`, `reset-password` y `verify-email` respectivamente — ver detalle de payloads en `backend/docs/API_REFERENCE.md`.
+
+**Desde 2026-09-12, `POST /api/v1/auth/login` exige email verificado** (reversa la decisión original de Fase 7 de no bloquear el login): un `403` con `detail` como objeto (`{code: "EMAIL_NOT_VERIFIED", mensaje: "..."}`, no un string) distingue este caso de credenciales inválidas. `login/page.tsx` chequea `detail.code` y, si coincide, muestra un botón "Reenviar correo de verificación" que llama a `POST /api/v1/auth/resend-verification` (`{email}`, enumeration-safe, siempre 200, 5 req/min).
 
 ## Endpoints consumidos por el frontend
 
@@ -397,7 +399,7 @@ Reglas:
 - `401`: token ausente o inválido.
 - `403`: acción no permitida (ej: editar/eliminar categoría base del sistema).
 - `404`: recurso inexistente o fuera de alcance del usuario.
-- `429`: rate limiting excedido (`/api/v1/auth/login`, `POST /api/v1/users/`, `/api/v1/auth/password-reset/request`, todos 5 req/min).
+- `429`: rate limiting excedido (`/api/v1/auth/login`, `POST /api/v1/users/`, `/api/v1/auth/password-reset/request`, `/api/v1/auth/resend-verification`, todos 5 req/min).
 
 ## Reglas de consumo
 
