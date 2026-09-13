@@ -2,6 +2,7 @@ import hashlib
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
@@ -13,8 +14,15 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models import models
 
-# 1. VARIABLES DE ENTORNO (Actualizado)
-load_dotenv()  # Esto lee el archivo .env automáticamente
+# 1. VARIABLES DE ENTORNO
+# `load_dotenv()` sin argumentos busca un `.env` hacia arriba desde este archivo hasta la raíz
+# del filesystem — si `backend/.env` no existe (ej. un git worktree recién creado, donde los
+# archivos gitignored no se copian), sigue subiendo y puede terminar leyendo el `.env` de la
+# raíz del repo real (el que usa Docker Compose, con credenciales SMTP reales) en vez de no
+# cargar nada. Se fija la ruta explícita a `backend/.env` para que nunca "escape" del proyecto;
+# si ese archivo no existe (como en Docker, donde las env vars ya vienen inyectadas), no hace
+# nada — no lanza error.
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 # Extraemos la llave. Si por algún error el archivo .env no existe, lanzará un error para protegerte.
 SECRET_KEY = os.getenv("SECRET_KEY")
