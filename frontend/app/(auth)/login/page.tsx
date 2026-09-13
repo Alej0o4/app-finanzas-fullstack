@@ -4,12 +4,16 @@ import { useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Wallet } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { queryKeys } from '@/lib/queryKeys';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
+import type { UserResponse } from '@/types/api';
 
 function LoginForm() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const registered = searchParams.get('registered');
   const resetSuccess = searchParams.get('reset');
@@ -54,8 +58,18 @@ function LoginForm() {
       localStorage.setItem('jwt_token', access_token);
       localStorage.setItem('refresh_token', refresh_token);
 
-      // Redirigimos a la captura: captura primero, dashboard después de guardar (Fase 10, Decisión 10.1.4)
-      router.push('/capture');
+      // Fase 19 §19.1.4/19.1.5: la Decisión 10.1.4 de Fase 10 ("login siempre redirige a
+      // /capture") queda resuelta aquí — un usuario recurrente con 2+ transacciones va
+      // directo al dashboard. Fallback a /capture si el fetch falla (no bloquear el login
+      // por una pieza no crítica, mismo criterio que el envío de email de verificación).
+      try {
+        const meResponse = await api.get('users/me');
+        const user = meResponse.data as UserResponse;
+        queryClient.setQueryData(queryKeys.currentUser(), user); // evita refetch en destino
+        router.push(user.has_transaction_history ? '/dashboard' : '/capture');
+      } catch {
+        router.push('/capture');
+      }
     } catch (err: unknown) {
       const error = err as { response?: { status?: number } };
       if (error.response?.status === 401 || error.response?.status === 403) {

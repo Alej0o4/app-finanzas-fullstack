@@ -114,6 +114,38 @@ function DashboardScreen() {
   const preferredExpense =
     summary?.monthly_expense_by_currency.find((b) => b.currency === preferredCurrency)?.total ?? 0;
 
+  // Fase 19 §19.2.1/19.2.2: fila secundaria compacta dentro de la card principal — reemplaza
+  // el grid de 2 columnas (Ingresos/Gastos). Se muestra siempre, aún con monthly_flow_balance
+  // null (son sumas de transacciones del mes, no el ingreso declarado).
+  const secondaryStats = (
+    <>
+      <div className="flex-1">
+        <p className="text-text-muted text-xs font-medium">Ingresos del Mes</p>
+        <div className="text-success mt-0.5 font-semibold tabular-nums">
+          {summary?.monthly_income_by_currency.length ? (
+            summary.monthly_income_by_currency.map((b) => (
+              <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
+            ))
+          ) : (
+            <p>{formatCurrency(0, preferredCurrency)}</p>
+          )}
+        </div>
+      </div>
+      <div className="flex-1">
+        <p className="text-text-muted text-xs font-medium">Gastos del Mes</p>
+        <div className="text-danger mt-0.5 font-semibold tabular-nums">
+          {summary?.monthly_expense_by_currency.length ? (
+            summary.monthly_expense_by_currency.map((b) => (
+              <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
+            ))
+          ) : (
+            <p>{formatCurrency(0, preferredCurrency)}</p>
+          )}
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="space-y-6 pb-10 sm:space-y-10">
       {/* Aha moment (Fase 15 §15.5, Decisión 15.5.1) — se muestra solo llegando desde la
@@ -152,7 +184,7 @@ function DashboardScreen() {
           de cuentas vive ahora en /accounts como vista secundaria (§11.5). */}
       <div className="space-y-6">
         {loadingSummary ? (
-          <Skeleton className="h-36 rounded-2xl" />
+          <Skeleton className="h-44 rounded-2xl" />
         ) : (
           <SummaryCard
             label="Balance del mes"
@@ -160,6 +192,7 @@ function DashboardScreen() {
             elevated
             trend={flowTrend}
             color={flowColor}
+            secondaryStats={secondaryStats}
           >
             {flowBalanceValue !== null ? (
               <span className={flowIsPositive ? '' : 'text-danger'}>
@@ -205,40 +238,6 @@ function DashboardScreen() {
             )}
           </SummaryCard>
         )}
-
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {loadingSummary ? (
-            <>
-              <Skeleton className="h-32 rounded-2xl" />
-              <Skeleton className="h-32 rounded-2xl" />
-            </>
-          ) : (
-            <>
-              <SummaryCard label="Ingresos del Mes" trend="up" color="var(--color-success)">
-                {summary?.monthly_income_by_currency.length ? (
-                  <div className="space-y-1">
-                    {summary.monthly_income_by_currency.map((b) => (
-                      <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
-                    ))}
-                  </div>
-                ) : (
-                  <p>{formatCurrency(0, preferredCurrency)}</p>
-                )}
-              </SummaryCard>
-              <SummaryCard label="Gastos del Mes" trend="down" color="var(--color-danger)">
-                {summary?.monthly_expense_by_currency.length ? (
-                  <div className="space-y-1">
-                    {summary.monthly_expense_by_currency.map((b) => (
-                      <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
-                    ))}
-                  </div>
-                ) : (
-                  <p>{formatCurrency(0, preferredCurrency)}</p>
-                )}
-              </SummaryCard>
-            </>
-          )}
-        </div>
       </div>
 
       {/* Budget Rings */}

@@ -667,3 +667,76 @@ class TestMonoCurrencyRegression:
         assert len(distribucion) == 1
         assert distribucion[0]["category_name"] == "Comida"
         assert Decimal(str(distribucion[0]["total"])) == Decimal("300.00")
+
+
+class TestCategoryDistributionCashflowEquivalence:
+    """Fase 19 §19.3.5 (Decisión 19.3.4): invariante de equivalencia de agregados.
+
+    `category-distribution` (con `type=income`) y `cashflow-series` filtran por los
+    MISMOS tres predicados (user_id, currency, rango de fechas) — ver Hallazgo 10 de
+    `docs/specs/fase_19_spec.md`. Para los mismos parámetros debe cumplirse:
+
+        sum(item.total de category-distribution, type=income)
+        == sum(item.income de cashflow-series)
+
+    La métrica "% del ingreso por categoría" (Decisión 19.3.4) divide cada categoría
+    contra `totals.totalIncome`, sumado en cliente desde `cashflow-series` — comparte
+    denominador con `category-distribution` solo si esta igualdad se mantiene. Este
+    test convierte una igualdad hoy accidental en un invariante probado: si un cambio
+    futuro toca el filtro de un endpoint sin tocar el otro, esto lo señala.
+    """
+
+    def test_category_distribution_income_total_equals_cashflow_series_income_total(
+        self, client, auth_headers, make_account, make_category
+    ):
+        # Ingresos en ≥2 categorías distintas (misma moneda/mismo rango) + un gasto:
+        # la suma de incomes no es 0 y no es trivial (un solo bucket).
+        cuenta_cop = make_account(auth_headers, name="Cuenta COP", currency="COP", balance="1000000.00")
+        categoria_salario = make_category(auth_headers, name="Salario", type="income")
+        categoria_freelance = make_category(auth_headers, name="Freelance", type="income")
+        categoria_gasto = make_category(auth_headers, name="Comida", type="expense")
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="2000000.00",
+            type="income",
+            account_id=cuenta_cop["id"],
+            category_id=categoria_salario["id"],
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="500000.00",
+            type="income",
+            account_id=cuenta_cop["id"],
+            category_id=categoria_freelance["id"],
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="300000.00",
+            type="expense",
+            account_id=cuenta_cop["id"],
+            category_id=categoria_gasto["id"],
+        )
+
+        rango = _current_month_range_params()
+
+        # cashflow-series sin `currency` → default COP (moneda preferida)
+        serie = client.get("/api/v1/dashboard/cashflow-series", params=rango, headers=auth_headers)
+        assert serie.status_code == 200, serie.text
+        total_income_serie = sum(Decimal(str(item["income"])) for item in serie.json())
+
+        # category-distribution con type=income, mismo rango y misma moneda default
+        distribucion = client.get(
+            "/api/v1/dashboard/category-distribution",
+            params={**rango, "type": "income"},
+            headers=auth_headers,
+        )
+        assert distribucion.status_code == 200, distribucion.text
+        total_income_categorias = sum(Decimal(str(item["total"])) for item in distribucion.json())
+
+        assert total_income_categorias == total_income_serie
+        # Sanidad del test: la igualdad no es trivial (0 == 0)
+        assert total_income_serie == Decimal("2500000.00")

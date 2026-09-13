@@ -317,12 +317,12 @@ export default function AccountDetailPage() {
       {/* ── Fase 17 §17.1: analítica por cuenta (solo lectura, sin controles de filtro) ── */}
 
       {/* Balance del mes de esta cuenta (Decisión 17.1.2). El cálculo vive en el backend
-          (GET /accounts/{id}/monthly-summary); acá solo se restan los dos montos para
-          pintar, y los Decimal→string se normalizan con Number(...) (Decisión 15.6). */}
+          (GET /accounts/{id}/monthly-summary, campo monthly_flow_balance); acá solo se pinta,
+          y los Decimal→string se normalizan con Number(...) (Decisión 15.6). Fase 19 §19.2.3:
+          ya no se restan income/expense en el cliente. */}
       <AccountMonthlyBalanceCard
         label="Balance del mes"
-        income={Number(monthlySummary?.monthly_income)}
-        expense={Number(monthlySummary?.monthly_expense)}
+        balance={Number(monthlySummary?.monthly_flow_balance ?? 0)}
         currency={account.currency}
         isLoading={loadingMonthlySummary}
       />

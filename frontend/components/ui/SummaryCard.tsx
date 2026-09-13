@@ -11,6 +11,8 @@ interface SummaryCardProps {
   size?: 'md' | 'lg';
   /** Eleva la card sobre sus pares para comunicar jerarquía (Fase 12 §12.2). Default false. */
   elevated?: boolean;
+  /** Fase 19 §19.2.1 — fila compacta bajo la cifra principal. */
+  secondaryStats?: ReactNode;
 }
 
 export default function SummaryCard({
@@ -21,6 +23,7 @@ export default function SummaryCard({
   color,
   size = 'md',
   elevated = false,
+  secondaryStats,
 }: SummaryCardProps) {
   const isLarge = size === 'lg';
 
@@ -59,6 +62,11 @@ export default function SummaryCard({
           <TrendingDown className={`text-danger shrink-0 ${isLarge ? 'h-7 w-7' : 'h-5 w-5'}`} />
         )}
       </div>
+      {secondaryStats && (
+        <div className="border-border/50 mt-4 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:gap-6">
+          {secondaryStats}
+        </div>
+      )}
     </div>
   );
 }
