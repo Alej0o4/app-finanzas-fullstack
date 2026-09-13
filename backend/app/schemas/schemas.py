@@ -90,6 +90,21 @@ class UserResponse(UserBase):
     preferred_theme: str = "dark"
     monthly_income: Decimal | None = None
     has_transaction_history: bool = False  # Fase 19 §19.1 — solo se calcula en GET /users/me
+    has_password: bool = False  # 🆕 Fase 22 §22.4 (Decisión D4)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _compute_has_password(cls, data):
+        # Solo cubre el path real hoy: los tres endpoints de users.py devuelven el objeto
+        # ORM `User` directamente (from_attributes=True), nunca un dict armado a mano —
+        # mismo path que ya usa `TransactionResponse._categoria_relacion_orm_a_none`
+        # (schemas.py) como precedente de validador "before" sobre datos crudos del ORM,
+        # aunque ahí es field_validator porque solo lee el campo que transforma;
+        # acá hace falta model_validator porque lee un atributo (`password_hash`) distinto
+        # del que expone (`has_password`).
+        if hasattr(data, "password_hash"):
+            data.has_password = data.password_hash is not None
+        return data
 
     class Config:
         from_attributes = True
@@ -100,6 +115,11 @@ class PreferencesUpdate(BaseModel):
     preferred_locale: str | None = None
     preferred_theme: str | None = None
     weekly_summary_enabled: bool | None = None  # Fase 14
+    # Fase 22 §22.1 (Decisión A5): instrucción de "además, cascadeá" para esta request
+    # puntual — no se persiste (ni en User ni en Account), solo orquesta la cascada de
+    # `update_preferences`. Se excluye de `model_dump(exclude_none=True)` en el handler
+    # para que el `setattr` no cree un atributo fantasma en el ORM.
+    apply_to_default_account: bool = False
 
 
 class UserProfileUpdate(BaseModel):
