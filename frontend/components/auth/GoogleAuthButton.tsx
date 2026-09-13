@@ -72,7 +72,8 @@ export default function GoogleAuthButton() {
       if (buttonRef.current) {
         window.google.accounts.id.renderButton(buttonRef.current, {
           theme: 'outline',
-          size: 'large',
+          size: 'medium',
+          shape: 'pill',
           width: '100%',
           text: 'continue_with',
           locale: 'es',
