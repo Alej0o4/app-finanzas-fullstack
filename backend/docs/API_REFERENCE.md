@@ -315,6 +315,12 @@ Salida:
   transacciones ("usuario recurrente"); se calcula con una query `LIMIT 2`, no `COUNT(*)`.
   Solo se calcula en este endpoint (los otros endpoints que devuelven `UserResponse`, como
   `POST /` o `PATCH /me`, serializan el default `false` sin consultar — Decisión 19.1.3).
+- `has_password` (`boolean`, Fase 22 §22.4, Decisión D4) — `true` si el usuario tiene
+  contraseña (`password_hash is not None`); `false` equivale a cuenta creada solo con Google.
+  A diferencia de `has_transaction_history`, se computa en los TRES endpoints que devuelven
+  `UserResponse` (`POST /`, `GET /me`, `PATCH /me`) vía `model_validator(mode="before")` en el
+  schema — no depende de que cada handler lo asigne (un usuario recién registrado por
+  contraseña SÍ tiene `password_hash` desde el primer instante).
 
 ### `PATCH /api/v1/users/me`
 
@@ -373,6 +379,15 @@ Entrada (campos opcionales):
 - `preferred_locale`: string
 - `preferred_theme`: string
 - `weekly_summary_enabled`: bool (Fase 14)
+- `apply_to_default_account`: bool, default `false` (Fase 22 §22.1, Decisión A5) —
+  instrucción por-request, NO se persiste. Cuando viene en `true` junto con
+  `preferred_currency`, el handler además actualiza la moneda de la cuenta por defecto
+  que crea `inicializar_datos_usuario_nuevo` (nombre `"Cuenta principal"`, `balance == 0`,
+  sin transacciones asociadas) en la MISMA transacción del PATCH (criterio de atomicidad
+  de un único commit). Si la cuenta ya fue usada (renombrada, con saldo, o con
+  transacciones), no se toca y no se informa error — el usuario la corrige en `/accounts`
+  (Decisión A2). El selector de Settings (Fase 21) llama este endpoint SIN el campo, así
+  que su comportamiento no cambia.
 
 ## Cuentas
 

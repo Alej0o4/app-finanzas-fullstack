@@ -261,6 +261,7 @@ Reglas de consumo:
 - `preferred_theme` (default `"dark"`)
 - `monthly_income` (`number | null`) — dato financiero del perfil, editable vía `PATCH /api/v1/users/me`. El dashboard lo consume dos veces (Fase 11 §11.3): indirectamente a través de `monthly_flow_balance` en `/dashboard/summary`, y directamente vía el formulario inline de la card "Balance del mes" cuando ese valor es `null`.
 - `has_transaction_history` (`boolean`, Fase 19 §19.1) — `true` si el usuario tiene 2+ transacciones. El login (`login/page.tsx`) lo lee para condicionar el redirect: `/dashboard` si es `true`, `/capture` si no (resuelve la Decisión 10.1.4 de Fase 10). Solo se calcula en `GET /users/me`; en `PATCH /me` llega como `false` fijo sin consultar — ningún call site de ese endpoint lee el campo (Decisión 19.1.3).
+- `has_password` (`boolean`, Fase 22 §22.4, Decisión D4) — `true` si la cuenta tiene contraseña, `false` = cuenta creada solo con Google. Se computa en los tres endpoints de `UserResponse` via `model_validator` del schema (no hay que asignarlo por handler). El modal de "Eliminar mi cuenta" en `/settings` lo usa para no pedir contraseña a una cuenta Google-only (`requiresPassword = currentUser?.has_password !== false`).
 
 ### Preferencias de usuario
 
@@ -273,9 +274,18 @@ Reglas de consumo:
 
 `PATCH /api/v1/users/me/preferences` acepta campos opcionales: `preferred_currency`, `preferred_locale`, `preferred_theme`, `weekly_summary_enabled`.
 
-El frontend escribe estas preferencias desde dos lugares: `ThemeToggle.tsx` (tema, con
-aplicación inmediata en cliente + persistencia) y la página de Ajustes
-(`/settings`, Fase 14 §14.6.2 — único control: el resumen semanal). Ambos pasan por la
+Además acepta `apply_to_default_account?: boolean` (Fase 22 §22.1, Decisión A5) — instrucción
+por-request, no se persiste: cuando es `true` junto con `preferred_currency`, el backend
+cascadea la moneda a la cuenta por defecto (si sigue virgen: nombre `"Cuenta principal"`,
+balance 0, sin transacciones) en la misma transacción. Solo lo envía el paso de moneda del
+onboarding (`OnboardingCurrencyStep.tsx`); el selector de Settings **no** lo manda y por eso
+el `useUserPreferences` invalida `accounts.all()` solo cuando viene `apply_to_default_account`
+(la cuenta pudo haber cambiado de moneda server-side).
+
+El frontend escribe estas preferencias desde tres lugares: `ThemeToggle.tsx` (tema, con
+aplicación inmediata en cliente + persistencia), la página de Ajustes
+(`/settings`, Fase 14 §14.6.2 — resumen semanal + moneda principal Fase 21) y el paso de
+moneda del onboarding (`OnboardingCurrencyStep.tsx`, Fase 22). Todos pasan por la
 mutación compartida de `useUserPreferences` (`updatePreferences`), que invalida la query
 `userPreferences` tras el `PATCH`.
 

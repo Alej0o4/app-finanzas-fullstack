@@ -852,11 +852,17 @@ no se puede corregir después, y la interacción entre cuentas Google-only y el 
 contraseña (login con password, borrado de cuenta, "olvidé mi contraseña") no es clara para el
 propio usuario ni tiene ningún tratamiento especial en el código.
 
-> Decidido en sesión de grilling del 2026-09-13. Sin usuarios reales todavía — no hace falta
-> ninguna ruta de migración con compatibilidad. Ver `docs/specs/fase_22_spec.md` para el
-> desglose técnico (decisiones A1–A3, B1, C1–C2, D1).
+> Decidido en sesión de grilling del 2026-09-13. Implementación completa el mismo día en el
+> worktree `fase-22-planning` — ver `docs/specs/fase_22_spec.md` para el desglose técnico
+> (decisiones A1–A3, B1, C1–C2, D1; arquitectura A4–A6 y D4 que disuelven la colisión sobre
+> `users.py`). Sin migraciones Alembic (ningún campo se persiste). Verificación: pytest
+> backend 218 passed (9 nuevos: `TestApplyToDefaultAccount` en
+> `tests/test_preferences.py` — archivo nuevo — y `TestHasPassword` en `test_users.py`),
+> `ruff check`/`format` limpios; frontend `pnpm lint`/`format:check`/`build` + `tsc --noEmit`
+> limpios (un fix de ciclo de re-render en el prerender de `/settings` durante el build).
+> 22.2 (categorías) sin tareas — se reafirma la Decisión 18.2.1 de Fase 18.
 
-- [ ] **Paso de moneda antes del paso de ingreso mensual en el onboarding
+- [x] **Paso de moneda antes del paso de ingreso mensual en el onboarding
       (`app/capture/page.tsx` / `OnboardingIncomeStep.tsx`).** Hoy el input de salario tiene un
       placeholder hardcodeado en escala COP (`"Ej. 3000000"`) sin preguntar nunca la moneda —
       `User.preferred_currency` queda en su default `"COP"` salvo que el usuario la cambie después
@@ -873,17 +879,17 @@ propio usuario ni tiene ningún tratamiento especial en el código.
     nunca una cuenta que el usuario ya haya usado).
   - El placeholder/símbolo del paso de ingreso se ajusta según la moneda elegida en vez de asumir
     escala COP.
-- [ ] **Selección de categorías dentro del wizard de onboarding: reconsiderado y descartado, sin
+- [x] **Selección de categorías dentro del wizard de onboarding: reconsiderado y descartado, sin
       cambios.** El dueño del proyecto esperaba un selector con preselección dentro del wizard,
       pero al confirmar que Fase 18 (Decisión 18.2.1/Q2/Q3) ya decidió explícitamente lo
       contrario — pre-siembra silenciosa de `hidden_categories` + editor post-onboarding en
       `/categories` — se reafirma esa decisión tal cual está. No se toca `app/capture/page.tsx`
       ni `register/page.tsx`.
-- [ ] **Salario mensual editable desde Configuración (`/settings`).** El endpoint ya existe
+- [x] **Salario mensual editable desde Configuración (`/settings`).** El endpoint ya existe
       (`PATCH users/me`, el mismo que usa `useSetMonthlyIncome.ts` en onboarding) — es
       prácticamente solo trabajo de UI. Alcance acotado a propósito: solo edición del valor
       actual, sin historial de ingresos por mes.
-- [ ] **Campo `has_password` en `UserResponse` (`GET/PATCH /users/me`), computado a partir de
+- [x] **Campo `has_password` en `UserResponse` (`GET/PATCH /users/me`), computado a partir de
       `password_hash is not None`.** Hoy el frontend no tiene ninguna señal de que una cuenta es
       Google-only (`google_id` no se expone en `UserResponse`, confirmado contra `schemas.py:86-
       92` y `frontend/types/api.ts:99-110`).
@@ -891,7 +897,7 @@ propio usuario ni tiene ningún tratamiento especial en el código.
     (`settings/page.tsx:384-404`) en vez de mostrar un texto genérico confuso para el resto de
     usuarios — el backend ya lo trata como opcional para estas cuentas (`users.py:147-149`, solo
     valida la contraseña `if current_user.password_hash is not None`).
-- [ ] **"Olvidé mi contraseña" para cuentas Google-only: se deja funcionar como ya funciona hoy,
+- [x] **"Olvidé mi contraseña" para cuentas Google-only: se deja funcionar como ya funciona hoy,
       solo con copy aclaratorio.** Verificado que el flujo de reset (`auth.py:196-292`) no tiene
       ningún caso especial para `password_hash is None` — si una cuenta Google-only completa un
       reset, termina con un `password_hash` real y queda como cuenta híbrida (Google + password),
