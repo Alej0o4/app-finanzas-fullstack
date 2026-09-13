@@ -797,9 +797,19 @@ login con Google/Apple es viable en el estado actual del proyecto.
 separados de la Fase 20 a propósito por ser un tema distinto (gestión de cuenta, no
 correos/login social) — mismo criterio que ya separó el login con Google dentro de la Fase 20.
 
-> Decidido en sesión del 2026-09-13, sin spec todavía. `frontend/app/(dashboard)/settings/page.tsx`
-> documenta explícitamente que hoy "no es el lugar para anticipar ajustes de cuenta (contraseña,
-> email, etc.) que ninguna fase pide" — esta fase es la que los pide.
+> Decidido en sesión del 2026-09-13. `frontend/app/(dashboard)/settings/page.tsx` documenta
+> explícitamente que hoy "no es el lugar para anticipar ajustes de cuenta (contraseña, email,
+> etc.) que ninguna fase pide" — esta fase es la que los pide.
+>
+> Spec completa en `docs/specs/fase_21_spec.md` (2026-09-13, con evaluación arquitectónica del
+> agente `software-architect`): confirma hard delete (no soft-delete — `User` hereda
+> `SoftDeleteMixin`, pero eso dejaría datos huérfanos y colisiones de email invisibles),
+> encuentra que el borrado en cascada de `run_seed()` ya está desactualizado (falta `ApiKey` de
+> Fase 16 y `HiddenCategory` de Fase 18 — bug latente real, no hipotético), fija el mecanismo
+> compartido (`delete_user_cascade()` en `app/core/user_deletion.py`, usado por
+> `DELETE /api/v1/users/me` y por el script de limpieza) con reingreso de contraseña + rate
+> limit 5/min en el endpoint, y resuelve el gap de cache de moneda preferida
+> (`queryKeys.currentUser()`/`dashboard.categoryBreakdown()` sin invalidar hoy).
 
 - [ ] **Selector de moneda principal en Settings.** El backend ya soporta `preferred_currency`
       en `User` (Fase 8, `GET`/`PATCH /api/v1/users/me/preferences`) — falta exponerlo en la UI
