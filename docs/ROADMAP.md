@@ -630,18 +630,18 @@ categorías `user_id` no nulo, frontend apagado desde Fase 11 detrás de un flag
 > Decidido en sesión de grilling del 2026-09-12. Sin usuarios reales todavía, no hace falta
 > ninguna ruta de migración con compatibilidad — se puede re-sembrar directamente.
 
-- [ ] **Ampliar el pool de categorías default** — agregar Mercado, Pareja, Regalos, Restaurantes,
+- [x] **Ampliar el pool de categorías default** — agregar Mercado, Pareja, Regalos, Restaurantes,
       Gastos hormiga, Uber, Carro, Transporte público (lista final a cerrar en la spec).
   - No reemplaza "Transporte" genérica — conviven ambos niveles de detalle, cada usuario elige
     el suyo.
-- [ ] **Selección de categorías en el registro** — un set base razonable viene pre-marcado (ej.
+- [x] **Selección de categorías en el registro** — un set base razonable viene pre-marcado (ej.
       Mercado, Transporte, Vivienda, Salud, Entretenimiento, Otro); el resto queda visible para
       agregar cuando el usuario quiera.
-- [ ] **Concepto nuevo: categorías "ocultas para mí"** — por usuario, no modifica ni borra
+- [x] **Concepto nuevo: categorías "ocultas para mí"** — por usuario, no modifica ni borra
       categorías del sistema (siguen siendo compartidas e inmutables vía API, sin cambios).
       Ocultar solo afecta el selector al crear una transacción nueva; no esconde transacciones
       históricas ni datos de analíticas.
-- [ ] **Activar el editor de categorías personalizadas** — quitar
+- [x] **Activar el editor de categorías personalizadas** — quitar
       `CUSTOM_CATEGORY_EDITING_ENABLED = false` en `categories/page.tsx:24`; el backend ya
       soporta CRUD completo de categorías user-owned desde antes de Fase 11.
   - Se retira del backlog priorizado (ver tabla abajo) — pasa a programado aquí.
