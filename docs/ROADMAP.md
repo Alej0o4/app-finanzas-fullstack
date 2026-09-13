@@ -791,6 +791,44 @@ login con Google/Apple es viable en el estado actual del proyecto.
 
 ---
 
+## Fase 21 — Configuración de cuenta: moneda principal y baja de cuenta
+
+**Objetivo:** dos pedidos del dueño del proyecto (2026-09-13) sobre la pantalla de settings,
+separados de la Fase 20 a propósito por ser un tema distinto (gestión de cuenta, no
+correos/login social) — mismo criterio que ya separó el login con Google dentro de la Fase 20.
+
+> Decidido en sesión del 2026-09-13, sin spec todavía. `frontend/app/(dashboard)/settings/page.tsx`
+> documenta explícitamente que hoy "no es el lugar para anticipar ajustes de cuenta (contraseña,
+> email, etc.) que ninguna fase pide" — esta fase es la que los pide.
+
+- [ ] **Selector de moneda principal en Settings.** El backend ya soporta `preferred_currency`
+      en `User` (Fase 8, `GET`/`PATCH /api/v1/users/me/preferences`) — falta exponerlo en la UI
+      de `/settings`. Alcance chico: agregar el selector y confirmar qué partes del dashboard
+      dependen de esta preferencia para revalidar cache tras el cambio.
+- [ ] **Baja de cuenta de usuario (self-service) + script de limpieza.** No confundir con
+      `Account` (cuenta bancaria) — esto es borrar el `User` completo. Doble motivación: (1) los
+      usuarios reales deben poder eliminar su cuenta si quieren, (2) sirve para limpiar usuarios
+      de prueba de la base sin tocar producción a mano.
+  - **Decisión de esta sesión sobre el mecanismo de borrado, tras comparar tres opciones:**
+    autoservicio puro (login como cada test user), autoservicio + script de management, y
+    autoservicio + rol admin en la API. Se descartó el rol admin — el proyecto no tiene ningún
+    concepto de roles hoy (todo el authz es "¿sos el dueño del recurso?", ver
+    `backend/docs/BUSINESS_RULES.md`) y agregarlo solo para borrar test users es
+    desproporcionado: requiere migración de Alembic para `is_admin`, un dependency de auth
+    nuevo, resolver el problema de quién marca al primer admin, y expone un endpoint HTTP capaz
+    de borrar cualquier usuario — mucha superficie nueva para un problema operativo chico.
+  - **Elegido: autoservicio + script de management**, mismo patrón que `run_seed()`
+    (`docker compose exec backend python -c "..."`) — sin exponer nada nuevo por HTTP, confiando
+    en que quien tiene acceso shell al deploy ya está en el círculo de confianza (mismo nivel que
+    leer `.env` o correr migraciones). Un único endpoint `DELETE /api/v1/users/me` (o similar) y
+    un script comparten la misma función de borrado — sin duplicar la lógica de cascada.
+  - Pendiente de spec antes de implementar (mismo criterio que Fases 17/18/20): qué cascada
+    exacta sobre accounts/transactions/categories/budgets/refresh tokens/API keys, si es soft o
+    hard delete, y el flujo de confirmación en el frontend (doble confirmación, ¿reingresar
+    contraseña?).
+
+---
+
 ## Backlog priorizado (después del MVP)
 
 | Prioridad | Feature | Nota |
