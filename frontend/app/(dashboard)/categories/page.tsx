@@ -17,11 +17,9 @@ import { useConfirmStore } from '@/store/useConfirmStore';
 import CategoryIcon from '@/components/ui/CategoryIcon';
 import type { Category } from '@/types/api';
 
-// Fase 11 §11.6: categorías curadas sin editor en v1 (consistente con Fase 8). El código de
-// creación/edición se mantiene funcional pero oculto — reactivar cambiando este flag cuando
-// el editor de categorías salga del backlog post-MVP (ver docs/ROADMAP.md, "Backlog
-// priorizado").
-const CUSTOM_CATEGORY_EDITING_ENABLED = false;
+// Fase 18 §18.4: editor de categorías propias activado (CRUD backend ya existía desde antes de
+// Fase 11, oculto tras este flag desde entonces).
+const CUSTOM_CATEGORY_EDITING_ENABLED = true;
 
 const categoryTypeTranslations: Record<string, string> = {
   income: 'Ingreso',
