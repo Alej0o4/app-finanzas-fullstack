@@ -27,9 +27,11 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     `/reset-password`, `/verify-email`. Pero `EMAIL_PROVIDER` sigue en `console` en todos los
     entornos — el email nunca sale de verdad, solo se loguea (`docker compose logs backend`,
     buscar `"email_body"`).
-  - **Sigue siendo un bloqueante real para un usuario que no seas vos**: sin `EMAIL_PROVIDER=smtp`
-    + credenciales reales (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`
-    en el `.env` de la raíz), nadie externo puede recibir el link de reset ni el de verificación.
+  - **Bloqueante crítico, no solo "molesto", desde el 2026-09-12**: el login ahora exige
+    `email_verified` (ver entrada en Resueltos abajo). Antes, sin envío real, un usuario nuevo
+    quedaba con el correo sin verificar pero podía usar la app igual; ahora queda **encerrado
+    fuera de su cuenta hasta que reciba el link**, y sin `EMAIL_PROVIDER=smtp` real nunca lo va
+    a recibir. No lanzar a usuarios reales sin resolver esto primero.
   - Acción: elegir un proveedor transaccional (Resend, Mailgun, SES, SMTP de un dominio propio),
     generar credenciales, y setear las variables en el `.env` de despliegue. No requiere cambios
     de código — `app/core/email.py` ya soporta el modo `smtp`.
@@ -144,6 +146,7 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 | Fecha | Item |
 |-------|------|
+| 2026-09-12 | Login ahora exige `email_verified` (reversa la decisión original de Fase 7 §2.2 de no bloquear el login): `POST /api/v1/auth/login` responde `403` con `detail.code == "EMAIL_NOT_VERIFIED"` para un usuario sin verificar; nuevo `POST /api/v1/auth/resend-verification` (enumeration-safe, 5 req/min) reenvía el link. `seed.py` marca el usuario de prueba como verificado para no romper el seed. Efecto secundario: el auto-login post-registro (Decisión 15.0.3) ahora falla para todo usuario nuevo y cae al fallback existente (`/login?registered=true`) — el onboarding instantáneo post-registro queda pausado hasta que el usuario verifique, ver bloqueante de envío real de correo arriba |
 | 2026-09-12 | Fase 17 — presupuestos multi-moneda y analítica por cuenta: índice único de `budgets` ensanchado a `(user_id, category_id, month, year, currency)` (migración `b5a09d0bed5e`) + `actualizar_presupuesto` ahora asigna `currency` con `try/except IntegrityError` (antes el campo se ignoraba en silencio y editar la moneda a una ocupada daba 500, mismo patrón que el gap de `AccountUpdate.currency`) + filtro por moneda en `dashboard/budgets-progress` (filtra filas, no recalcula `spent`) + motor de alertas evaluado con `.all()` por presupuesto (antes `.first()` dejaba sin avisar al segundo presupuesto por categoría/período en otra moneda) + `account_id` en `dashboard/category-distribution` + nuevo `GET /accounts/{id}/monthly-summary` — ver `docs/specs/fase_17_spec.md` §17.1/17.2 |
 | 2026-09-06 | Saldos de cuenta sin reconciliación posible — resuelto en Fase 16 §16.4: `opening_balance` inmutable (con backfill en la migración `e460a42926d7`) + `POST /accounts/{id}/reconcile`. Nota: el backfill solo establece línea de base hacia adelante, no audita desviaciones históricas (ver `BUSINESS_RULES.md`) |
 | 2026-09-06 | API keys personales revocables (Fase 16 §16.1): tabla `api_keys` (migración `6c9bbf3564cc`), auth alternativa `oikos_pat_*` en `get_current_user`, CRUD `/api/v1/api-keys/`, UI en `/settings` |

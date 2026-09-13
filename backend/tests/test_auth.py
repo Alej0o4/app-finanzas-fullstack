@@ -366,10 +366,61 @@ class TestEmailVerification:
         db_session.refresh(user)
         assert user.email_verified is False
 
-    def test_login_works_without_verifying_email(self, client, register_and_login):
-        user = register_and_login(email="sin-verificar@example.com", password="Contrasena10")
-        response = client.post("/api/v1/auth/login", data={"username": user["email"], "password": user["password"]})
+    def test_login_before_verifying_email_returns_403(self, client):
+        # No usa `register_and_login`: esa factory marca email_verified=True a propósito
+        # para no obligar a cada otro test a pasar por el flujo real de verificación.
+        client.post(
+            "/api/v1/users/",
+            json={"email": "sin-verificar@example.com", "full_name": "Alguien", "password": "Contrasena10"},
+        )
+        response = client.post(
+            "/api/v1/auth/login",
+            data={"username": "sin-verificar@example.com", "password": "Contrasena10"},
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"]["code"] == "EMAIL_NOT_VERIFIED"
+
+    def test_login_after_verifying_email_succeeds(self, client, captured_emails):
+        client.post(
+            "/api/v1/users/",
+            json={"email": "verificado-login@example.com", "full_name": "Alguien", "password": "Contrasena10"},
+        )
+        raw_token = _extract_token_from_email(captured_emails[-1]["html_body"])
+        client.get("/api/v1/auth/verify-email", params={"token": raw_token})
+
+        response = client.post(
+            "/api/v1/auth/login",
+            data={"username": "verificado-login@example.com", "password": "Contrasena10"},
+        )
         assert response.status_code == 200
+
+    def test_resend_verification_sends_new_token_for_unverified_user(self, client, captured_emails):
+        client.post(
+            "/api/v1/users/",
+            json={"email": "reenviar@example.com", "full_name": "Alguien", "password": "Contrasena10"},
+        )
+        assert len(captured_emails) == 1
+
+        response = client.post("/api/v1/auth/resend-verification", json={"email": "reenviar@example.com"})
+        assert response.status_code == 200
+        assert len(captured_emails) == 2
+
+        raw_token = _extract_token_from_email(captured_emails[-1]["html_body"])
+        client.get("/api/v1/auth/verify-email", params={"token": raw_token})
+        login = client.post("/api/v1/auth/login", data={"username": "reenviar@example.com", "password": "Contrasena10"})
+        assert login.status_code == 200
+
+    def test_resend_verification_does_not_reveal_nonexistent_email(self, client, captured_emails):
+        response = client.post("/api/v1/auth/resend-verification", json={"email": "no-existe@example.com"})
+        assert response.status_code == 200
+        assert len(captured_emails) == 0
+
+    def test_resend_verification_is_noop_for_already_verified_user(self, client, register_and_login, captured_emails):
+        user = register_and_login(email="ya-verificado@example.com")
+        emails_before = len(captured_emails)  # el registro ya mandó 1 (usuario luego marcado verificado por la fixture)
+        response = client.post("/api/v1/auth/resend-verification", json={"email": user["email"]})
+        assert response.status_code == 200
+        assert len(captured_emails) == emails_before
 
 
 # --- Cuenta por defecto al registrarse (Fase 8 §5) -------------------------------

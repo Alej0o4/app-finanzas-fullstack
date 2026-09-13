@@ -134,6 +134,9 @@ def run_seed():
             preferred_currency="COP",
             preferred_locale="es-CO",
             monthly_income=Decimal("3500000"),
+            # Login exige email_verified desde el gate agregado en auth.py — sin esto, el
+            # usuario de seed quedaría bloqueado para iniciar sesión.
+            email_verified=True,
         )
         db.add(user)
         db.flush()

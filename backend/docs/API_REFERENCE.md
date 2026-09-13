@@ -7,8 +7,8 @@
   flujo OAuth2, se aceptan **API keys personales** con prefijo `oikos_pat_` en el mismo
   header (Fase 16 §16.1) — ver sección "API keys" abajo.
 - Content type esperado: `application/json`, excepto login, que usa formulario OAuth2.
-- Rate limiting: `/api/v1/auth/login`, `POST /api/v1/users/`, `/api/v1/auth/password-reset/request`
-  y `POST /api/v1/api-keys/` (5 req/min por IP via `slowapi`), y `POST /api/v1/transactions/`
+- Rate limiting: `/api/v1/auth/login`, `POST /api/v1/users/`, `/api/v1/auth/password-reset/request`,
+  `/api/v1/auth/resend-verification` y `POST /api/v1/api-keys/` (5 req/min por IP via `slowapi`), y `POST /api/v1/transactions/`
   (60 req/min — keyed por usuario cuando la autenticación es con API key, resuelto contra la
   DB para que todas las keys de un mismo usuario compartan un balde; por IP en el resto,
   Fase 16 §16.1, corregido en la revisión de seguridad post-16.1 — ver `docs/TODO.md`).
@@ -38,7 +38,11 @@ Salida:
 
 Errores esperados:
 
-- `403` si las credenciales son inválidas.
+- `403` si las credenciales son inválidas (`detail` es un string, `"Credenciales Inválidas"`).
+- `403` si el email todavía no fue verificado — agregado 2026-09-12, reversa la decisión
+  original de Fase 7 de no bloquear el login. Acá `detail` es un objeto, no un string:
+  `{"code": "EMAIL_NOT_VERIFIED", "mensaje": "..."}`. El frontend distingue este caso de
+  credenciales inválidas mirando `detail.code`, no el status code (ambos son 403).
 - `429` si se exceden 5 intentos por minuto (rate limiting).
 
 ### `POST /api/v1/auth/refresh`
@@ -107,8 +111,9 @@ Errores esperados:
 ### `GET /api/v1/auth/verify-email`
 
 Verifica el email del usuario a partir del token enviado en el registro (Fase 7, §2.2). El
-token expira a las 48h y es de un solo uso. **No verificar el email no bloquea el login** —
-es una decisión de producto para no agregar fricción al onboarding.
+token expira a las 48h y es de un solo uso. **Desde el 2026-09-12, no verificar el email SÍ
+bloquea el login** (ver `POST /api/v1/auth/login` arriba) — reversa la decisión original de
+Fase 7 de no agregar fricción al onboarding.
 
 Query params:
 
@@ -121,6 +126,22 @@ Salida:
 Errores esperados:
 
 - `400` si el token es inválido, ya fue usado o expiró.
+
+### `POST /api/v1/auth/resend-verification`
+
+Reenvía el email de verificación (token nuevo, invalida implícitamente el anterior solo en el
+sentido de que ambos quedan válidos hasta que uno se use o expire — no hay revocación
+explícita del token viejo). Mismo patrón anti-enumeración que `password-reset/request`:
+**siempre responde 200**, exista o no el correo, y no revela si ya estaba verificado. Rate
+limited (5 req/min por IP).
+
+Entrada:
+
+- `email`
+
+Salida:
+
+- `{"estado": "OK", "mensaje": "Si el correo está registrado y aún no fue verificado, te enviamos un nuevo enlace."}`
 
 ## API keys (Fase 16 §16.1)
 

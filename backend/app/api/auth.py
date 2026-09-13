@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
+from app.api.users import enviar_email_verificacion
 from app.core import security
 from app.core.database import get_db
 from app.core.email import send_email
@@ -25,6 +26,15 @@ def login(request: Request, user_credentials: OAuth2PasswordRequestForm = Depend
 
     if not security.verify_password(user_credentials.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Credenciales Inválidas")
+
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "EMAIL_NOT_VERIFIED",
+                "mensaje": "Verificá tu correo antes de iniciar sesión. Revisá tu bandeja de entrada.",
+            },
+        )
 
     access_token = security.create_access_token(data={"sub": str(user.id)})
 
@@ -233,3 +243,24 @@ def verificar_email(token: str, db: Session = Depends(get_db)):
     db.commit()
 
     return {"estado": "OK", "mensaje": "Correo verificado exitosamente."}
+
+
+@router.post("/resend-verification")
+@limiter.limit("5/minute")
+def reenviar_verificacion(
+    request: Request,
+    body: schemas.ResendVerificationRequest,
+    db: Session = Depends(get_db),
+):
+    """Reenvía el email de verificación (mismo patrón anti-enumeración que password-reset:
+    siempre responde 200, exista o no el correo, y no revela si ya estaba verificado)."""
+    normalized_email = body.email.lower().strip()
+    user = db.query(models.User).filter(models.User.email == normalized_email).first()
+
+    if user and not user.email_verified:
+        enviar_email_verificacion(user, db)
+
+    return {
+        "estado": "OK",
+        "mensaje": "Si el correo está registrado y aún no fue verificado, te enviamos un nuevo enlace.",
+    }

@@ -21,14 +21,28 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
   // Fase 12 §12.8: errores por campo (no globo nativo del navegador) + foco en el primero.
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
+  const handleResendVerification = async () => {
+    setResendState('sending');
+    try {
+      await api.post('auth/resend-verification', { email: username });
+    } finally {
+      // Enumeration-safe en el backend: siempre 200. Mostramos éxito sin importar el resultado.
+      setResendState('sent');
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setNeedsVerification(false);
+    setResendState('idle');
 
     const errors: typeof fieldErrors = {};
     if (!/^\S+@\S+\.\S+$/.test(username)) errors.email = 'Ingresa un correo válido.';
@@ -71,8 +85,14 @@ function LoginForm() {
         router.push('/capture');
       }
     } catch (err: unknown) {
-      const error = err as { response?: { status?: number } };
-      if (error.response?.status === 401 || error.response?.status === 403) {
+      const error = err as {
+        response?: { status?: number; data?: { detail?: string | { code?: string } } };
+      };
+      const detail = error.response?.data?.detail;
+      if (typeof detail === 'object' && detail?.code === 'EMAIL_NOT_VERIFIED') {
+        setNeedsVerification(true);
+        setError('Tu correo todavía no está verificado. Revisá tu bandeja de entrada.');
+      } else if (error.response?.status === 401 || error.response?.status === 403) {
         setError('Credenciales inválidas. Por favor verifica tus datos.');
       } else {
         setError('Error de conexión. Inténtalo más tarde.');
@@ -103,7 +123,7 @@ function LoginForm() {
           aria-atomic="true"
           className="bg-success/10 border-success/20 text-success mb-6 rounded-xl border p-3 text-center text-sm"
         >
-          Cuenta creada exitosamente. Ahora puedes iniciar sesión.
+          Cuenta creada. Revisá tu correo para verificar tu cuenta antes de iniciar sesión.
         </div>
       )}
 
@@ -127,7 +147,21 @@ function LoginForm() {
           aria-atomic="true"
           className="bg-danger/10 border-danger/20 text-danger mb-6 rounded-xl border p-3 text-center text-sm"
         >
-          {error}
+          <p>{error}</p>
+          {needsVerification && (
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={resendState !== 'idle'}
+              className="text-danger mt-2 font-medium underline underline-offset-2 disabled:opacity-60"
+            >
+              {resendState === 'sent'
+                ? 'Enlace reenviado, revisá tu correo'
+                : resendState === 'sending'
+                  ? 'Enviando...'
+                  : 'Reenviar correo de verificación'}
+            </button>
+          )}
         </div>
       )}
 

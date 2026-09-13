@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base, get_db
 from app.core.rate_limit import limiter
 from app.main import app
-from app.models import models  # noqa: F401 - registra las tablas en Base.metadata antes del create_all
+from app.models import models
 
 STRONG_PASSWORD = "Contrasena10"  # cumple la política de §2.3: no solo dígitos/letras, no común
 
@@ -91,9 +91,14 @@ def client(db_session) -> Generator[TestClient, None, None]:
 
 
 @pytest.fixture
-def register_and_login(client: TestClient):
+def register_and_login(client: TestClient, db_session: Session):
     """Factory: registra un usuario vía `POST /api/v1/users/` y loguea vía
-    `POST /api/v1/auth/login`. Devuelve email/password/id/tokens/headers listos para usar."""
+    `POST /api/v1/auth/login`. Devuelve email/password/id/tokens/headers listos para usar.
+
+    El login exige `email_verified` (gate agregado en `auth.py`); esta factory marca el
+    usuario como verificado directo en la sesión de test para no forzar a cada test que
+    solo necesita "un usuario logueado" a pasar por el flujo real de verificación por
+    token. `TestEmailVerification` sí ejercita ese flujo real sin pasar por este atajo."""
     counter = {"n": 0}
 
     def _factory(
@@ -110,6 +115,9 @@ def register_and_login(client: TestClient):
         )
         assert register_response.status_code == 200, register_response.text
         user_data = register_response.json()
+
+        db_session.query(models.User).filter(models.User.email == email).update({"email_verified": True})
+        db_session.commit()
 
         login_response = client.post(
             "/api/v1/auth/login",

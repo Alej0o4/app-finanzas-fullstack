@@ -16,7 +16,7 @@ from app.schemas import schemas
 router = APIRouter()
 
 
-def _enviar_email_verificacion(user: models.User, db: Session) -> None:
+def enviar_email_verificacion(user: models.User, db: Session) -> None:
     raw_token = security.generate_refresh_token()
     db.add(
         models.EmailVerificationToken(
@@ -79,9 +79,10 @@ def crear_usuario(request: Request, usuario: schemas.UserCreate, db: Session = D
     db.commit()
     db.refresh(nuevo_usuario)
 
-    # No bloquea el login (decisión de producto tomada en docs/specs/fase_07_spec.md §2.2):
-    # el registro no debe fallar ni demorarse si el envío de email tiene un problema.
-    _enviar_email_verificacion(nuevo_usuario, db)
+    # El registro no debe fallar ni demorarse si el envío de email tiene un problema
+    # (decisión original de Fase 7 §2.2). El login sí exige email verificado desde el gate
+    # agregado en auth.py `login()` — ver docs/TODO.md.
+    enviar_email_verificacion(nuevo_usuario, db)
 
     return nuevo_usuario
 
