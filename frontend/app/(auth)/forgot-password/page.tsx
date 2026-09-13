@@ -98,7 +98,7 @@ export default function ForgotPasswordPage() {
           onChange={(e) => setEmail(e.target.value)}
           error={fieldErrors.email}
           className="bg-background py-3"
-          placeholder="alejandro@ejemplo.com"
+          placeholder="juan@ejemplo.com"
         />
 
         <Button

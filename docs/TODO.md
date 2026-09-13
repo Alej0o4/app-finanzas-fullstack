@@ -21,21 +21,6 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🔴 Bloqueantes — antes de que exista un usuario que no seas tú
 
-- [ ] **Recuperación de contraseña y verificación de email implementadas, pero sin envío real de correo.**
-  - El código de Fase 7 está completo y probado (`backend/app/api/auth.py`, `docs/specs/fase_07_spec.md`
-    §2.1/§2.2): tokens de un solo uso, expiración, páginas de frontend en `/forgot-password`,
-    `/reset-password`, `/verify-email`. Pero `EMAIL_PROVIDER` sigue en `console` en todos los
-    entornos — el email nunca sale de verdad, solo se loguea (`docker compose logs backend`,
-    buscar `"email_body"`).
-  - **Bloqueante crítico, no solo "molesto", desde el 2026-09-12**: el login ahora exige
-    `email_verified` (ver entrada en Resueltos abajo). Antes, sin envío real, un usuario nuevo
-    quedaba con el correo sin verificar pero podía usar la app igual; ahora queda **encerrado
-    fuera de su cuenta hasta que reciba el link**, y sin `EMAIL_PROVIDER=smtp` real nunca lo va
-    a recibir. No lanzar a usuarios reales sin resolver esto primero.
-  - Acción: elegir un proveedor transaccional (Resend, Mailgun, SES, SMTP de un dominio propio),
-    generar credenciales, y setear las variables en el `.env` de despliegue. No requiere cambios
-    de código — `app/core/email.py` ya soporta el modo `smtp`.
-
 - [ ] **Backup de PostgreSQL: script listo, sin programar.**
   - `scripts/backup.sh` existe y funciona (`pg_dump` + gzip + rotación de 7 días,
     `scripts/restore.sh` para restaurar), pero no hay ningún cron ni scheduler que lo dispare
@@ -146,6 +131,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 | Fecha | Item |
 |-------|------|
+| 2026-09-13 | Plantilla de correo con marca (Fase 20) — los correos de verificación/reset ya no son un `<p>` con link pelado; ahora usan `render_email_html()` (header "Oikos", botón real, link de respaldo en texto) — ver `docs/ROADMAP.md` Fase 20 |
+| 2026-09-12 | `EMAIL_PROVIDER=smtp` configurado y verificado de punta a punta contra el `.env` real de despliegue (Gmail + contraseña de aplicación): registro → email real entregado → click en el link → `email_verified=true` → login que antes daba `403 EMAIL_NOT_VERIFIED` ahora da `200`. Las credenciales viven solo en el `.env` del despliegue (gitignored, no en el repo) — `backend/.env` (modo sin Docker) sigue sin estas variables, así que correr sin Docker sigue cayendo a `EMAIL_PROVIDER=console` salvo que se agreguen ahí también |
 | 2026-09-12 | Login ahora exige `email_verified` (reversa la decisión original de Fase 7 §2.2 de no bloquear el login): `POST /api/v1/auth/login` responde `403` con `detail.code == "EMAIL_NOT_VERIFIED"` para un usuario sin verificar; nuevo `POST /api/v1/auth/resend-verification` (enumeration-safe, 5 req/min) reenvía el link. `seed.py` marca el usuario de prueba como verificado para no romper el seed. Efecto secundario: el auto-login post-registro (Decisión 15.0.3) ahora falla para todo usuario nuevo y cae al fallback existente (`/login?registered=true`) — el onboarding instantáneo post-registro queda pausado hasta que el usuario verifique, ver bloqueante de envío real de correo arriba |
 | 2026-09-12 | Fase 17 — presupuestos multi-moneda y analítica por cuenta: índice único de `budgets` ensanchado a `(user_id, category_id, month, year, currency)` (migración `b5a09d0bed5e`) + `actualizar_presupuesto` ahora asigna `currency` con `try/except IntegrityError` (antes el campo se ignoraba en silencio y editar la moneda a una ocupada daba 500, mismo patrón que el gap de `AccountUpdate.currency`) + filtro por moneda en `dashboard/budgets-progress` (filtra filas, no recalcula `spent`) + motor de alertas evaluado con `.all()` por presupuesto (antes `.first()` dejaba sin avisar al segundo presupuesto por categoría/período en otra moneda) + `account_id` en `dashboard/category-distribution` + nuevo `GET /accounts/{id}/monthly-summary` — ver `docs/specs/fase_17_spec.md` §17.1/17.2 |
 | 2026-09-06 | Saldos de cuenta sin reconciliación posible — resuelto en Fase 16 §16.4: `opening_balance` inmutable (con backfill en la migración `e460a42926d7`) + `POST /accounts/{id}/reconcile`. Nota: el backfill solo establece línea de base hacia adelante, no audita desviaciones históricas (ver `BUSINESS_RULES.md`) |

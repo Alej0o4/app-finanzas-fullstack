@@ -5,7 +5,18 @@ esta fase (transacciones, presupuestos, auth) no depende de comportamiento Postg
 (a diferencia de `dashboard.py`, que sí bifurca por dialecto y queda fuera de este alcance).
 """
 
+import os
 from collections.abc import Generator
+
+# Red de seguridad: fijar estas env vars ANTES de importar app.main (más abajo), que dispara
+# `load_dotenv()` en app.core.security al importarse. `load_dotenv()` nunca sobreescribe una env
+# var que ya existe (default `override=False`), así que fijarlas acá primero es suficiente para
+# que el test suite quede totalmente aislado de cualquier `.env` real del filesystem — no solo
+# para que nunca pueda enviar un correo real (EMAIL_PROVIDER), sino para que tampoco firme JWTs
+# de test con una SECRET_KEY de producción si por lo que sea `load_dotenv()` encuentra un `.env`
+# real (ver comentario en security.py sobre por qué eso podía pasar).
+os.environ.setdefault("EMAIL_PROVIDER", "console")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-solo-para-pytest-no-usar-en-real")
 
 import pytest
 from fastapi.testclient import TestClient

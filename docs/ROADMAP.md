@@ -753,6 +753,44 @@ post-pivote" entre Fase 15 y 16 más arriba.
 
 ---
 
+## Fase 20 — Correos transaccionales con marca + login social
+
+**Objetivo:** dos hallazgos de uso real (los correos de verificación/reset son un `<p>` con un
+link pelado, sin ningún elemento visual de Oikos — parecen phishing; los formularios de auth
+muestran el nombre real del dueño del proyecto como placeholder) más la evaluación de si sumar
+login con Google/Apple es viable en el estado actual del proyecto.
+
+> Decidido en sesión de grilling del 2026-09-13. Los dos primeros ítems se implementaron el
+> mismo día. El login con Google queda documentado acá pero sin implementar — tiene un impacto
+> de esquema más grande que el resto de la fase, por eso se separa a propósito de lo ya resuelto.
+
+- [x] **Plantilla de correo con marca** — *(2026-09-13)* — nueva función `render_email_html()`
+      en `app/core/email.py`: header con el nombre "Oikos" en el color primario (`#0284c7`),
+      botón real en vez de link crudo, y el link en texto plano debajo por si el cliente de
+      correo bloquea el botón. CSS inline (obligatorio en email — los clientes no cargan
+      `<style>` externo ni ejecutan JS). Aplica a los dos correos existentes (verificación de
+      cuenta y recuperación de contraseña), que comparten la misma función — no se duplicó la
+      plantilla.
+- [x] **Placeholders genéricos en los formularios de auth** — *(2026-09-13)* — "Alejandro
+      Martínez" / "alejandro@ejemplo.com" (nombre real del dueño del proyecto) reemplazados por
+      "Juan Pérez" / "juan@ejemplo.com" en `register`, `login` y `forgot-password`.
+- [ ] **Login con Google (OAuth)** — evaluado, no implementado. Se retira del backlog
+      priorizado (ver tabla abajo) — pasa a programado acá.
+  - Impacto real detectado al investigar: `User.password_hash` es `nullable=False` hoy →
+    necesita migración de Alembic para permitirlo nulo (o un hash dummy), más una columna nueva
+    de identidad del proveedor externo (ej. `google_id`). No hay ninguna librería OAuth
+    instalada todavía.
+  - Decisión explícita de esta sesión: **solo Google, no Apple**. "Sign in with Apple" exige
+    Apple Developer Program pago (99 USD/año, solo para tener el botón — Oikos es web, no
+    publica en ninguna App Store) y una configuración bastante más compleja (JWT firmado como
+    client secret, verificación de dominio). No vale la pena el costo/complejidad para el
+    estado actual del proyecto — Apple queda fuera de scope, no solo pospuesto.
+  - Pendiente de spec antes de implementar (mismo criterio que Fases 17/18): qué pasa si el
+    email de Google ya existe como cuenta con password, el endpoint de callback, y dónde va el
+    botón en `login`/`register`.
+
+---
+
 ## Backlog priorizado (después del MVP)
 
 | Prioridad | Feature | Nota |
@@ -760,7 +798,6 @@ post-pivote" entre Fase 15 y 16 más arriba.
 | Alta | **Automatización de ingresos/gastos recurrentes** | Feature de retención del mes 2, no de adquisición del día 1. Requiere scheduler (ya existirá tras Fase 14). |
 | Alta | **Sinking funds** (gastos distribuidos en cuotas mensuales virtuales) | Diferenciador potencial para v1.1. Validado por YNAB. Feature de usuario avanzado. |
 | Media | **Registro por nota de voz con IA** | v1.2. Feature de marketing / efecto "wow". Depende de la captura por nombre (Fase 16). |
-| Media | **Google OAuth** | Aplazado en la decisión del 2026-08-22. |
 | Media | **Filtros de fecha y categoría en dashboard** | Iteración 2, cuando haya datos de uso reales que lo justifiquen. |
 | Media | **App nativa iOS/Android** | Solo si se necesitan widgets de pantalla de inicio, push nativas o Face ID. La PWA de Fase 13 cubre el resto. |
 | Baja | **Multi-moneda ampliado** (tasas de cambio) | El modelo ya soporta agrupación por moneda; la conversión no está y no se necesita. |

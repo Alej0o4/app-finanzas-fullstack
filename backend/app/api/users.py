@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core import security
 from app.core.database import get_db
 from app.core.default_categories import BASE_REGISTRATION_CATEGORY_NAMES
-from app.core.email import send_email
+from app.core.email import render_email_html, send_email
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user, get_password_hash
 from app.models import models
@@ -31,10 +31,14 @@ def enviar_email_verificacion(user: models.User, db: Session) -> None:
     send_email(
         to=user.email,
         subject="Verificá tu correo — Oikos",
-        html_body=(
-            f"<p>Gracias por registrarte en Oikos. Verificá tu correo entrando a este enlace "
-            f"(expira en {security.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS} horas):</p>"
-            f'<p><a href="{verify_link}">{verify_link}</a></p>'
+        html_body=render_email_html(
+            heading="Confirmá tu cuenta",
+            intro_html=(
+                f"Gracias por registrarte en Oikos. Hacé clic en el botón para verificar tu "
+                f"correo (el enlace expira en {security.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS} horas)."
+            ),
+            cta_text="Verificar mi correo",
+            cta_link=verify_link,
         ),
     )
 

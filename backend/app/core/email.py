@@ -22,6 +22,39 @@ from email.mime.text import MIMEText
 logger = logging.getLogger(__name__)
 
 _SMTP_TIMEOUT_SECONDS = 10
+_PRIMARY_COLOR = "#0284c7"
+
+
+def render_email_html(heading: str, intro_html: str, cta_text: str, cta_link: str, footer_note: str = "") -> str:
+    """Envuelve el contenido de un email transaccional en una plantilla mínima con marca.
+
+    Antes los correos de verificación/reset eran un `<p>` con un link pelado — sin ningún
+    elemento visual de Oikos, lo que hacía que pareciera phishing. Esta plantilla agrega un
+    header con el nombre de la app, un botón real en vez de un link crudo, y conserva el link
+    en texto por si el cliente de correo bloquea el botón. Todo el CSS es inline a propósito:
+    los clientes de correo no cargan `<style>` externo ni ejecutan JS.
+    """
+    footer_html = (
+        f'<p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:#94a3b8;">{footer_note}</p>'
+        if footer_note
+        else ""
+    )
+    return f"""
+<div style="background-color:#f1f5f9;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="max-width:480px;margin:0 auto;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
+    <div style="background-color:{_PRIMARY_COLOR};padding:20px 24px;">
+      <span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.02em;">Oikos</span>
+    </div>
+    <div style="padding:28px 24px;">
+      <h1 style="margin:0 0 12px;font-size:18px;color:#0f172a;">{heading}</h1>
+      <div style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#334155;">{intro_html}</div>
+      <a href="{cta_link}" style="display:inline-block;background-color:{_PRIMARY_COLOR};color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;">{cta_text}</a>
+      <p style="margin:20px 0 0;font-size:12px;line-height:1.5;color:#94a3b8;word-break:break-all;">Si el botón no funciona, copiá y pegá este link en tu navegador:<br><a href="{cta_link}" style="color:{_PRIMARY_COLOR};">{cta_link}</a></p>
+      {footer_html}
+    </div>
+  </div>
+</div>
+"""
 
 
 def send_email(to: str, subject: str, html_body: str) -> None:

@@ -126,7 +126,7 @@ export default function RegisterPage() {
           onChange={(e) => setFullName(e.target.value)}
           error={fieldErrors.fullName}
           className="bg-background py-3"
-          placeholder="Alejandro Martínez"
+          placeholder="Juan Pérez"
         />
 
         <Input
@@ -139,7 +139,7 @@ export default function RegisterPage() {
           onChange={(e) => setEmail(e.target.value)}
           error={fieldErrors.email}
           className="bg-background py-3"
-          placeholder="alejandro@ejemplo.com"
+          placeholder="juan@ejemplo.com"
         />
 
         <Input
