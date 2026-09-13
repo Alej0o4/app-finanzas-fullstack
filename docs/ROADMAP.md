@@ -760,9 +760,10 @@ link pelado, sin ningún elemento visual de Oikos — parecen phishing; los form
 muestran el nombre real del dueño del proyecto como placeholder) más la evaluación de si sumar
 login con Google/Apple es viable en el estado actual del proyecto.
 
-> Decidido en sesión de grilling del 2026-09-13. Los dos primeros ítems se implementaron el
-> mismo día. El login con Google queda documentado acá pero sin implementar — tiene un impacto
-> de esquema más grande que el resto de la fase, por eso se separa a propósito de lo ya resuelto.
+> Decidido en sesión de grilling del 2026-09-13. Los dos primeros ítems se implementaron ese
+> mismo día. El login con Google se separó a propósito del resto de la fase por su impacto de
+> esquema más grande, se especificó en `docs/specs/fase_20_spec.md` y se implementó también el
+> 2026-09-13 (commits `4f7756c`/`f26c59c`).
 
 - [x] **Plantilla de correo con marca** — *(2026-09-13)* — nueva función `render_email_html()`
       en `app/core/email.py`: header con el nombre "Oikos" en el color primario (`#0284c7`),
@@ -774,20 +775,28 @@ login con Google/Apple es viable en el estado actual del proyecto.
 - [x] **Placeholders genéricos en los formularios de auth** — *(2026-09-13)* — "Alejandro
       Martínez" / "alejandro@ejemplo.com" (nombre real del dueño del proyecto) reemplazados por
       "Juan Pérez" / "juan@ejemplo.com" en `register`, `login` y `forgot-password`.
-- [ ] **Login con Google (OAuth)** — evaluado, no implementado. Se retira del backlog
-      priorizado (ver tabla abajo) — pasa a programado acá.
-  - Impacto real detectado al investigar: `User.password_hash` es `nullable=False` hoy →
-    necesita migración de Alembic para permitirlo nulo (o un hash dummy), más una columna nueva
-    de identidad del proveedor externo (ej. `google_id`). No hay ninguna librería OAuth
-    instalada todavía.
-  - Decisión explícita de esta sesión: **solo Google, no Apple**. "Sign in with Apple" exige
-    Apple Developer Program pago (99 USD/año, solo para tener el botón — Oikos es web, no
-    publica en ninguna App Store) y una configuración bastante más compleja (JWT firmado como
-    client secret, verificación de dominio). No vale la pena el costo/complejidad para el
-    estado actual del proyecto — Apple queda fuera de scope, no solo pospuesto.
-  - Pendiente de spec antes de implementar (mismo criterio que Fases 17/18): qué pasa si el
-    email de Google ya existe como cuenta con password, el endpoint de callback, y dónde va el
-    botón en `login`/`register`.
+- [x] **Login con Google (OAuth)** — *(2026-09-13)* — implementado siguiendo
+      `docs/specs/fase_20_spec.md`: Google Identity Services del lado del frontend (sin
+      redirect ni client secret), endpoint nuevo `POST /api/v1/auth/google` que verifica el ID
+      token contra las claves públicas de Google (`google-auth`) y emite el mismo
+      JWT/refresh token que `login()`. `User.password_hash` pasa a `nullable=True` + columna
+      `google_id` nueva (migración `5b79ad1d27e4`). Auto-vincula una cuenta con contraseña
+      existente si el email de Google coincide, en vez de duplicarla o rechazar el login.
+      `GoogleAuthButton.tsx` insertado en `login/page.tsx` y `register/page.tsx`.
+  - **Solo Google, no Apple** (decisión explícita de la sesión del 2026-09-13, sin cambios):
+    "Sign in with Apple" exige Apple Developer Program pago (99 USD/año) y una configuración
+    más compleja (JWT firmado como client secret, verificación de dominio) — no vale la pena
+    para un proyecto web-only. Apple queda fuera de scope, no solo pospuesto.
+  - **Requiere configuración de credenciales para funcionar en un entorno dado** — no es
+    automático solo por estar en el código: hace falta un Client ID de Google Cloud Console
+    seteado como `GOOGLE_CLIENT_ID` (backend) y `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (build arg del
+    frontend) en el `.env` de ese entorno. Sin esas variables, `GoogleAuthButton` no renderiza
+    nada (degradación silenciosa e intencional, ver spec) y `POST /auth/google` responde `503`.
+    Confirmado 2026-09-13: ninguna de las dos estaba seteada en el `.env` de este despliegue, y
+    `docker-compose.yml`/`frontend/Dockerfile` tampoco pasaban `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+    como build arg del frontend — corregido el mismo día (ambos archivos ahora la propagan
+    igual que `NEXT_PUBLIC_API_URL`), pero las credenciales de Google Cloud Console siguen sin
+    generarse/configurarse.
 
 ---
 
