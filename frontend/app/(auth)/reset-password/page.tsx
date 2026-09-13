@@ -139,6 +139,16 @@ function ResetPasswordForm() {
         </div>
       )}
 
+      {/* Fase 22 §22.5 (Decisión 22.5.1): copy genérico — en este punto la identidad viene
+          del token de la URL, no de una sesión; el texto aclara sin afirmar que la cuenta
+          sea Google-only. */}
+      <div className="bg-surface-elevated/70 border-border/50 mb-6 rounded-xl border p-3">
+        <p className="text-text-muted text-xs leading-relaxed">
+          Si tu cuenta se creó con Google, esta acción le agrega una contraseña — de ahí en adelante
+          vas a poder iniciar sesión con cualquiera de los dos métodos.
+        </p>
+      </div>
+
       {/* Formulario */}
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         <Input
