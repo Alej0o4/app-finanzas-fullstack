@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
+import GoogleAuthButton from '@/components/auth/GoogleAuthButton';
 import type { UserResponse } from '@/types/api';
 
 function LoginForm() {
@@ -214,6 +215,9 @@ function LoginForm() {
           {!isLoading && <ArrowRight size={16} />}
         </Button>
       </form>
+
+      {/* Fase 20 §20.3 (P7): después de la acción principal, arriba del link cruzado. */}
+      <GoogleAuthButton />
 
       <p className="text-text-muted mt-6 text-center text-sm">
         ¿No tienes cuenta?{' '}

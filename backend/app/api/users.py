@@ -45,6 +45,35 @@ def enviar_email_verificacion(user: models.User, db: Session) -> None:
     )
 
 
+def inicializar_datos_usuario_nuevo(usuario: models.User, db: Session) -> None:
+    """Cuenta por defecto + pre-siembra de categorías ocultas. Compartido entre el registro
+    por contraseña (crear_usuario) y el registro por Google (login_google) — Fase 20 §20.3,
+    Hallazgo 4: un segundo punto de creación de User que se salte esto reabre el bug de
+    'usuario nuevo con 0 cuentas' ya documentado en docs/TODO.md."""
+    # Cuenta por defecto (Fase 8 §5): un usuario nuevo nunca debe quedarse con 0 cuentas
+    # — `account_id` es obligatorio al transaccionar y QuickTransactionModal falla en silencio.
+    # Mismo commit que el usuario: o existen ambos, o ninguno.
+    cuenta_por_defecto = models.Account(
+        name="Cuenta principal",
+        type="debit",
+        balance=Decimal("0.00"),
+        currency=usuario.preferred_currency or "COP",
+        user_id=usuario.id,
+        highlighted=True,
+    )
+    db.add(cuenta_por_defecto)
+
+    # Fase 18 §18.2 (Decisión 18.2.1/Q2/Q3): pre-siembra silenciosa de `hidden_categories`.
+    # Las categorías de sistema fuera del set base quedan ocultas por defecto en el selector
+    # de captura, sin pantalla nueva de registro. Mismo commit que el usuario y la cuenta:
+    # o existen los tres, o ninguno. El query pasa por el listener global de soft-delete,
+    # así que categorías de sistema borradas lógicamente no entran al loop.
+    categorias_sistema = db.query(models.Category).filter(models.Category.user_id.is_(None)).all()
+    for categoria in categorias_sistema:
+        if categoria.name not in BASE_REGISTRATION_CATEGORY_NAMES:
+            db.add(models.HiddenCategory(user_id=usuario.id, category_id=categoria.id))
+
+
 @router.post("/", response_model=schemas.UserResponse)
 @limiter.limit("5/minute")
 def crear_usuario(request: Request, usuario: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -58,29 +87,7 @@ def crear_usuario(request: Request, usuario: schemas.UserCreate, db: Session = D
     nuevo_usuario = models.User(email=normalized_email, full_name=usuario.full_name, password_hash=hashed_password)
     db.add(nuevo_usuario)
     db.flush()  # asigna nuevo_usuario.id sin cerrar la transacción todavía
-
-    # Cuenta por defecto (Fase 8 §5): un usuario nuevo nunca debe quedarse con 0 cuentas
-    # — `account_id` es obligatorio al transaccionar y QuickTransactionModal falla en silencio.
-    # Mismo commit que el usuario: o existen ambos, o ninguno.
-    cuenta_por_defecto = models.Account(
-        name="Cuenta principal",
-        type="debit",
-        balance=Decimal("0.00"),
-        currency=nuevo_usuario.preferred_currency or "COP",
-        user_id=nuevo_usuario.id,
-        highlighted=True,
-    )
-    db.add(cuenta_por_defecto)
-
-    # Fase 18 §18.2 (Decisión 18.2.1/Q2/Q3): pre-siembra silenciosa de `hidden_categories`.
-    # Las categorías de sistema fuera del set base quedan ocultas por defecto en el selector
-    # de captura, sin pantalla nueva de registro. Mismo commit que el usuario y la cuenta:
-    # o existen los tres, o ninguno. El query pasa por el listener global de soft-delete,
-    # así que categorías de sistema borradas lógicamente no entran al loop.
-    categorias_sistema = db.query(models.Category).filter(models.Category.user_id.is_(None)).all()
-    for categoria in categorias_sistema:
-        if categoria.name not in BASE_REGISTRATION_CATEGORY_NAMES:
-            db.add(models.HiddenCategory(user_id=nuevo_usuario.id, category_id=categoria.id))
+    inicializar_datos_usuario_nuevo(nuevo_usuario, db)
 
     db.commit()
     db.refresh(nuevo_usuario)

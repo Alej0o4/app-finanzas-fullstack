@@ -2,9 +2,11 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security.oauth2 import OAuth2PasswordRequestForm
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from sqlalchemy.orm import Session
 
-from app.api.users import enviar_email_verificacion
+from app.api.users import enviar_email_verificacion, inicializar_datos_usuario_nuevo
 from app.core import security
 from app.core.database import get_db
 from app.core.email import render_email_html, send_email
@@ -21,7 +23,7 @@ def login(request: Request, user_credentials: OAuth2PasswordRequestForm = Depend
     normalized_email = user_credentials.username.lower().strip()
     user = db.query(models.User).filter(models.User.email == normalized_email).first()
 
-    if not user:
+    if not user or user.password_hash is None:  # 🆕 Fase 20 §20.3 — cuenta solo-Google
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Credenciales Inválidas")
 
     if not security.verify_password(user_credentials.password, user.password_hash):
@@ -38,6 +40,78 @@ def login(request: Request, user_credentials: OAuth2PasswordRequestForm = Depend
 
     access_token = security.create_access_token(data={"sub": str(user.id)})
 
+    raw_refresh = security.generate_refresh_token()
+    db.add(
+        models.RefreshToken(
+            token_hash=security.hash_token(raw_refresh),
+            user_id=user.id,
+            expires_at=datetime.now(UTC) + timedelta(days=security.REFRESH_TOKEN_EXPIRE_DAYS),
+        )
+    )
+    db.commit()
+
+    return {
+        "access_token": access_token,
+        "refresh_token": raw_refresh,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/google", response_model=schemas.TokenResponse)
+@limiter.limit("5/minute")
+def login_google(request: Request, body: schemas.GoogleLoginRequest, db: Session = Depends(get_db)):
+    """Login/registro con ID token de Google Identity Services (Fase 20 §20.3).
+
+    Google ya verificó la identidad del usuario (firma + `email_verified`), así que esta
+    cuenta nace directamente verificada — sin pasar por `enviar_email_verificacion()`
+    (Decisión P4). Respuesta con la MISMA forma que `login()`: el frontend reutiliza el
+    mismo manejo de tokens sin bifurcar lógica (Historia de usuario 14).
+    """
+    if not security.GOOGLE_CLIENT_ID:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El login con Google no está configurado en este entorno.",
+        )
+
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            body.id_token, google_requests.Request(), security.GOOGLE_CLIENT_ID
+        )
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de Google inválido.") from None
+
+    if not idinfo.get("email_verified"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="El correo de Google no está verificado.")
+
+    normalized_email = idinfo["email"].lower().strip()
+    user = db.query(models.User).filter(models.User.email == normalized_email).first()
+
+    if user:
+        # Auto-link (Decisión P3): si el correo ya existe como cuenta con contraseña, se
+        # vincula en vez de crear una duplicada o rechazar el login. No es account
+        # takeover: Google solo firma `email_verified=true` sobre correos que esa cuenta
+        # de Google controla — capacidad equivalente al reset de contraseña por email.
+        if not user.google_id:
+            user.google_id = idinfo["sub"]
+        if not user.email_verified:
+            user.email_verified = True
+    else:
+        user = models.User(
+            email=normalized_email,
+            full_name=idinfo.get("name", normalized_email),
+            password_hash=None,
+            google_id=idinfo["sub"],
+            email_verified=True,
+        )
+        db.add(user)
+        db.flush()  # asigna user.id sin cerrar la transacción
+        inicializar_datos_usuario_nuevo(user, db)
+
+    db.commit()
+    db.refresh(user)
+
+    # Mismo bloque de emisión de tokens que login() — sin cambios de forma.
+    access_token = security.create_access_token(data={"sub": str(user.id)})
     raw_refresh = security.generate_refresh_token()
     db.add(
         models.RefreshToken(
