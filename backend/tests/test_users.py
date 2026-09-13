@@ -34,3 +34,76 @@ class TestActualizarPerfil:
     def test_patch_me_without_token_returns_401(self, client):
         response = client.patch("/api/v1/users/me", json={"monthly_income": "100.00"})
         assert response.status_code == 401
+
+
+class TestHasTransactionHistory:
+    """Fase 19 §19.1: `has_transaction_history` en GET /users/me.
+
+    El umbral de "usuario recurrente" es 2 o más transacciones, no 1 (Decisión 19.1.1,
+    resuelve la Decisión 10.1.4 de Fase 10). El campo es un atributo calculado solo en
+    `obtener_usuario_actual` — no es una columna, y el `default=False` del schema es lo
+    que se serializa en `crear_usuario`/`actualizar_perfil` (Decisión 19.1.3).
+    """
+
+    def _create_transaction(self, client, headers, account_id, category_id, **overrides) -> dict:
+        payload = {
+            "amount": "100.00",
+            "type": "expense",
+            "description": "tx para el historial",
+            "account_id": account_id,
+            "category_id": category_id,
+        }
+        payload.update(overrides)
+        response = client.post("/api/v1/transactions/", json=payload, headers=headers)
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    def test_no_transactions_returns_false(self, client, register_and_login):
+        user = register_and_login(email="historial-vacio@example.com")
+
+        me = client.get("/api/v1/users/me", headers=user["headers"])
+        assert me.status_code == 200, me.text
+        assert me.json()["has_transaction_history"] is False
+
+    def test_exactly_one_transaction_returns_false(self, client, register_and_login, make_account, make_category):
+        user = register_and_login(email="historial-una-tx@example.com")
+        headers = user["headers"]
+        cuenta = make_account(headers, name="Cuenta historial", currency="COP", balance="1000.00")
+        categoria = make_category(headers, name="Comida", type="expense")
+
+        self._create_transaction(client, headers, cuenta["id"], categoria["id"])
+
+        me = client.get("/api/v1/users/me", headers=headers)
+        assert me.status_code == 200, me.text
+        assert me.json()["has_transaction_history"] is False
+
+    def test_two_transactions_returns_true(self, client, register_and_login, make_account, make_category):
+        user = register_and_login(email="historial-dos-tx@example.com")
+        headers = user["headers"]
+        cuenta = make_account(headers, name="Cuenta historial", currency="COP", balance="1000.00")
+        categoria = make_category(headers, name="Comida", type="expense")
+
+        self._create_transaction(client, headers, cuenta["id"], categoria["id"])
+        self._create_transaction(client, headers, cuenta["id"], categoria["id"])
+
+        me = client.get("/api/v1/users/me", headers=headers)
+        assert me.status_code == 200, me.text
+        assert me.json()["has_transaction_history"] is True
+
+    def test_has_transaction_history_uses_limit_not_count_semantics(
+        self, client, register_and_login, make_account, make_category
+    ):
+        """50 transacciones → `true`. El nombre documenta la intención de la query
+        (Decisión 19.1.2): es un `LIMIT 2` que solo pregunta "¿hay 2 o más?", no un
+        `COUNT(*)` que recorra todas las filas para responder lo mismo."""
+        user = register_and_login(email="historial-largo@example.com")
+        headers = user["headers"]
+        cuenta = make_account(headers, name="Cuenta historial", currency="COP", balance="1000.00")
+        categoria = make_category(headers, name="Comida", type="expense")
+
+        for i in range(50):
+            self._create_transaction(client, headers, cuenta["id"], categoria["id"], description=f"tx {i}")
+
+        me = client.get("/api/v1/users/me", headers=headers)
+        assert me.status_code == 200, me.text
+        assert me.json()["has_transaction_history"] is True

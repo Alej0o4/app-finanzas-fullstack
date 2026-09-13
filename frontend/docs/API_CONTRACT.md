@@ -232,6 +232,7 @@ Reglas de consumo:
 - `preferred_locale` (default `"es-CO"`)
 - `preferred_theme` (default `"dark"`)
 - `monthly_income` (`number | null`) — dato financiero del perfil, editable vía `PATCH /api/v1/users/me`. El dashboard lo consume dos veces (Fase 11 §11.3): indirectamente a través de `monthly_flow_balance` en `/dashboard/summary`, y directamente vía el formulario inline de la card "Balance del mes" cuando ese valor es `null`.
+- `has_transaction_history` (`boolean`, Fase 19 §19.1) — `true` si el usuario tiene 2+ transacciones. El login (`login/page.tsx`) lo lee para condicionar el redirect: `/dashboard` si es `true`, `/capture` si no (resuelve la Decisión 10.1.4 de Fase 10). Solo se calcula en `GET /users/me`; en `PATCH /me` llega como `false` fijo sin consultar — ningún call site de ese endpoint lee el campo (Decisión 19.1.3).
 
 ### Preferencias de usuario
 

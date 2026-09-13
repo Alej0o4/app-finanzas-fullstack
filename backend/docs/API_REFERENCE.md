@@ -242,7 +242,11 @@ Salida:
 - `preferred_currency`
 - `preferred_locale`
 - `preferred_theme`
-- `monthly_income`
+- `monthly_income` (`null` hasta que se defina vía `PATCH /api/v1/users/me`)
+- `has_transaction_history` (`boolean`, Fase 19 §19.1) — `true` si el usuario tiene 2 o más
+  transacciones ("usuario recurrente"); se calcula con una query `LIMIT 2`, no `COUNT(*)`.
+  Solo se calcula en este endpoint (los otros endpoints que devuelven `UserResponse`, como
+  `POST /` o `PATCH /me`, serializan el default `false` sin consultar — Decisión 19.1.3).
 
 ### `PATCH /api/v1/users/me`
 

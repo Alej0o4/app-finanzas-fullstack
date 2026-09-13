@@ -8,7 +8,10 @@ import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useState, useMemo, Suspense } from 'react';
 import { useQueryParamState, useQueryParamsBatch } from '@/hooks/useQueryParamState';
 import CashflowChart, { type AnalyticsSeries } from '@/components/CashflowChart';
-import CategoryDonutChart, { type CategoryType } from '@/components/CategoryDonutChart';
+import CategoryDonutChart, {
+  type CategoryType,
+  type ReferenceMode,
+} from '@/components/CategoryDonutChart';
 import AnalyticsSummary from '@/components/AnalyticsSummary';
 import Input from '@/components/ui/Input';
 import Skeleton from '@/components/ui/Skeleton';
@@ -103,6 +106,14 @@ const validateCategoryType = (raw: string): CategoryType =>
     ? (raw as CategoryType)
     : 'expense';
 
+// Fase 19 §19.3: whitelist del denominador de porcentaje del donut (mismo criterio de
+// Fase 13 §13.6 que validateCategoryType). 'expense-total' = % de mis gastos (comportamiento
+// original); 'income-total' = % de mi ingreso total del período (Decisión 19.3.1/19.3.4).
+const validateReferenceMode = (raw: string): ReferenceMode =>
+  (['expense-total', 'income-total'] as const).includes(raw as ReferenceMode)
+    ? (raw as ReferenceMode)
+    : 'expense-total';
+
 const validateNeto = (raw: string): 'true' | 'false' => (raw === 'true' ? 'true' : 'false');
 
 function AnalyticsPageContent() {
@@ -124,6 +135,11 @@ function AnalyticsPageContent() {
     validateCategoryType
   );
   const [netoRaw, setNetMode] = useQueryParamState('neto', 'false', validateNeto);
+  const [referenceMode, setReferenceMode] = useQueryParamState(
+    'reference',
+    'expense-total',
+    validateReferenceMode
+  );
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
 
   const netMode = netoRaw === 'true';
@@ -301,6 +317,9 @@ function AnalyticsPageContent() {
           onNetModeChange={(net) => setNetMode(String(net))}
           hiddenCategories={hiddenCategories}
           onHiddenCategoriesChange={setHiddenCategories}
+          referenceMode={referenceMode}
+          onReferenceModeChange={setReferenceMode}
+          totalIncomeForPeriod={totals.totalIncome}
         />
       </div>
     </div>

@@ -89,6 +89,7 @@ class UserResponse(UserBase):
     preferred_locale: str = "es-CO"
     preferred_theme: str = "dark"
     monthly_income: Decimal | None = None
+    has_transaction_history: bool = False  # Fase 19 §19.1 — solo se calcula en GET /users/me
 
     class Config:
         from_attributes = True

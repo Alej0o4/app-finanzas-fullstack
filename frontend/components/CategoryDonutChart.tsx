@@ -10,6 +10,9 @@ import type { CategoryDistributionItem } from '@/types/api';
 
 export type CategoryType = 'expense' | 'income';
 
+// Fase 19 §19.3: contra qué denominador se divide el porcentaje de cada categoría de gasto.
+export type ReferenceMode = 'expense-total' | 'income-total';
+
 const TYPE_OPTIONS: { value: CategoryType; label: string }[] = [
   { value: 'expense', label: 'Gastos' },
   { value: 'income', label: 'Ingresos' },
@@ -44,6 +47,11 @@ interface CategoryDonutChartProps {
   onNetModeChange: (net: boolean) => void;
   hiddenCategories: Set<string>;
   onHiddenCategoriesChange: (set: Set<string>) => void;
+  referenceMode: ReferenceMode;
+  onReferenceModeChange: (mode: ReferenceMode) => void;
+  /** Fase 19 §19.3.4 — ingreso total del período, ya sumado en analytics/page.tsx desde
+   *  cashflow-series. Denominador cuando referenceMode === 'income-total'. */
+  totalIncomeForPeriod: number;
 }
 
 export default function CategoryDonutChart({
@@ -56,6 +64,9 @@ export default function CategoryDonutChart({
   onNetModeChange,
   hiddenCategories,
   onHiddenCategoriesChange,
+  referenceMode,
+  onReferenceModeChange,
+  totalIncomeForPeriod,
 }: CategoryDonutChartProps) {
   const { config } = useAppConfig();
   const originalCategoryData = useMemo(() => {
@@ -65,26 +76,45 @@ export default function CategoryDonutChart({
         value: Number(item.total),
       })) || [];
 
-    const totalAmount = items.reduce((sum, item) => sum + item.value, 0);
+    // Fase 19 §19.3 (Decisiones 19.3.2-19.3.4 + Hallazgo 8): % del ingreso total del
+    // período en vez de % del subtotal de gastos, solo para gastos en modo bruto.
+    const usesIncomeReference =
+      referenceMode === 'income-total' && categoryType === 'expense' && !netMode;
+    const denominator = usesIncomeReference
+      ? totalIncomeForPeriod
+      : items.reduce((sum, item) => sum + item.value, 0);
 
     return items.map((item) => ({
       ...item,
-      percentage: totalAmount > 0 ? (item.value / totalAmount) * 100 : 0,
+      percentage: denominator > 0 ? (item.value / denominator) * 100 : 0,
     }));
-  }, [data]);
+  }, [data, referenceMode, categoryType, netMode, totalIncomeForPeriod]);
 
   const visibleCategoryData = useMemo(() => {
     const items = originalCategoryData.filter(
       (item) => !hiddenCategories.has(String(item.category_id))
     );
 
-    const totalAmount = items.reduce((sum, item) => sum + item.value, 0);
+    // Misma lógica que originalCategoryData: cuando se referencia el ingreso total, el
+    // porcentaje de cada item visible NO se re-normaliza a la suma visible.
+    const usesIncomeReference =
+      referenceMode === 'income-total' && categoryType === 'expense' && !netMode;
+    const denominator = usesIncomeReference
+      ? totalIncomeForPeriod
+      : items.reduce((sum, item) => sum + item.value, 0);
 
     return items.map((item) => ({
       ...item,
-      percentage: totalAmount > 0 ? (item.value / totalAmount) * 100 : 0,
+      percentage: denominator > 0 ? (item.value / denominator) * 100 : 0,
     }));
-  }, [originalCategoryData, hiddenCategories]);
+  }, [
+    originalCategoryData,
+    hiddenCategories,
+    referenceMode,
+    categoryType,
+    netMode,
+    totalIncomeForPeriod,
+  ]);
 
   const visibleColorIndexMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -151,6 +181,30 @@ export default function CategoryDonutChart({
                   </button>
                 ))}
               </div>
+              <div className="border-border/50 my-1 border-t" />
+              <div className="flex flex-col gap-1">
+                <p className="text-text-muted px-2 py-1 text-xs font-medium">Referencia</p>
+                {[
+                  { value: 'expense-total' as const, label: 'Mis gastos' },
+                  { value: 'income-total' as const, label: 'Mi ingreso total' },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    disabled={categoryType === 'income' || netMode}
+                    onClick={() => onReferenceModeChange(option.value)}
+                    className={`rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                      referenceMode === option.value
+                        ? 'bg-surface text-text'
+                        : 'text-text-muted hover:text-text hover:bg-surface/50'
+                    } ${
+                      categoryType === 'income' || netMode ? 'pointer-events-none opacity-40' : ''
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </ChartControlsPopover>
         </div>
@@ -187,6 +241,8 @@ export default function CategoryDonutChart({
                     content={({ active, payload }) => {
                       const item = payload?.[0]?.payload;
                       if (!active || !item) return null;
+                      const usesIncomeReference =
+                        referenceMode === 'income-total' && categoryType === 'expense' && !netMode;
                       return (
                         <div className="border-border bg-surface-elevated shadow-background/30 rounded-lg border px-3 py-2 text-sm shadow-lg">
                           <p className="text-text font-medium">{item.category_name}</p>
@@ -195,7 +251,8 @@ export default function CategoryDonutChart({
                             {formatCurrency(Number(item.value), config.currency)}
                           </p>
                           <p className="text-text-muted">
-                            {item.percentage.toFixed(1)}% del subtotal
+                            {item.percentage.toFixed(1)}%
+                            {usesIncomeReference ? ' del ingreso total' : ' del subtotal'}
                           </p>
                         </div>
                       );

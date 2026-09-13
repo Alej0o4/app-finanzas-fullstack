@@ -76,7 +76,14 @@ def crear_usuario(request: Request, usuario: schemas.UserCreate, db: Session = D
 
 
 @router.get("/me", response_model=schemas.UserResponse)  # 🆕 nuevo endpoint
-def obtener_usuario_actual(current_user: models.User = Depends(get_current_user)):
+def obtener_usuario_actual(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),  # Fase 19 §19.1
+):
+    # Fase 19 §19.1.2: LIMIT 2, no COUNT(*) — solo hace falta saber si hay 2 o más,
+    # no cuántas. El filtro de deleted_at IS NULL lo aplica el with_loader_criteria global.
+    primeras_dos = db.query(models.Transaction.id).filter(models.Transaction.user_id == current_user.id).limit(2).all()
+    current_user.has_transaction_history = len(primeras_dos) >= 2
     return current_user
 
 

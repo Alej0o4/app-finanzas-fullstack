@@ -101,6 +101,9 @@ export interface UserResponse {
   preferred_locale: string;
   preferred_theme: string;
   monthly_income: number | null;
+  /** Fase 19 §19.1 — true si el usuario tiene 2+ transacciones (usuario recurrente); solo se
+   *  calcula en GET /users/me, nunca en los otros endpoints que devuelven UserResponse. */
+  has_transaction_history: boolean;
 }
 
 export interface PreferencesUpdatePayload {

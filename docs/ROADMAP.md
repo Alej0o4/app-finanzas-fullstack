@@ -648,28 +648,45 @@ categorías `user_id` no nulo, frontend apagado desde Fase 11 detrás de un flag
 
 ---
 
-## Fase 19 — Fricción post-onboarding y analítica de ingreso
+## Fase 19 — Fricción post-onboarding y analítica de ingreso ✅ completa (2026-09-12)
 
 **Objetivo:** cerrar tres fricciones encontradas en una semana de uso real desde celular.
 
-> Decidido en sesión de grilling del 2026-09-12.
+> Decidido en sesión de grilling del 2026-09-12. Implementación completa el mismo día — ver
+> `docs/specs/fase_19_spec.md` para el desglose técnico y las decisiones de diseño numeradas
+> (19.1.1–19.3.5). Verificación: pytest backend 177 passed (5 nuevos en `test_users.py` y
+> `test_dashboard.py`), `ruff check`/`format` limpios, `pnpm lint`/`format:check`/`build` limpios.
+> Los tres ítems son independientes (no comparten archivos) y se implementaron en paralelo con
+> agentes `backend-engineer`/`frontend-engineer`.
 
-- [ ] **Redirección de login condicionada al uso real, no solo al onboarding** — hoy
-      `login/page.tsx:58` redirige siempre a `/capture`, sin condición. Se agrega
-      `has_transactions` (o equivalente) a la respuesta de login/`/users/me`; con 2 o más
+- [x] **Redirección de login condicionada al uso real, no solo al onboarding** — *2026-09-12* —
+      hoy `login/page.tsx:58` redirige siempre a `/capture`, sin condición. Se agregó
+      `has_transaction_history` a `GET /users/me` (no al login, ver Decisión 19.1.1); el campo se
+      calcula con una query `LIMIT 2` (Decisión 19.1.2, sin `COUNT(*)`); con 2 o más
       transacciones, el login redirige directo a `/dashboard`.
-  - Esto resuelve la Decisión 10.1.4 de Fase 10, documentada ahí mismo como riesgo a validar con
-    datos de uso reales una vez hubiera usuarios recurrentes — ya se validó: genera exactamente
-    la fricción medible que esa decisión anticipaba.
-- [ ] **Rediseño de la card "Balance del mes"** — hoy es redundante junto a "Ingresos del Mes" /
-      "Gastos del Mes" (ver Fase 11, "Reordenar la jerarquía de las summary cards del
-      dashboard"): las mismas 3 cifras en 3 tarjetas separadas. Se fusiona en una fila compacta
-      sin eliminar el dato — sigue siendo el titular del pivote a flujo (Cambio de enfoque,
-      2026-08-22).
-- [ ] **Nueva métrica "% del ingreso por categoría" en Analítica** — complementaria a la dona
-      existente (que reparte el 100% de los *gastos*, no del ingreso). Se implementa como
-      pestaña ("Ver como % de: Gastos | Ingresos") que cambia el marco de referencia de toda la
-      vista, no como dos números combinados en la misma fila.
+  - Esto resuelve la **Decisión 10.1.4** de Fase 10, documentada ahí mismo como riesgo a validar
+    con datos de uso reales una vez hubiera usuarios recurrentes — ya se validó: genera
+    exactamente la fricción medible que esa decisión anticipaba. El frontend primea el cache de
+    TanStack Query con la respuesta de `users/me` y usa `/capture` como fallback si el fetch
+    falla (Decisiones 19.1.4/19.1.5). El flujo de registro (`register/page.tsx`) no cambia —
+    `?onboarding=1` sigue siendo el destino de un usuario recién creado.
+- [x] **Rediseño de la card "Balance del mes"** — *2026-09-12* — hoy es redundante junto a
+      "Ingresos del Mes" / "Gastos del Mes" (ver Fase 11, "Reordenar la jerarquía de las summary
+      cards del dashboard"): las mismas 3 cifras en 3 tarjetas separadas. Se fusionó en una sola
+      `SummaryCard` con la prop nueva `secondaryStats` (una fila compacta Ingresos/Gastos debajo
+      de la cifra principal, Decisión 19.2.1/19.2.2), sin eliminar el dato — sigue siendo el
+      titular del pivote a flujo (Cambio de enfoque, 2026-08-22). De paso se cerró el Hallazgo 7
+      del spec: `AccountMonthlyBalanceCard` (Fase 17) dejó de restar `income - expense` en el
+      cliente y lee `monthly_flow_balance` directo del backend (Decisión 19.2.3).
+- [x] **Nueva métrica "% del ingreso por categoría" en Analítica** — *2026-09-12* — complementaria
+      a la dona existente (que reparte el 100% de los *gastos*, no del ingreso). Se implementó
+      como grupo "Referencia" (`Mis gastos | Mi ingreso total`) dentro del popover de la dona,
+      con copy explícitamente distinto del selector "Tipo" para no confundir ambos ejes (Decisión
+      19.3.1), deshabilitado en las combinaciones sin significado de producto (Tipo=Ingresos,
+      Modo=Neto, Decisiones 19.3.2/19.3.3) y con el denominador reutilizando `totals.totalIncome`
+      ya sumado en cliente, sin endpoint nuevo (Decisión 19.3.4). La igualdad que eso presupone
+      quedó probada por el test de equivalencia `category-distribution`/`cashflow-series`
+      (Decisión 19.3.5).
 
 ---
 
