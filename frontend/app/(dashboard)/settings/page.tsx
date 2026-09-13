@@ -14,6 +14,8 @@ import EmptyState from '@/components/ui/EmptyState';
 import Select from '@/components/ui/Select';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
+import { useSetMonthlyIncome } from '@/lib/hooks/useSetMonthlyIncome';
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@/lib/hooks/useApiKeys';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
@@ -70,6 +72,40 @@ export default function SettingsPage() {
   });
   const availableCurrencies = Array.from(new Set(accounts?.map((a) => a.currency) ?? []));
 
+  // --- Ingreso mensual (Fase 22 §22.3, Decisión 22.3.1) -----------------------------
+  // El salario es un campo numérico de texto libre: pedir un PATCH en cada tecla sería
+  // ruidoso, así que usa el patrón de OnboardingIncomeStep (Input + submit explícito),
+  // no el de "cambio = guardado" del selector de moneda y el switch.
+  const { data: currentUser } = useCurrentUser();
+  const setMonthlyIncome = useSetMonthlyIncome();
+  const [incomeValue, setIncomeValue] = useState('');
+  // `currentUser` carga async — `monthly_income` puede llegar después del primer render.
+  // Se precarga ajustando estado durante el render con el patrón oficial de React
+  // ("storing information from previous renders", react.dev/reference/react/useState):
+  // `prevMonthlyIncome` recuerda el último valor visto de la query y `incomeValue === ''`
+  // evita pisar lo que el usuario esté tipeando si la query se refresca.
+  const [prevMonthlyIncome, setPrevMonthlyIncome] = useState<number | null>(null);
+  // `undefined ?? null` normaliza la query sin cargar (currentUser undefined) a null,
+  // igual que `prevMonthlyIncome` — si se comparara `undefined !== null` el estado
+  // nunca se estabilizaría y React entraría en bucle (rompió el prerender de /settings).
+  const currentIncome = currentUser?.monthly_income ?? null;
+  if (currentIncome !== prevMonthlyIncome) {
+    setPrevMonthlyIncome(currentIncome);
+    if (currentIncome != null && incomeValue === '') {
+      setIncomeValue(String(currentIncome));
+    }
+  }
+
+  const handleIncomeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsed = Number(incomeValue);
+    if (!incomeValue.trim() || Number.isNaN(parsed) || parsed < 0) return;
+    setMonthlyIncome.mutate(parsed, {
+      onSuccess: () => toast.success('Ingreso mensual actualizado.'),
+      onError: (err) => toast.error(getApiError(err)),
+    });
+  };
+
   // --- Baja de cuenta (Fase 21 §21.2) ---------------------------------------------
 
   const queryClient = useQueryClient();
@@ -95,6 +131,11 @@ export default function SettingsPage() {
     onError: (err) => setPasswordError(getApiError(err)),
   });
 
+  // Fase 22 §22.4 (Decisión 22.4.2): default seguro mientras carga — el campo de
+  // contraseña solo se oculta cuando el backend confirma que la cuenta no tiene
+  // (`has_password: false`, cuenta Google-only).
+  const requiresPassword = currentUser?.has_password !== false;
+
   const closeDeleteModal = () => {
     setIsDeleteOpen(false);
     setPassword('');
@@ -103,8 +144,10 @@ export default function SettingsPage() {
 
   const handleDeleteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password) return;
-    deleteAccount.mutate(password);
+    if (requiresPassword && !password) return;
+    // Para cuentas Google-only el backend saltea el chequeo de contraseña (Hallazgo 6) —
+    // se envía vacío sin pedirla.
+    deleteAccount.mutate(requiresPassword ? password : '');
   };
 
   // --- API keys (Fase 16 §16.1) ------------------------------------------------
@@ -229,6 +272,33 @@ export default function SettingsPage() {
             </option>
           ))}
         </Select>
+      </section>
+
+      {/* Fase 22 §22.3 (Decisión 22.3.1): salario editable, contiguo a la moneda — agrupa
+          los dos datos financieros de perfil en vez de intercalarlos con ajustes técnicos.
+          Sin historial (Decisión C2): un único valor, sobreescrito. */}
+      <section className="bg-surface border-border/70 rounded-2xl border p-4 sm:p-5">
+        <div className="mb-4">
+          <h2 className="text-text font-sans text-base font-semibold">Ingreso mensual</h2>
+          <p className="text-text-muted mt-0.5 text-xs sm:text-sm">
+            Se usa para calcular cuánto te queda cada mes en el dashboard.
+          </p>
+        </div>
+        <form onSubmit={handleIncomeSubmit} className="flex items-end gap-3">
+          <Input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="0.01"
+            label="Monto mensual aproximado"
+            value={incomeValue}
+            onChange={(e) => setIncomeValue(e.target.value)}
+            className="bg-background"
+          />
+          <Button type="submit" variant="secondary" loading={setMonthlyIncome.isPending}>
+            Guardar
+          </Button>
+        </form>
       </section>
 
       <section className="bg-surface border-border/70 rounded-2xl border p-4 sm:p-5">
@@ -389,19 +459,28 @@ export default function SettingsPage() {
               transacciones, presupuestos y categorías propias de forma permanente.
             </p>
           </div>
-          <Input
-            label="Contraseña"
-            type="password"
-            placeholder="Confirmá tu contraseña"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              if (passwordError) setPasswordError('');
-            }}
-            error={passwordError}
-            autoFocus
-            className="bg-background"
-          />
+          {/* Fase 22 §22.4 (Decisión 22.4.2): una cuenta Google-only no tiene contraseña que
+              confirmar — el backend saltea el chequeo (Hallazgo 6), pedirla solo confunde. */}
+          {requiresPassword ? (
+            <Input
+              label="Contraseña"
+              type="password"
+              placeholder="Confirmá tu contraseña"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (passwordError) setPasswordError('');
+              }}
+              error={passwordError}
+              autoFocus
+              className="bg-background"
+            />
+          ) : (
+            <p className="text-text-muted text-xs leading-relaxed">
+              Tu cuenta usa Google para iniciar sesión — no hace falta contraseña para confirmar
+              esta acción.
+            </p>
+          )}
           <div className="mt-6 flex gap-3">
             <Button type="button" variant="ghost" onClick={closeDeleteModal} className="flex-1">
               Cancelar
@@ -410,7 +489,7 @@ export default function SettingsPage() {
               type="submit"
               variant="danger"
               loading={deleteAccount.isPending}
-              disabled={!password}
+              disabled={requiresPassword && !password}
               className="flex-1"
             >
               Eliminar definitivamente
