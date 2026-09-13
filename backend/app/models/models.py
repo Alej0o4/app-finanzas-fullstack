@@ -20,7 +20,8 @@ class User(Base, SoftDeleteMixin):
     id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String, nullable=False)  # 🆕 nuevo campo
     email = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
+    password_hash = Column(String, nullable=True)  # 🔁 antes: nullable=False — Fase 20 §20.3
+    google_id = Column(String, unique=True, index=True, nullable=True)  # 🆕 Fase 20 §20.3
     preferred_currency = Column(String(3), default="COP")
     preferred_locale = Column(String(10), default="es-CO")
     preferred_theme = Column(String(10), default="dark")

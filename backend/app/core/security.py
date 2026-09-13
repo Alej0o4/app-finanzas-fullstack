@@ -45,6 +45,12 @@ EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS = 48
 # variable opcional en .env.example.
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
+# Client ID de Google para el login social (Fase 20 §20.3). Es una funcionalidad OPCIONAL:
+# a diferencia de SECRET_KEY (que firma cada JWT), nadie depende de esta variable hasta que
+# alguien use POST /auth/google. Se lee igual que FRONTEND_URL (fallo suave, sin raise) —
+# el endpoint chequea explícitamente `None` y responde 503 con mensaje claro.
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")  # None si no está configurado — opcional
+
 # 2. CONFIGURACIONES DE SEGURIDAD
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")

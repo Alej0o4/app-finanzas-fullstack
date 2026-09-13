@@ -8,7 +8,7 @@
   header (Fase 16 §16.1) — ver sección "API keys" abajo.
 - Content type esperado: `application/json`, excepto login, que usa formulario OAuth2.
 - Rate limiting: `/api/v1/auth/login`, `POST /api/v1/users/`, `/api/v1/auth/password-reset/request`,
-  `/api/v1/auth/resend-verification` y `POST /api/v1/api-keys/` (5 req/min por IP via `slowapi`), y `POST /api/v1/transactions/`
+  `/api/v1/auth/resend-verification`, `/api/v1/auth/google` y `POST /api/v1/api-keys/` (5 req/min por IP via `slowapi`), y `POST /api/v1/transactions/`
   (60 req/min — keyed por usuario cuando la autenticación es con API key, resuelto contra la
   DB para que todas las keys de un mismo usuario compartan un balde; por IP en el resto,
   Fase 16 §16.1, corregido en la revisión de seguridad post-16.1 — ver `docs/TODO.md`).
@@ -44,6 +44,53 @@ Errores esperados:
   `{"code": "EMAIL_NOT_VERIFIED", "mensaje": "..."}`. El frontend distingue este caso de
   credenciales inválidas mirando `detail.code`, no el status code (ambos son 403).
 - `429` si se exceden 5 intentos por minuto (rate limiting).
+
+### `POST /api/v1/auth/google` (Fase 20 §20.3)
+
+Login/registro con el ID token firmado de Google Identity Services. Google ya verificó la
+identidad (firma + claim `email_verified`), así que la cuenta nace (o se vincula) con
+`email_verified=true` de inmediato, sin pasar por el flujo de verificación por correo
+(Decisión P4 del spec de Fase 20) — es la única vía de registro que funciona de punta a
+punta incluso con `EMAIL_PROVIDER=console`.
+
+- Si el correo del token **no existe**: crea un `User` nuevo (sin `password_hash` — cuenta
+  solo-Google — con `google_id` seteado y `email_verified=true`) + cuenta por defecto
+  "Cuenta principal" + pre-siembra de categorías ocultas, exactamente igual que el
+  registro por contraseña (helper compartido `inicializar_datos_usuario_nuevo`).
+- Si el correo **ya existe** como cuenta con contraseña: se **vincula** automáticamente
+  (se setea `google_id` del token y `email_verified=true` si no lo estaba) en vez de crear
+  una cuenta duplicada o rechazar el login (Decisión P3). El `password_hash` no se toca —
+  la cuenta sigue pudiendo loguearse con su contraseña.
+
+Entrada (JSON):
+
+- `id_token`: el credencial (JWT firmado) que devuelve Google Identity Services al usuario.
+
+Salida — idéntica a `POST /api/v1/auth/login` (`TokenResponse`), para que el frontend
+reutilice el mismo manejo de tokens sin bifurcar lógica:
+
+- `access_token`: JWT firmado (expira en 15 min).
+- `refresh_token`: token opaco (expira en 30 días).
+- `token_type`: `bearer`.
+
+Errores esperados:
+
+- `503` si `GOOGLE_CLIENT_ID` no está configurado en el entorno — el backend arranca igual,
+  pero el endpoint avisa con un mensaje claro en vez de un `500` sin explicación (la
+  variable es opcional, como `FRONTEND_URL`, no obligatoria como `SECRET_KEY`).
+- `401` si `verify_oauth2_token` rechaza el token (firma/audiencia/emisor inválidos):
+  `"Token de Google inválido."`.
+- `403` si el claim `email_verified` del token es `false` — no se confía en un correo que
+  la propia Google reporta como no verificado, y no se crea ningún usuario.
+- `429` si se exceden 5 peticiones por minuto (rate limiting).
+
+> Cambio de esquema asociado (Fase 20 §20.3): `users.password_hash` pasó de `NOT NULL` a
+> nullable (una cuenta creada solo por Google no tiene hash), y se agregó
+> `users.google_id` (String, único, indexado, nullable — una cuenta con contraseña no lo
+> tiene hasta que se vincula con Google). Como consecuencia, `POST /api/v1/auth/login` con
+> la contraseña correcta contra una cuenta solo-Google responde `403 Credenciales
+> Inválidas` (mismo mensaje genérico que credenciales malas — anti-enumeración, no se
+> revela que la cuenta usa Google).
 
 ### `POST /api/v1/auth/refresh`
 
