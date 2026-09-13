@@ -844,6 +844,66 @@ correos/login social) — mismo criterio que ya separó el login con Google dent
 
 ---
 
+## Fase 22 — Onboarding moneda-primero, salario editable y claridad de cuentas Google
+
+**Objetivo:** cuatro detalles encontrados por el dueño del proyecto al usar el producto ya con
+Fase 20/21 en producción: el onboarding asume COP sin preguntar, el salario fijado en onboarding
+no se puede corregir después, y la interacción entre cuentas Google-only y el flujo de
+contraseña (login con password, borrado de cuenta, "olvidé mi contraseña") no es clara para el
+propio usuario ni tiene ningún tratamiento especial en el código.
+
+> Decidido en sesión de grilling del 2026-09-13. Sin usuarios reales todavía — no hace falta
+> ninguna ruta de migración con compatibilidad. Ver `docs/specs/fase_22_spec.md` para el
+> desglose técnico (decisiones A1–A3, B1, C1–C2, D1).
+
+- [ ] **Paso de moneda antes del paso de ingreso mensual en el onboarding
+      (`app/capture/page.tsx` / `OnboardingIncomeStep.tsx`).** Hoy el input de salario tiene un
+      placeholder hardcodeado en escala COP (`"Ej. 3000000"`) sin preguntar nunca la moneda —
+      `User.preferred_currency` queda en su default `"COP"` salvo que el usuario la cambie después
+      a mano en Settings (Fase 21).
+  - **Lista curada de 5 monedas** (no hay ningún precedente de lista fija/`Enum` en el código —
+    `currency`/`preferred_currency` es `str` libre en todo el backend, ver Fase 21 §17.2.4/21
+    Hallazgo 6): **COP, USD, EUR, MXN, ARS**.
+  - **La cuenta por defecto también debe quedar en la moneda elegida.** `inicializar_datos_usuario_
+    nuevo` (`backend/app/api/users.py:56`) ya crea la cuenta con `currency=usuario.preferred_
+    currency or "COP"`, pero eso corre en el mismo commit que el registro — *antes* de que el
+    wizard de onboarding cargue. Se resuelve con una actualización en cascada: al enviar el nuevo
+    paso de moneda, además de fijar `preferred_currency`, hacer `PATCH` de la cuenta por defecto
+    (guardado a que siga siendo "Cuenta principal" con saldo 0 y sin transacciones, para no tocar
+    nunca una cuenta que el usuario ya haya usado).
+  - El placeholder/símbolo del paso de ingreso se ajusta según la moneda elegida en vez de asumir
+    escala COP.
+- [ ] **Selección de categorías dentro del wizard de onboarding: reconsiderado y descartado, sin
+      cambios.** El dueño del proyecto esperaba un selector con preselección dentro del wizard,
+      pero al confirmar que Fase 18 (Decisión 18.2.1/Q2/Q3) ya decidió explícitamente lo
+      contrario — pre-siembra silenciosa de `hidden_categories` + editor post-onboarding en
+      `/categories` — se reafirma esa decisión tal cual está. No se toca `app/capture/page.tsx`
+      ni `register/page.tsx`.
+- [ ] **Salario mensual editable desde Configuración (`/settings`).** El endpoint ya existe
+      (`PATCH users/me`, el mismo que usa `useSetMonthlyIncome.ts` en onboarding) — es
+      prácticamente solo trabajo de UI. Alcance acotado a propósito: solo edición del valor
+      actual, sin historial de ingresos por mes.
+- [ ] **Campo `has_password` en `UserResponse` (`GET/PATCH /users/me`), computado a partir de
+      `password_hash is not None`.** Hoy el frontend no tiene ninguna señal de que una cuenta es
+      Google-only (`google_id` no se expone en `UserResponse`, confirmado contra `schemas.py:86-
+      92` y `frontend/types/api.ts:99-110`).
+  - Se usa para ocultar/aclarar el campo de contraseña en el modal de "Eliminar mi cuenta"
+    (`settings/page.tsx:384-404`) en vez de mostrar un texto genérico confuso para el resto de
+    usuarios — el backend ya lo trata como opcional para estas cuentas (`users.py:147-149`, solo
+    valida la contraseña `if current_user.password_hash is not None`).
+- [ ] **"Olvidé mi contraseña" para cuentas Google-only: se deja funcionar como ya funciona hoy,
+      solo con copy aclaratorio.** Verificado que el flujo de reset (`auth.py:196-292`) no tiene
+      ningún caso especial para `password_hash is None` — si una cuenta Google-only completa un
+      reset, termina con un `password_hash` real y queda como cuenta híbrida (Google + password),
+      sin ningún aviso. Esto es justo el flujo que `fase_20_spec.md` ("Fuera de alcance") dejó
+      pendiente sin diseñar ("un flujo para que alguien que se registró con Google defina una
+      contraseña después"). Decisión: no bloquearlo (no le quita ninguna capacidad al usuario) —
+      solo agregar texto explícito en la página de confirmación del reset explicando que se le
+      está creando una contraseña nueva y que podrá usar cualquiera de los dos métodos de ahí en
+      adelante. Sin cambios de backend.
+
+---
+
 ## Backlog priorizado (después del MVP)
 
 | Prioridad | Feature | Nota |
