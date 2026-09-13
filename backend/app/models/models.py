@@ -132,6 +132,25 @@ class Budget(Base, SoftDeleteMixin):
     )
 
 
+class HiddenCategory(Base):
+    """Overlay por usuario "oculta para mí" sobre `Category` (Fase 18, Decisión Q1).
+
+    No hereda `SoftDeleteMixin` a propósito: la existencia de la fila ES la señal — no hay
+    un tercer estado que un booleano interno necesite representar, y "des-ocultar" es un
+    DELETE real, no un borrado lógico (`docs/specs/fase_18_spec.md`, Decisión Q1).
+
+    La PK es compuesta (user_id, category_id): una sola fila por par, y la idempotencia
+    de `POST /categories/{id}/hide` depende de ese constraint. Sin `ondelete=` en las FKs,
+    mismo patrón que el resto del archivo — es seguro porque ni `User` ni `Category` tienen
+    ruta de borrado físico (ambas usan `SoftDeleteMixin`).
+    """
+
+    __tablename__ = "hidden_categories"
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), primary_key=True)
+    hidden_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
     id = Column(Integer, primary_key=True, index=True)

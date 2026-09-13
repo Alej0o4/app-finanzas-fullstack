@@ -70,3 +70,142 @@ class TestPoolDefaultCategories:
         `_normalizar_nombre_categoria` (`transactions.py:26-30`)."""
         pares = [(_normalizar_nombre_categoria(c["name"]), c["type"]) for c in DEFAULT_CATEGORIES]
         assert len(pares) == len(set(pares))
+
+
+# ---------------------------------------------------------------------------
+# §18.3 — Categorías "ocultas para mí".
+# ---------------------------------------------------------------------------
+# "Mercado" se usa como categoría de sistema de referencia en varios tests: además de
+# existir en el pool ampliado de §18.1, está dentro de BASE_REGISTRATION_CATEGORY_NAMES
+# (§18.2), lo que la mantiene `is_hidden: false` para un usuario recién registrado —
+# aislando lo que cada test quiere probar de la pre-siembra del registro.
+_CATEGORIA_SISTEMA_REFERENCIA = "Mercado"
+
+
+def _categoria_de_sistema(db_session, nombre: str) -> models.Category:
+    return (
+        db_session.query(models.Category)
+        .filter(models.Category.user_id.is_(None), models.Category.name == nombre)
+        .first()
+    )
+
+
+def _post_hide(client: TestClient, headers: dict, category_id: int):
+    return client.post(f"/api/v1/categories/{category_id}/hide", headers=headers)
+
+
+def _delete_hide(client: TestClient, headers: dict, category_id: int):
+    return client.delete(f"/api/v1/categories/{category_id}/hide", headers=headers)
+
+
+class TestHiddenCategories:
+    """§18.3 — endpoints POST/DELETE /hide e `is_hidden` en CategoryResponse.
+
+    Todas las pruebas — incluida la por-usuario — se hacen con dos usuarios reales
+    (`test_user`/`other_user`), no con una segunda sesión simulada, porque la ocultación
+    es estrictamente por filas de `hidden_categories` scoped a `user_id`.
+    """
+
+    def test_hide_system_category_only_hides_for_that_user(
+        self, client, test_user, other_user, db_session, seed_system_categories
+    ):
+        seed_system_categories()
+        mercado = _categoria_de_sistema(db_session, _CATEGORIA_SISTEMA_REFERENCIA)
+        assert mercado is not None
+
+        response = _post_hide(client, test_user["headers"], mercado.id)
+        assert response.status_code == 204
+
+        categorias_owner = _get_categorias(client, test_user["headers"])
+        owner_mercado = next(c for c in categorias_owner if c["id"] == mercado.id)
+        assert owner_mercado["is_hidden"] is True
+
+        # Un segundo usuario sigue viendo la misma categoría de sistema sin ocultar.
+        categorias_otro = _get_categorias(client, other_user["headers"])
+        otro_mercado = next(c for c in categorias_otro if c["id"] == mercado.id)
+        assert otro_mercado["is_hidden"] is False
+
+    def test_hide_own_category_hides_for_that_user_only(self, client, test_user, other_user, make_category):
+        propia = make_category(test_user["headers"], name="Freelance", type="income")
+
+        response = _post_hide(client, test_user["headers"], propia["id"])
+        assert response.status_code == 204
+
+        categorias_owner = _get_categorias(client, test_user["headers"])
+        assert next(c for c in categorias_owner if c["id"] == propia["id"])["is_hidden"] is True
+
+        # Las categorías propias de un usuario no son visibles para otro — el "por usuario"
+        # de las propias queda garantizado por el ownership, no por la visibilidad: el otro
+        # usuario simplemente no la ve en su listado.
+        categorias_otro = {c["id"] for c in _get_categorias(client, other_user["headers"])}
+        assert propia["id"] not in categorias_otro
+
+    def test_hide_twice_is_idempotent_single_row(self, client, test_user, db_session, seed_system_categories):
+        seed_system_categories()
+        mercado = _categoria_de_sistema(db_session, _CATEGORIA_SISTEMA_REFERENCIA)
+
+        assert _post_hide(client, test_user["headers"], mercado.id).status_code == 204
+        assert _post_hide(client, test_user["headers"], mercado.id).status_code == 204
+
+        filas = (
+            db_session.query(models.HiddenCategory).filter_by(user_id=test_user["id"], category_id=mercado.id).count()
+        )
+        assert filas == 1  # la PK compuesta no puede duplicarse
+
+    def test_delete_hide_on_not_hidden_category_is_noop(self, client, test_user, db_session, seed_system_categories):
+        seed_system_categories()
+        mercado = _categoria_de_sistema(db_session, _CATEGORIA_SISTEMA_REFERENCIA)
+
+        response = _delete_hide(client, test_user["headers"], mercado.id)
+        assert response.status_code == 204
+
+        assert (
+            db_session.query(models.HiddenCategory).filter_by(user_id=test_user["id"], category_id=mercado.id).count()
+            == 0
+        )
+
+    def test_hide_category_owned_by_third_party_returns_404(self, client, test_user, other_user, make_category):
+        categoria_del_otro = make_category(other_user["headers"], name="Privada de otro", type="expense")
+
+        response = _post_hide(client, test_user["headers"], categoria_del_otro["id"])
+        assert response.status_code == 404
+
+    def test_put_on_own_hidden_category_reports_is_hidden_true(self, client, auth_headers, make_category):
+        """Regresión del "Refinamiento" de la Decisión 18.3.2: un PUT sobre una categoría
+        propia ya oculta debe reportar `is_hidden: true` — Antes del fix, Pydantic usaba el
+        `default=False` del schema al serializar el objeto ORM (que no tiene `is_hidden`)."""
+        propia = make_category(auth_headers, name="Ocultable", type="expense")
+        assert _post_hide(client, auth_headers, propia["id"]).status_code == 204
+
+        response = client.put(
+            f"/api/v1/categories/{propia['id']}",
+            json={"name": "Ocultable renombrada", "type": "expense"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["is_hidden"] is True
+
+    def test_hidden_system_category_still_resolves_by_name_in_transactions(
+        self, client, auth_headers, db_session, make_account, seed_system_categories
+    ):
+        """Regresión de la Decisión Q7/18.3.5: ocultar "Uber" no rompe la resolución por
+        nombre de Fase 16 §16.2 — los atajos móviles siguen pudiendo capturar la categoría."""
+        seed_system_categories()
+        uber = _categoria_de_sistema(db_session, "Uber")
+        assert uber is not None
+        assert _post_hide(client, auth_headers, uber.id).status_code == 204
+
+        cuenta = make_account(auth_headers, balance="1000.00")
+        response = client.post(
+            "/api/v1/transactions/",
+            json={
+                "amount": "50.00",
+                "type": "expense",
+                "description": "viaje por shortcut",
+                "account_id": cuenta["id"],
+                "category": "Uber",
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["category_id"] == uber.id

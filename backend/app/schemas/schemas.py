@@ -244,6 +244,7 @@ class CategoryResponse(CategoryBase):
     id: int
     user_id: int | None = None
     icon: str | None = None
+    is_hidden: bool = False  # 🆕 Fase 18 — computado por usuario, no persistido en Category
 
     class Config:
         from_attributes = True
