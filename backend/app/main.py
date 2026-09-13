@@ -27,6 +27,7 @@ from app.api import (
     users,
 )
 from app.core.database import SessionLocal
+from app.core.default_categories import DEFAULT_CATEGORIES, LEGACY_DEFAULT_CATEGORY_NAMES
 from app.core.logging_config import configure_logging, request_id_var
 from app.core.rate_limit import limiter
 from app.core.weekly_summary import run_weekly_summary_job
@@ -42,27 +43,11 @@ app = FastAPI(
 # Scheduler del resumen semanal (Fase 14 §14.4, Decisión 14.4.1) — in-process, single
 # worker (el deployment es un solo proceso uvicorn sin --workers). Se arranca en startup
 # y se apaga en shutdown.
+#
+# DEFAULT_CATEGORIES / LEGACY_DEFAULT_CATEGORY_NAMES viven en app/core/default_categories.py
+# (Fase 18 §18.1) — `api/users.py` también las necesita y un import desde `main.py`
+# crearía un ciclo (main importa routers, incluido users).
 scheduler = BackgroundScheduler()
-
-DEFAULT_CATEGORIES = [
-    {"name": "Alimentación", "type": "expense", "icon": "UtensilsCrossed"},
-    {"name": "Transporte", "type": "expense", "icon": "Car"},
-    {"name": "Vivienda", "type": "expense", "icon": "House"},
-    {"name": "Salud", "type": "expense", "icon": "HeartPulse"},
-    {"name": "Educación", "type": "expense", "icon": "GraduationCap"},
-    {"name": "Entretenimiento", "type": "expense", "icon": "Gamepad2"},
-    {"name": "Cuidado personal", "type": "expense", "icon": "Heart"},
-    {"name": "Suscripción", "type": "expense", "icon": "Radio"},
-    {"name": "Otro", "type": "expense", "icon": "CircleEllipsis"},
-    {"name": "Salario", "type": "income", "icon": "Wallet"},
-    {"name": "Otros ingresos", "type": "income", "icon": "TrendingUp"},
-]
-
-LEGACY_DEFAULT_CATEGORY_NAMES = {
-    ("expense", "Otro"): "Otro (Gasto)",
-    ("income", "Otro"): "Otro (Ingreso)",
-    ("expense", "Entretenimiento"): "Ocio",
-}
 
 
 def seed_default_categories() -> None:
