@@ -48,6 +48,7 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
 - `PATCH /api/v1/users/me` (acepta `{ monthly_income }` — usado por la card "Balance del mes" del dashboard para fijar el ingreso mensual inline, Fase 11 §11.3)
 - `GET /api/v1/users/me/preferences`
 - `PATCH /api/v1/users/me/preferences`
+- `DELETE /api/v1/users/me` — elimina la cuenta del usuario autenticado (Fase 21 §21.2). Body `{ password }`; `204` si ok, `403` si la contraseña es incorrecta, `401` sin token. Irreversible (hard delete de todo el usuario).
 
 ### Cuentas
 

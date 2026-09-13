@@ -6,6 +6,7 @@ from sqlalchemy import or_
 
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash
+from app.core.user_deletion import delete_user_cascade
 from app.models import models
 
 # Cuántos meses hacia atrás cubre el seed, además del mes en curso (Fase 11, seguimiento:
@@ -104,27 +105,9 @@ def run_seed():
     try:
         existing = db.query(models.User).filter(models.User.email == "test@test.com").first()
         if existing:
-            # Orden de borrado dictado por FKs, no alfabético (Fases 7/10/13): una fila con
-            # FK NOT NULL o NULL-pero-sin-ondelete a otra tabla debe borrarse ANTES que la
-            # tabla referenciada, o la DELETE revienta con ForeignKeyViolation apenas el
-            # usuario de prueba acumula datos reales de uso normal de la app (tokens,
-            # idempotency keys, avisos de presupuesto, suscripciones push) y no solo los
-            # que el propio seed insertó la corrida anterior.
-            #   Notification.budget_id -> budgets.id (nullable, sin ondelete): antes de Budget.
-            db.query(models.Notification).filter(models.Notification.user_id == existing.id).delete()
-            db.query(models.PushSubscription).filter(models.PushSubscription.user_id == existing.id).delete()
-            db.query(models.Budget).filter(models.Budget.user_id == existing.id).delete()
-            #   IdempotencyKey.transaction_id -> transactions.id: antes de Transaction.
-            db.query(models.IdempotencyKey).filter(models.IdempotencyKey.user_id == existing.id).delete()
-            db.query(models.Transaction).filter(models.Transaction.user_id == existing.id).delete()
-            db.query(models.Account).filter(models.Account.user_id == existing.id).delete()
-            db.query(models.Category).filter(models.Category.user_id == existing.id).delete()
-            db.query(models.RefreshToken).filter(models.RefreshToken.user_id == existing.id).delete()
-            db.query(models.PasswordResetToken).filter(models.PasswordResetToken.user_id == existing.id).delete()
-            db.query(models.EmailVerificationToken).filter(
-                models.EmailVerificationToken.user_id == existing.id
-            ).delete()
-            db.delete(existing)
+            # Orden de borrado dictado por FKs (ninguna tiene ondelete=CASCADE): lo
+            # implementa delete_user_cascade en user_deletion.py (Decisión A3, Fase 21).
+            delete_user_cascade(db, existing)
             db.flush()
 
         user = models.User(

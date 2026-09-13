@@ -62,6 +62,7 @@ cd frontend && pnpm dev                          # http://localhost:3000
 | Docker dev (hot-reload) | `docker compose -f docker-compose.yml -f docker-compose.dev.yml up` |
 | Docker logs | `docker compose logs -f backend` |
 | Docker seed | `docker compose exec backend python -c "from app.core.seed import run_seed; run_seed()"` |
+| Docker delete user | `docker compose exec backend python -c "from app.core.database import SessionLocal; from app.core.user_deletion import delete_user_by_email; db = SessionLocal(); print(delete_user_by_email(db, 'email@ejemplo.com')); db.close()"` — Fase 21, en el CLAUDE.md raíz |
 
 No hay typecheck ni test configurados. Formateadores: `ruff` (backend) + `prettier` (frontend).
 

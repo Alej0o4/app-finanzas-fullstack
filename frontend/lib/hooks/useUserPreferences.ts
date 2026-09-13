@@ -43,6 +43,15 @@ export function useUserPreferences() {
     onSuccess: (_data, body) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.userPreferences() });
 
+      // B1 (spec Fase 21): `currentUser()` es la fuente real de
+      // `user?.preferred_currency` que leen dashboard/accounts/analytics, y
+      // `categoryBreakdown()` tiene clave fija con la moneda pasada por query param —
+      // invalidar ambas acá evita que el dashboard sirva el desglose de la moneda vieja
+      // desde cache hasta un reload manual (Hallazgo 8).
+      if (body.preferred_currency) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.currentUser() });
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() });
+      }
       if (body.preferred_theme) {
         updateConfig({ theme: body.preferred_theme });
       }

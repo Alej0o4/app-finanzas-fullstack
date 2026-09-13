@@ -797,15 +797,20 @@ login con Google/Apple es viable en el estado actual del proyecto.
 separados de la Fase 20 a propósito por ser un tema distinto (gestión de cuenta, no
 correos/login social) — mismo criterio que ya separó el login con Google dentro de la Fase 20.
 
-> Decidido en sesión del 2026-09-13, sin spec todavía. `frontend/app/(dashboard)/settings/page.tsx`
-> documenta explícitamente que hoy "no es el lugar para anticipar ajustes de cuenta (contraseña,
-> email, etc.) que ninguna fase pide" — esta fase es la que los pide.
+> Decidido en sesión del 2026-09-13. Implementación completa el mismo día en el worktree
+> `fase-21-spec` — ver `docs/specs/fase_21_spec.md` para el desglose técnico (decisiones
+> A1–A6 para la baja, B1 para la cache de moneda, Hallazgos 1/8 que corrigen bugs fuera
+> del ROADMAP literal). Verificación: pytest backend 200 passed (6 nuevos: `TestEliminarCuenta`
+> y `test_seed.py` con `PRAGMA foreign_keys=ON` para que la regresión no sea vacua en SQLite),
+> `ruff check`/`format` limpios; frontend `pnpm lint`/`format:check`/`build` + `tsc --noEmit`
+> limpios. Los dos ítems se implementaron en paralelo con agentes
+> `backend-engineer`/`frontend-engineer`.
 
-- [ ] **Selector de moneda principal en Settings.** El backend ya soporta `preferred_currency`
+- [x] **Selector de moneda principal en Settings.** — *2026-09-13* — El backend ya soporta `preferred_currency`
       en `User` (Fase 8, `GET`/`PATCH /api/v1/users/me/preferences`) — falta exponerlo en la UI
       de `/settings`. Alcance chico: agregar el selector y confirmar qué partes del dashboard
       dependen de esta preferencia para revalidar cache tras el cambio.
-- [ ] **Baja de cuenta de usuario (self-service) + script de limpieza.** No confundir con
+- [x] **Baja de cuenta de usuario (self-service) + script de limpieza.** — *2026-09-13* — No confundir con
       `Account` (cuenta bancaria) — esto es borrar el `User` completo. Doble motivación: (1) los
       usuarios reales deben poder eliminar su cuenta si quieren, (2) sirve para limpiar usuarios
       de prueba de la base sin tocar producción a mano.
@@ -822,10 +827,11 @@ correos/login social) — mismo criterio que ya separó el login con Google dent
     en que quien tiene acceso shell al deploy ya está en el círculo de confianza (mismo nivel que
     leer `.env` o correr migraciones). Un único endpoint `DELETE /api/v1/users/me` (o similar) y
     un script comparten la misma función de borrado — sin duplicar la lógica de cascada.
-  - Pendiente de spec antes de implementar (mismo criterio que Fases 17/18/20): qué cascada
-    exacta sobre accounts/transactions/categories/budgets/refresh tokens/API keys, si es soft o
-    hard delete, y el flujo de confirmación en el frontend (doble confirmación, ¿reingresar
-    contraseña?).
+  - **Spec completa en `docs/specs/fase_21_spec.md`** (2026-09-13): resuelve la cascada exacta
+    (12 tablas, borrado en orden de FKs — `ApiKey` y `HiddenCategory` olvidadas en `seed.py`
+    corregidas en esta fase), hard delete (no soft-delete), endpoint `DELETE /api/v1/users/me`
+    con reingreso de contraseña + rate limit, y script de limpieza vía `delete_user_by_email()`.
+    Flujo de confirmación en el frontend: modal con `Input type="password"` y doble fricción.
 
 ---
 
