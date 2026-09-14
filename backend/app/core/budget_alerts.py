@@ -8,7 +8,7 @@ no reintroducir el bug de mezclar monedas que ya se corrigió una vez ahí.
 
 import logging
 from calendar import monthrange
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import func
@@ -41,6 +41,16 @@ def spent_por_categoria_y_moneda(
     """
     primer_dia = datetime(year, month, 1)
     ultimo_dia = datetime(year, month, monthrange(year, month)[1], 23, 59, 59)
+    # Si `month`/`year` es el mes en curso, el límite superior real es hoy, no el fin de
+    # calendario del mes — de lo contrario una transacción con fecha futura (mismo mes)
+    # ya cuenta como "gastado" acá aunque category-distribution/cashflow-series (Fase 11
+    # §11.4/Fase 17 §17.1.3) la excluyan por acotar a `hoy`. Para un mes ya cerrado, `hoy`
+    # cae después de `ultimo_dia` y no cambia nada. Para un mes FUTURO (presupuesto/gasto
+    # ya creados para el próximo período, ver test_two_budgets_same_category_
+    # different_currencies_evaluate_own_spent_by_currency) no se acota — `hoy` está antes
+    # de que ese mes empiece, y ese período se evalúa completo desde que se crea.
+    ahora = datetime.now(UTC).replace(tzinfo=None)
+    limite = ahora if primer_dia <= ahora <= ultimo_dia else ultimo_dia
 
     spent_rows = (
         db.query(
@@ -53,7 +63,7 @@ def spent_por_categoria_y_moneda(
             models.Transaction.type == "expense",
             models.Transaction.category_id.in_(category_ids),
             models.Transaction.date >= primer_dia,
-            models.Transaction.date <= ultimo_dia,
+            models.Transaction.date <= limite,
         )
         .group_by(models.Transaction.category_id, models.Transaction.currency)
         .all()

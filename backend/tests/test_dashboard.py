@@ -6,7 +6,8 @@ Hasta Fase 11 no existía ningún test de app/api/dashboard.py (hallazgo 11 del 
 de Fase 11) — este archivo cierra esa deuda además de cubrir los fixes.
 """
 
-from datetime import UTC, datetime
+from calendar import monthrange
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -801,3 +802,114 @@ class TestCategoryDistributionCashflowEquivalence:
         assert total_income_categorias == total_income_serie
         # Sanidad del test: la igualdad no es trivial (0 == 0)
         assert total_income_serie == Decimal("2500000.00")
+
+
+class TestFutureDatedTransactionExcludedFromCurrentMonth:
+    """Bug encontrado en verificación manual (2026-09-13): una transacción con fecha
+    futura DENTRO del mes en curso contaba como "ya gastado/recibido" en /summary y en
+    budgets-progress (que acotaban a fin de mes calendario), pero quedaba afuera de
+    category-distribution/cashflow-series (que ya acotaban a `hoy`, Fase 11 §11.4) — el
+    dashboard mostraba un total distinto al de sus propios gráficos de desglose para el
+    mismo período. Ambos ahora acotan a `hoy` cuando el mes consultado es el mes en
+    curso (ver `dashboard.obtener_resumen` y `budget_alerts.spent_por_categoria_y_moneda`)."""
+
+    @staticmethod
+    def _fecha_futura_mismo_mes() -> str | None:
+        hoy = datetime.now(UTC)
+        ultimo_dia_mes = monthrange(hoy.year, hoy.month)[1]
+        if hoy.day >= ultimo_dia_mes:
+            return None  # hoy es el último día del mes: no hay "futuro" dentro del mismo mes
+        manana = hoy + timedelta(days=1)
+        return datetime(manana.year, manana.month, manana.day, tzinfo=UTC).isoformat()
+
+    def test_summary_excludes_future_dated_expense_in_current_month(
+        self, client, auth_headers, make_account, make_category
+    ):
+        fecha_futura = self._fecha_futura_mismo_mes()
+        if fecha_futura is None:
+            pytest.skip("hoy es el último día del mes")
+
+        # `highlighted=True`: si el usuario ya tiene alguna cuenta destacada (p. ej. la
+        # cuenta por defecto que crea el onboarding), /summary solo agrega destacadas —
+        # sin esto, las transacciones de esta cuenta quedarían afuera del resumen por
+        # ese filtro y no por el bug bajo prueba.
+        cuenta = make_account(auth_headers, currency="COP", balance="1000000.00", highlighted=True)
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="30000.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="500000.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+            date=fecha_futura,
+        )
+
+        resumen = client.get("/api/v1/dashboard/summary", headers=auth_headers)
+        assert resumen.status_code == 200, resumen.text
+        gasto_cop = next(
+            item["total"] for item in resumen.json()["monthly_expense_by_currency"] if item["currency"] == "COP"
+        )
+        assert Decimal(str(gasto_cop)) == Decimal("30000.00")
+
+        # category-distribution no calcula "hoy" internamente — recibe start/end del
+        # caller. El frontend real pasa `end_date=hoy` (accounts/[id]/page.tsx,
+        # dashboard/page.tsx, analytics/page.tsx) — mismo rango acá, para comparar contra
+        # el mismo período que /summary de arriba.
+        hoy = datetime.now(UTC)
+        distribucion = client.get(
+            "/api/v1/dashboard/category-distribution",
+            params={
+                "start_date": datetime(hoy.year, hoy.month, 1, tzinfo=UTC).isoformat(),
+                "end_date": hoy.isoformat(),
+            },
+            headers=auth_headers,
+        )
+        assert Decimal(str(distribucion.json()[0]["total"])) == Decimal("30000.00")
+
+    def test_budgets_progress_excludes_future_dated_expense_in_current_month(
+        self, client, auth_headers, make_account, make_category
+    ):
+        fecha_futura = self._fecha_futura_mismo_mes()
+        if fecha_futura is None:
+            pytest.skip("hoy es el último día del mes")
+
+        cuenta = make_account(auth_headers, currency="COP", balance="1000000.00")
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        month, year = _now_month_year()
+        presupuesto = client.post(
+            "/api/v1/budgets/",
+            json={
+                "category_id": categoria["id"],
+                "amount_limit": "100000.00",
+                "currency": "COP",
+                "month": month,
+                "year": year,
+            },
+            headers=auth_headers,
+        )
+        assert presupuesto.status_code == 200, presupuesto.text
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="500000.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+            date=fecha_futura,
+        )
+
+        progreso = client.get("/api/v1/dashboard/budgets-progress", headers=auth_headers)
+        assert progreso.status_code == 200, progreso.text
+        fila = next(p for p in progreso.json() if p["budget_id"] == presupuesto.json()["id"])
+        assert Decimal(str(fila["spent"])) == Decimal("0.00")

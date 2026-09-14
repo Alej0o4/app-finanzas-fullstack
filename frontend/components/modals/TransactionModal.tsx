@@ -52,8 +52,9 @@ export default function TransactionModal({
   });
 
   const displayedCategories = useMemo(() => {
-    if (showAllCategories) return categories || [];
-    return categories?.filter((category) => category.type === type) || [];
+    const visibleCategories = categories?.filter((category) => !category.is_hidden) || [];
+    if (showAllCategories) return visibleCategories;
+    return visibleCategories.filter((category) => category.type === type);
   }, [categories, type, showAllCategories]);
 
   const createMutation = useMutation({

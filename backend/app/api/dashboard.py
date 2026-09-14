@@ -54,6 +54,13 @@ def obtener_resumen(db: Session = Depends(get_db), current_user: models.User = D
     primer_dia = datetime(hoy.year, hoy.month, 1)
     ultimo_dia_mes = calendar.monthrange(hoy.year, hoy.month)[1]
     ultimo_dia = datetime(hoy.year, hoy.month, ultimo_dia_mes, 23, 59, 59)
+    # El límite superior real de "este mes" es hoy, no el fin de calendario del mes —
+    # de lo contrario una transacción con fecha futura (mismo mes) cuenta como "ya
+    # gastado/recibido" aquí pero queda afuera de category-distribution/cashflow-series,
+    # que sí acotan a `hoy` (Fase 11 §11.4/Fase 17 §17.1.3) — mismo bug para meses ya
+    # cerrados: ahí `hoy` cae después de `ultimo_dia` y el límite efectivo sigue siendo
+    # el fin de mes real.
+    limite_gasto = min(ultimo_dia, hoy.replace(tzinfo=None))
 
     # Transacciones del mes solo de cuentas destacadas (o todas si no hay)
     tx_account_ids = db.query(models.Account.id).filter(*account_filter).subquery()
@@ -69,7 +76,7 @@ def obtener_resumen(db: Session = Depends(get_db), current_user: models.User = D
             models.Transaction.type == "income",
             models.Transaction.account_id.in_(tx_account_ids),
             models.Transaction.date >= primer_dia,
-            models.Transaction.date <= ultimo_dia,
+            models.Transaction.date <= limite_gasto,
         )
         .group_by(models.Transaction.currency)
         .all()
@@ -86,7 +93,7 @@ def obtener_resumen(db: Session = Depends(get_db), current_user: models.User = D
             models.Transaction.type == "expense",
             models.Transaction.account_id.in_(tx_account_ids),
             models.Transaction.date >= primer_dia,
-            models.Transaction.date <= ultimo_dia,
+            models.Transaction.date <= limite_gasto,
         )
         .group_by(models.Transaction.currency)
         .all()
