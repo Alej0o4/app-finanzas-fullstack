@@ -1,0 +1,18 @@
+# Plantilla — no es un archivo funcional. El real (`rclone.conf`, gitignorado) lo genera
+# `rclone config` en el HOST (necesita browser para el login OAuth con la cuenta de Google
+# de Oikos) y después se copia a la raíz del repo. Ver docs/BACKUPS.md para el paso a paso.
+#
+# Formato esperado — dos remotos encadenados: uno de Google Drive (oikos-gdrive) y uno de
+# cifrado por encima (oikos-crypt), que es el que usa scripts/backup/entrypoint.sh
+# (BACKUP_REMOTE=oikos-crypt:oikos-backups por default en docker-compose.yml).
+#
+# [oikos-gdrive]
+# type = drive
+# scope = drive
+# token = {"access_token":"...","token_type":"Bearer","refresh_token":"...","expiry":"..."}
+#
+# [oikos-crypt]
+# type = crypt
+# remote = oikos-gdrive:oikos-backups
+# password = ***cifrado por rclone, no es texto plano***
+# password2 = ***cifrado por rclone, no es texto plano (salt)***

@@ -104,6 +104,19 @@ ni de cuentas irrecuperables. **Bloquea todas las fases siguientes.**
 - [x] **Script `scripts/backup.sh`** — `pg_dump` con rotación de 7 días — 1d *(2026-08-22)*
   - Con datos de terceros esto pasa de molesto a inaceptable.
 
+- [x] **Backup automático + offsite cifrado** — 1d *(2026-09-13, ver docs/BACKUPS.md)*
+  - El script existía pero nada lo disparaba (bloqueante en docs/TODO.md): sin servidor
+    24/7 (portátil, no dedicado), un cron a hora fija se salta backups cada vez que la
+    máquina está apagada en ese momento.
+  - Solución: servicio `backup` en `docker-compose.yml`, disparado en cada
+    `docker compose up` en vez de por reloj — dumpea si el último backup local supera
+    `BACKUP_MIN_INTERVAL_HOURS` (default 20h), y si hay un remoto rclone configurado, sube
+    el dump cifrado (rclone crypt) a Google Drive de la cuenta de Oikos
+    (`oikos.notificaciones.non.eply@gmail.com`). Retención 7d local / 30d nube.
+  - Setup de rclone (OAuth + password de cifrado) es manual, una sola vez, por navegador —
+    no automatizable desde el código. `scripts/restore.sh --remote <archivo>` restaura
+    directo desde la nube.
+
 - [x] **Secretos fuera de `docker-compose.yml`** — 4h *(2026-08-22)*
   - Hoy: `POSTGRES_PASSWORD: oikos_secret` hardcodeado y `SECRET_KEY:-changeme_in_production` como default silencioso.
   - El default silencioso debe fallar el arranque, no continuar.

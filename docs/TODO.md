@@ -21,13 +21,6 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🔴 Bloqueantes — antes de que exista un usuario que no seas tú
 
-- [ ] **Backup de PostgreSQL: script listo, sin programar.**
-  - `scripts/backup.sh` existe y funciona (`pg_dump` + gzip + rotación de 7 días,
-    `scripts/restore.sh` para restaurar), pero no hay ningún cron ni scheduler que lo dispare
-    automáticamente todavía — hay que correrlo a mano o programarlo vos mismo.
-  - Con datos de terceros, no tener el cron armado pasa de molesto a inaceptable.
-  - Acción: `crontab -e` en el host de despliegue, ej. `0 3 * * * cd /ruta/al/repo && ./scripts/backup.sh`.
-
 ---
 
 ## 🟠 Bugs confirmados (auditoría 2026-08-22)
@@ -160,6 +153,7 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 | 2026-08-22 | Regex CORS de Tailscale condicional a `ENABLE_TAILSCALE_CORS`, ya no incondicional |
 | 2026-08-22 | Logging estructurado (JSON a stdout) + `X-Request-ID` |
 | 2026-08-22 | `scripts/backup.sh` con rotación de 7 días (falta programar el cron, ver bloqueante arriba) |
+| 2026-09-13 | Backup automático programado — servicio `backup` en docker-compose.yml (dispara en cada `docker compose up`, no cron de host) + subida cifrada a Google Drive (cuenta de Oikos) vía rclone crypt, retención 7d local / 30d nube. Ver docs/BACKUPS.md. Reemplaza el bloqueante de arriba |
 | 2026-07-14 | datetime.utcnow() migrado a datetime.now(timezone.utc) |
 | 2026-07-14 | Formularios migrados de raw input/select a componentes UI |
 | 2026-07-14 | Bug multi-moneda en `/dashboard/summary` (agrupación por moneda) |

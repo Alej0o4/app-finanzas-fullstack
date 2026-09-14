@@ -44,6 +44,22 @@ services:
       timeout: 5s
       retries: 3
 
+  backup:
+    build: ./scripts/backup
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Definí POSTGRES_PASSWORD en .env}
+      BACKUP_REMOTE: ${BACKUP_REMOTE:-oikos-crypt:oikos-backups}
+      BACKUP_MIN_INTERVAL_HOURS: ${BACKUP_MIN_INTERVAL_HOURS:-20}
+      BACKUP_RETENTION_DAYS_LOCAL: ${BACKUP_RETENTION_DAYS_LOCAL:-7}
+      BACKUP_RETENTION_DAYS_REMOTE: ${BACKUP_RETENTION_DAYS_REMOTE:-30}
+    volumes:
+      - ./backups:/backups
+      - ${RCLONE_CONFIG_PATH:-./rclone.conf}:/config/rclone.conf:ro
+
   frontend:
     build:
       context: ./frontend
