@@ -14,8 +14,12 @@ backend/.pytest_cache/
 backend/.env
 /.env
 
-# Backups locales de la base de datos (scripts/backup.sh)
+# Backups locales de la base de datos (scripts/backup.sh, servicio `backup` de docker-compose)
 backups/
+
+# Config de rclone (contiene el token OAuth de Drive y la clave de cifrado) — nunca commitear.
+# Ver rclone.conf.example y docs/BACKUPS.md.
+/rclone.conf
 
 # Base de datos SQLite
 *.db
