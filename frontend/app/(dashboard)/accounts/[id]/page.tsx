@@ -328,12 +328,22 @@ export default function AccountDetailPage() {
       />
 
       {/* Ejecución de Presupuestos — mismo mapeo y estados que dashboard/page.tsx:244-281,
-          filtrado a la moneda de esta cuenta (Decisión 17.1.3/P4). */}
+          filtrado a la moneda de esta cuenta (Decisión 17.1.3/P4). `Budget` no tiene
+          account_id — el spent de cada fila es el agregado de TODAS las cuentas del
+          usuario en esta moneda, no solo el de esta cuenta. El título y la aclaración de
+          abajo lo hacen explícito (verificación manual 2026-09-13: sin esto, dos cuentas
+          en la misma moneda hacían parecer que el gasto de una "se filtraba" a la otra). */}
       <div>
-        <div className="mb-6 flex items-center space-x-2">
+        <div className="mb-1 flex items-center space-x-2">
           <PieChart className="text-primary" size={20} />
-          <h2 className="text-text font-sans text-xl font-bold">Ejecución de Presupuestos</h2>
+          <h2 className="text-text font-sans text-xl font-bold">
+            Presupuestos en {account.currency}
+          </h2>
         </div>
+        <p className="text-text-muted mb-6 text-xs">
+          Suma el gasto de todas tus cuentas en {account.currency}, no solo el de esta cuenta — los
+          presupuestos no están atados a una cuenta puntual.
+        </p>
 
         {loadingBudgets ? (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
