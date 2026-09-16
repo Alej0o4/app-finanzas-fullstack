@@ -9,6 +9,12 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 > **Contexto del cambio:** varios items estaban clasificados como baja prioridad bajo el
 > supuesto "solo lo uso yo, en red privada Tailscale". Ese supuesto ya no aplica.
 
+> **2026-09-15 — Auditoría completa** (seguridad, arquitectura/mantenibilidad, UX/frontend)
+> corrida a pedido del usuario. Ítems nuevos marcados `(auditoría 2026-09-15)` abajo. También
+> corrigió una afirmación desactualizada en `CLAUDE.md` sobre `EMAIL_PROVIDER` (decía
+> "console en todos lados"; en realidad `smtp` está configurado y verificado en el
+> despliegue real desde 2026-09-12 — solo falta en `backend/.env` para correr sin Docker).
+
 > **2026-09-06 — Tailscale Funnel activado para uso personal diario.** Oikos ahora es
 > alcanzable en `https://<host>.<tailnet>.ts.net` desde fuera de la red privada (celular,
 > datos móviles), no solo desde IPs `100.x.x.x` del tailnet. Sigue siendo de un solo usuario
@@ -21,9 +27,62 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🔴 Bloqueantes — antes de que exista un usuario que no seas tú
 
+- [ ] **Account takeover vía auto-link de Google OAuth (auditoría de seguridad 2026-09-15).**
+  - `POST /users/` crea el `User` con `password_hash` utilizable de inmediato — solo el
+    *login* está bloqueado hasta verificar el email (`auth.py` `login()`), no la creación
+    de la cuenta.
+  - `login_google` (`auth.py`, función `login_google`) busca al usuario solo por email y,
+    si existe, marca `email_verified = True` y linkea `google_id` **sin tocar
+    `password_hash` ni pedir re-autenticación**.
+  - Exploit: un atacante registra `victima@gmail.com` con una contraseña propia (nunca la
+    verifica — cuesta un solo request, rate-limitado). Cuando la víctima real hace login
+    con Google usando ese mismo email, el backend encuentra la fila del atacante, la marca
+    `email_verified=True` y linkea el `google_id` de la víctima a ella. La contraseña del
+    atacante ahora es válida contra `POST /auth/login` (ya con `email_verified=True`):
+    control total de la cuenta y los datos financieros de la víctima, sin que note nada
+    distinto al loguearse con Google.
+  - El comentario en el código que descarta "no es account takeover" solo contempla el
+    caso de Google linkeando una cuenta-contraseña *ya verificada*, no el de un atacante
+    plantando deliberadamente una fila sin verificar para interceptar un login de Google
+    futuro.
+  - Fix sugerido: al auto-linkear, invalidar/anular el `password_hash` existente (o exigir
+    la contraseña actual para confirmar el link) en vez de confiar en una fila sin
+    verificar.
+
 ---
 
-## 🟠 Bugs confirmados (auditoría 2026-08-22)
+## 🟠 Bugs confirmados (auditoría 2026-08-22 + 2026-09-15)
+
+- [ ] **El dashboard confunde "error de red" con "no hay datos" (auditoría 2026-09-15).**
+  - `frontend/app/(dashboard)/page.tsx` (queries de summary/budgets-progress/recent-
+    transactions/category-breakdown) nunca chequean `isError` de `useQuery` — solo
+    `isLoading`. Un request fallido se ve idéntico a "todavía no tenés presupuestos/
+    transacciones": la página más importante de la app no avisa que algo se rompió, ni
+    ofrece reintentar. Mismo patrón de fallo silencioso que `QuickTransactionModal` (ver
+    arriba), pero en la pantalla principal.
+
+- [ ] **Formulario de ingreso mensual inline en el dashboard falla en silencio
+  (auditoría 2026-09-15).**
+  - `frontend/app/(dashboard)/page.tsx` (`onSubmit` del ingreso mensual): input inválido
+    hace `return` sin toast ni error de campo. Es además el único formulario de la app sin
+    `noValidate` (todos los demás siguen el patrón de Fase 12 §12.8), así que mezcla
+    validación nativa del browser con un guard custom que nunca se ve.
+
+- [ ] **`POST /push/subscribe` no valida ownership del `endpoint` (auditoría 2026-09-15).**
+  - `backend/app/api/push.py` hace upsert por `endpoint` y reasigna `user_id =
+    current_user.id` sin chequear si ese endpoint ya pertenecía a otro usuario. Explotable
+    solo si un atacante puede obtener/repetir el endpoint push de otra persona (no es
+    adivinable, pero un dispositivo compartido, sync de browser, o el riesgo ya aceptado de
+    JWT-en-localStorage podrían filtrarlo). Falta el chequeo de ownership igual.
+
+- [ ] **`docker-compose.yml` publica backend (8000) y frontend (3000) en todas las
+  interfaces, no solo Tailscale (auditoría 2026-09-15, sin confirmar explotabilidad real).**
+  - Los puertos se publican como `"8000:8000"`/`"3000:3000"` (bind a `0.0.0.0`). Si el host
+    tiene cualquier otra ruta de red alcanzable (IP pública, otra VPN, NAT de nube), la API
+    queda expuesta directo, saltándose la terminación TLS de Funnel y las protecciones de
+    borde que el modelo de amenaza de este documento asume. Verificar si el host real tiene
+    otra interfaz pública antes de priorizar; si la tiene, acotar el bind (`127.0.0.1:` o
+    la IP del tailnet) en vez de `0.0.0.0`.
 
 - [ ] **Un usuario nuevo no puede registrar nada.**
   - `account_id` es obligatorio y un usuario recién registrado tiene 0 cuentas.
@@ -65,6 +124,16 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     implementar cuando `Dockerfile`/`docker-compose.yml` pasen a `--workers > 1` o más de una
     réplica.
 
+- [ ] **`frontend/docs/STATE_AND_FETCHING.md` (el mapa de query keys/invalidación) está
+  congelado en Fase 16 (auditoría 2026-09-15).**
+  - No menciona nada de Fases 17-22: `queryKeys.accounts.monthlySummary`/`budgetsProgress`
+    por cuenta (`frontend/lib/queryKeys.ts`), los params `account_id`/`currency` agregados
+    a `analytics.cashflow`/`analytics.categories`, las keys de categorías ocultas, ni las
+    mutations de settings de Fase 21/22. CLAUDE.md lo señala como el mapa autoritativo —
+    hoy es engañoso para cualquiera (agente o humano) que confíe en él en vez de grepear.
+    Mismo nivel de disciplina que ya se exige para `API_REFERENCE.md`/`API_CONTRACT.md`:
+    actualizar en el próximo touch a cualquiera de estas áreas.
+
 - [ ] **JWT guardado en `localStorage`** (`frontend/lib/api.ts`).
   - Riesgo de robo vía XSS. Alternativa: cookie `httpOnly` + `secure` + `sameSite`.
   - Sube de prioridad al salir de la red privada Tailscale. Mitigado parcialmente en Fase 7:
@@ -74,9 +143,36 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🟢 Modularidad — revisar cuando el código duela al modificarlo
 
-- [ ] **Lógica de negocio embebida en routers FastAPI.**
-  - Los routers hacen de controller + service + repository. `app/services/` no existe.
-  - El caso más grave es la lógica contable, duplicada en crear/actualizar/eliminar transacción.
+- [ ] **Lógica de negocio embebida en routers FastAPI — y la excepción ya existente apunta
+  al lado equivocado (actualizado 2026-09-15).**
+  - Los routers hacen de controller + service + repository. `app/services/` no existe
+    formalmente, pero ya emergió una capa de servicio ad-hoc dentro de `app/core/`:
+    `budget_alerts.py`, `budget_recurrence.py`, `notification_dispatch.py`,
+    `weekly_summary.py`, `user_deletion.py` — cada uno usado por 2+ routers o el scheduler.
+  - El problema: la extracción pasó para notificaciones/scheduling, **no** para el código
+    de mayor riesgo. La lógica contable (signo del delta: `income → +` / `expense → -`)
+    sigue copy-pasteada tres veces en `transactions.py` (`crear_transaccion`,
+    `actualizar_transaccion`, `eliminar_transaccion`) — es el código que mueve la plata de
+    otras personas, y es el que debería haberse extraído primero, no al final.
+  - Cuando se cree `app/services/`, empezar por un `ledger.py`/`transaction_accounting.py`
+    con esa lógica, usando `budget_alerts.py` como plantilla de cómo ya funciona
+    core/-como-service en este repo.
+
+- [ ] **`schemas.py` (462 líneas, 49 clases) está más forzado que `models.py` (341 líneas,
+  14 clases) — priorizar partir schemas primero (auditoría 2026-09-15).**
+  - Los modelos están bien comentados y cada clase es autocontenida; separarlos no es
+    urgente. Los schemas mezclan auth/transacciones/notificaciones/push/API-keys en un solo
+    archivo plano sin separación por dominio — es el candidato real si solo se hace uno.
+
+- [ ] **`budget_recurrence.py` sin test dedicado para la lógica de generación de períodos
+  (auditoría 2026-09-15).**
+  - `test_budgets.py` solo verifica que el flag `is_recurring` sobreviva el round-trip;
+    nunca ejercita `ensure_recurring_budgets_for_period` directamente. Es justamente el fix
+    del bug "los presupuestos no sobreviven al cambio de mes" (ver 🟠 arriba) — vale la pena
+    blindarlo con test antes de tocarlo de nuevo.
+  - Nota positiva de la misma auditoría: Google OAuth, API keys y push sí están bien
+    testeados (`test_auth.py`, `test_api_keys.py`, `test_push.py`) — mejor cobertura de lo
+    que sugiere la narrativa de CLAUDE.md. El frontend sigue en cero tests, confirmado.
 
 - [ ] **Sin capa de excepciones de dominio.**
   - Todo `raise HTTPException` mezclado con reglas de negocio.
