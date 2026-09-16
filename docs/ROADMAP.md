@@ -936,6 +936,116 @@ propio usuario ni tiene ningún tratamiento especial en el código.
 
 ---
 
+## Fase 23 — Cierre de vulnerabilidad crítica: account takeover vía Google OAuth 🔴 bloqueante
+
+**Objetivo:** cerrar el account takeover confirmado en `login_google` antes de tocar cualquier
+otra fase nueva de esta tanda — ya hay al menos un usuario real fuera de la cuenta de pruebas.
+**Bloquea las Fases 24 y 25.**
+
+> Encontrado en la auditoría completa del 2026-09-15 (`CODE_REVIEW.md`, sección Seguridad) y
+> confirmado leyendo `backend/app/api/auth.py:62-122`: `login_google` auto-linkea una cuenta
+> existente por email y marca `email_verified=True` sin invalidar ni tocar `password_hash`. Un
+> atacante puede pre-registrar el email de la víctima con su propia contraseña (nunca la
+> verifica — un solo request, rate-limitado) y, cuando la víctima hace login real con Google, el
+> backend encuentra esa fila y la deja verificada: la contraseña del atacante queda válida contra
+> `/auth/login` para la cuenta de la víctima. El propio test
+> `test_existing_unverified_password_account_is_autolinked` (`backend/tests/test_auth.py:525`)
+> asserta el comportamiento vulnerable como esperado (`password_hash is not None` tras el link) —
+> confirma que la decisión de diseño se tomó, pero el análisis de amenaza detrás del comentario
+> "no es account takeover" (`auth.py:90-93`) no contempló este escenario. Tracked en
+> `docs/TODO.md` 🔴 Bloqueantes.
+
+- [ ] **Invalidar/reconfirmar el `password_hash` existente al auto-linkear una cuenta de
+      Google** — 1-2d
+  - Opción A: anular `password_hash` al vincular (la cuenta queda Google-only hasta que el
+    usuario fije una contraseña nueva desde Settings, mismo flujo ya existente para cuentas
+    Google-only puras, ver Fase 22).
+  - Opción B: exigir confirmación de la contraseña actual antes de completar el auto-link (más
+    fricción sobre un flujo hoy silencioso, pero preserva la contraseña si el usuario la quiere
+    seguir usando).
+  - Decisión de producto pendiente entre A y B antes de implementar — ninguna se eligió todavía.
+- [ ] **Corregir `test_existing_unverified_password_account_is_autolinked`** para reflejar el
+      comportamiento arreglado (hoy asserta el bug como correcto) + agregar un test explícito del
+      escenario hostil (atacante pre-registra el email, víctima hace login con Google, la
+      contraseña del atacante deja de ser válida contra esa cuenta) — parte del mismo esfuerzo de
+      arriba, no una tarea separada.
+- [ ] **Ownership check en `POST /push/subscribe`** (`backend/app/api/push.py:33-51`) antes de
+      reasignar `user_id` al hacer upsert por `endpoint` — 1-2h. Severidad baja (el endpoint no es
+      adivinable) pero el chequeo falta igual.
+
+---
+
+## Fase 24 — UX: fallos silenciosos del flujo principal
+
+**Objetivo:** cerrar el patrón de "falla silenciosa" que la auditoría del 2026-09-15 encontró
+repetido en el flujo de mayor tráfico (dashboard + captura), más dos bugs de datos de bajo
+esfuerzo detectados en la misma revisión.
+
+> Decidido a partir de `CODE_REVIEW.md` (secciones UX y 🟠 Bugs confirmados de `docs/TODO.md`).
+> Incluye `AccountUpdate.currency`, ya trackeado suelto en "Pendientes heredados de fases
+> anteriores" más abajo — se retira de esa lista y se agenda aquí.
+
+- [ ] **`isError` + retry visible en las 4 queries del dashboard**
+      (`frontend/app/(dashboard)/page.tsx:45-64` — summary, budgets-progress,
+      recent-transactions, category-breakdown) — 2-3h. Hoy un fallo de red se ve idéntico a "sin
+      datos todavía", sin aviso ni forma de reintentar, en la pantalla que el usuario abre
+      primero.
+- [ ] **`noValidate` + error de campo visible en el formulario de ingreso mensual inline del
+      dashboard** — 1-2h. Es el único formulario del proyecto sin el patrón de Fase 12 §12.8:
+      input inválido hace `return` sin toast ni error de campo, mezclando validación nativa del
+      browser con un guard custom que nunca se ve.
+- [ ] **`PUT /accounts/{id}` debe aplicar cambios de `currency`** (`backend/app/api/accounts.py`,
+      `actualizar_cuenta`) — 1h. `AccountUpdate` hereda el campo de `AccountBase`, pero el
+      endpoint solo actualiza `name`/`type`/`highlighted` — el frontend envía `currency` sin
+      ningún efecto ni error.
+- [ ] **Exponer `category_icon` en `category-distribution`** — 1h. `CategoryBreakdownBars`
+      (Fase 11 §11.4) cae siempre al ícono genérico `Wallet` porque el schema
+      `CategoryDistributionData` no trae el campo, a diferencia de `BudgetProgress`. Cosmético,
+      no afecta montos ni orden.
+
+---
+
+## Fase 25 — Arquitectura: capa de servicios, tipos compartidos y deuda de tests
+
+**Objetivo:** consolidar en una sola fase la deuda de arquitectura/modularidad que tanto la
+auditoría del 2026-09-15 como "Pendientes heredados de fases anteriores" venían señalando por
+separado — empezando por el código de mayor riesgo (contabilidad de transacciones), no por lo
+más fácil de extraer.
+
+> Decidido a partir de `CODE_REVIEW.md` (secciones Arquitectura, Mantenibilidad y Modularidad).
+> Fusiona y retira de "Pendientes heredados de fases anteriores" más abajo: extraer custom hooks
+> de queries, migrar JWT a cookies httpOnly, crear `app/services/` + `app/core/exceptions.py`, y
+> partir `models.py`/`schemas.py` por dominio.
+
+- [ ] **Extraer el delta contable de `transactions.py` a una función compartida y testeada**
+      (`backend/app/api/transactions.py:186,312,393-395` — `crear_transaccion`/
+      `eliminar_transaccion`/`actualizar_transaccion`) — 1d. Primer módulo real de
+      `app/services/` (ej. `ledger.py`), usando `app/core/budget_alerts.py` como plantilla de
+      cómo ya funciona una capa de servicio ad-hoc en este repo — no arrancar `app/services/`
+      desde cero con código de bajo riesgo.
+- [ ] **Partir `schemas.py` por dominio** (462 líneas / 49 clases — auth, transacciones,
+      notificaciones, push, API keys en un solo archivo plano) — 1-2d. Prioridad sobre partir
+      `models.py` (341 líneas / 14 clases, ya bien encapsulado por clase, no urgente).
+- [ ] **Capa de excepciones de dominio** (`app/core/exceptions.py`) para desacoplar
+      `raise HTTPException` de las reglas de negocio en los routers — 1-2 semanas.
+- [ ] **Extraer custom hooks de queries** (`useAccounts`, `useCategories`, `useTransactions`) —
+      reemplaza el `useQuery` + `queryFn` inline repetido por página — 2-3d.
+- [ ] **Migrar JWT de `localStorage` a cookies `httpOnly`** (`frontend/lib/api.ts`) — 1-2
+      semanas, toca todo el flujo de auth del frontend. Sube de prioridad por el Funnel público
+      activo desde 2026-09-06.
+- [ ] **Actualizar `frontend/docs/STATE_AND_FETCHING.md`** con las query keys de Fases 17-22
+      (`monthlySummary`/`budgetsProgress` por cuenta, params `account_id`/`currency` en
+      analytics, keys de categorías ocultas, mutations de settings) — 2-3h. Hoy está congelado en
+      Fase 16 y `CLAUDE.md` lo señala como mapa autoritativo — engaña a quien confíe en él en vez
+      de grepear `lib/queryKeys.ts`.
+- [ ] **Test dedicado para `ensure_recurring_budgets_for_period`**
+      (`backend/app/core/budget_recurrence.py`) — 0.5-1d. `test_budgets.py` solo verifica que el
+      flag `is_recurring` sobreviva el round-trip; nunca ejercita la función de generación de
+      períodos directamente — es justo la lógica detrás del fix de Fase 8 ("los presupuestos no
+      sobreviven al cambio de mes").
+
+---
+
 ## Backlog priorizado (después del MVP)
 
 | Prioridad | Feature | Nota |
@@ -996,15 +1106,13 @@ Estas estaban "fuera de scope" bajo el supuesto de un solo usuario. Ese supuesto
 - [ ] Acceder y verificar el flujo completo desde celular vía Tailscale (Fase 4A).
 - [ ] Seed automático tras el primer startup en Docker (Fase 4B).
 - [ ] Script `scripts/deploy.sh` (git pull → docker compose up --build -d) (Fase 4B).
-- [ ] Decidir `AccountUpdate.currency` — el schema hereda el campo pero `accounts.py` lo ignora silenciosamente.
-  Sube de prioridad tras Fase 22: es la razón por la que el onboarding se acotó a 3 monedas
-  (COP/USD/EUR) en vez de las 5 que decidió la sesión de grilling — sin poder editar la
-  moneda de una cuenta, MXN/ARS quedarían sin forma de corregirse si el guard de la cascada
-  las saltea. Resolver esto (y ampliar el dropdown de creación en `accounts/page.tsx`) es
-  prerrequisito para volver a las 5 monedas originales.
-- [ ] Extraer custom hooks de queries (`useAccounts`, `useCategories`, `useTransactions`).
-- [ ] Migrar JWT de `localStorage` a cookies httpOnly (sube de prioridad al salir de Tailscale).
-- [ ] Crear capa `app/services/` y `app/core/exceptions.py`; partir `models.py` y `schemas.py` por dominio.
+> **2026-09-16 — cuatro ítems de esta lista se fusionaron en las Fases 24/25** (ver arriba) tras
+> la auditoría completa del 2026-09-15, para que queden bajo el mismo flujo de fases numeradas en
+> vez de trackeados sueltos: `AccountUpdate.currency` (→ Fase 24), extraer custom hooks de
+> queries, migrar JWT a cookies httpOnly, y crear `app/services/`/`app/core/exceptions.py` +
+> partir `models.py`/`schemas.py` (→ Fase 25, las últimas dos como ítems separados). La nota sobre
+> por qué `AccountUpdate.currency` subió de prioridad tras Fase 22 (acota el onboarding a 3
+> monedas en vez de 5) sigue vigente — ver Fase 24 para la tarea en sí.
 - [x] **`focus-visible` y `htmlFor`/`id` en el modal de edición manual de `transactions/page.tsx`** (Fase 9). Resuelto en Fase 12 §12.8.3: el modal migró a los componentes `Input`/`Select` compartidos (con validación por campo y foco en el primer error).
   - El modal de editar transacción (líneas ~495-577) usa `<input>`/`<select>` crudos en vez de los
     componentes `Input`/`Select` ya corregidos en Fase 9 (§9.1/§9.2 de `docs/specs/fase_09_spec.md`):

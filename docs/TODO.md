@@ -48,6 +48,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   - Fix sugerido: al auto-linkear, invalidar/anular el `password_hash` existente (o exigir
     la contraseña actual para confirmar el link) en vez de confiar en una fila sin
     verificar.
+  - **→ Programado en `docs/ROADMAP.md` Fase 23** (2026-09-16), fase bloqueante que frena las
+    Fases 24/25.
 
 ---
 
@@ -60,6 +62,7 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     transacciones": la página más importante de la app no avisa que algo se rompió, ni
     ofrece reintentar. Mismo patrón de fallo silencioso que `QuickTransactionModal` (ver
     arriba), pero en la pantalla principal.
+  - **→ Programado en `docs/ROADMAP.md` Fase 24** (2026-09-16).
 
 - [ ] **Formulario de ingreso mensual inline en el dashboard falla en silencio
   (auditoría 2026-09-15).**
@@ -67,6 +70,7 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     hace `return` sin toast ni error de campo. Es además el único formulario de la app sin
     `noValidate` (todos los demás siguen el patrón de Fase 12 §12.8), así que mezcla
     validación nativa del browser con un guard custom que nunca se ve.
+  - **→ Programado en `docs/ROADMAP.md` Fase 24** (2026-09-16).
 
 - [ ] **`POST /push/subscribe` no valida ownership del `endpoint` (auditoría 2026-09-15).**
   - `backend/app/api/push.py` hace upsert por `endpoint` y reasigna `user_id =
@@ -74,30 +78,34 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     solo si un atacante puede obtener/repetir el endpoint push de otra persona (no es
     adivinable, pero un dispositivo compartido, sync de browser, o el riesgo ya aceptado de
     JWT-en-localStorage podrían filtrarlo). Falta el chequeo de ownership igual.
+  - **→ Programado en `docs/ROADMAP.md` Fase 23** (2026-09-16).
 
 - [ ] **`docker-compose.yml` publica backend (8000) y frontend (3000) en todas las
-  interfaces, no solo Tailscale (auditoría 2026-09-15, sin confirmar explotabilidad real).**
-  - Los puertos se publican como `"8000:8000"`/`"3000:3000"` (bind a `0.0.0.0`). Si el host
-    tiene cualquier otra ruta de red alcanzable (IP pública, otra VPN, NAT de nube), la API
-    queda expuesta directo, saltándose la terminación TLS de Funnel y las protecciones de
-    borde que el modelo de amenaza de este documento asume. Verificar si el host real tiene
-    otra interfaz pública antes de priorizar; si la tiene, acotar el bind (`127.0.0.1:` o
-    la IP del tailnet) en vez de `0.0.0.0`.
+  interfaces, no solo Tailscale (auditoría 2026-09-15).**
+  - Los puertos se publican como `"8000:8000"`/`"3000:3000"` (bind a `0.0.0.0`).
+  - **Verificado con el usuario (2026-09-16): el host no tiene ninguna otra interfaz de red
+    pública** (solo Tailscale) — el riesgo queda confirmado como teórico/bajo por ahora. Se
+    deja anotado, sin tarea de fase: revisar de nuevo si el despliegue alguna vez gana otra
+    ruta de red (IP pública directa, otra VPN, NAT de nube).
 
-- [ ] **Un usuario nuevo no puede registrar nada.**
-  - `account_id` es obligatorio y un usuario recién registrado tiene 0 cuentas.
-  - `QuickTransactionModal` hace `if (!effectiveAccountId || ...) return;` — **falla en silencio**:
-    el botón "Registrar" no hace nada, sin error ni aviso.
-  - Doble fix: cuenta por defecto al registrarse + señal de error en el submit.
+- [x] **Un usuario nuevo no puede registrar nada — obsoleto, ya resuelto.** *(detectado como
+  desactualizado el 2026-09-16, al convertir el audit en fases del ROADMAP)*
+  - Este ítem quedó sin marcar tras la Fase 8 (2026-08-23, "Cuenta por defecto al registrarse"):
+    `inicializar_datos_usuario_nuevo` (`backend/app/api/users.py:48-90`) ya crea una cuenta por
+    defecto en el registro desde esa fecha. Verificado contra el código actual — el bug no
+    existe más.
 
-- [ ] **Los presupuestos no sobreviven al cambio de mes.**
-  - `Budget` exige `month` + `year` fijos, sin recurrencia.
-  - El presupuesto de enero desaparece en febrero → dashboard vacío → se rompe el loop
-    de retención (registro → feedback → ajuste).
+- [x] **Los presupuestos no sobreviven al cambio de mes — obsoleto, ya resuelto.** *(detectado
+  como desactualizado el 2026-09-16, misma pasada que el ítem anterior)*
+  - `Budget.is_recurring` (`backend/app/models/models.py:107`) y `budget_recurrence.py`
+    (`ensure_recurring_budgets_for_period`) ya resuelven esto desde Fase 8 (2026-08-23,
+    "Presupuestos recurrentes"). Verificado contra el código actual. El único gap real
+    relacionado es la falta de test directo sobre esa función — ver Fase 25 del ROADMAP.
 
 - [ ] **`Account PUT` ignora cambios de `currency` silenciosamente.**
   - `AccountUpdate` hereda `currency` de `AccountBase`, pero `accounts.py` solo actualiza
     `name`, `type` y `highlighted`. El frontend envía `currency` sin efecto.
+  - **→ Programado en `docs/ROADMAP.md` Fase 24** (2026-09-16).
 
 ---
 
@@ -133,11 +141,13 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     hoy es engañoso para cualquiera (agente o humano) que confíe en él en vez de grepear.
     Mismo nivel de disciplina que ya se exige para `API_REFERENCE.md`/`API_CONTRACT.md`:
     actualizar en el próximo touch a cualquiera de estas áreas.
+  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
 
 - [ ] **JWT guardado en `localStorage`** (`frontend/lib/api.ts`).
   - Riesgo de robo vía XSS. Alternativa: cookie `httpOnly` + `secure` + `sameSite`.
   - Sube de prioridad al salir de la red privada Tailscale. Mitigado parcialmente en Fase 7:
     el TTL del access token bajó de 60 a 15 min, así que la ventana de robo es más corta.
+  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
 
 ---
 
@@ -157,32 +167,41 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   - Cuando se cree `app/services/`, empezar por un `ledger.py`/`transaction_accounting.py`
     con esa lógica, usando `budget_alerts.py` como plantilla de cómo ya funciona
     core/-como-service en este repo.
+  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
 
 - [ ] **`schemas.py` (462 líneas, 49 clases) está más forzado que `models.py` (341 líneas,
   14 clases) — priorizar partir schemas primero (auditoría 2026-09-15).**
   - Los modelos están bien comentados y cada clase es autocontenida; separarlos no es
     urgente. Los schemas mezclan auth/transacciones/notificaciones/push/API-keys en un solo
     archivo plano sin separación por dominio — es el candidato real si solo se hace uno.
+  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
 
 - [ ] **`budget_recurrence.py` sin test dedicado para la lógica de generación de períodos
   (auditoría 2026-09-15).**
   - `test_budgets.py` solo verifica que el flag `is_recurring` sobreviva el round-trip;
-    nunca ejercita `ensure_recurring_budgets_for_period` directamente. Es justamente el fix
-    del bug "los presupuestos no sobreviven al cambio de mes" (ver 🟠 arriba) — vale la pena
-    blindarlo con test antes de tocarlo de nuevo.
+    nunca ejercita `ensure_recurring_budgets_for_period` directamente — es justo la lógica
+    detrás de la resolución de Fase 8 ("los presupuestos no sobreviven al cambio de mes",
+    ver nota de obsolescencia en 🟠 arriba) — vale la pena blindarlo con test antes de
+    tocarlo de nuevo.
   - Nota positiva de la misma auditoría: Google OAuth, API keys y push sí están bien
     testeados (`test_auth.py`, `test_api_keys.py`, `test_push.py`) — mejor cobertura de lo
     que sugiere la narrativa de CLAUDE.md. El frontend sigue en cero tests, confirmado.
+  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
 
 - [ ] **Sin capa de excepciones de dominio.**
   - Todo `raise HTTPException` mezclado con reglas de negocio.
+  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
 
 - [ ] **`schemas.py` y `models.py` como archivos únicos.**
   - Manejable a 6 entidades; el nuevo MVP agrega varias (tokens API, suscripciones push,
     avisos) → partir por dominio.
+  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16, mismo ítem que el de arriba
+    sobre `schemas.py`/`models.py` — entrada duplicada preexistente, se deja para no perder
+    historial pero apunta a la misma tarea).
 
 - [ ] **Frontend: fetching duplicado por página.**
   - `useQuery` + `queryFn` inline repetido. Extraer a `useAccounts`, `useCategories`, etc.
+  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
 
 - [ ] **`transactions/page.tsx` creció a 604 líneas.**
   - El code review de julio reportaba 380. La tendencia importa más que el número.
@@ -205,6 +224,7 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     `CategoryDistributionData` no trae `category_icon` como sí lo hace `BudgetProgress`.
   - Bajo impacto: cosmético, no afecta montos ni orden. Agregar el campo al schema y al
     query de `obtener_distribucion_categorias` si se quiere ícono real por fila.
+  - **→ Programado en `docs/ROADMAP.md` Fase 24** (2026-09-16).
 
 ---
 
