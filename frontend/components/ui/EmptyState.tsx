@@ -4,14 +4,17 @@ interface EmptyStateProps {
   icon: ReactNode;
   message: string;
   description?: string;
+  /** Fase 24 §24.1 — slot opcional para una acción (ej. botón "Reintentar"). */
+  action?: ReactNode;
 }
 
-export default function EmptyState({ icon, message, description }: EmptyStateProps) {
+export default function EmptyState({ icon, message, description, action }: EmptyStateProps) {
   return (
     <div className="text-text-muted flex flex-col items-center p-12 text-center">
       <div className="mb-3">{icon}</div>
       <p className="text-sm font-medium">{message}</p>
       {description && <p className="text-text-muted/70 mt-1 text-xs">{description}</p>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }

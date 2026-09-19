@@ -13,6 +13,8 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
+from app.models import models
+
 
 def _now_month_year() -> tuple[int, int]:
     now = datetime.now(UTC)
@@ -517,6 +519,35 @@ class TestCategoryDistributionCurrency:
         filas = response.json()
         assert len(filas) == 1
         assert Decimal(str(filas[0]["total"])) == Decimal("50.00")
+
+    def test_response_includes_category_icon(self, client, auth_headers, db_session, make_account, make_category):
+        """Fase 24 §24.4: category-distribution expone category_icon, igual que
+        BudgetProgress. El endpoint POST /categories/ no acepta icon en el body
+        (CategoryCreate no tiene ese campo, ver categories.py:22-41), así que el icon
+        se fija directo en la sesión de test — mismo criterio que register_and_login
+        fija email_verified directo (conftest.py:130)."""
+        cuenta = make_account(auth_headers, currency="COP")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        db_session.query(models.Category).filter(models.Category.id == categoria["id"]).update({"icon": "Utensils"})
+        db_session.commit()
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="10000.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+        )
+
+        response = client.get(
+            "/api/v1/dashboard/category-distribution",
+            params=_current_month_range_params(),
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        fila = response.json()[0]
+        assert fila["category_icon"] == "Utensils"
 
 
 class TestCategoryDistributionAccountFilter:

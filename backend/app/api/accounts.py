@@ -193,9 +193,29 @@ def actualizar_cuenta(
     if not cuenta or cuenta.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="La cuenta a actualizar no existe o no tienes permisos.")
 
-    cuenta.name = cuenta_actualizada.name
-    cuenta.type = cuenta_actualizada.type
-    cuenta.highlighted = cuenta_actualizada.highlighted
+    # Fase 24 §24.3 (Decisión C1): actualización parcial real — solo se aplican los
+    # campos presentes en el body, no los defaults del schema (antes, un PUT que
+    # omitía `highlighted` lo reseteaba a False en cada edición, Hallazgo 4).
+    campos_enviados = cuenta_actualizada.model_fields_set
+
+    if "name" in campos_enviados:
+        cuenta.name = cuenta_actualizada.name
+    if "type" in campos_enviados:
+        cuenta.type = cuenta_actualizada.type
+    if "highlighted" in campos_enviados:
+        cuenta.highlighted = cuenta_actualizada.highlighted
+
+    # Fase 24 §24.3 (Decisión C2/C4): el guard solo dispara si el valor cambia de
+    # verdad Y la cuenta tiene transacciones activas — mismo status/estilo de mensaje
+    # que `eliminar_cuenta` (el filtro global de soft-delete ya excluye borradas).
+    if "currency" in campos_enviados and cuenta_actualizada.currency != cuenta.currency:
+        tiene_transacciones = db.query(models.Transaction).filter(models.Transaction.account_id == account_id).first()
+        if tiene_transacciones:
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede cambiar la moneda de una cuenta con transacciones asociadas.",
+            )
+        cuenta.currency = cuenta_actualizada.currency
 
     db.commit()
     db.refresh(cuenta)

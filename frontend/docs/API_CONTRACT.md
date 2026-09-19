@@ -64,7 +64,14 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
   `Decimal` llegan serializados como `string` (Decisión 15.6) — el frontend los normaliza
   con `Number(...)` antes de formatear (ver `AccountMonthlyBalanceCard`).
 - `POST /api/v1/accounts/`
-- `PUT /api/v1/accounts/{account_id}`
+- `PUT /api/v1/accounts/{account_id}` — actualización **parcial** desde Fase 24 §24.3
+  (Decisión C1): solo aplica los campos presentes en el body, sin resetear a los defaults del
+  schema los que se omitan (antes, omitir `highlighted` lo dejaba en `false`). `currency` solo
+  se aplica si la cuenta **no** tiene transacciones activas; en caso contrario responde `400`
+  con `detail` como string plano ("No se puede cambiar la moneda de una cuenta con
+  transacciones asociadas."). Reenviar la misma moneda nunca dispara el guard. El frontend web
+  **no envía `currency` en este PUT** (el modal de edición no tiene selector de moneda) — el
+  cambio queda efectivo solo para callers directos de la API.
 - `PATCH /api/v1/accounts/{account_id}/highlighted`
 - `DELETE /api/v1/accounts/{account_id}`
 - `POST /api/v1/accounts/{account_id}/reconcile` (Fase 16 §16.4) — recalcula `balance` desde
@@ -173,6 +180,10 @@ ignoran.
   pasando `account_id` + `currency=account.currency` a ambos endpoints (`cashflow-series` y
   `category-distribution`) — si solo se pasara `account_id` sin la moneda de esa cuenta, el
   backend cae a `preferred_currency` y una cuenta en otra moneda muestra $0 en todo.
+  Desde Fase 24 §24.4 cada fila de la respuesta incluye `category_icon: string | null` — el
+  ícono real de la categoría (misma fuente que `BudgetProgress.category_icon`), `null` si la
+  categoría no tiene uno asignado (el caso común de las creadas por el usuario vía
+  `POST /categories/`).
 
 ### Notificaciones (Fase 13 §13.5)
 

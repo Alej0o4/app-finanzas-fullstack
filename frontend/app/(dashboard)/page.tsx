@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { PieChart, Tags } from 'lucide-react';
+import { AlertCircle, PieChart, Tags } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -9,7 +9,7 @@ import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useSetMonthlyIncome } from '@/lib/hooks/useSetMonthlyIncome';
 import { useAppConfig } from '@/providers/AppConfigProvider';
-import { Suspense, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
 import BudgetRing from '@/components/charts/BudgetRing';
 import CategoryBreakdownBars from '@/components/charts/CategoryBreakdownBars';
 import SummaryCard from '@/components/ui/SummaryCard';
@@ -31,6 +31,10 @@ function DashboardScreen() {
   const { data: user } = useCurrentUser();
   const searchParams = useSearchParams();
   const [monthlyIncomeInput, setMonthlyIncomeInput] = useState('');
+  // Fase 24 §24.2 (Decisión B1-B2): error de campo inline + ref para mover el foco al fallar
+  // la validación. Mismo patrón que la Decisión 12.8.1 de Fase 12, sin librería nueva.
+  const [monthlyIncomeError, setMonthlyIncomeError] = useState<string | null>(null);
+  const monthlyIncomeRef = useRef<HTMLInputElement>(null);
 
   const now = new Date();
   // .toISOString() (no formateo manual): manda el instante UTC real. Un string armado a mano
@@ -42,28 +46,44 @@ function DashboardScreen() {
   // La moneda preferida del usuario; config.currency es su espejo desde preferencias.
   const preferredCurrency = user?.preferred_currency ?? config.currency;
 
-  const { data: summary, isLoading: loadingSummary } = useQuery<DashboardSummary>({
+  const {
+    data: summary,
+    isLoading: loadingSummary,
+    isError: summaryError,
+    refetch: refetchSummary,
+  } = useQuery<DashboardSummary>({
     queryKey: queryKeys.dashboard.summary(),
     queryFn: async () => (await api.get('dashboard/summary')).data,
   });
 
-  const { data: budgetsProgress, isLoading: loadingBudgets } = useQuery<BudgetProgress[]>({
+  const {
+    data: budgetsProgress,
+    isLoading: loadingBudgets,
+    isError: budgetsError,
+    refetch: refetchBudgets,
+  } = useQuery<BudgetProgress[]>({
     queryKey: queryKeys.budgets.progress(),
     queryFn: async () => (await api.get('dashboard/budgets-progress')).data,
   });
 
-  const { data: recentTransactionsData, isLoading: loadingRecentTransactions } = useQuery<
-    PaginatedResponse<Transaction>
-  >({
+  const {
+    data: recentTransactionsData,
+    isLoading: loadingRecentTransactions,
+    isError: recentTransactionsError,
+    refetch: refetchRecentTransactions,
+  } = useQuery<PaginatedResponse<Transaction>>({
     queryKey: queryKeys.dashboard.recentTransactions(),
     queryFn: async () => (await api.get('transactions/', { params: { limit: 5 } })).data,
   });
 
   // Desglose de gastos del mes por categoría (Fase 11 §11.4). Decisión 11.1.1: se pasa
   // `currency` explícito aunque el backend ya defaultea a la moneda preferida.
-  const { data: categoryBreakdown, isLoading: loadingCategoryBreakdown } = useQuery<
-    CategoryDistributionItem[]
-  >({
+  const {
+    data: categoryBreakdown,
+    isLoading: loadingCategoryBreakdown,
+    isError: categoryBreakdownError,
+    refetch: refetchCategoryBreakdown,
+  } = useQuery<CategoryDistributionItem[]>({
     queryKey: queryKeys.dashboard.categoryBreakdown(),
     queryFn: async () =>
       (
@@ -183,8 +203,18 @@ function DashboardScreen() {
       {/* Summary Cards — la card principal mide flujo mensual (Fase 11 §11.3); el saldo total
           de cuentas vive ahora en /accounts como vista secundaria (§11.5). */}
       <div className="space-y-6">
+        {/* Fase 24 §24.1 (Decisión A2): bloque de error inline, mismo tono visual que
+            CashflowChart.tsx:96-99 — distingue "falló la query" de "sin datos todavía". */}
         {loadingSummary ? (
           <Skeleton className="h-44 rounded-2xl" />
+        ) : summaryError ? (
+          <div className="border-border text-text-muted flex h-44 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm">
+            <AlertCircle size={20} />
+            <p>No se pudo cargar el resumen del mes.</p>
+            <Button variant="secondary" size="sm" onClick={() => refetchSummary()}>
+              Reintentar
+            </Button>
+          </div>
         ) : (
           <SummaryCard
             label="Balance del mes"
@@ -201,11 +231,15 @@ function DashboardScreen() {
             ) : summary ? (
               <form
                 className="mt-2 w-full space-y-2"
+                noValidate
                 onSubmit={(e) => {
                   e.preventDefault();
                   const parsed = Number(monthlyIncomeInput);
-                  if (monthlyIncomeInput.trim() === '' || Number.isNaN(parsed) || parsed < 0)
-                    return;
+                  if (monthlyIncomeInput.trim() === '' || Number.isNaN(parsed) || parsed < 0) {
+                    setMonthlyIncomeError('Ingresa un monto válido (0 o mayor).');
+                    return monthlyIncomeRef.current?.focus();
+                  }
+                  setMonthlyIncomeError(null);
                   setMonthlyIncomeMutation.mutate(parsed, {
                     onSuccess: () => toast.success('Ingreso mensual guardado'),
                     onError: (error) => toast.error(getApiError(error)),
@@ -217,15 +251,16 @@ function DashboardScreen() {
                 </p>
                 <div className="flex items-center gap-2">
                   <Input
+                    ref={monthlyIncomeRef}
                     type="number"
                     inputMode="decimal"
-                    required
                     min={0}
                     step="0.01"
                     aria-label="Ingreso mensual"
                     placeholder={`Ej. 3000000 (${preferredCurrency})`}
                     value={monthlyIncomeInput}
                     onChange={(e) => setMonthlyIncomeInput(e.target.value)}
+                    error={monthlyIncomeError ?? undefined}
                     className="bg-background"
                   />
                   <Button type="submit" loading={setMonthlyIncomeMutation.isPending}>
@@ -257,6 +292,16 @@ function DashboardScreen() {
               </div>
             ))}
           </div>
+        ) : budgetsError ? (
+          <EmptyState
+            icon={<AlertCircle size={48} className="opacity-20" />}
+            message="No se pudo cargar el progreso de presupuestos."
+            action={
+              <Button variant="secondary" size="sm" onClick={() => refetchBudgets()}>
+                Reintentar
+              </Button>
+            }
+          />
         ) : !budgetsProgress || budgetsProgress.length === 0 ? (
           <EmptyState
             icon={<PieChart size={48} className="opacity-20" />}
@@ -286,7 +331,12 @@ function DashboardScreen() {
           <h2 className="text-text font-sans text-xl font-bold">Gastos por Categoría</h2>
         </div>
 
-        <CategoryBreakdownBars data={categoryBreakdown} isLoading={loadingCategoryBreakdown} />
+        <CategoryBreakdownBars
+          data={categoryBreakdown}
+          isLoading={loadingCategoryBreakdown}
+          isError={categoryBreakdownError}
+          onRetry={() => refetchCategoryBreakdown()}
+        />
       </div>
 
       {/* Recent Transactions */}
@@ -316,6 +366,16 @@ function DashboardScreen() {
                 </div>
               ))}
             </div>
+          ) : recentTransactionsError ? (
+            <EmptyState
+              icon={<AlertCircle size={48} className="opacity-20" />}
+              message="No se pudieron cargar las transacciones recientes."
+              action={
+                <Button variant="secondary" size="sm" onClick={() => refetchRecentTransactions()}>
+                  Reintentar
+                </Button>
+              }
+            />
           ) : !recentTransactions || recentTransactions.length === 0 ? (
             <EmptyState
               icon={<PieChart size={48} className="opacity-20" />}

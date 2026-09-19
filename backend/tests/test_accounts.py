@@ -258,3 +258,97 @@ class TestMonthlySummary:
     def test_nonexistent_account_returns_404(self, client, auth_headers):
         response = client.get("/api/v1/accounts/999999/monthly-summary", headers=auth_headers)
         assert response.status_code == 404
+
+
+class TestUpdateAccount:
+    def test_updates_name_and_type_without_touching_currency_or_highlighted(self, client, auth_headers, make_account):
+        """Fase 24 §24.3 (Decisión C1): un PUT que omite currency/highlighted no los
+        resetea a los defaults del schema — regresión directa del bug confirmado para
+        `highlighted` (Hallazgo 4)."""
+        cuenta = make_account(auth_headers, name="Original", type="cash", currency="USD", highlighted=True)
+
+        response = client.put(
+            f"/api/v1/accounts/{cuenta['id']}",
+            json={"name": "Renombrada", "type": "debit"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        actualizada = response.json()
+        assert actualizada["name"] == "Renombrada"
+        assert actualizada["type"] == "debit"
+        assert actualizada["currency"] == "USD"  # sin tocar
+        assert actualizada["highlighted"] is True  # sin tocar (antes: se reseteaba a False)
+
+    def test_applies_currency_change_when_account_has_no_transactions(self, client, auth_headers, make_account):
+        """Fase 24 §24.3 (Decisión C2): el caso feliz — cuenta recién creada, sin
+        historial, el cambio de moneda se aplica de verdad (antes: se ignoraba en
+        silencio, 200 sin efecto)."""
+        cuenta = make_account(auth_headers, currency="COP")
+
+        response = client.put(
+            f"/api/v1/accounts/{cuenta['id']}",
+            json={"name": cuenta["name"], "type": cuenta["type"], "currency": "USD"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["currency"] == "USD"
+
+    def test_blocks_currency_change_when_account_has_active_transaction(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """Fase 24 §24.3 (Decisión C2): el guard real — mismo status/estilo de mensaje
+        que eliminar_cuenta (accounts.py:231-233), mismo criterio de 'operación que no
+        tiene sentido con historial existente'."""
+        cuenta = make_account(auth_headers, currency="COP")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        tx = client.post(
+            "/api/v1/transactions/",
+            json={"amount": "50.00", "type": "expense", "account_id": cuenta["id"], "category_id": categoria["id"]},
+            headers=auth_headers,
+        )
+        assert tx.status_code == 200, tx.text
+
+        response = client.put(
+            f"/api/v1/accounts/{cuenta['id']}",
+            json={"name": cuenta["name"], "type": cuenta["type"], "currency": "USD"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 400
+        assert "moneda" in response.json()["detail"].lower()
+
+        # La cuenta conserva su moneda original — el bloqueo es real, no cosmético.
+        sin_cambios = client.get(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).json()
+        assert sin_cambios["currency"] == "COP"
+
+    def test_allows_update_with_same_currency_even_with_transactions(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """Fase 24 §24.3 (Decisión C2): el guard solo dispara si el valor cambia de
+        verdad — renombrar/retipear una cuenta con transacciones sigue funcionando
+        igual que hoy, incluso si el body reenvía la misma moneda."""
+        cuenta = make_account(auth_headers, currency="COP")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        client.post(
+            "/api/v1/transactions/",
+            json={"amount": "50.00", "type": "expense", "account_id": cuenta["id"], "category_id": categoria["id"]},
+            headers=auth_headers,
+        )
+
+        response = client.put(
+            f"/api/v1/accounts/{cuenta['id']}",
+            json={"name": "Otro nombre", "type": cuenta["type"], "currency": "COP"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["name"] == "Otro nombre"
+        assert response.json()["currency"] == "COP"
+
+    def test_foreign_account_returns_404(self, client, auth_headers, other_user, make_account):
+        cuenta = make_account(other_user["headers"])
+
+        response = client.put(
+            f"/api/v1/accounts/{cuenta['id']}",
+            json={"name": "x", "type": "cash"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 404

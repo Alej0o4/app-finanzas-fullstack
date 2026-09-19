@@ -297,6 +297,7 @@ def obtener_distribucion_categorias(
             db.query(
                 models.Transaction.category_id,
                 models.Category.name,
+                models.Category.icon,  # 🆕 Fase 24 §24.4 — mismo campo que BudgetProgress
                 net_total.label("total"),
             )
             .join(models.Category, models.Category.id == models.Transaction.category_id)
@@ -304,6 +305,7 @@ def obtener_distribucion_categorias(
             .group_by(
                 models.Transaction.category_id,
                 models.Category.name,
+                models.Category.icon,  # 🆕 Fase 24 §24.4
             )
             .having(net_total > 0)
             .order_by(net_total.desc())
@@ -314,6 +316,7 @@ def obtener_distribucion_categorias(
             db.query(
                 models.Transaction.category_id,
                 models.Category.name,
+                models.Category.icon,  # 🆕 Fase 24 §24.4 — mismo campo que BudgetProgress
                 func.sum(models.Transaction.amount).label("total"),
             )
             .join(models.Category, models.Category.id == models.Transaction.category_id)
@@ -321,9 +324,12 @@ def obtener_distribucion_categorias(
             .group_by(
                 models.Transaction.category_id,
                 models.Category.name,
+                models.Category.icon,  # 🆕 Fase 24 §24.4
             )
             .order_by(func.sum(models.Transaction.amount).desc())
             .all()
         )
 
-    return [{"category_id": r.category_id, "category_name": r.name, "total": r.total} for r in rows]
+    return [
+        {"category_id": r.category_id, "category_name": r.name, "category_icon": r.icon, "total": r.total} for r in rows
+    ]

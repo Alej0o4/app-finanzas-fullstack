@@ -1,16 +1,21 @@
 'use client';
 
-import { Wallet } from 'lucide-react';
+import { AlertCircle, Wallet } from 'lucide-react';
 import type { CategoryDistributionItem } from '@/types/api';
 import CategoryIcon from '@/components/ui/CategoryIcon';
 import EmptyState from '@/components/ui/EmptyState';
 import Skeleton from '@/components/ui/Skeleton';
+import Button from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 
 interface CategoryBreakdownBarsProps {
   data: CategoryDistributionItem[] | undefined;
   isLoading: boolean;
+  /** Fase 24 §24.1: distingue "falló la query" de "no hay gastos todavía". */
+  isError?: boolean;
+  /** Fase 24 §24.1: refetch de la query de category-distribution del caller. */
+  onRetry?: () => void;
   /** Moneda para formatear los montos. Si se omite, cae a la preferida global (retrocompatible
    *  con el dashboard, Fase 17 §17.1 — la vista por cuenta pasa la moneda real de la cuenta). */
   currency?: string;
@@ -27,6 +32,8 @@ interface CategoryBreakdownBarsProps {
 export default function CategoryBreakdownBars({
   data,
   isLoading,
+  isError = false,
+  onRetry,
   currency,
 }: CategoryBreakdownBarsProps) {
   const { config } = useAppConfig();
@@ -38,7 +45,17 @@ export default function CategoryBreakdownBars({
 
   return (
     <div className="bg-surface border-border/70 shadow-background/20 rounded-2xl border p-6 shadow-sm">
-      {isLoading ? (
+      {isError ? (
+        <EmptyState
+          icon={<AlertCircle size={48} className="opacity-20" />}
+          message="No se pudo cargar el desglose por categoría."
+          action={
+            <Button variant="secondary" size="sm" onClick={() => onRetry?.()}>
+              Reintentar
+            </Button>
+          }
+        />
+      ) : isLoading ? (
         <div className="space-y-5">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="space-y-2">
@@ -62,9 +79,12 @@ export default function CategoryBreakdownBars({
             <li key={item.category_id}>
               <div className="mb-1.5 flex items-center justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-2">
-                  {/* El contrato de category-distribution no incluye ícono; CategoryIcon cae
-                      al fallback genérico mientras eso no cambie. */}
-                  <CategoryIcon fallback={<Wallet size={16} className="text-text-muted" />} />
+                  {/* Fase 24 §24.4: el contrato ahora incluye category_icon; el fallback solo
+                      cubre categorías sin ícono asignado (icon: null), no todas. */}
+                  <CategoryIcon
+                    icon={item.category_icon}
+                    fallback={<Wallet size={16} className="text-text-muted" />}
+                  />
                   <span className="text-text truncate text-sm font-medium">
                     {item.category_name}
                   </span>

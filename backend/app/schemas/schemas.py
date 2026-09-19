@@ -378,6 +378,7 @@ class CashflowData(BaseModel):
 class CategoryDistributionData(BaseModel):
     category_id: int
     category_name: str
+    category_icon: str | None = None  # 🆕 Fase 24 §24.4 — mismo campo que BudgetProgress
     total: Decimal
 
     class Config:

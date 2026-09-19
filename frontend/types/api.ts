@@ -83,6 +83,7 @@ export interface CashflowItem {
 export interface CategoryDistributionItem {
   category_id: number;
   category_name: string;
+  category_icon?: string; // Fase 24 §24.4 — ícono real de la categoría (mismo campo que BudgetProgress)
   total: number;
 }
 

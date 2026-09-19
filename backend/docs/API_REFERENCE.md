@@ -433,8 +433,23 @@ Lista las cuentas del usuario autenticado.
 
 ### `PUT /api/v1/accounts/{account_id}`
 
-Actualiza nombre, tipo y destacada de la cuenta. Nunca modifica `balance` ni `opening_balance`
-(regla de negocio: el saldo solo lo mueven las transacciones).
+Actualización parcial (Fase 24 §24.3, Decisión C1): aplica solo los campos presentes en
+el body — `name`, `type`, `highlighted` y/o `currency`. Un campo ausente no se toca
+(p. ej. un PUT que omite `currency`/`highlighted` no los resetea a los defaults del
+schema). Nunca modifica `balance` ni `opening_balance` (regla de negocio: el saldo solo
+lo mueven las transacciones).
+
+`currency` solo se aplica si además el valor enviado es distinto del actual. Si la cuenta
+tiene al menos una transacción activa, el cambio se bloquea con `400` y detail plano
+"No se puede cambiar la moneda de una cuenta con transacciones asociadas." (mismo
+criterio que `DELETE /accounts/{id}`, Decisión C2/C4). Reenviar la misma moneda (sin
+cambio real) nunca dispara el bloqueo, con o sin transacciones.
+
+Errores esperados:
+
+- `404` si la cuenta no existe o no pertenece al usuario autenticado.
+- `400` si se intenta cambiar `currency` a un valor distinto del actual y la cuenta
+  tiene transacciones asociadas.
 
 ### `PATCH /api/v1/accounts/{account_id}/highlighted`
 
@@ -750,6 +765,9 @@ Salida:
 
 - `category_id`
 - `category_name`
+- `category_icon` (string | null, Fase 24 §24.4) — ícono de la categoría
+  (`Category.icon`, el mismo campo que ya expone `BudgetProgress.category_icon`);
+  `null` para categorías sin ícono asignado
 - `total` — cuando `neto=true`, representa el gasto neto
 
 ## Notificaciones (Fase 13 §13.5)
