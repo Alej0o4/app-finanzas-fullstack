@@ -7,6 +7,8 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, getApiError } from '@/lib/utils';
 import { queryKeys } from '@/lib/queryKeys';
+import { useCategories } from '@/lib/hooks/useCategories';
+import { useAccounts } from '@/lib/hooks/useAccounts';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import Skeleton from '@/components/ui/Skeleton';
@@ -15,7 +17,7 @@ import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import Label from '@/components/ui/Label';
 import { useConfirmStore } from '@/store/useConfirmStore';
-import type { Category, Budget, BudgetPayload, Account } from '@/types/api';
+import type { Budget, BudgetPayload } from '@/types/api';
 
 const getMonthName = (month: number, year: number) => {
   const date = new Date(year, month - 1);
@@ -55,17 +57,11 @@ export default function BudgetsPage() {
     queryFn: async () => (await api.get('budgets/')).data,
   });
 
-  const { data: categories } = useQuery<Category[]>({
-    queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('categories/')).data,
-  });
+  const { data: categories } = useCategories();
 
   // Fase 17 §17.2.4: las monedas del selector salen de las cuentas reales del usuario
   // (misma queryKey que accounts/, ya cacheada por QueryProvider si otra página la cargó).
-  const { data: accounts } = useQuery<Account[]>({
-    queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('accounts/')).data,
-  });
+  const { data: accounts } = useAccounts();
   const availableCurrencies = Array.from(new Set(accounts?.map((a) => a.currency) ?? []));
 
   const expenseCategories = categories?.filter((c) => c.type === 'expense') || [];

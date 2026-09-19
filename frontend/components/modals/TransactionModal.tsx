@@ -1,16 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
+import { useAccounts } from '@/lib/hooks/useAccounts';
+import { useCategories } from '@/lib/hooks/useCategories';
 import { getApiError } from '@/lib/utils';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
-import type { Account, Category, CreateTransactionPayload } from '@/types/api';
+import type { CreateTransactionPayload } from '@/types/api';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -39,17 +41,9 @@ export default function TransactionModal({
   const [categoryId, setCategoryId] = useState('');
   const [showAllCategories, setShowAllCategories] = useState(false);
 
-  const { data: accounts } = useQuery<Account[]>({
-    queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('accounts/')).data,
-    enabled: isOpen,
-  });
+  const { data: accounts } = useAccounts({ enabled: isOpen });
 
-  const { data: categories } = useQuery<Category[]>({
-    queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('categories/')).data,
-    enabled: isOpen,
-  });
+  const { data: categories } = useCategories({ enabled: isOpen });
 
   const displayedCategories = useMemo(() => {
     const visibleCategories = categories?.filter((category) => !category.is_hidden) || [];

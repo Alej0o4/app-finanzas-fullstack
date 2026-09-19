@@ -5,18 +5,20 @@ import unicodedata
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy import desc, func, or_, update
+from sqlalchemy import desc, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.budget_alerts import evaluate_budget_thresholds_safely
 from app.core.database import get_db
+from app.core.exceptions import AccountNotFoundError, CategoryNotFoundError
 from app.core.rate_limit import key_func_por_usuario_o_ip, limiter
 
 # 🔒 Importamos a nuestro Guardia de Seguridad
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
+from app.services import ledger
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -80,7 +82,7 @@ def _resolver_cuenta(db: Session, user_id: int, account_id: int | None) -> model
             db.query(models.Account).filter(models.Account.id == account_id, models.Account.user_id == user_id).first()
         )
         if not cuenta:
-            raise HTTPException(status_code=404, detail="La cuenta especificada no existe o no te pertenece.")
+            raise AccountNotFoundError()  # 🔁 antes: raise HTTPException(404, "...")
         return cuenta
 
     cuentas_usuario = db.query(models.Account).filter(models.Account.user_id == user_id).all()
@@ -162,7 +164,7 @@ def crear_transaccion(
     )
 
     if not cuenta:
-        raise HTTPException(status_code=404, detail="La cuenta especificada no existe o no te pertenece.")
+        raise AccountNotFoundError()  # 🔁 antes: raise HTTPException(404, "...")
 
     categoria = (
         db.query(models.Category)
@@ -174,31 +176,20 @@ def crear_transaccion(
     )
 
     if not categoria:
-        raise HTTPException(
-            status_code=404, detail="La categoría especificada no existe o no tienes permisos para usarla."
-        )
+        raise CategoryNotFoundError()  # 🔁 antes: raise HTTPException(404, "...")
 
     # 2. Ensamblar la transacción
     nueva_transaccion = models.Transaction(**transaccion.model_dump(exclude_none=True), user_id=current_user.id)
     nueva_transaccion.currency = cuenta.currency  # hereda la moneda de la cuenta
 
-    # 🧮 3. Lógica Contable: Actualizar saldo de forma atómica en SQL
-    delta = transaccion.amount if transaccion.type == "income" else -transaccion.amount
-
     try:
         db.add(nueva_transaccion)
-        # El filtro explícito de borrado lógico complementa al handler select-only de
-        # database.py (Opción A, Decisión 6.1): un update() ORM-enabled NO queda
-        # cubierto por el filtro global — mutar el saldo de una cuenta soft-deleted
-        # sería un bug de integridad.
-        db.execute(
-            update(models.Account)
-            .where(
-                models.Account.id == transaccion.account_id,
-                models.Account.deleted_at.is_(None),
-            )
-            .values(balance=models.Account.balance + delta)
-        )
+        # 🧮 3. Lógica Contable (Fase 25 §25.1 — extraída a app/services/ledger.py: el
+        # signo del delta y el UPDATE atómico viven en ledger.registrar_impacto /
+        # aplicar_delta, que documenta el filtro deleted_at IS NULL — Decisión 6.1: un
+        # update() ORM-enabled no queda cubierto por el filtro global select-only de
+        # database.py, hay que llevarlo explícito en el WHERE).
+        ledger.registrar_impacto(db, cuenta.id, transaccion.type, transaccion.amount)
         if idempotency_key:
             # Decisión 10.4.4: Transaction + saldo + bitácora comparten UN solo commit —
             # si el INSERT de la clave pierde una carrera contra el UNIQUE(user_id, key),
@@ -306,18 +297,10 @@ def eliminar_transaccion(
     # 1. Obtener la cuenta asociada a esta transacción
     cuenta = db.query(models.Account).filter(models.Account.id == transaccion.account_id).first()
 
-    # 🧮 2. Lógica Contable Inversa: Revertir el impacto de forma atómica
-    # (mismo filtro explícito de borrado lógico que en crear_transaccion)
+    # 🧮 2. Lógica Contable Inversa: Revertir el impacto de forma atómica (Fase 25 §25.1
+    # — el filtro deleted_at IS NULL vive en ledger.aplicar_delta)
     if cuenta:
-        delta = -transaccion.amount if transaccion.type == "income" else transaccion.amount
-        db.execute(
-            update(models.Account)
-            .where(
-                models.Account.id == transaccion.account_id,
-                models.Account.deleted_at.is_(None),
-            )
-            .values(balance=models.Account.balance + delta)
-        )
+        ledger.revertir_impacto(db, transaccion.account_id, transaccion.type, transaccion.amount)
 
     try:
         transaccion.deleted_at = datetime.now(UTC)  # borrado lógico: el impacto contable ya fue revertido arriba
@@ -386,43 +369,18 @@ def actualizar_transaccion(
     )
 
     if not categoria:
-        raise HTTPException(
-            status_code=404, detail="La categoría especificada no existe o no tienes permisos para usarla."
-        )
-
-    old_delta = transaccion_db.amount if transaccion_db.type == "income" else -transaccion_db.amount
-    new_delta = (
-        transaccion_actualizada.amount if transaccion_actualizada.type == "income" else -transaccion_actualizada.amount
-    )
+        raise CategoryNotFoundError()  # 🔁 antes: raise HTTPException(404, "...")
 
     try:
-        if cuenta_vieja.id == cuenta_nueva.id:
-            net_delta = new_delta - old_delta
-            db.execute(
-                update(models.Account)
-                .where(
-                    models.Account.id == cuenta_vieja.id,
-                    models.Account.deleted_at.is_(None),
-                )
-                .values(balance=models.Account.balance + net_delta)
-            )
-        else:
-            db.execute(
-                update(models.Account)
-                .where(
-                    models.Account.id == cuenta_vieja.id,
-                    models.Account.deleted_at.is_(None),
-                )
-                .values(balance=models.Account.balance - old_delta)
-            )
-            db.execute(
-                update(models.Account)
-                .where(
-                    models.Account.id == cuenta_nueva.id,
-                    models.Account.deleted_at.is_(None),
-                )
-                .values(balance=models.Account.balance + new_delta)
-            )
+        ledger.aplicar_edicion(
+            db,
+            cuenta_vieja_id=cuenta_vieja.id,
+            cuenta_nueva_id=cuenta_nueva.id,
+            tipo_viejo=transaccion_db.type,
+            monto_viejo=transaccion_db.amount,
+            tipo_nuevo=transaccion_actualizada.type,
+            monto_nuevo=transaccion_actualizada.amount,
+        )
 
         transaccion_db.amount = transaccion_actualizada.amount
         transaccion_db.type = transaccion_actualizada.type

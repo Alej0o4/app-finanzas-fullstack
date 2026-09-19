@@ -1,17 +1,19 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
+import { useAccounts } from '@/lib/hooks/useAccounts';
+import { useCategories } from '@/lib/hooks/useCategories';
 import { getApiError } from '@/lib/utils';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import CategoryIcon from '@/components/ui/CategoryIcon';
-import type { Account, Category, CreateTransactionPayload } from '@/types/api';
+import type { Account, CreateTransactionPayload } from '@/types/api';
 
 type PaymentMethod = 'cash' | 'card' | 'transfer';
 
@@ -49,15 +51,9 @@ export default function TransactionCaptureForm({
   // Fase 12 §12.8: errores por campo (no globo nativo del navegador) + foco en el primero.
   const [fieldErrors, setFieldErrors] = useState<{ amount?: string; category?: string }>({});
 
-  const { data: accounts } = useQuery<Account[]>({
-    queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('accounts/')).data,
-  });
+  const { data: accounts } = useAccounts();
 
-  const { data: categories } = useQuery<Category[]>({
-    queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('categories/')).data,
-  });
+  const { data: categories } = useCategories();
 
   const filteredCategories = useMemo(
     () => categories?.filter((c) => c.type === type && !c.is_hidden) || [],

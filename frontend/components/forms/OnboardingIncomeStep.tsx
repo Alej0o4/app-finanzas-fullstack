@@ -1,15 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { useSetMonthlyIncome } from '@/lib/hooks/useSetMonthlyIncome';
+import { useAccounts } from '@/lib/hooks/useAccounts';
+import { useCategories } from '@/lib/hooks/useCategories';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { getApiError } from '@/lib/utils';
-import type { Account, Category } from '@/types/api';
 
 /** Categoría de sistema que siembra el ingreso declarado (ver seed_default_categories en
  * backend/app/main.py) — nunca la crea ni la borra el usuario. */
@@ -38,14 +39,8 @@ export default function OnboardingIncomeStep({
   const queryClient = useQueryClient();
   const setIncomeMutation = useSetMonthlyIncome();
 
-  const { data: accounts } = useQuery<Account[]>({
-    queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('accounts/')).data,
-  });
-  const { data: categories } = useQuery<Category[]>({
-    queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('categories/')).data,
-  });
+  const { data: accounts } = useAccounts();
+  const { data: categories } = useCategories();
 
   // El ingreso declarado solo alimentaba `monthly_flow_balance` (Fase 11 §11.3) — la cuenta
   // nunca recibía la plata, así que arrancaba en $0 pese a que el usuario acababa de decir

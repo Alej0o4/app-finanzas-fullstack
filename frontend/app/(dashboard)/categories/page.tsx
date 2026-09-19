@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
   Edit2,
@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { getApiError } from '@/lib/utils';
 import { queryKeys } from '@/lib/queryKeys';
+import { useCategories } from '@/lib/hooks/useCategories';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import ModalShell from '@/components/ui/ModalShell';
@@ -166,13 +167,7 @@ export default function CategoriesPage() {
   // el refetch la mueva de sección.
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
 
-  const { data: categories, isLoading } = useQuery<Category[]>({
-    queryKey: queryKeys.categories.all(),
-    queryFn: async () => {
-      const response = await api.get('categories/');
-      return response.data;
-    },
-  });
+  const { data: categories, isLoading } = useCategories();
 
   const createCategoryMutation = useMutation({
     mutationFn: async (newCategory: { name: string; type: string }) => {

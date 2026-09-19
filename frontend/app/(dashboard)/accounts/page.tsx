@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { formatCurrency, getApiError } from '@/lib/utils';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
+import { useAccounts } from '@/lib/hooks/useAccounts';
 import { queryKeys } from '@/lib/queryKeys';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
@@ -44,13 +45,7 @@ export default function AccountsPage() {
   const createBalanceRef = useRef<HTMLInputElement>(null);
   const editNameRef = useRef<HTMLInputElement>(null);
 
-  const { data: accounts, isLoading } = useQuery<Account[]>({
-    queryKey: queryKeys.accounts.all(),
-    queryFn: async () => {
-      const response = await api.get('accounts/');
-      return response.data;
-    },
-  });
+  const { data: accounts, isLoading } = useAccounts();
 
   // Saldo total por moneda de TODAS las cuentas (Fase 11 §11.5). A diferencia de
   // /dashboard/summary, este endpoint no filtra por destacadas — así el total mostrado

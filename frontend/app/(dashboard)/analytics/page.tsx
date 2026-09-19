@@ -5,6 +5,7 @@ import { queryKeys } from '@/lib/queryKeys';
 import type { CashflowItem, CategoryDistributionItem } from '@/types/api';
 import { api } from '@/lib/api';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
+import { useAccounts } from '@/lib/hooks/useAccounts';
 import { useState, useMemo, Suspense } from 'react';
 import { useQueryParamState, useQueryParamsBatch } from '@/hooks/useQueryParamState';
 import CashflowChart, { type AnalyticsSeries } from '@/components/CashflowChart';
@@ -16,7 +17,6 @@ import AnalyticsSummary from '@/components/AnalyticsSummary';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import Skeleton from '@/components/ui/Skeleton';
-import type { Account } from '@/types/api';
 
 export type AnalyticsPeriod = 'week' | 'month' | 'year' | 'custom';
 
@@ -158,10 +158,7 @@ function AnalyticsPageContent() {
   const netMode = netoRaw === 'true';
   const accountId = accountFilter !== 'all' ? Number(accountFilter) : undefined;
 
-  const { data: accounts } = useQuery<Account[]>({
-    queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('accounts/')).data,
-  });
+  const { data: accounts } = useAccounts();
 
   // `currency` y `account_id` son ortogonales en el backend (Fase 17 §17.1.3) — al
   // filtrar por una cuenta hay que pasar SU moneda explícita, si no la vista se queda

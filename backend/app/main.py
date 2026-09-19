@@ -11,7 +11,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from app.api import (
     accounts,
@@ -28,6 +28,7 @@ from app.api import (
 )
 from app.core.database import SessionLocal
 from app.core.default_categories import DEFAULT_CATEGORIES, LEGACY_DEFAULT_CATEGORY_NAMES
+from app.core.exceptions import DomainError
 from app.core.logging_config import configure_logging, request_id_var
 from app.core.rate_limit import limiter
 from app.core.weekly_summary import run_weekly_summary_job
@@ -155,8 +156,14 @@ app.add_middleware(
     dispatch=request_id_middleware,
 )
 
+
+def _domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(DomainError, _domain_error_handler)  # 🆕 Fase 25 §25.3
 
 # 3. Conexión de Enrutadores
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Autenticación"])

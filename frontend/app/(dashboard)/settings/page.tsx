@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Check, Copy, KeyRound, Plus, Trash2 } from 'lucide-react';
@@ -17,16 +17,13 @@ import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useSetMonthlyIncome } from '@/lib/hooks/useSetMonthlyIncome';
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@/lib/hooks/useApiKeys';
+import { useAccounts } from '@/lib/hooks/useAccounts';
 import { api } from '@/lib/api';
-import { queryKeys } from '@/lib/queryKeys';
 import { getApiError } from '@/lib/utils';
 import type { components } from '@/types/generated/api';
 
 type ApiKey = components['schemas']['ApiKeyResponse'];
 type ApiKeyCreateResponse = components['schemas']['ApiKeyCreateResponse'];
-// Código nuevo usa tipos generados (Decisión 16.3.2): AccountResponse, no el Account
-// manual de types/api.ts que budgets/page.tsx todavía usa.
-type Account = components['schemas']['AccountResponse'];
 
 // Fase 14 §14.6.2: primera superficie de ajustes del producto. Fase 16 §16.1 agrega la
 // gestión de API keys — ver Decisión 16.1.6. Fase 21 §21.1/§21.2 suma la moneda principal
@@ -66,10 +63,7 @@ export default function SettingsPage() {
   // Fase 21 §21.1 (Decisión 21.1.1): monedas del selector derivadas de las cuentas
   // reales del usuario (misma queryKey que accounts/, ya en cache si visitó /accounts
   // o /budgets antes) — nunca una lista fija.
-  const { data: accounts } = useQuery<Account[]>({
-    queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('accounts/')).data,
-  });
+  const { data: accounts } = useAccounts();
   const availableCurrencies = Array.from(new Set(accounts?.map((a) => a.currency) ?? []));
 
   // --- Ingreso mensual (Fase 22 §22.3, Decisión 22.3.1) -----------------------------

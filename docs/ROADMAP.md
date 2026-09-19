@@ -1045,32 +1045,56 @@ más fácil de extraer.
 > de queries, migrar JWT a cookies httpOnly, crear `app/services/` + `app/core/exceptions.py`, y
 > partir `models.py`/`schemas.py` por dominio.
 
-- [ ] **Extraer el delta contable de `transactions.py` a una función compartida y testeada**
+> Implementación completa el 2026-09-18 — ver `docs/specs/fase_25_spec.md` para el desglose
+> técnico y las decisiones de arquitectura numeradas (§25.1–§25.7, L1–L6/S1–S5/X1–X4/
+> Q1–Q4/J1–J8/M1–M2/R1–R4). Verificación: pytest backend **233 passed** (11 nuevos:
+> `test_ledger.py` y `test_budget_recurrence.py`), `ruff check`/`format` limpios, `pnpm lint`/
+> `format:check`/`build` + `tsc --noEmit` limpios. **§25.5 (JWT → cookies httpOnly) NO se
+> ejecutó** — diseñado completo (J1–J8) pero diferido por decisión J1 a un spec propio (Fase 26),
+> por su blast radius sobre todo el tráfico autenticado con usuarios reales activos y ausencia de
+> CSRF/tests de frontend; el checkbox queda sin marcar abajo. Dos correcciones de precisión
+> documentadas en el spec: `schemas.py` tiene 48 clases (no 49) y `models.py` 13 (no 14); no
+> existe key separada para "categorías ocultas" (M2 — `is_hidden` es un campo de
+> `GET /categories/`, filtrado client-side).
+
+- [x] **Extraer el delta contable de `transactions.py` a una función compartida y testeada**
       (`backend/app/api/transactions.py:186,312,393-395` — `crear_transaccion`/
       `eliminar_transaccion`/`actualizar_transaccion`) — 1d. Primer módulo real de
       `app/services/` (ej. `ledger.py`), usando `app/core/budget_alerts.py` como plantilla de
       cómo ya funciona una capa de servicio ad-hoc en este repo — no arrancar `app/services/`
-      desde cero con código de bajo riesgo.
-- [ ] **Partir `schemas.py` por dominio** (462 líneas / 49 clases — auth, transacciones,
+      desde cero con código de bajo riesgo. *(2026-09-18, spec §25.1)*
+- [x] **Partir `schemas.py` por dominio** (462 líneas / 49 clases — auth, transacciones,
       notificaciones, push, API keys en un solo archivo plano) — 1-2d. Prioridad sobre partir
       `models.py` (341 líneas / 14 clases, ya bien encapsulado por clase, no urgente).
-- [ ] **Capa de excepciones de dominio** (`app/core/exceptions.py`) para desacoplar
+      *(2026-09-18, spec §25.2 — 48 clases reales; `schemas.py` queda como shim de re-exports)*
+- [x] **Capa de excepciones de dominio** (`app/core/exceptions.py`) para desacoplar
       `raise HTTPException` de las reglas de negocio en los routers — 1-2 semanas.
-- [ ] **Extraer custom hooks de queries** (`useAccounts`, `useCategories`, `useTransactions`) —
+      *(2026-09-18, spec §25.3 — piloto acotado a `transactions.py` (Decisión X1): `DomainError`
+      + `AccountNotFoundError`/`CategoryNotFoundError` reemplazan los 4 `HTTPException` con
+      strings duplicados + `exception_handler` único en `main.py`; los otros 59 `raise`
+      quedan como trabajo incremental router por router)*
+- [x] **Extraer custom hooks de queries** (`useAccounts`, `useCategories`, `useTransactions`) —
       reemplaza el `useQuery` + `queryFn` inline repetido por página — 2-3d.
+      *(2026-09-18, spec §25.4 — 10 call sites de `accounts.all()`, 8 de `categories.all()`,
+      `transactions/page.tsx`; solo lecturas, mutaciones intactas)*
 - [ ] **Migrar JWT de `localStorage` a cookies `httpOnly`** (`frontend/lib/api.ts`) — 1-2
       semanas, toca todo el flujo de auth del frontend. Sube de prioridad por el Funnel público
-      activo desde 2026-09-06.
-- [ ] **Actualizar `frontend/docs/STATE_AND_FETCHING.md`** con las query keys de Fases 17-22
+      activo desde 2026-09-06. — **Diseño completo documentado en spec §25.5 (J1–J8), creación
+      diferida a un spec propio (Fase 26)** — ver bloque de resumen arriba (Decisión J1). El
+      camino de API keys (`Authorization: Bearer oikos_pat_...`) queda intacto en el diseño.
+- [x] **Actualizar `frontend/docs/STATE_AND_FETCHING.md`** con las query keys de Fases 17-22
       (`monthlySummary`/`budgetsProgress` por cuenta, params `account_id`/`currency` en
       analytics, keys de categorías ocultas, mutations de settings) — 2-3h. Hoy está congelado en
       Fase 16 y `CLAUDE.md` lo señala como mapa autoritativo — engaña a quien confíe en él en vez
-      de grepear `lib/queryKeys.ts`.
-- [ ] **Test dedicado para `ensure_recurring_budgets_for_period`**
+      de grepear `lib/queryKeys.ts`. *(2026-09-18, spec §25.6 — incl. sección "Hooks compartidos"
+      con los 3 hooks nuevos y nota M2: no existe key separada de categorías ocultas)*
+- [x] **Test dedicado para `ensure_recurring_budgets_for_period`**
       (`backend/app/core/budget_recurrence.py`) — 0.5-1d. `test_budgets.py` solo verifica que el
       flag `is_recurring` sobreviva el round-trip; nunca ejercita la función de generación de
       períodos directamente — es justo la lógica detrás del fix de Fase 8 ("los presupuestos no
-      sobreviven al cambio de mes").
+      sobreviven al cambio de mes"). *(2026-09-18, spec §25.7 — 5 tests unit-level: salto de año,
+      plantilla más reciente con gap, skip de fila manual, 2 categorías independientes y la rama
+      de `IntegrityError`/rollback; `test_budgets.py` no cambia)*
 
 ---
 
@@ -1141,6 +1165,10 @@ Estas estaban "fuera de scope" bajo el supuesto de un solo usuario. Ese supuesto
 > partir `models.py`/`schemas.py` (→ Fase 25, las últimas dos como ítems separados). La nota sobre
 > por qué `AccountUpdate.currency` subió de prioridad tras Fase 22 (acota el onboarding a 3
 > monedas en vez de 5) sigue vigente — ver Fase 24 para la tarea en sí.
+> **2026-09-18 — Fase 25 cerrada** (custom hooks, `app/services/ledger.py`,
+> `app/core/exceptions.py` y split de `schemas.py` implementados; ver arriba). La migración de
+> JWT a cookies httpOnly queda diseñada en la spec de Fase 25 (§25.5, decisiones J1–J8) y
+> pendiente de un spec propio — sigue abierta bajo Fase 25 (checkbox sin marcar).
 - [x] **`focus-visible` y `htmlFor`/`id` en el modal de edición manual de `transactions/page.tsx`** (Fase 9). Resuelto en Fase 12 §12.8.3: el modal migró a los componentes `Input`/`Select` compartidos (con validación por campo y foco en el primer error).
   - El modal de editar transacción (líneas ~495-577) usa `<input>`/`<select>` crudos en vez de los
     componentes `Input`/`Select` ya corregidos en Fase 9 (§9.1/§9.2 de `docs/specs/fase_09_spec.md`):

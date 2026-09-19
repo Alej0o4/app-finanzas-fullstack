@@ -19,6 +19,8 @@ import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import { queryKeys } from '@/lib/queryKeys';
+import { useCategories } from '@/lib/hooks/useCategories';
+import { useAccounts } from '@/lib/hooks/useAccounts';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import ModalShell from '@/components/ui/ModalShell';
@@ -33,7 +35,6 @@ import { useState } from 'react';
 import type {
   Account,
   Transaction,
-  Category,
   UpdateTransactionPayload,
   PaginatedResponse,
   BudgetProgress,
@@ -82,14 +83,8 @@ export default function AccountDetailPage() {
 
   const transactions = transactionsData?.items;
 
-  const { data: categories } = useQuery<Category[]>({
-    queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('categories/')).data,
-  });
-  const { data: allAccounts } = useQuery<Account[]>({
-    queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('accounts/')).data,
-  });
+  const { data: categories } = useCategories();
+  const { data: allAccounts } = useAccounts();
 
   // ── Fase 17 §17.1: analítica por cuenta ──────────────────────────────────────────────
   // Balance del mes de esta cuenta (GET /accounts/{id}/monthly-summary, Decisión 17.1.4).

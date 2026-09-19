@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowRightLeft,
   ArrowDownRight,
@@ -17,6 +17,9 @@ import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useQueryParamState, useQueryParamsBatch } from '@/hooks/useQueryParamState';
 import { queryKeys } from '@/lib/queryKeys';
+import { useTransactions } from '@/lib/hooks/useTransactions';
+import { useAccounts } from '@/lib/hooks/useAccounts';
+import { useCategories } from '@/lib/hooks/useCategories';
 import EmptyState from '@/components/ui/EmptyState';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import CategoryIcon from '@/components/ui/CategoryIcon';
@@ -25,13 +28,7 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import Skeleton from '@/components/ui/Skeleton';
-import type {
-  Account,
-  Category,
-  Transaction,
-  UpdateTransactionPayload,
-  PaginatedResponse,
-} from '@/types/api';
+import type { Transaction, UpdateTransactionPayload } from '@/types/api';
 
 type DatePreset = 'all' | '7d' | 'month' | 'year' | 'custom';
 
@@ -169,20 +166,11 @@ function TransactionsPageContent() {
     return p;
   }, [skip, startDateParam, endDateParam, categoryFilter, accountFilter]);
 
-  const { data, isFetching } = useQuery<PaginatedResponse<Transaction>>({
-    queryKey: queryKeys.transactions.filtered(params),
-    queryFn: async () => (await api.get('transactions/', { params })).data,
-  });
+  const { data, isFetching } = useTransactions(params);
 
-  const { data: accounts } = useQuery<Account[]>({
-    queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('accounts/')).data,
-  });
+  const { data: accounts } = useAccounts();
 
-  const { data: categories } = useQuery<Category[]>({
-    queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('categories/')).data,
-  });
+  const { data: categories } = useCategories();
 
   // Acumula páginas conforme llegan — sincroniza React Query con estado local
   /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */

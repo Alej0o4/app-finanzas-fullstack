@@ -34,8 +34,14 @@ Las claves deben mantenerse consistentes entre páginas y componentes.
 ### Globales
 
 - `currentUser`
+- `userPreferences` (Fase 21/22 §22.1) — `GET/PATCH /users/me/preferences`; la usan
+  `useUserPreferences.ts` y `settings/page.tsx`. Se invalida tras cambiar moneda/locale/tema.
 - `accounts`
 - `categories`
+  - Nota (Fase 25 §25.6/M2): **no existe una key separada para "categorías ocultas"**.
+    `is_hidden` es un campo más de la respuesta de `GET /categories/` (Fase 18); el filtrado
+    se hace client-side sobre esta misma key (`categories?.filter((c) => c.is_hidden)` en
+    `categories/page.tsx`), sin key nueva que invalidar.
 - `budgets`
 - `transactions`
 - `dashboardSummary`
@@ -54,8 +60,20 @@ Las claves deben mantenerse consistentes entre páginas y componentes.
 - `category`
 - `transactions`, `account`, `id`
 - `transactions`, `category`, `id`
-- `analytics-cashflow`
-- `analytics-categories`
+- `account-monthly-summary` (Fase 17 §17.1) — balance del mes de una cuenta puntual
+  (`GET /accounts/{id}/monthly-summary`). Clave por cuenta, no reutiliza `dashboardSummary`.
+- `account-category-breakdown` (Fase 17 §17.1) — desglose de gastos del mes por categoría,
+  restringido a una cuenta.
+- `account-budgets-progress` (Fase 17 §17.1, Decisión 17.1.3/P4) — progreso de presupuestos
+  filtrado a la moneda de una cuenta. El prefijo matchea la invalidación por prefix desde
+  el módulo de presupuestos.
+- `analytics-cashflow` — la key incluye, tras el período, dos segmentos opcionales por
+  cuenta/moneda (Fase 17): `['analytics-cashflow', start, end, period, accountId?, currency?]`.
+- `analytics-categories` — idem, con `type`/`neto` y `accountId?`/`currency?`:
+  `['analytics-categories', start, end, type, neto?, accountId?, currency?]`. Cuando el
+  selector de cuenta de `/analytics` está en una moneda distinta a la preferida, `currency`
+  viaja explícito en la key (corrección del Bug real documentado en Fase 19,
+  "Analítica sin selector de cuenta").
 
 ## Invalidation patterns
 
@@ -131,6 +149,17 @@ revalidar una fila individual con `read_at` seteado sin que el popover haga fetc
 (cada mutación es barata y poco frecuente; no vale la pena optimizar con updateQueryData).
 El `unread-count` tiene `refetchInterval: 60_000` (Decisión 13.5.4): el badge se refresca
 solo, sin disparar la query de lista completa.
+
+### Actualizar preferencias / fijar ingreso mensual (Settings, Fase 21/22)
+
+`useUserPreferences.ts` invalida tras un `PATCH /users/me/preferences` (Decisión 22.1.6):
+
+- `userPreferences`
+- `currentUser`
+- `dashboard-category-breakdown`
+- `accounts` — condicionalmente: solo si la moneda preferida cambió (las cuentas no cambian
+  de moneda, pero los agregados del dashboard que dependen de `preferred_currency` sí
+  necesitan revalidarse).
 
 ## Estado local
 
@@ -221,6 +250,24 @@ commiteado sigue siendo válido para compilar.
 - Consulta `/api/users/me`.
 - Debe usarse en vistas autenticadas donde el nombre o identidad del usuario sea relevante.
 
+### `useAccounts` / `useCategories` / `useTransactions` (Fase 25 §25.4)
+
+Extraídos en Fase 25 desde los `useQuery` inline que cada página repetía
+(`lib/hooks/use{Accounts,Categories,Transactions}.ts`, mismo `queryKey`/`queryFn` que usaban
+los call sites — no cambia ningún comportamiento de cacheo):
+
+- `useAccounts(options?)` — `GET /accounts/` → `Account[]`. Segundo parámetro opcional
+  `{ enabled }` para queries condicionales (p. ej. `TransactionModal` con `enabled: isOpen`).
+- `useCategories(options?)` — `GET /categories/` → `Category[]` (incluye `is_hidden`, Fase 18).
+- `useTransactions(params)` — `GET /transactions/` → `PaginatedResponse<Transaction>`.
+  `params` es el mismo objeto de filtros que armaba `transactions/page.tsx` (skip, limit,
+  account_id, category_id, start_date, end_date); se pasa tal cual a
+  `queryKeys.transactions.filtered(params)`. Único consumidor: `transactions/page.tsx`.
+
+Solo cubren **lecturas**. Las mutaciones quedan en cada página con sus listas de
+invalidación heterogéneas (Decisión Q3 de la spec de Fase 25) — no forzarlas a un hook
+compartido.
+
 ### `useQueryParamState` (Fase 12 §12.1)
 
 `hooks/useQueryParamState.ts` sincroniza un string con un query param de la URL:
@@ -299,8 +346,9 @@ Uso actual:
 
 ### Analytics
 
-- Cashflow: `analytics-cashflow`
-- Categorías: `analytics-categories` (incluye `neto` como cuarto segmento de la key)
+- Cashflow: `analytics-cashflow` (con segmentos opcionales `accountId`/`currency`, ver
+  "Vista específica" arriba)
+- Categorías: `analytics-categories` (con `neto` y los mismos segmentos opcionales de cuenta/moneda)
 
 ### Transacciones
 

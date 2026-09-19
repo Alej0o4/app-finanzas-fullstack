@@ -9,6 +9,8 @@ import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import { queryKeys } from '@/lib/queryKeys';
+import { useAccounts } from '@/lib/hooks/useAccounts';
+import { useCategories } from '@/lib/hooks/useCategories';
 import ModalShell from '@/components/ui/ModalShell';
 import Skeleton from '@/components/ui/Skeleton';
 import Button from '@/components/ui/Button';
@@ -19,7 +21,6 @@ import CategoryIcon from '@/components/ui/CategoryIcon';
 import type {
   Category,
   Transaction,
-  Account,
   UpdateTransactionPayload,
   PaginatedResponse,
 } from '@/types/api';
@@ -54,15 +55,9 @@ export default function CategoryDetailPage() {
 
   const transactions = transactionsData?.items;
 
-  const { data: accounts } = useQuery<Account[]>({
-    queryKey: queryKeys.accounts.all(),
-    queryFn: async () => (await api.get('accounts/')).data,
-  });
+  const { data: accounts } = useAccounts();
 
-  const { data: categories } = useQuery<Category[]>({
-    queryKey: queryKeys.categories.all(),
-    queryFn: async () => (await api.get('categories/')).data,
-  });
+  const { data: categories } = useCategories();
 
   const filteredCategories = categories?.filter((c) => c.type === type) || [];
 
