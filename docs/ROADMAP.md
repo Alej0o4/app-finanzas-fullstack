@@ -55,12 +55,13 @@ Más el **onboarding de 3 minutos** que lleva al usuario a su primer gráfico (F
 
 ## Próxima fase planeada — Fase 26: JWT en cookies httpOnly
 
-**Aún sin spec propio.** El diseño completo ya existe (Fase 25 spec, §25.5, decisiones J1–J8) pero
-se diferió a propósito por su blast radius: toca todo el flujo de auth del frontend
-(`frontend/lib/api.ts`) con usuarios reales ya activos, y el proyecto no tiene ninguna protección
-CSRF hoy — moverse a cookies sin resolver eso primero cambiaría un problema por otro. El camino de
-API keys (`Authorization: Bearer oikos_pat_...`, usado por Atajos de iOS reales) queda intacto en
-el diseño y no se ve afectado.
+**Spec propio ya escrito: `docs/specs/fase_26_spec.md`.** Retoma el diseño de Fase 25 (§25.5,
+decisiones J1–J8), lo reverifica contra el código actual y lo desglosa en tareas Backend/Frontend
+concretas — no implementado todavía. Blast radius conocido: toca todo el flujo de auth del
+frontend (no solo `frontend/lib/api.ts` — el spec encontró 8 archivos, no 1) con usuarios reales
+ya activos, y el proyecto no tiene ninguna protección CSRF hoy — moverse a cookies sin resolver
+eso primero cambiaría un problema por otro. El camino de API keys (`Authorization: Bearer
+oikos_pat_...`, usado por Atajos de iOS reales) queda intacto en el diseño y no se ve afectado.
 
 **Por qué sube de prioridad:** el Tailscale Funnel está activo desde 2026-09-06 — la app es
 alcanzable desde internet público, no solo desde el tailnet, lo que acorta cuánto más se puede
