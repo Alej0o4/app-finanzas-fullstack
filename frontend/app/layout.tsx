@@ -19,6 +19,16 @@ export const metadata: Metadata = {
   // Fase 13 §13.1: el manifest hace la app instalable (PWA). Los íconos los produce
   // diseño (mismo caso que el favicon de Fase 12 §12.5); acá solo se referencian.
   manifest: '/manifest.json',
+  // iOS no lee el manifest para el ícono de "Añadir a pantalla de inicio" ni para el
+  // modo standalone — necesita estas entradas aparte (Safari-only, no las respeta Chrome/Android).
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Oikos',
+  },
+  icons: {
+    apple: '/icons/icon-192.png',
+  },
 };
 
 export default function RootLayout({
