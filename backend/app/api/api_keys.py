@@ -8,11 +8,12 @@ auditar incidentes.
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core import security
 from app.core.database import get_db
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.models import models
@@ -43,12 +44,9 @@ def crear_api_key(
         .count()
     )
     if activas >= MAX_ACTIVE_API_KEYS_POR_USUARIO:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Ya tenés {MAX_ACTIVE_API_KEYS_POR_USUARIO} API keys activas, el máximo "
-                "permitido. Revocá alguna que ya no uses antes de crear una nueva."
-            ),
+        raise BadRequestError(
+            f"Ya tenés {MAX_ACTIVE_API_KEYS_POR_USUARIO} API keys activas, el máximo "
+            "permitido. Revocá alguna que ya no uses antes de crear una nueva."
         )
 
     raw_key = security.generate_api_key()
@@ -88,7 +86,7 @@ def revocar_api_key(
         db.query(models.ApiKey).filter(models.ApiKey.id == api_key_id, models.ApiKey.user_id == current_user.id).first()
     )
     if not api_key or api_key.revoked_at is not None:
-        raise HTTPException(status_code=404, detail="La API key no existe o ya fue revocada.")
+        raise NotFoundError("La API key no existe o ya fue revocada.")
     api_key.revoked_at = datetime.now(UTC)
     db.commit()
     return {"estado": "OK", "mensaje": "API key revocada exitosamente."}

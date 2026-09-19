@@ -64,6 +64,29 @@ Reglas:
 - No duplicar este formulario en otras pantallas.
 - Si se modifica el payload, actualizar también la documentación de API.
 
+### `components/modals/EditTransactionModal.tsx`
+
+Responsabilidad:
+
+- Editar una transacción existente (contraparte de `TransactionModal`, que solo crea).
+
+Props principales:
+
+- `isOpen`, `transaction`, `accounts`, `categories`, `isSaving`, `onClose`, `onSave`.
+
+Comportamiento:
+
+- Extraído de `transactions/page.tsx` en Fase 27 (`docs/specs/fase_27_spec.md`) — antes vivía
+  inline en la página.
+- Owns el estado del formulario internamente; el padre lo monta con `key={editSessionKey}`
+  (incrementado en cada apertura) para forzar un reset limpio en vez de un `useEffect`
+  sincronizando props → estado.
+- Validación por campo con foco automático en el primer error (mismo patrón que `TransactionModal`).
+
+Reglas:
+
+- No duplicar este formulario en otras pantallas.
+
 ### `components/charts/BudgetRing.tsx`
 
 Responsabilidad:

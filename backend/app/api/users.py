@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.responses import Response  # 🆕 Fase 26
@@ -10,6 +10,7 @@ from app.core import auth_cookies, security  # 🆕 Fase 26: auth_cookies
 from app.core.database import get_db
 from app.core.default_categories import BASE_REGISTRATION_CATEGORY_NAMES
 from app.core.email import render_email_html, send_email
+from app.core.exceptions import BadRequestError, ForbiddenError, InternalServerError
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user, get_password_hash
 from app.core.user_deletion import delete_user_cascade
@@ -81,7 +82,7 @@ def crear_usuario(request: Request, usuario: schemas.UserCreate, db: Session = D
     normalized_email = usuario.email.lower().strip()
     usuario_existente = db.query(models.User).filter(models.User.email == normalized_email).first()
     if usuario_existente:
-        raise HTTPException(status_code=400, detail="Error: Este correo electrónico ya está registrado.")
+        raise BadRequestError("Error: Este correo electrónico ya está registrado.")
 
     hashed_password = get_password_hash(usuario.password)
 
@@ -149,7 +150,7 @@ def eliminar_cuenta_propia(
     if current_user.password_hash is not None and not security.verify_password(
         body.password, current_user.password_hash
     ):
-        raise HTTPException(status_code=403, detail="Contraseña incorrecta.")
+        raise ForbiddenError("Contraseña incorrecta.")
 
     try:
         delete_user_cascade(db, current_user)
@@ -160,7 +161,4 @@ def eliminar_cuenta_propia(
         auth_cookies.limpiar_cookies_de_sesion(response)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="No se pudo eliminar la cuenta. Contactá soporte.",
-        ) from None
+        raise InternalServerError("No se pudo eliminar la cuenta. Contactá soporte.") from None

@@ -9,6 +9,54 @@
 
 ---
 
+## Fase 28 — `DomainError` extendida a los 10 routers restantes (2026-09-19)
+
+Cierra la deuda de arquitectura que Fase 25 §25.3 dejó abierta a propósito: `app/core/exceptions.py`
+deja de ser un piloto de 4 call sites en `transactions.py` y pasa a cubrir los 65 `raise
+HTTPException` que quedaban repartidos en los 10 routers restantes (14 en `transactions.py`,
+12 en `auth.py`, 8 en `accounts.py`, 8 en `categories.py`, 7 en `budgets.py`, 3 en `users.py`,
+3 en `dashboard.py`, 2 cada uno en `api_keys.py`/`push.py`/`notifications.py`). Traducción
+mecánica 1:1 — mismo `status_code`, mismo `detail` (string o dict, verbatim, incluido el caso
+`EMAIL_NOT_VERIFIED` de `auth.py`) — sin cambio de contrato de API.
+
+`DomainError.detail` se amplía de `str | None` a `Any` (necesario por el caso dict de arriba).
+Taxonomía genérica por status code: `BadRequestError`/`UnauthorizedError`/`ForbiddenError`/
+`NotFoundError`/`ConflictError`/`ValidationError` (400–422). **Dos clases no estaban en el spec
+original y se agregaron durante la implementación** al encontrar sitios reales que no encajaban
+en 400–422: `InternalServerError` (500, 6 sitios — errores internos ya capturados por `except`
+genérico en `transactions.py`/`dashboard.py`/`users.py`, no reglas de negocio) y
+`ServiceUnavailableError` (503, 2 sitios — Google/VAPID sin configurar en `auth.py`/`push.py`).
+`AccountNotFoundError`/`CategoryNotFoundError` (Fase 25) quedaron sin tocar.
+
+251 tests backend en verde (verificados incrementalmente, router por router, no solo al final),
+`ruff check`/`ruff format` limpios, cero `raise HTTPException` vivo en `app/api/` (verificado con
+grep — los 4 matches restantes son comentarios `# 🔁 antes:` que documentan la migración anterior).
+
+Spec: `docs/specs/fase_28_spec.md`.
+
+---
+
+## Fase 27 — Modularidad frontend: `transactions/page.tsx` descompuesto (2026-09-19)
+
+Refactor puro de modularidad, sin cambio de comportamiento: `frontend/app/(dashboard)/
+transactions/page.tsx` pasa de 646 a 313 líneas, extrayendo `components/transactions/
+TransactionFilters.tsx` (chips de preset + inputs de fecha + selects de cuenta/categoría),
+`components/transactions/TransactionList.tsx` (filas + paginación + empty state) y
+`components/modals/EditTransactionModal.tsx` (modal de edición completo, seguía el patrón de
+`TransactionModal.tsx`). La página queda como orquestador: estado de filtros sincronizado con la
+URL, paginación, y las dos mutaciones con sus listas de invalidación exactas.
+
+Detalle notable: `EditTransactionModal` usa `key={editSessionKey}` (incrementado en cada
+`openEditModal`) para forzar un remount limpio del formulario en cada apertura — sin esto,
+reabrir la misma transacción tras cancelar una edición en curso podía dejar resurgir datos
+editados sin guardar, un caso borde que sí existía (implícitamente) en el código original.
+
+`pnpm lint`/`pnpm build` limpios, las 18 rutas generan.
+
+Spec: `docs/specs/fase_27_spec.md`.
+
+---
+
 ## Fase 26 — JWT de `localStorage` a cookies `httpOnly` (2026-09-19)
 
 Retomó el diseño que Fase 25 §25.5 dejó deliberadamente sin ejecutar (decisiones J1–J8):

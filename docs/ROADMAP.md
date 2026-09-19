@@ -102,6 +102,29 @@ No hay una próxima fase planeada todavía — ver "Backlog priorizado" abajo pa
 
 ---
 
+## Fases 27–28 — completadas (2026-09-19): cierre de deuda de documentación/arquitectura/modularidad
+
+Antes de retomar el backlog de features, se cerraron los últimos ítems de deuda de modularidad
+que la auditoría 2026-09-19 (`CODE_REVIEW.md`) todavía marcaba como abiertos — a pedido explícito
+del dueño del producto, revirtiendo la propia recomendación de la auditoría de tratarlos como
+trabajo oportunista sin fase dedicada.
+
+- **Fase 27** — `frontend/app/(dashboard)/transactions/page.tsx` (646 líneas, sobre el umbral de
+  alerta) descompuesto en `TransactionFilters`/`TransactionList`/`EditTransactionModal`; la página
+  queda en 313 líneas como orquestador. Refactor puro, sin cambio de comportamiento. Spec:
+  `docs/specs/fase_27_spec.md`.
+- **Fase 28** — `app/core/exceptions.py` deja de ser un piloto de `transactions.py` (Fase 25) y
+  cubre los 65 `raise HTTPException` que quedaban en los 10 routers restantes, con una taxonomía
+  genérica por status code (400–422, más 500/503 agregados durante la implementación). Cero
+  cambio de contrato de API. Spec: `docs/specs/fase_28_spec.md`.
+
+Con esto, la deuda de modularidad de `docs/TODO.md` 🟢 queda cerrada salvo la nomenclatura mixta
+español/inglés (documentada como irrelevante en solitario) y la migración oportunista de call
+sites a tipos generados desde OpenAPI (sin fecha, convivencia deliberada desde Fase 16 §16.3). La
+próxima fase (29) retoma el backlog priorizado abajo.
+
+---
+
 ## Pendientes abiertos
 
 - [ ] **Login con Google caído en producción** (`disabled_client`) — sigue siendo prioritario
@@ -128,6 +151,9 @@ Ver también `docs/TODO.md` para deuda técnica y bugs confirmados no ligados a 
 ---
 
 ## Backlog priorizado — reordenado 2026-09-19 para uso personal
+
+Con las Fases 27–28 cerradas (arriba), este backlog retoma la numeración desde **Fase 29**: el
+primer candidato de la tabla de abajo (filtros de fecha/categoría) es el siguiente a especificar.
 
 Criterio de prioridad: ¿esto hace que trackear y entender mis propios gastos sea más fácil o más
 claro? Ya no hay criterio de "adquisición", "retención de usuarios" ni "efecto wow" de

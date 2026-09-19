@@ -3,13 +3,14 @@ import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.budget_alerts import spent_por_categoria_y_moneda
 from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.database import get_db
+from app.core.exceptions import InternalServerError, NotFoundError
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
@@ -207,7 +208,7 @@ def obtener_serie_flujo_caja(
             .first()
         )
         if not cuenta:
-            raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+            raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
     filtro_moneda = currency or current_user.preferred_currency or "COP"
     try:
@@ -250,7 +251,7 @@ def obtener_serie_flujo_caja(
         ]
     except Exception:
         logger.exception("Error in cashflow-series")
-        raise HTTPException(status_code=500, detail="Error al obtener serie de flujo de caja") from None
+        raise InternalServerError("Error al obtener serie de flujo de caja") from None
 
 
 @router.get("/category-distribution", response_model=list[schemas.CategoryDistributionData])
@@ -273,7 +274,7 @@ def obtener_distribucion_categorias(
             .first()
         )
         if not cuenta:
-            raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+            raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
     filtro_moneda = currency or current_user.preferred_currency or "COP"
     filtros = [

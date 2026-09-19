@@ -1,12 +1,13 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.database import get_db
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
@@ -29,7 +30,7 @@ def crear_presupuesto(
         .first()
     )
     if not categoria:
-        raise HTTPException(status_code=404, detail="La categoría asignada no existe.")
+        raise NotFoundError("La categoría asignada no existe.")
 
     presupuesto_existente = (
         db.query(models.Budget)
@@ -47,7 +48,7 @@ def crear_presupuesto(
     )
 
     if presupuesto_existente:
-        raise HTTPException(status_code=400, detail="Ya existe un presupuesto para esta categoría, moneda, mes y año.")
+        raise BadRequestError("Ya existe un presupuesto para esta categoría, moneda, mes y año.")
 
     nuevo_presupuesto = models.Budget(**presupuesto.model_dump(), user_id=current_user.id)
     try:
@@ -55,10 +56,7 @@ def crear_presupuesto(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="Ya existe un presupuesto para esta categoría, moneda, mes y año.",
-        ) from None
+        raise BadRequestError("Ya existe un presupuesto para esta categoría, moneda, mes y año.") from None
     db.refresh(nuevo_presupuesto)
     return nuevo_presupuesto
 
@@ -92,7 +90,7 @@ def eliminar_presupuesto(
 ):
     presupuesto = db.query(models.Budget).filter(models.Budget.id == budget_id).first()
     if not presupuesto or presupuesto.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="El presupuesto no existe o no tienes permisos.")
+        raise NotFoundError("El presupuesto no existe o no tienes permisos.")
 
     presupuesto.deleted_at = datetime.now(UTC)
     db.commit()
@@ -111,7 +109,7 @@ def actualizar_presupuesto(
     )
 
     if not presupuesto_db:
-        raise HTTPException(status_code=404, detail="Presupuesto no encontrado.")
+        raise NotFoundError("Presupuesto no encontrado.")
 
     # Validamos que la nueva categoría exista
     categoria = (
@@ -123,7 +121,7 @@ def actualizar_presupuesto(
         .first()
     )
     if not categoria:
-        raise HTTPException(status_code=404, detail="La nueva categoría asignada no existe.")
+        raise NotFoundError("La nueva categoría asignada no existe.")
 
     # Actualizamos los datos
     presupuesto_db.amount_limit = presupuesto_actualizado.amount_limit
@@ -142,9 +140,6 @@ def actualizar_presupuesto(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="Ya existe un presupuesto para esta categoría, moneda, mes y año.",
-        ) from None
+        raise BadRequestError("Ya existe un presupuesto para esta categoría, moneda, mes y año.") from None
     db.refresh(presupuesto_db)
     return presupuesto_db
