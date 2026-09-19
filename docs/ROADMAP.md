@@ -936,11 +936,11 @@ propio usuario ni tiene ningún tratamiento especial en el código.
 
 ---
 
-## Fase 23 — Cierre de vulnerabilidad crítica: account takeover vía Google OAuth 🔴 bloqueante
+## Fase 23 — Cierre de vulnerabilidad crítica: account takeover vía Google OAuth 🔴 bloqueante — COMPLETA
 
 **Objetivo:** cerrar el account takeover confirmado en `login_google` antes de tocar cualquier
 otra fase nueva de esta tanda — ya hay al menos un usuario real fuera de la cuenta de pruebas.
-**Bloquea las Fases 24 y 25.**
+**Bloqueaba las Fases 24 y 25 — desbloqueadas desde 2026-09-18.**
 
 > Encontrado en la auditoría completa del 2026-09-15 (`CODE_REVIEW.md`, sección Seguridad) y
 > confirmado leyendo `backend/app/api/auth.py:62-122`: `login_google` auto-linkea una cuenta
@@ -952,26 +952,35 @@ otra fase nueva de esta tanda — ya hay al menos un usuario real fuera de la cu
 > `test_existing_unverified_password_account_is_autolinked` (`backend/tests/test_auth.py:525`)
 > asserta el comportamiento vulnerable como esperado (`password_hash is not None` tras el link) —
 > confirma que la decisión de diseño se tomó, pero el análisis de amenaza detrás del comentario
-> "no es account takeover" (`auth.py:90-93`) no contempló este escenario. Tracked en
-> `docs/TODO.md` 🔴 Bloqueantes.
+> "no es account takeover" (`auth.py:90-93`) no contempló este escenario. Especificado en
+> `docs/specs/fase_23_spec.md` (commit `d29c207`) e implementado el mismo día (commit
+> `6e4d11a`).
 
-- [ ] **Invalidar/reconfirmar el `password_hash` existente al auto-linkear una cuenta de
-      Google** — 1-2d
-  - Opción A: anular `password_hash` al vincular (la cuenta queda Google-only hasta que el
-    usuario fije una contraseña nueva desde Settings, mismo flujo ya existente para cuentas
-    Google-only puras, ver Fase 22).
-  - Opción B: exigir confirmación de la contraseña actual antes de completar el auto-link (más
-    fricción sobre un flujo hoy silencioso, pero preserva la contraseña si el usuario la quiere
-    seguir usando).
-  - Decisión de producto pendiente entre A y B antes de implementar — ninguna se eligió todavía.
-- [ ] **Corregir `test_existing_unverified_password_account_is_autolinked`** para reflejar el
-      comportamiento arreglado (hoy asserta el bug como correcto) + agregar un test explícito del
-      escenario hostil (atacante pre-registra el email, víctima hace login con Google, la
-      contraseña del atacante deja de ser válida contra esa cuenta) — parte del mismo esfuerzo de
-      arriba, no una tarea separada.
-- [ ] **Ownership check en `POST /push/subscribe`** (`backend/app/api/push.py:33-51`) antes de
-      reasignar `user_id` al hacer upsert por `endpoint` — 1-2h. Severidad baja (el endpoint no es
-      adivinable) pero el chequeo falta igual.
+- [x] **Invalidar el `password_hash` existente al auto-linkear una cuenta de Google** —
+      *(2026-09-18)* — **Opción A elegida**: `login_google()` anula `password_hash` al
+      auto-linkear, pero solo cuando la cuenta todavía **no estaba verificada** en el momento de
+      ese login (`not user.email_verified`, capturado antes de mutar nada — Decisión G1/G2 de la
+      spec). Una cuenta que ya se había verificado por el flujo normal de contraseña conserva su
+      contraseña sin cambios al vincular Google después. La cuenta afectada queda Google-only,
+      mismo estado que una cuenta creada directamente con Google (Fase 20) o una que ya usa el
+      mecanismo `has_password` de Fase 22 para fijar una contraseña nueva desde Settings/
+      forgot-password. Opción B (exigir confirmar la contraseña actual) se descartó: en el
+      escenario de ataque real la víctima nunca conoce la contraseña que el atacante plantó, así
+      que la habría bloqueado a ella sin proteger nada.
+- [x] **Corregir `test_existing_unverified_password_account_is_autolinked`** — *(2026-09-18)* —
+      ahora asserta `password_hash is None` tras el link (antes asertaba el bug como correcto).
+      Se agregó `test_autolink_on_unverified_account_nullifies_attacker_planted_password`
+      (escenario hostil completo end-to-end: la contraseña plantada por el atacante deja de ser
+      válida contra `POST /auth/login`) y se extendió
+      `test_existing_verified_password_account_is_idempotent_and_autolinked` con la regresión de
+      que una cuenta ya verificada conserva su contraseña y sigue logueando con ella.
+- [x] **Ownership check en `POST /push/subscribe`** (`backend/app/api/push.py`) — *(2026-09-18)* —
+      no se bloquea la reasignación cross-usuario (rompería el caso legítimo, ya documentado a
+      propósito, de un dispositivo compartido entre dos usuarios distintos) — se audita con
+      `logger.warning(...)` cada vez que un `endpoint` existente cambia de dueño, visible vía
+      `docker compose logs -f backend`. Test nuevo:
+      `test_subscribe_reassigns_ownership_across_users_and_logs_it`
+      (`backend/tests/test_push.py`).
 
 ---
 

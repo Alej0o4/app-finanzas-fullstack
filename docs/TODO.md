@@ -27,29 +27,19 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🔴 Bloqueantes — antes de que exista un usuario que no seas tú
 
-- [ ] **Account takeover vía auto-link de Google OAuth (auditoría de seguridad 2026-09-15).**
-  - `POST /users/` crea el `User` con `password_hash` utilizable de inmediato — solo el
-    *login* está bloqueado hasta verificar el email (`auth.py` `login()`), no la creación
-    de la cuenta.
-  - `login_google` (`auth.py`, función `login_google`) busca al usuario solo por email y,
-    si existe, marca `email_verified = True` y linkea `google_id` **sin tocar
-    `password_hash` ni pedir re-autenticación**.
-  - Exploit: un atacante registra `victima@gmail.com` con una contraseña propia (nunca la
-    verifica — cuesta un solo request, rate-limitado). Cuando la víctima real hace login
-    con Google usando ese mismo email, el backend encuentra la fila del atacante, la marca
-    `email_verified=True` y linkea el `google_id` de la víctima a ella. La contraseña del
-    atacante ahora es válida contra `POST /auth/login` (ya con `email_verified=True`):
-    control total de la cuenta y los datos financieros de la víctima, sin que note nada
-    distinto al loguearse con Google.
-  - El comentario en el código que descarta "no es account takeover" solo contempla el
-    caso de Google linkeando una cuenta-contraseña *ya verificada*, no el de un atacante
-    plantando deliberadamente una fila sin verificar para interceptar un login de Google
-    futuro.
-  - Fix sugerido: al auto-linkear, invalidar/anular el `password_hash` existente (o exigir
-    la contraseña actual para confirmar el link) en vez de confiar en una fila sin
-    verificar.
-  - **→ Programado en `docs/ROADMAP.md` Fase 23** (2026-09-16), fase bloqueante que frena las
-    Fases 24/25.
+- [x] **Account takeover vía auto-link de Google OAuth (auditoría de seguridad 2026-09-15) —
+  resuelto.** *(2026-09-18, Fase 23, `docs/specs/fase_23_spec.md`, commit `6e4d11a`)*
+  - `login_google` ahora anula `password_hash` al auto-linkear una cuenta que todavía no
+    estaba verificada (`not user.email_verified` capturado antes de mutar nada) — cualquier
+    contraseña plantada por un atacante deja de ser válida contra `POST /auth/login` en
+    cuanto la víctima real hace login con Google. Una cuenta ya verificada antes de vincular
+    Google conserva su contraseña sin cambios.
+  - Test de regresión del bug original (`test_existing_unverified_password_account_is_
+    autolinked`) corregido + test nuevo del escenario hostil completo
+    (`test_autolink_on_unverified_account_nullifies_attacker_planted_password`) +
+    regresión sobre la cuenta ya verificada.
+  - Nada pendiente de esta entrada — no quedó ningún ítem sin implementar de Fase 23 sobre
+    este hallazgo.
 
 ---
 
@@ -72,13 +62,16 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     validación nativa del browser con un guard custom que nunca se ve.
   - **→ Programado en `docs/ROADMAP.md` Fase 24** (2026-09-16).
 
-- [ ] **`POST /push/subscribe` no valida ownership del `endpoint` (auditoría 2026-09-15).**
-  - `backend/app/api/push.py` hace upsert por `endpoint` y reasigna `user_id =
-    current_user.id` sin chequear si ese endpoint ya pertenecía a otro usuario. Explotable
-    solo si un atacante puede obtener/repetir el endpoint push de otra persona (no es
-    adivinable, pero un dispositivo compartido, sync de browser, o el riesgo ya aceptado de
-    JWT-en-localStorage podrían filtrarlo). Falta el chequeo de ownership igual.
-  - **→ Programado en `docs/ROADMAP.md` Fase 23** (2026-09-16).
+- [x] **`POST /push/subscribe` no valida ownership del `endpoint` (auditoría 2026-09-15) —
+  resuelto.** *(2026-09-18, Fase 23, commit `6e4d11a`)*
+  - No se bloqueó la reasignación cross-usuario: bloquear rompería el caso legítimo, ya
+    documentado a propósito en el propio docstring, de un dispositivo compartido entre dos
+    usuarios distintos — y con los datos del request no hay forma de distinguir ambos casos
+    del lado del servidor. En vez de eso, cada reasignación que cruza de un usuario a otro
+    queda auditada con `logger.warning(...)`, visible vía `docker compose logs -f backend`.
+    Severidad ya tasada como baja (el `endpoint` no es adivinable) — visibilidad, no bloqueo.
+  - Test nuevo: `test_subscribe_reassigns_ownership_across_users_and_logs_it`
+    (`backend/tests/test_push.py`).
 
 - [ ] **`docker-compose.yml` publica backend (8000) y frontend (3000) en todas las
   interfaces, no solo Tailscale (auditoría 2026-09-15).**
