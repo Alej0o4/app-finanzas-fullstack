@@ -984,7 +984,7 @@ otra fase nueva de esta tanda — ya hay al menos un usuario real fuera de la cu
 
 ---
 
-## Fase 24 — UX: fallos silenciosos del flujo principal
+## Fase 24 — UX: fallos silenciosos del flujo principal ✅ completa (2026-09-18)
 
 **Objetivo:** cerrar el patrón de "falla silenciosa" que la auditoría del 2026-09-15 encontró
 repetido en el flujo de mayor tráfico (dashboard + captura), más dos bugs de datos de bajo
@@ -994,23 +994,42 @@ esfuerzo detectados en la misma revisión.
 > Incluye `AccountUpdate.currency`, ya trackeado suelto en "Pendientes heredados de fases
 > anteriores" más abajo — se retira de esa lista y se agenda aquí.
 
-- [ ] **`isError` + retry visible en las 4 queries del dashboard**
+> Implementación completa el 2026-09-18 — ver `docs/specs/fase_24_spec.md` para el desglose
+> técnico y las decisiones de arquitectura numeradas (A1-A4, B1-B2, C1-C4, D1-D2). La decisión
+> más delicada (C2, el guard de moneda en `PUT /accounts/{id}`) se verificó contra las 6
+> funciones reales que leen montos de `Transaction`/`Account`: 4 (las del dashboard) ya filtran
+> por `Transaction.currency` y habrían sido seguras con un cambio libre, pero `reconciliar_cuenta`
+> y `obtener_resumen_mensual_cuenta` no filtran y se habrían roto en silencio — se eligió bloquear
+> el cambio de moneda con `400` cuando la cuenta tiene transacciones activas, mismo guard que ya
+> usa `eliminar_cuenta`. Ese mismo trabajo encontró y corrigió, como prerrequisito necesario (no
+> alcance ampliado), un bug ya en producción: cualquier `PUT` que omitiera `highlighted` la
+> reseteaba a `false` — `actualizar_cuenta` pasó a actualización parcial real
+> (`model_fields_set`). Verificación: pytest backend 228 passed, `ruff check`/`format` limpios;
+> frontend `pnpm lint`/`format:check`/`build` + `tsc --noEmit` limpios. `backend/docs/
+> API_REFERENCE.md` y `frontend/docs/API_CONTRACT.md` actualizados en el mismo commit.
+
+- [x] **`isError` + retry visible en las 4 queries del dashboard**
       (`frontend/app/(dashboard)/page.tsx:45-64` — summary, budgets-progress,
-      recent-transactions, category-breakdown) — 2-3h. Hoy un fallo de red se ve idéntico a "sin
+      recent-transactions, category-breakdown) — 2-3h *(2026-09-18, ver `docs/specs/
+      fase_24_spec.md` §24.1 — reutiliza `EmptyState` con un slot `action` nuevo, botón
+      "Reintentar" independiente por sección)*. Hoy un fallo de red se ve idéntico a "sin
       datos todavía", sin aviso ni forma de reintentar, en la pantalla que el usuario abre
       primero.
-- [ ] **`noValidate` + error de campo visible en el formulario de ingreso mensual inline del
-      dashboard** — 1-2h. Es el único formulario del proyecto sin el patrón de Fase 12 §12.8:
-      input inválido hace `return` sin toast ni error de campo, mezclando validación nativa del
-      browser con un guard custom que nunca se ve.
-- [ ] **`PUT /accounts/{id}` debe aplicar cambios de `currency`** (`backend/app/api/accounts.py`,
-      `actualizar_cuenta`) — 1h. `AccountUpdate` hereda el campo de `AccountBase`, pero el
-      endpoint solo actualiza `name`/`type`/`highlighted` — el frontend envía `currency` sin
-      ningún efecto ni error.
-- [ ] **Exponer `category_icon` en `category-distribution`** — 1h. `CategoryBreakdownBars`
-      (Fase 11 §11.4) cae siempre al ícono genérico `Wallet` porque el schema
-      `CategoryDistributionData` no trae el campo, a diferencia de `BudgetProgress`. Cosmético,
-      no afecta montos ni orden.
+- [x] **`noValidate` + error de campo visible en el formulario de ingreso mensual inline del
+      dashboard** — 1-2h *(2026-09-18, ver §24.2 — mismo patrón de Fase 12 §12.8, foco por
+      `ref` al fallar la validación)*. Es el único formulario del proyecto sin ese patrón:
+      input inválido hacía `return` sin toast ni error de campo, mezclando validación nativa del
+      browser con un guard custom que nunca se veía.
+- [x] **`PUT /accounts/{id}` debe aplicar cambios de `currency`** (`backend/app/api/accounts.py`,
+      `actualizar_cuenta`) — 1h *(2026-09-18, ver §24.3 — Decisión C2: guard `400` si la cuenta
+      tiene transacciones activas, mismo criterio que `eliminar_cuenta`; ver nota arriba sobre
+      el bug de `highlighted` corregido de paso)*. `AccountUpdate` hereda el campo de
+      `AccountBase`, pero el endpoint solo actualizaba `name`/`type`/`highlighted` — el frontend
+      enviaba `currency` sin ningún efecto ni error.
+- [x] **Exponer `category_icon` en `category-distribution`** — 1h *(2026-09-18, ver §24.4)*.
+      `CategoryBreakdownBars` (Fase 11 §11.4) caía siempre al ícono genérico `Wallet` porque el
+      schema `CategoryDistributionData` no traía el campo, a diferencia de `BudgetProgress`.
+      Cosmético, no afecta montos ni orden.
 
 ---
 

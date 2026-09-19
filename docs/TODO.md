@@ -45,22 +45,18 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🟠 Bugs confirmados (auditoría 2026-08-22 + 2026-09-15)
 
-- [ ] **El dashboard confunde "error de red" con "no hay datos" (auditoría 2026-09-15).**
-  - `frontend/app/(dashboard)/page.tsx` (queries de summary/budgets-progress/recent-
-    transactions/category-breakdown) nunca chequean `isError` de `useQuery` — solo
-    `isLoading`. Un request fallido se ve idéntico a "todavía no tenés presupuestos/
-    transacciones": la página más importante de la app no avisa que algo se rompió, ni
-    ofrece reintentar. Mismo patrón de fallo silencioso que `QuickTransactionModal` (ver
-    arriba), pero en la pantalla principal.
-  - **→ Programado en `docs/ROADMAP.md` Fase 24** (2026-09-16).
+- [x] **El dashboard confunde "error de red" con "no hay datos" (auditoría 2026-09-15) —
+  resuelto.** *(2026-09-18, Fase 24 §24.1, `docs/specs/fase_24_spec.md`, commit `529de0c`)*
+  - Las 4 queries del dashboard (summary/budgets-progress/recent-transactions/category-
+    breakdown) ahora exponen `isError`/`refetch`; cada sección muestra un mensaje
+    específico + botón "Reintentar" independiente (reutilizando `EmptyState` con un slot
+    `action` nuevo) en vez de caer en el mismo estado visual que "sin datos todavía".
 
-- [ ] **Formulario de ingreso mensual inline en el dashboard falla en silencio
-  (auditoría 2026-09-15).**
-  - `frontend/app/(dashboard)/page.tsx` (`onSubmit` del ingreso mensual): input inválido
-    hace `return` sin toast ni error de campo. Es además el único formulario de la app sin
-    `noValidate` (todos los demás siguen el patrón de Fase 12 §12.8), así que mezcla
-    validación nativa del browser con un guard custom que nunca se ve.
-  - **→ Programado en `docs/ROADMAP.md` Fase 24** (2026-09-16).
+- [x] **Formulario de ingreso mensual inline en el dashboard falla en silencio
+  (auditoría 2026-09-15) — resuelto.** *(2026-09-18, Fase 24 §24.2, commit `529de0c`)*
+  - El `<form>` ahora tiene `noValidate`, el guard custom setea un error de campo visible
+    (prop `error` de `Input`) y mueve el foco al input en vez de hacer `return` silencioso
+    — mismo patrón que Fase 12 §12.8.
 
 - [x] **`POST /push/subscribe` no valida ownership del `endpoint` (auditoría 2026-09-15) —
   resuelto.** *(2026-09-18, Fase 23, commit `6e4d11a`)*
@@ -95,10 +91,16 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     "Presupuestos recurrentes"). Verificado contra el código actual. El único gap real
     relacionado es la falta de test directo sobre esa función — ver Fase 25 del ROADMAP.
 
-- [ ] **`Account PUT` ignora cambios de `currency` silenciosamente.**
-  - `AccountUpdate` hereda `currency` de `AccountBase`, pero `accounts.py` solo actualiza
-    `name`, `type` y `highlighted`. El frontend envía `currency` sin efecto.
-  - **→ Programado en `docs/ROADMAP.md` Fase 24** (2026-09-16).
+- [x] **`Account PUT` ignora cambios de `currency` silenciosamente — resuelto.** *(2026-09-18,
+  Fase 24 §24.3, commit `529de0c`)*
+  - `actualizar_cuenta` ahora aplica `currency` cuando cambia de verdad y la cuenta no tiene
+    transacciones activas; si las tiene, responde `400` (mismo criterio que `eliminar_cuenta`)
+    en vez de ignorar el campo en silencio. De paso pasó a actualización parcial real
+    (`model_fields_set`), lo que también corrigió un bug encontrado en el camino: un `PUT`
+    que omitía `highlighted` lo reseteaba a `false` en cada edición de nombre/tipo.
+  - Verificado que hoy ningún caller de la UI web envía `currency` en este endpoint (el modal
+    de edición no tiene selector de moneda) — el efecto observable es para callers directos
+    de la API por ahora.
 
 ---
 
@@ -211,13 +213,11 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   - `crear_transaccion` devuelve `TransactionResponse`; variables `cuenta`/`transaccion`
     junto a `models.Account`. Irrelevante en solitario, molesto si el proyecto se abre.
 
-- [ ] **`category-distribution` no expone `icon` — el desglose por categoría del dashboard
-  usa un ícono genérico en todas las filas.**
-  - `CategoryBreakdownBars` (Fase 11 §11.4) siempre cae al fallback `Wallet`: el schema
-    `CategoryDistributionData` no trae `category_icon` como sí lo hace `BudgetProgress`.
-  - Bajo impacto: cosmético, no afecta montos ni orden. Agregar el campo al schema y al
-    query de `obtener_distribucion_categorias` si se quiere ícono real por fila.
-  - **→ Programado en `docs/ROADMAP.md` Fase 24** (2026-09-16).
+- [x] **`category-distribution` no expone `icon` — resuelto.** *(2026-09-18, Fase 24 §24.4,
+  commit `529de0c`)*
+  - `CategoryDistributionData`/`category-distribution` ahora exponen `category_icon` (mismo
+    campo que `BudgetProgress`), y `CategoryBreakdownBars` lo consume — el desglose por
+    categoría del dashboard muestra el ícono real en vez de caer siempre al fallback `Wallet`.
 
 ---
 
