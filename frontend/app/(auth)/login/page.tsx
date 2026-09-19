@@ -62,16 +62,16 @@ function LoginForm() {
       formData.append('password', password);
 
       // Petición al backend
-      const response = await api.post('auth/login', formData, {
+      await api.post('auth/login', formData, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
       });
 
-      // Guardamos los tokens en localStorage
-      const { access_token, refresh_token } = response.data;
-      localStorage.setItem('jwt_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
+      // Fase 26 (Decisión F3): ya no se guardan tokens en localStorage — el Set-Cookie de
+      // la respuesta de login deja la sesión lista (access_token/refresh_token HttpOnly +
+      // csrf_token legible por JS). El body sigue trayendo los tokens para clientes
+      // no-browser, pero el frontend ya no los toca.
 
       // Fase 19 §19.1.4/19.1.5: la Decisión 10.1.4 de Fase 10 ("login siempre redirige a
       // /capture") queda resuelta aquí — un usuario recurrente con 2+ transacciones va

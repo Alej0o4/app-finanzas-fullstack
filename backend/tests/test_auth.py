@@ -9,6 +9,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import pytest
 from freezegun import freeze_time
 from jose import jwt
 
@@ -659,6 +660,144 @@ class TestLoginGoogle:
 
         sixth_response = client.post("/api/v1/auth/google", json={"id_token": "idtoken-falso"})
         assert sixth_response.status_code == 429
+
+
+# --- Cookies de sesión (Fase 26, Decisiones B1/B2/B6/B7/B8) -------------------
+
+
+class TestCookiesDeSesion:
+    """Fase 26: `login`/`refresh` setean los tokens como cookies httpOnly, `get_current_user`
+    acepta el cookie como fallback, y `logout`/baja de cuenta los limpian en su respuesta.
+
+    Hallazgo 13 de docs/specs/fase_26_spec.md: el TestClient de httpx mantiene un cookie-jar
+    real por instancia — se loguea y el jar hace el resto, sin simular un navegador a mano.
+
+    COOKIE_SECURE se fuerza a False: el TestClient habla por `http://testserver` y un cookie
+    Secure jamás viaja sobre http (regla del navegador y de httpx) — sin este monkeypatch
+    ningún test llegaría a ver el cookie en la request.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _cookies_viajan_sobre_http(self, monkeypatch):
+        monkeypatch.setattr(security, "COOKIE_SECURE", False)
+
+    def test_login_sets_httponly_access_and_refresh_cookies(self, client, db_session):
+        email = "cookies-set@example.com"
+        register = client.post(
+            "/api/v1/users/",
+            json={"email": email, "full_name": "Usuaria Cookies", "password": "Contrasena10"},
+        )
+        assert register.status_code == 200, register.text
+        db_session.query(models.User).filter(models.User.email == email).update({"email_verified": True})
+        db_session.commit()
+
+        response = client.post("/api/v1/auth/login", data={"username": email, "password": "Contrasena10"})
+        assert response.status_code == 200, response.text
+
+        set_cookies = response.headers.get_list("set-cookie")
+        por_nombre = {linea.split("=", 1)[0]: linea for linea in set_cookies}
+
+        access = por_nombre["access_token"]
+        assert "HttpOnly" in access
+        assert "Max-Age=900" in access  # 15 min = TTL del access token (Decisión B2)
+        assert "Path=/" in access
+        assert "SameSite=lax" in access
+
+        refresh = por_nombre["refresh_token"]
+        assert "HttpOnly" in refresh
+        assert "Max-Age=2592000" in refresh  # 30 días
+        assert "Path=/api/v1/auth" in refresh  # angosto pero cubre /logout (Decisión B2, corregida)
+
+        csrf = por_nombre["csrf_token"]
+        assert "HttpOnly" not in csrf  # el frontend lo lee por JS (double-submit, B5)
+        assert "Path=/" in csrf
+        assert "Max-Age=2592000" in csrf
+
+        # El cookie-jar del propio TestClient adoptó los tres (Hallazgo 13).
+        assert client.cookies.get("access_token") is not None
+        assert client.cookies.get("refresh_token") is not None
+        assert client.cookies.get("csrf_token") is not None
+
+    def test_refresh_rotates_cookie_without_body(self, client, register_and_login):
+        register_and_login(email="cookies-refresh@example.com")
+        access_antes = client.cookies.get("access_token")
+        refresh_antes = client.cookies.get("refresh_token")
+        assert access_antes is not None
+
+        # Sin body: el cookie refresh_token (jar de httpx, Path angosto) viaja solo.
+        response = client.post("/api/v1/auth/refresh")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["access_token"]
+        assert body["refresh_token"]
+
+        access_despues = client.cookies.get("access_token")
+        assert access_despues is not None
+        assert access_despues != access_antes  # el access token se rotó
+        assert client.cookies.get("refresh_token") != refresh_antes
+
+    def test_protected_route_authenticates_via_cookie_without_header(self, client, register_and_login):
+        user = register_and_login(email="cookies-me@example.com")
+
+        # Sin Authorization a mano: el cookie access_token viaja solo y autentica.
+        response = client.get("/api/v1/users/me")
+        assert response.status_code == 200, response.text
+        assert response.json()["id"] == user["id"]
+
+    def test_logout_clears_all_three_cookies(self, client, register_and_login):
+        register_and_login(email="cookies-logout@example.com")
+        assert client.cookies.get("access_token") is not None
+
+        # Logout es una mutación con cookie de sesión presente y no está exenta del
+        # middleware CSRF — el frontend (Decisión F1) manda X-CSRF-Token en todo no-GET.
+        response = client.post(
+            "/api/v1/auth/logout",
+            headers={"X-CSRF-Token": client.cookies.get("csrf_token")},
+        )
+        assert response.status_code == 200, response.text
+
+        # limpiar_cookies_de_sesion manda Max-Age=0 para los tres (mismos paths que al setear).
+        assert client.cookies.get("access_token") is None
+        assert client.cookies.get("refresh_token") is None
+        assert client.cookies.get("csrf_token") is None
+
+    def test_logout_via_cookie_only_revokes_refresh_token_server_side(self, client, register_and_login):
+        """Regresión: con el Path angosto original (/api/v1/auth/refresh) el cookie
+        refresh_token nunca llegaba a /auth/logout (ruta hermana, no subruta) y el logout
+        por navegador no revocaba nada server-side — corregido ampliando el Path a
+        /api/v1/auth. Se captura el valor del cookie ANTES de logout (que lo limpia) y se
+        lo reusa a mano en /refresh después, para verificar la revocación en DB
+        independientemente de que el cookie ya no esté en el jar."""
+        register_and_login(email="cookies-logout-revoke@example.com")
+        refresh_token_value = client.cookies.get("refresh_token")
+        assert refresh_token_value is not None
+
+        response = client.post(
+            "/api/v1/auth/logout",
+            headers={"X-CSRF-Token": client.cookies.get("csrf_token")},
+        )
+        assert response.status_code == 200, response.text
+
+        refresh_after_logout = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token_value})
+        assert refresh_after_logout.status_code == 401
+
+    def test_delete_account_clears_cookies(self, client, register_and_login):
+        # Hallazgo 6 / Decisión B8: borrar la cuenta también debe limpiar los cookies en la
+        # misma respuesta (el frontend ya no puede tocar cookies httpOnly).
+        user = register_and_login(email="cookies-borrar-cuenta@example.com")
+        assert client.cookies.get("access_token") is not None
+
+        response = client.request(
+            "DELETE",
+            "/api/v1/users/me",
+            json={"password": user["password"]},
+            headers={"X-CSRF-Token": client.cookies.get("csrf_token")},
+        )
+        assert response.status_code == 204, response.text
+
+        assert client.cookies.get("access_token") is None
+        assert client.cookies.get("refresh_token") is None
+        assert client.cookies.get("csrf_token") is None
 
 
 def test_jwt_created_with_expired_delta_is_rejected_by_jose_directly():

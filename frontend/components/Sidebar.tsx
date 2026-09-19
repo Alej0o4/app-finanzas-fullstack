@@ -48,16 +48,13 @@ export default function Sidebar() {
   }, [closeSidebar, isMobile]);
 
   const handleLogout = async () => {
-    const refreshToken = localStorage.getItem('refresh_token');
-    if (refreshToken) {
-      try {
-        await api.post('auth/logout', { refresh_token: refreshToken });
-      } catch {
-        // Si falla la revocación, el token expirará solo
-      }
+    // Fase 26 (Decisión F4): sin body — el cookie refresh_token (HttpOnly) viaja solo
+    // con withCredentials; el backend limpia los cookies en su propia respuesta.
+    try {
+      await api.post('auth/logout');
+    } catch {
+      // Si falla la revocación, el token expirará solo
     }
-    localStorage.removeItem('jwt_token');
-    localStorage.removeItem('refresh_token');
     queryClient.clear();
     router.push('/login');
   };

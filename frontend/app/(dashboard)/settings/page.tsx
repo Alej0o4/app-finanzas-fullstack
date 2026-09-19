@@ -114,10 +114,10 @@ export default function SettingsPage() {
       await api.delete('users/me', { data: { password } });
     },
     onSuccess: () => {
-      localStorage.removeItem('jwt_token');
-      localStorage.removeItem('refresh_token');
-      // queryClient.clear(), no invalidar: no debe quedar ningún dato del usuario
-      // borrado accesible en memoria aunque el navegador quede abierto.
+      // Fase 26 (Decisión F4/B8): el backend ya limpia los tres cookies de sesión en
+      // la misma respuesta de DELETE /users/me — ya no hay nada que borrar del lado
+      // cliente. queryClient.clear(), no invalidar: no debe quedar ningún dato del
+      // usuario borrado accesible en memoria aunque el navegador quede abierto.
       queryClient.clear();
       toast.success('Tu cuenta fue eliminada.');
       router.push('/login');

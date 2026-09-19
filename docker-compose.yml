@@ -23,7 +23,8 @@ services:
     environment:
       DATABASE_URL: postgresql://oikos:${POSTGRES_PASSWORD:?Definí POSTGRES_PASSWORD en .env}@postgres:5432/oikos
       SECRET_KEY: ${SECRET_KEY:?Definí SECRET_KEY en .env}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://100.76.235.30:3000}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,https://alejo-yoga-6-13alc6.tail44159c.ts.net}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
       ENABLE_TAILSCALE_CORS: "true"
       FRONTEND_URL: ${FRONTEND_URL:-http://100.76.235.30:3000}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
@@ -64,7 +65,7 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://100.76.235.30:8000}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://alejo-yoga-6-13alc6.tail44159c.ts.net}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
     restart: unless-stopped
     depends_on:

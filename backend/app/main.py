@@ -26,6 +26,7 @@ from app.api import (
     transactions,
     users,
 )
+from app.core.csrf import csrf_protection_middleware  # 🆕 Fase 26
 from app.core.database import SessionLocal
 from app.core.default_categories import DEFAULT_CATEGORIES, LEGACY_DEFAULT_CATEGORY_NAMES
 from app.core.exceptions import DomainError
@@ -155,6 +156,11 @@ app.add_middleware(
     BaseHTTPMiddleware,
     dispatch=request_id_middleware,
 )
+
+app.add_middleware(
+    BaseHTTPMiddleware,
+    dispatch=csrf_protection_middleware,
+)  # 🆕 Fase 26 (Decisión B5)
 
 
 def _domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:

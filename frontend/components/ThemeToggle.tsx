@@ -4,6 +4,7 @@ import { Sun, Moon, Monitor } from 'lucide-react';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useEffect, useCallback, useRef } from 'react';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
+import { haySesionActiva } from '@/lib/authSession';
 
 type Theme = 'dark' | 'light' | 'system';
 
@@ -76,7 +77,7 @@ export default function ThemeToggle() {
     prevTheme.current = next;
     localStorage.setItem('oikos_theme', next);
     applyTheme(next);
-    if (typeof window !== 'undefined' && localStorage.getItem('jwt_token')) {
+    if (haySesionActiva()) {
       updatePreferences.mutate({ preferred_theme: next });
     }
   };

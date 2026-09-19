@@ -63,11 +63,11 @@ export default function RegisterPage() {
         const formData = new URLSearchParams();
         formData.append('username', email);
         formData.append('password', password);
-        const loginResponse = await api.post('auth/login', formData, {
+        await api.post('auth/login', formData, {
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         });
-        localStorage.setItem('jwt_token', loginResponse.data.access_token);
-        localStorage.setItem('refresh_token', loginResponse.data.refresh_token);
+        // Fase 26 (Decisión F3): el Set-Cookie de la respuesta de /auth/login ya
+        // deja la sesión lista — ya no se guardan tokens en localStorage.
         router.push('/capture?onboarding=1');
       } catch {
         router.push('/login?registered=true');

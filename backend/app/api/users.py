@@ -4,8 +4,9 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.responses import Response  # 🆕 Fase 26
 
-from app.core import security
+from app.core import auth_cookies, security  # 🆕 Fase 26: auth_cookies
 from app.core.database import get_db
 from app.core.default_categories import BASE_REGISTRATION_CATEGORY_NAMES
 from app.core.email import render_email_html, send_email
@@ -140,6 +141,7 @@ def actualizar_perfil(
 @limiter.limit("5/minute")
 def eliminar_cuenta_propia(
     request: Request,
+    response: Response,  # 🆕 Fase 26 — limpiar los cookies de sesión en la misma respuesta
     body: schemas.UserDeleteRequest,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -152,6 +154,10 @@ def eliminar_cuenta_propia(
     try:
         delete_user_cascade(db, current_user)
         db.commit()
+        # 🆕 Fase 26 (Hallazgo 6/Decisión B8): el frontend ya no puede limpiar cookies
+        # httpOnly por JS — si este endpoint no los borra, el navegador conserva un
+        # access_token/refresh_token con apariencia válida apuntando a un user_id inexistente.
+        auth_cookies.limpiar_cookies_de_sesion(response)
     except IntegrityError:
         db.rollback()
         raise HTTPException(

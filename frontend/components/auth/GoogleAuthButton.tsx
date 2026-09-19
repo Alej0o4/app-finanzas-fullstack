@@ -41,9 +41,9 @@ export default function GoogleAuthButton() {
 
     const handleCredential = async (response: { credential: string }) => {
       try {
-        const { data } = await api.post('auth/google', { id_token: response.credential });
-        localStorage.setItem('jwt_token', data.access_token);
-        localStorage.setItem('refresh_token', data.refresh_token);
+        // Fase 26 (Decisión F3): ya no se guardan tokens en localStorage — el Set-Cookie
+        // de la respuesta de /auth/google deja la sesión lista, igual que en el login.
+        await api.post('auth/google', { id_token: response.credential });
 
         // Mismo criterio de destino que login/page.tsx:79-86 — funciona igual para un
         // registro nuevo (has_transaction_history=false → /capture) y para una usuaria

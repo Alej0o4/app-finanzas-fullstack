@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -51,9 +51,22 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 # el endpoint chequea explícitamente `None` y responde 503 con mensaje claro.
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")  # None si no está configurado — opcional
 
+# Flag de cookies (Fase 26). Default True: el acceso de producción se consolida en el dominio
+# HTTPS de Tailscale Funnel (Decisión B10, docs/specs/fase_26_spec.md) — un cookie Secure=True
+# nunca se envía a un origen http://, así que este flag solo necesita bajar a False en entornos
+# que sirven HTTP plano a propósito (docker-compose.dev.yml, desarrollo local sin Funnel).
+# Mismo patrón que ENABLE_TAILSCALE_CORS (Fase 7 §3.3): un flag de entorno, no una rama de
+# código nueva, para no hardcodear una topología de red específica de este despliegue.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"
+
 # 2. CONFIGURACIONES DE SEGURIDAD
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+# 🆕 Fase 26 (Decisión B4): auto_error=False — sin header `Authorization`, la dependencia NO
+# lanza 401 por su cuenta; `get_current_user` decide: primero header, y si viene vacío, cae
+# al cookie `access_token` como fallback (Hallazgo 1 de docs/specs/fase_26_spec.md). Con el
+# default auto_error=True, un fallback de cookie dentro del cuerpo de get_current_user nunca
+# se alcanzaría para una request sin header.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 # 3. FUNCIONES DE CONTRASEÑAS (Bcrypt)
@@ -105,12 +118,29 @@ def generate_api_key() -> str:
 
 
 # 6. EL GUARDIA DE SEGURIDAD (Dependencia para las rutas protegidas)
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+def get_current_user(
+    request: Request,  # 🆕 Fase 26 — necesario para leer el cookie de fallback
+    token: str | None = Depends(oauth2_scheme),  # 🆕 ahora puede ser None
+    db: Session = Depends(get_db),
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudieron validar las credenciales",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    # 🆕 Fase 26 (Decisión B4): el header Authorization sigue siendo el camino primario —
+    # clientes no-browser (curl, Shortcuts de iOS con oikos_pat_, un futuro cliente API) no
+    # cambian nada. El cookie es un fallback que solo se consulta si no vino header, nunca al
+    # revés — no hay ninguna rama nueva que toque el camino de API key.
+    # Nota: "access_token" es un string literal a propósito — app/core/auth_cookies.py
+    # (que define ACCESS_COOKIE_NAME) importa de este módulo, así que importarlo acá a nivel
+    # de módulo crearía un ciclo. Ambos valores deben coincidir por convención (ver el
+    # comentario cruzado en auth_cookies.py; Decisión B4 de docs/specs/fase_26_spec.md).
+    if token is None:
+        token = request.cookies.get("access_token")
+    if token is None:
+        raise credentials_exception
 
     if token.startswith(API_KEY_PREFIX):
         return _get_user_from_api_key(token, db, credentials_exception)

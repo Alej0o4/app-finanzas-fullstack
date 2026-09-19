@@ -86,6 +86,16 @@ class TestAutenticacionConApiKey:
         response = client.get("/api/v1/users/me", headers=test_user["headers"])
         assert response.status_code == 200
 
+    def test_api_key_still_authenticates_with_no_cookie_present(self, client, test_user):
+        """Regresión directa contra el Hallazgo 10 de docs/specs/fase_26_spec.md — el camino
+        de API key (Shortcuts de iOS reales) no debe depender de ningún cookie."""
+        creada = _crear_api_key(client, test_user["headers"])
+        headers = {"Authorization": f"Bearer {creada['key']}"}
+        response = client.get("/api/v1/users/me", headers=headers)
+        assert response.status_code == 200, response.text
+        # Ningún cookie de sesión debería haberse seteado por esta request.
+        assert "access_token" not in response.cookies
+
 
 class TestRevocacion:
     def test_revoked_key_returns_401_on_next_request(self, client, test_user):

@@ -5,9 +5,10 @@ from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from sqlalchemy.orm import Session
+from starlette.responses import Response  # 🆕 Fase 26
 
 from app.api.users import enviar_email_verificacion, inicializar_datos_usuario_nuevo
-from app.core import security
+from app.core import auth_cookies, security  # 🆕 Fase 26: auth_cookies
 from app.core.database import get_db
 from app.core.email import render_email_html, send_email
 from app.core.rate_limit import limiter
@@ -19,7 +20,12 @@ router = APIRouter()
 
 @router.post("/login", response_model=schemas.TokenResponse)
 @limiter.limit("5/minute")
-def login(request: Request, user_credentials: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(
+    request: Request,
+    response: Response,  # 🆕 Fase 26
+    user_credentials: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
     normalized_email = user_credentials.username.lower().strip()
     user = db.query(models.User).filter(models.User.email == normalized_email).first()
 
@@ -50,6 +56,13 @@ def login(request: Request, user_credentials: OAuth2PasswordRequestForm = Depend
     )
     db.commit()
 
+    # 🆕 Fase 26 (Decisión B6): cookies de sesión en la misma respuesta que el body —
+    # el frontend deja de leer/escribir localStorage y autentica vía cookie.
+    csrf_token = auth_cookies.generar_csrf_token()
+    auth_cookies.establecer_cookies_de_sesion(
+        response, access_token=access_token, refresh_token=raw_refresh, csrf_token=csrf_token
+    )
+
     return {
         "access_token": access_token,
         "refresh_token": raw_refresh,
@@ -59,7 +72,12 @@ def login(request: Request, user_credentials: OAuth2PasswordRequestForm = Depend
 
 @router.post("/google", response_model=schemas.TokenResponse)
 @limiter.limit("5/minute")
-def login_google(request: Request, body: schemas.GoogleLoginRequest, db: Session = Depends(get_db)):
+def login_google(
+    request: Request,
+    response: Response,  # 🆕 Fase 26
+    body: schemas.GoogleLoginRequest,
+    db: Session = Depends(get_db),
+):
     """Login/registro con ID token de Google Identity Services (Fase 20 §20.3).
 
     Google ya verificó la identidad del usuario (firma + `email_verified`), así que esta
@@ -132,6 +150,12 @@ def login_google(request: Request, body: schemas.GoogleLoginRequest, db: Session
     )
     db.commit()
 
+    # 🆕 Fase 26 (Decisión B6): mismos cookies que login() — el frontend no bifurca lógica.
+    csrf_token = auth_cookies.generar_csrf_token()
+    auth_cookies.establecer_cookies_de_sesion(
+        response, access_token=access_token, refresh_token=raw_refresh, csrf_token=csrf_token
+    )
+
     return {
         "access_token": access_token,
         "refresh_token": raw_refresh,
@@ -141,10 +165,22 @@ def login_google(request: Request, body: schemas.GoogleLoginRequest, db: Session
 
 @router.post("/refresh", response_model=schemas.TokenResponse)
 def refresh(
-    body: schemas.RefreshRequest,
+    request: Request,  # 🆕 Fase 26 — leer el cookie refresh_token cuando no viene body
+    response: Response,  # 🆕 Fase 26
+    body: schemas.RefreshRequest | None = None,  # 🆕 Fase 26 — ahora opcional
     db: Session = Depends(get_db),
 ):
-    token_hash = security.hash_token(body.refresh_token)
+    # 🆕 Fase 26: el frontend manda el refresh en el cookie (Path angosto
+    # /api/v1/auth/refresh) sin body; el body queda para clientes no-browser. Si vienen
+    # ambos, se usa el body (misma semántica de rotación/reuso que el flujo viejo).
+    raw_refresh = body.refresh_token if body else request.cookies.get(auth_cookies.REFRESH_COOKIE_NAME)
+    if raw_refresh is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token inválido o expirado",
+        )
+
+    token_hash = security.hash_token(raw_refresh)
     stored = (
         db.query(models.RefreshToken)
         .filter(
@@ -174,6 +210,13 @@ def refresh(
     )
     db.commit()
 
+    # 🆕 Fase 26 (Decisión B6): rota también los cookies — el access token nuevo reemplaza
+    # al viejo y el refresh token nuevo reemplaza al que acaba de revocarse.
+    csrf_token = auth_cookies.generar_csrf_token()
+    auth_cookies.establecer_cookies_de_sesion(
+        response, access_token=access_token, refresh_token=raw_refresh, csrf_token=csrf_token
+    )
+
     return {
         "access_token": access_token,
         "refresh_token": raw_refresh,
@@ -183,23 +226,24 @@ def refresh(
 
 @router.post("/logout")
 def logout(
-    body: schemas.LogoutRequest,
+    response: Response,  # 🆕 Fase 26
+    request: Request,  # 🆕 Fase 26
+    body: schemas.LogoutRequest | None = None,  # 🆕 Fase 26 — ahora opcional
     db: Session = Depends(get_db),
 ):
-    token_hash = security.hash_token(body.refresh_token)
-    stored = (
-        db.query(models.RefreshToken)
-        .filter(
-            models.RefreshToken.token_hash == token_hash,
-            models.RefreshToken.revoked_at.is_(None),
+    raw_refresh = request.cookies.get(auth_cookies.REFRESH_COOKIE_NAME) or (body.refresh_token if body else None)
+    if raw_refresh:
+        token_hash = security.hash_token(raw_refresh)
+        stored = (
+            db.query(models.RefreshToken)
+            .filter(models.RefreshToken.token_hash == token_hash, models.RefreshToken.revoked_at.is_(None))
+            .first()
         )
-        .first()
-    )
+        if stored:
+            stored.revoked_at = datetime.now(UTC)
+            db.commit()
 
-    if stored:
-        stored.revoked_at = datetime.now(UTC)
-        db.commit()
-
+    auth_cookies.limpiar_cookies_de_sesion(response)  # 🆕 Fase 26
     return {"estado": "OK", "mensaje": "Sesión cerrada exitosamente."}
 
 

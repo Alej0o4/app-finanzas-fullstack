@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { haySesionActiva } from '@/lib/authSession';
 import { queryKeys } from '@/lib/queryKeys';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useEffect } from 'react';
@@ -11,7 +12,7 @@ export function useUserPreferences() {
   const { updateConfig } = useAppConfig();
   const queryClient = useQueryClient();
 
-  const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('jwt_token');
+  const hasToken = haySesionActiva();
 
   const query = useQuery({
     queryKey: queryKeys.userPreferences(),
