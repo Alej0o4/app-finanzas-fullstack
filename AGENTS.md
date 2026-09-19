@@ -1,15 +1,22 @@
 # AGENTS.md — Oikos
 
-App web de finanzas personales multi-moneda. Backend FastAPI + SQLAlchemy, frontend Next.js App Router + React 19 + TanStack Query + Zustand + Recharts + Tailwind CSS 4. PostgreSQL en Docker, sin tests automatizados aún.
+App web de finanzas personales multi-moneda. Backend FastAPI + SQLAlchemy, frontend Next.js App Router + React 19 + TanStack Query + Zustand + Recharts + Tailwind CSS 4. PostgreSQL en Docker. 251 tests de backend (pytest), lint limpio (`ruff`).
 
-> ⚠️ **Cambio de enfoque (2026-08-22).** El proyecto pasó de "app personal de un solo usuario"
-> a producto para cualquier persona. Esto revirtió tres decisiones que estaban fuera de scope:
-> **Alembic, testing y versionado de API** — las tres vuelven a scope.
+> ⚠️ **Cambio de enfoque (2026-08-22 → revertido 2026-09-19).** El proyecto pasó de "app
+> personal de un solo usuario" a producto para cualquier persona (2026-08-22), y **volvió a ser
+> herramienta personal el 2026-09-19** — sin plan de publicarlo ni abrirlo a usuarios externos.
 >
-> El dashboard pasa de medir **stock** (saldo de cuentas) a medir **flujo**
-> (`ingreso mensual − gastos del mes`); los saldos siguen visibles en vista secundaria.
+> Lo que **no** cambia con la vuelta: Alembic, testing y versionado de API siguen en scope (por
+> mantenibilidad, no por multi-usuario), igual que la capa `app/services/`/`app/schemas/`/
+> `app/core/exceptions.py`. Lo que **sí** cambia: seguridad/auth/hardening deja de ser foco
+> activo — el baseline de la Fase 26 (cookies httpOnly + CSRF) se considera suficiente para un
+> solo usuario de confianza. No proponer trabajo nuevo de seguridad salvo bug real o pedido
+> explícito.
 >
-> **Lee [docs/ROADMAP.md](docs/ROADMAP.md) antes de proponer arquitectura.**
+> El dashboard mide **flujo** (`ingreso mensual − gastos del mes`), no solo **stock** (saldo de
+> cuentas); los saldos siguen visibles en vista secundaria.
+>
+> **Lee [docs/ROADMAP.md](docs/ROADMAP.md) antes de proponer arquitectura o features.**
 
 ## Startup
 
@@ -64,7 +71,7 @@ cd frontend && pnpm dev                          # http://localhost:3000
 | Docker seed | `docker compose exec backend python -c "from app.core.seed import run_seed; run_seed()"` |
 | Docker delete user | `docker compose exec backend python -c "from app.core.database import SessionLocal; from app.core.user_deletion import delete_user_by_email; db = SessionLocal(); print(delete_user_by_email(db, 'email@ejemplo.com')); db.close()"` — Fase 21, en el CLAUDE.md raíz |
 
-No hay typecheck ni test configurados. Formateadores: `ruff` (backend) + `prettier` (frontend).
+No hay typecheck configurado. Tests: `pytest` desde `backend/` (SQLite en memoria, sin Docker). Formateadores: `ruff` (backend) + `prettier` (frontend).
 
 > Para cargar datos de prueba multi-moneda con 3 cuentas y 45 transacciones, ejecuta el comando Seed. Credenciales: `test@test.com` / `testpass123`. Ver skill `seed-data`.
 
@@ -72,19 +79,19 @@ No hay typecheck ni test configurados. Formateadores: `ruff` (backend) + `pretti
 
 - Backend es fuente de verdad para saldos, presupuestos, agregados. **Frontend no recalcula métricas financieras.**
 - State: React Query (servidor, staleTime 1 min, refetchOnWindowFocus=false) + Zustand (solo UI: sidebar) + useState (formularios/modales).
-- Auth: `OAuth2PasswordBearer` → JWT con `sub=user_id`. Login espera `username` (email) + `password`. Refresh token rotation.
+- Auth: JWT con `sub=user_id`, `access_token`/`refresh_token`/`csrf_token` en cookies httpOnly (Fase 26, ver Startup arriba); `Authorization: Bearer` sigue siendo el camino primario para clientes no-browser (curl, API keys). Login espera `username` (email) + `password`. Refresh token rotation.
 - Preferencias de usuario: `preferred_currency` (COP), `preferred_locale` (es-CO), `preferred_theme` (dark) vía `GET/PATCH /api/users/me/preferences`.
 - CORS configurado vía variable de entorno `ALLOWED_ORIGINS`.
-- Rate limiting en login via `slowapi` (5 req/min).
-- Rutas FastAPI monolíticas (sin capa service); `backend/app/services/` vacío (deuda técnica).
+- Rate limiting en login via `slowapi` (5 req/min, en memoria — distribuido queda fuera de scope, ver ROADMAP).
+- Capa de servicios naciente: `app/services/ledger.py` (Fase 25) extrae la lógica contable compartida por `transactions.py`; la mayoría de la lógica de negocio de los otros 10 routers sigue inline (deuda técnica incremental, documentada en TODO.md).
 - DB: PostgreSQL en Docker (`postgres:16-alpine`), datos en volumen `pgdata`. Backend lee `DATABASE_URL` de variable de entorno.
 - Frontend import alias `@/*` → raíz del proyecto.
 - `pnpm` (no npm).
 
 ## Documentación relevante
 
-- [Roadmap](docs/ROADMAP.md) — **empieza aquí.** Cambio de enfoque, los 5 componentes del MVP, fases 7–14 y backlog priorizado.
-- [Deuda técnica y bugs](docs/TODO.md) — repriorizada el 2026-08-22; incluye bugs confirmados en auditoría.
+- [Roadmap](docs/ROADMAP.md) — **empieza aquí.** Cambio de enfoque (2026-08-22 y 2026-09-19), los 5 componentes del MVP, historial de fases y backlog priorizado.
+- [Deuda técnica y bugs](docs/TODO.md) — repriorizada el 2026-08-22 y de nuevo el 2026-09-19; incluye bugs confirmados en auditoría.
 - [Reglas de negocio](backend/docs/BUSINESS_RULES.md) — invariantes de dominio.
 - [API](backend/docs/API_REFERENCE.md) + [Contrato frontend](frontend/docs/API_CONTRACT.md) — endpoints y payloads.
 - [Frontend: fetching y estado](frontend/docs/STATE_AND_FETCHING.md) — query keys y patrones de invalidación.

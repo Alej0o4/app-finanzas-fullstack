@@ -1,216 +1,327 @@
 # Auditoría de Proyecto: Oikos — Finanzas Personales
 
-**Fecha**: 15 de septiembre de 2026
+**Fecha**: 19 de septiembre de 2026
 **Analista**: Claude Code
-**Tipo de proyecto**: Fullstack multi-usuario (post-pivote 2026-08-22)
+**Tipo de Proyecto**: Fullstack, uso personal (post-pivote 2026-09-19, ver `docs/ROADMAP.md`)
 **Stack**: FastAPI + SQLAlchemy + Alembic + PostgreSQL / Next.js 15 (App Router) + TanStack Query + Zustand + Tailwind
 
-**Nota de continuidad**: esta auditoría retoma y verifica hallazgos ya redactados (sin commitear) por una sesión anterior del mismo día, cortada antes de cerrar el reporte. Todos los hallazgos de esa sesión fueron re-verificados contra el código actual antes de incluirse aquí — ninguno se copió sin confirmar. El reporte de julio (`CODE_REVIEW.md` previo, commit `d4633a3`) queda obsoleto: es pre-pivote, cuando tests/Alembic/versionado de API todavía estaban fuera de alcance.
+---
+
+## 0. Nota de calibración
+
+Esta auditoría se corre inmediatamente después del segundo pivote del proyecto (2026-09-19):
+Oikos vuelve a ser una herramienta personal para un solo dueño/desarrollador, sin plan de
+apertura a usuarios externos. Por eso:
+
+- **Sí se evalúa con exigencia normal**: estructura, arquitectura, mantenibilidad, modularidad,
+  testing, migraciones, versionado de API, documentación, UX de la app en sí. Estas cosas
+  facilitan seguir construyendo features, con o sin otros usuarios.
+- **No se penaliza** como si fuera un producto para usuarios externos: hardening de seguridad,
+  robustez de auth más allá de lo ya construido, escalabilidad de rate limiting, TTL/scopes de
+  API keys, resistencia a abuso. El baseline llegado a la Fase 26 (cookies `httpOnly` + CSRF,
+  verificación de email, rate limiting básico en memoria, fix del account-takeover de Google
+  OAuth) se trata como *suficiente* para un usuario de confianza — el score de Seguridad
+  responde a "¿es razonable para este contexto?", no a "¿es production-grade para internet
+  público?".
+- Si algo es un bug real que afecta el uso diario del dueño (ej. login de Google caído en
+  producción), se marca igual — no es "seguridad", es una feature del producto rota.
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-### Estado General: 6.3/10
+### Estado General: 7.6/10
 
-**Veredicto**: ACEPTABLE CON UN BLOQUEANTE CRÍTICO. La base de Fases 7–22 es sólida — Alembic, tests de backend reales, versionado de API, rate limiting, verificación de email — y la documentación sigue siendo un punto fuerte genuino. Pero hay una vulnerabilidad de **account takeover confirmada y codificada como comportamiento esperado en un test** (no un descuido: el equipo la revisó y la validó con el razonamiento equivocado). Es bloqueante para cualquier usuario real que no seas vos, y hoy ya hay al menos un usuario real fuera de la cuenta de pruebas (`alejomaringomez2004@gmail.com`, vía Google).
+**Veredicto**: BUENO. La auditoría anterior (2026-09-15, 6.3/10) encontró una vulnerabilidad
+crítica confirmada y tres bugs de "falla silenciosa" en el flujo más usado de la app; las
+Fases 23–26 (2026-09-16 a 2026-09-19) cerraron ambos frentes con evidencia verificable en el
+código y en 251 tests backend en verde. El score sube no por relajar el criterio, sino porque
+el trabajo real se hizo. La brecha que queda es más pareja: ningún área está en rojo, pero
+`app/core/exceptions.py` sigue siendo un piloto de un solo router, `AGENTS.md` quedó
+desactualizado en la misma pasada que actualizó `CLAUDE.md`/`ROADMAP.md`/`TODO.md`, y el login
+de Google sigue caído en producción por un motivo ajeno al código.
 
-### Top 3 problemas críticos
+### Top 3 Problemas Críticos
 
-1. **Account takeover vía auto-link de Google OAuth** — Impacto: Crítico
-   - `backend/app/api/auth.py:89-97` (`login_google`)
-   - Un atacante registra la víctima por email+contraseña (nunca verifica). Cuando la víctima hace login con Google, el backend encuentra esa fila, la marca `email_verified=True` y linkea el `google_id` real **sin tocar el `password_hash` del atacante**. Resultado: la contraseña del atacante queda válida contra `/auth/login` para la cuenta ya verificada de la víctima.
-   - El propio test `test_existing_unverified_password_account_is_autolinked` (`backend/tests/test_auth.py:525`) asserta `user.password_hash is not None` después del link como comportamiento *correcto* — confirma que la decisión de diseño (comentario "no es account takeover" en `auth.py:90-93`) se tomó, pero el análisis de amenaza que la sustenta no contempló el caso de un atacante plantando la fila a propósito.
+1. **Login con Google caído en producción (`disabled_client`)** — Impacto: Alto (afecta el uso
+   diario real del único usuario del producto)
+   - No es un bug de código — Google Cloud deshabilitó el OAuth Client ID, apelación pendiente
+     desde 2026-09-19 (`docs/TODO.md`, sección 🟠). El workaround activo (reset de contraseña
+     sobre una cuenta `password_hash IS NULL`) funciona pero es un efecto colateral no
+     diseñado, no una feature.
+   - Solución: nada que hacer en código mientras la apelación esté pendiente; si falla, recrear
+     el Client ID y completar el consent screen con branding real (ya documentado como plan B).
 
-2. **Tres bugs de "falla silenciosa" en el flujo de mayor tráfico** — Impacto: Alto
-   - Dashboard (`frontend/app/(dashboard)/page.tsx:45-64`): las 4 queries destructuran `isLoading` pero ninguna `isError` — un fallo de red se ve idéntico a "sin datos todavía", sin aviso ni retry, en la pantalla que el usuario abre primero.
-   - Ingreso mensual inline en el mismo archivo: input inválido hace `return` sin toast ni error de campo, y es el único formulario sin `noValidate` del proyecto (rompe el patrón de Fase 12 §12.8).
-   - `QuickTransactionModal` (ya documentado en `docs/TODO.md`): usuario recién registrado sin cuentas → el botón "Registrar" no hace nada.
+2. **`AGENTS.md` quedó desactualizado mientras `CLAUDE.md`/`ROADMAP.md`/`TODO.md` se
+   actualizaban hoy mismo** — Impacto: Medio
+   - `AGENTS.md:3` dice "sin tests automatizados aún" (hay 251 tests backend pasando);
+     `AGENTS.md:79` dice "`backend/app/services/` vacío (deuda técnica)" (existe
+     `app/services/ledger.py` desde Fase 25); el aviso de cambio de enfoque en `AGENTS.md:5-12`
+     sigue anclado al pivote del 2026-08-22, sin mención del pivote de vuelta del 2026-09-19.
+     El propio `CLAUDE.md` (que sí está al día) documenta que `AGENTS.md` es un archivo
+     paralelo dirigido a otros agentes — quedó fuera de la disciplina de "actualizar ambos
+     docs en el mismo cambio" que el proyecto sí aplica a `API_REFERENCE.md`/`API_CONTRACT.md`.
+   - Solución: sincronizar `AGENTS.md` con el estado actual (~30 min, es un resumen, no
+     duplica todo `CLAUDE.md`).
 
-3. **La lógica que mueve la plata está triplicada, no la que menos riesgo tiene** — Impacto: Medio-Alto
-   - El signo del delta (`income → +monto` / `expense → -monto`) está copiado en `backend/app/api/transactions.py:186`, `:312` y `:393-395` (crear/eliminar/actualizar). Mientras tanto sí se extrajo una capa de servicio ad-hoc en `app/core/` para notificaciones, alertas y recurrencia de presupuestos — todo código de menor riesgo que la contabilidad de transacciones, que sigue sin extraer.
+3. **La capa de excepciones de dominio y la extracción de lógica a `app/services/` siguen
+   siendo pilotos de un solo caso** — Impacto: Medio (deuda de arquitectura reconocida, no un
+   hallazgo nuevo)
+   - `app/core/exceptions.py` solo lo usa `transactions.py` (4 `raise`); quedan 65
+     `raise HTTPException` repartidos en los otros 10 routers mezclando validación de negocio
+     con la capa HTTP. Esto ya está documentado como deuda deliberada en `docs/TODO.md` —
+     se repite acá porque sigue siendo el mayor bloque de deuda de modularidad real del
+     backend, no para reabrir una decisión ya tomada.
+   - Solución: seguir el plan ya escrito (incremental, router por router, la próxima vez que
+     se toque cada uno por otra razón) — no requiere una fase dedicada.
 
-### Fortalezas destacadas
+### Fortalezas Destacadas
 
-- ✅ **Documentación excepcional y viva**: 11+ documentos técnicos (`backend/docs/`, `frontend/docs/`, `docs/`), specs por fase, un `TODO.md` con historial de resueltos fechado desde julio. Pocos proyectos de este tamaño mantienen esta disciplina.
-- ✅ **Cobertura de tests de backend real y mayor de lo que sugiere la narrativa**: 5.690 líneas de test contra 2.261 líneas de routers (`backend/tests/`, 15 archivos) — Google OAuth, API keys y push tienen suites dedicadas y prueban casos negativos (token inválido, rate limit, expiración).
-- ✅ **Migraciones, versionado y seguridad básica ya resueltos de raíz**: Alembic reemplazó el `create_all()` ad-hoc, `/api/v1/` centralizado en un solo archivo (`lib/api.ts`), secrets sin default silencioso, rate limiting real en auth, headers de seguridad, CORS condicionado por env var.
+- ✅ **Los tres hallazgos críticos de la auditoría anterior están genuinamente resueltos, no
+  solo reclasificados**: el auto-link de Google OAuth anula `password_hash` en cuentas no
+  verificadas (`backend/app/api/auth.py:114-124`, con test de regresión hostil); las 4 queries
+  del dashboard exponen `isError`/`refetch` con botón "Reintentar"
+  (`frontend/app/(dashboard)/page.tsx:50-92`); el delta contable vive en un solo lugar
+  (`backend/app/services/ledger.py`), consumido por los 3 call sites que antes lo duplicaban.
+- ✅ **Disciplina de documentación y de historial técnico fuera de lo común para un proyecto
+  de un solo desarrollador**: `docs/CHANGELOG.md` con 26 fases, cada una con spec propia en
+  `docs/specs/`, y un `docs/TODO.md` que no solo lista deuda sino que registra cuándo y por qué
+  cada ítem se resolvió o se cerró como fuera de scope — incluida la honestidad de marcar
+  hallazgos previos como "ya no aplica por el pivote", no como "resuelto" cuando no lo fueron.
+- ✅ **251 tests backend en verde, `ruff check` limpio, sin dependencias sueltas**: verificado
+  ejecutando la suite completa en esta auditoría (no solo leído del changelog) — coincide
+  exactamente con el número que reporta `docs/CHANGELOG.md` para Fase 26.
 
-### Quick wins (horas)
+### Quick Wins (horas)
 
-- Chequear ownership en `POST /push/subscribe` antes de reasignar `user_id` (~1-2h)
-- Agregar manejo de `isError` + retry visible a las 4 queries del dashboard (~2-3h)
-- `noValidate` + error visible en el formulario de ingreso mensual (~1-2h)
-- Hacer que `PUT /accounts/{id}` respete cambios de `currency` (~1h)
-- Exponer `category_icon` en `category-distribution` (~1h)
+- Sincronizar `AGENTS.md` con el estado post-pivote 2026-09-19 (~0.5-1h)
+- Extraer subcomponentes de `transactions/page.tsx` (646 líneas, sigue creciendo desde las 380
+  de julio) la próxima vez que se toque (~2-3h)
+- Nada de seguridad — ver nota de calibración arriba
 
 ---
 
-## 2. Análisis por área
+## 2. Análisis por Área
 
 ### 2.1 Estructura
-**Score**: 7.5/10
+**Score**: 8/10 | **Prioridad**: Baja
 
-**Hallazgos**:
-- Separación clara backend/frontend, un router por dominio (`api/auth.py`, `api/transactions.py`, etc.), route groups de Next.js bien usados (`(auth)` vs `(dashboard)` vs `capture/` standalone).
-- `lib/api.ts` centraliza correctamente el prefijo de versión — ya paga dividendos: si mañana existe `/api/v2/`, es un solo archivo a tocar.
-- Puntos de fricción ya reconocidos por el propio equipo en `docs/TODO.md`: `schemas.py` (462 líneas, 49 clases) mezcla auth/transacciones/push/API-keys sin separación por dominio; `models.py` (341 líneas, 14 clases) está mejor organizado y no es urgente partirlo; `transactions/page.tsx` llegó a 658 líneas (era 380 en julio — la tendencia importa más que el número absoluto).
-- Nomenclatura mixta español/inglés dentro del mismo módulo (`crear_transaccion` → `TransactionResponse`) — irrelevante en solitario, sí sería fricción real si el repo se abre a más de una persona.
+**Hallazgos Positivos**:
+- Separación backend/frontend clara, un router por dominio (`backend/app/api/{auth,transactions,accounts,...}.py`), route groups de Next.js bien usados (`(auth)` vs `(dashboard)` vs `capture/` standalone documentado explícitamente en `CLAUDE.md`).
+- `schemas.py` (antes 462 líneas/48 clases, señalado como el archivo más forzado del repo en la auditoría 2026-09-15) se partió en 12 módulos por dominio bajo `backend/app/schemas/` en Fase 25, con `schemas.py` como shim de re-exports — cero call sites rotos, verificado (`backend/app/schemas/schemas.py`, 110 líneas de solo imports).
+- Ningún archivo de backend supera las 500 líneas hoy (el más largo, `transactions.py`, 434 líneas); `models.py` se mantiene en un solo archivo a propósito, ya bien encapsulado por clase, y la propia auditoría anterior no lo marcaba urgente.
+
+**Áreas de Mejora**:
+- `frontend/app/(dashboard)/transactions/page.tsx` sigue creciendo: 380 líneas en julio → 646 hoy. Ya cruzó el umbral de alerta (>500 líneas) del checklist de estructura.
+- Nomenclatura mixta español/inglés dentro del mismo módulo (`crear_transaccion` → `TransactionResponse`) — irrelevante en solitario para un repo de un solo dev, documentado ya como tal en `docs/TODO.md`.
 
 **Recomendaciones**:
-- Priorizar partir `schemas.py` por dominio (auth/transactions/notifications/push/api-keys) antes que `models.py` — es el archivo real forzado.
-- Vigilar `transactions/page.tsx` en el próximo touch; si cruza ~700 líneas, extraer subcomponentes.
+1. Extraer subcomponentes de `transactions/page.tsx` (filtros, tabla, paginación) la próxima vez que se toque ese archivo — no urgente aisladamente, pero ya está por encima del umbral.
 
 ---
 
 ### 2.2 Arquitectura
-**Score**: 6.5/10
+**Score**: 7.5/10 | **Prioridad**: Media
 
-**Hallazgos**:
-- Capas intencionalmente delgadas por decisión documentada (sin `app/services/` formal a esta escala) — pero ya emergió una capa ad-hoc en `app/core/` (`budget_alerts.py`, `budget_recurrence.py`, `notification_dispatch.py`, `weekly_summary.py`, `user_deletion.py`), cada uno consumido por 2+ routers o el scheduler. La arquitectura real ya no es "todo en el router"; es "todo en el router excepto lo que se volvió doloroso".
-- El problema no es la ausencia de capa de servicio — es que se aplicó donde menos importaba. La lógica contable de `transactions.py` (la que mueve dinero real) sigue sin extraer, mientras que scheduling/notificaciones sí tienen su módulo.
-- Auth flow es sólido arquitectónicamente: JWT de vida corta + refresh opaco hasheado en DB + rotación, verificación de email obligatoria para login, reset de contraseña que revoca todo lo activo (refresh tokens y API keys). El diseño es correcto; el bug de la sección de seguridad es una falla puntual en `login_google`, no un problema del auth flow en general.
-- API versionada desde el día uno del pivote (`/api/v1/`), migraciones con Alembic reemplazando el `_ensure_*_column()` legacy — ambas eran deuda arquitectónica real, ya resueltas.
+**Hallazgos Positivos**:
+- `app/services/ledger.py` (Fase 25) es la primera extracción real a una capa de servicio, y resolvió exactamente el problema de mayor riesgo que señalaba la auditoría anterior: el signo del delta contable y el `UPDATE` atómico de `Account.balance` estaban copy-pasteados 3 veces en `transactions.py` (líneas 186/312/393-395); ahora viven una vez en `ledger.registrar_impacto`/`revertir_impacto`/`aplicar_edicion`, consumidos por los 3 call sites — verificado leyendo `backend/app/api/transactions.py:187-192,301-303,375`.
+- Auth flow sigue siendo sólido y ahora más completo: JWT de 15 min + refresh opaco hasheado con rotación + cookies `httpOnly` (Fase 26) + CSRF double-submit, con el camino de API key (`Authorization: Bearer oikos_pat_...`) intacto para clientes no-browser — un diseño consistente, no dos sistemas de auth compitiendo.
+- Migraciones con Alembic reemplazando el `create_all()`/`_ensure_*_column()` ad-hoc, API versionada bajo `/api/v1/` desde un único punto (`frontend/lib/api.ts`) — ambas eran deuda arquitectónica real del código pre-2026-08-22, ya cerradas.
+
+**Áreas de Mejora**:
+- `app/core/exceptions.py` (`DomainError` + 2 subclases) es un piloto acotado a `transactions.py` — los otros 10 routers de `app/api/` siguen usando `raise HTTPException` inline mezclado con validación de negocio (65 ocurrencias contadas en esta auditoría). Es deuda documentada y aceptada, no un hallazgo nuevo, pero sigue siendo el mayor bloque de acoplamiento HTTP↔dominio del backend.
+- La arquitectura real del backend ya no es "todo en el router" — `app/core/` acumula 8 módulos consumidos por 2+ routers cada uno (`budget_alerts.py`, `budget_recurrence.py`, `notification_dispatch.py`, `weekly_summary.py`, `user_deletion.py`, `auth_cookies.py`, `csrf.py`, `default_categories.py`) — pero `CLAUDE.md` describe esto correctamente ahora ("thin layered structure with a nascent service layer"), a diferencia de la versión que auditó 2026-09-15.
 
 **Recomendaciones**:
-- Cuando se cree `app/services/` formalmente, empezar por `ledger.py`/`transaction_accounting.py` con el delta de contabilidad — usar `budget_alerts.py` como plantilla de cómo ya funciona "core/-como-service" en este repo, no como excepción a evitar.
-- Documentar explícitamente en `backend/docs/ARCHITECTURE.md` que `app/core/` ya cumple parcialmente el rol de capa de servicio — el CLAUDE.md actual ("no service layer") describe la intención original, no el estado real.
+1. Seguir el plan ya escrito en `docs/TODO.md`: migrar `raise HTTPException` a `DomainError` router por router, la próxima vez que se toque cada uno por otra razón — no vale la pena una fase dedicada solo para esto a esta escala.
 
 ---
 
 ### 2.3 Mantenibilidad
-**Score**: 6/10
+**Score**: 7.5/10 | **Prioridad**: Baja
 
-**Hallazgos**:
-- Duplicación real y de alto riesgo: el signo del delta contable en 3 puntos de `transactions.py` (líneas 186, 312, 393-395). Un cambio futuro en la regla (ej. transferencias entre cuentas) tiene 3 lugares para desincronizarse.
-- `frontend/docs/STATE_AND_FETCHING.md` — el mapa de query keys que `CLAUDE.md` señala como autoritativo — está congelado en Fase 16. No menciona las query keys de Fases 17-22 (`monthlySummary`/`budgetsProgress` por cuenta, params `account_id`/`currency` en analytics, keys de categorías ocultas, mutations de settings). Es un documento que hoy engaña más de lo que ayuda si alguien confía en él en vez de grepear `lib/queryKeys.ts`.
-- Fetching duplicado por página en frontend (`useQuery` + `queryFn` inline repetido en vez de hooks como `useAccounts`/`useCategories`).
-- Lint/format configurados y usados (`ruff`, `eslint`, `prettier`) — reduce el riesgo de deriva de estilo con el tiempo, aunque no hay CI que lo haga cumplir automáticamente todavía.
+**Hallazgos Positivos**:
+- La duplicación de mayor riesgo real (delta contable, ver 2.2) está resuelta con un test unitario dedicado (`test_ledger.py`, 6 tests).
+- `frontend/docs/STATE_AND_FETCHING.md` — señalado como "congelado en Fase 16" en la auditoría anterior — está actualizado (última modificación hoy, 2026-09-19) con las query keys de Fases 17-25 (`monthlySummary`/`budgetsProgress` por cuenta, params `account_id`/`currency`, mutations de Settings).
+- `ruff check .` corre limpio sobre todo el backend (verificado en esta auditoría, no solo asumido); lint/format configurados y usados en ambos lados.
+- `docs/TODO.md` funciona como un tracker de deuda real, no decorativo: cada ítem resuelto tiene fecha, fase y commit; los que dejaron de aplicar por el pivote están marcados como tal (no como "resueltos" cuando no lo fueron) — es la clase de disciplina que hace que un audit futuro pueda confiar en el documento en vez de tener que re-verificar todo desde cero.
+
+**Áreas de Mejora**:
+- `AGENTS.md` es la única pieza de documentación de referencia que quedó desactualizada en esta pasada (ver Resumen Ejecutivo #2) — afirma "sin tests automatizados" y "`services/` vacío", ambas falsas hoy.
+- `transactions/page.tsx` sigue la tendencia de crecimiento que ya se señalaba en julio (2.1).
 
 **Recomendaciones**:
-- Extraer el delta contable a una función pura testeada una sola vez, reutilizada en los 3 endpoints (quick win de mantenibilidad, no requiere `app/services/` formal para empezar).
-- Actualizar `STATE_AND_FETCHING.md` en el próximo touch a cualquiera de esas áreas — mismo nivel de disciplina que ya se exige para `API_REFERENCE.md`/`API_CONTRACT.md`.
+1. Sincronizar `AGENTS.md` — es barato y evita que un agente que lo lea primero parta de una premisa falsa (exactamente el tipo de problema que esta skill pide detectar).
 
 ---
 
 ### 2.4 Modularidad
-**Score**: 5.5/10
+**Score**: 7/10 | **Prioridad**: Media
 
-**Hallazgos**:
-- Sin capa de excepciones de dominio: todo `raise HTTPException` mezclado con reglas de negocio en los routers — acopla la capa HTTP a la validación de negocio.
-- `schemas.py` como archivo único de 49 clases es el mayor obstáculo real a la modularidad hoy (ver 2.1) — más que `models.py`, que está bien encapsulado por clase.
-- Frontend: sin hooks reutilizables de fetching; cada página reimplementa su `useQuery`. Migración a tipos generados desde OpenAPI (`frontend/types/generated/api.ts`, Fase 16 §16.3) ya arrancó para código nuevo, conviviendo deliberadamente con tipos manuales en el código viejo — decisión razonable, sin fecha de deprecación fijada.
-- Puntos positivos: routers ya están bien acotados por dominio (una responsabilidad por archivo), y los módulos de `app/core/` que sí se extrajeron son consumidos limpiamente por múltiples call sites sin acoplamiento circular aparente.
+**Hallazgos Positivos**:
+- `frontend/lib/hooks/{useAccounts,useCategories,useTransactions}.ts` (Fase 25) reemplazaron 19 `useQuery`+`queryFn` inline repetidos por página — la duplicación de fetching señalada en la auditoría anterior está resuelta para lecturas; mutaciones siguen inline a propósito (listas de invalidación demasiado heterogéneas para un hook único), decisión razonable y documentada.
+- Routers siguen bien acotados por dominio, sin acoplamiento circular aparente entre ellos; los módulos de `app/core/` extraídos se consumen limpiamente desde múltiples call sites.
+- Codegen de tipos desde OpenAPI (`frontend/types/generated/api.ts`, Fase 16) conviviendo deliberadamente con tipos manuales para código nuevo — sin fecha de deprecación fijada, pero es una decisión consciente, no deriva accidental.
+
+**Áreas de Mejora**:
+- Mismo punto que 2.2: sin capa de excepciones de dominio fuera de `transactions.py`, la lógica de negocio de los otros 10 routers sigue acoplada a `HTTPException` directamente.
+- `ApiKey` sin scopes es una decisión de producto ya evaluada y cerrada (`models.py:315-318`, Decisión 16.1.1) — correcto no reabrirla bajo el modelo de amenaza actual de un solo usuario.
 
 **Recomendaciones**:
-- Partir `schemas.py` por dominio es el cambio de modularidad de mayor ROI disponible ahora mismo.
-- Migrar oportunistamente los call sites de tipos manuales a los generados cuando se toque ese código, sin proyecto dedicado.
+1. Mismo plan incremental que 2.2 — no hay una recomendación nueva de modularidad que no sea ya la extensión de la capa de excepciones ya empezada.
 
 ---
 
 ### 2.5 Seguridad
-**Score**: 5/10
+**Score**: 8.5/10 | **Prioridad**: Baja
 
-**Hallazgos**:
-- 🔴 **Crítico, confirmado**: account takeover vía auto-link de Google OAuth (ver Resumen Ejecutivo e ítem correspondiente en `docs/TODO.md`, sección Bloqueantes). Verificado leyendo `auth.py:62-122` y el test que lo codifica como esperado.
-- 🟡 `POST /push/subscribe` (`backend/app/api/push.py:33-51`) hace upsert por `endpoint` y reasigna `user_id` sin verificar si ese endpoint ya pertenecía a otro usuario. El propio docstring justifica el upsert para el caso legítimo (mismo dispositivo, reinicio de sesión) pero no distingue ese caso de un endpoint robado — riesgo bajo (el endpoint no es adivinable) pero el chequeo de ownership falta igual.
-- 🟡 `docker-compose.yml:39-40,73-74` publica los puertos 8000/3000 en `0.0.0.0` por defecto (sin especificar interfaz). Si el host tiene alguna otra ruta de red además del tailnet (IP pública, otra VPN, NAT de nube), la API queda expuesta sin pasar por la terminación TLS de Tailscale Funnel. No confirmado si el host real tiene esa exposición — verificar antes de repriorizar, y si la tiene, acotar el bind.
-- 🟢 Lo que sí está bien: contraseñas con política de fuerza mínima, bcrypt, JWT de 15 min, refresh token opaco hasheado con rotación, revocación de refresh tokens *y* API keys en reset de contraseña, rate limiting real (5/min) en registro/login/reset, CORS condicionado a `ENABLE_TAILSCALE_CORS` (ya no incondicional), headers de seguridad (`X-Content-Type-Options`, `X-Frame-Options`), secrets obligatorios sin default silencioso en `docker compose up`.
-- 🟡 Aceptado y documentado conscientemente (no es un hallazgo nuevo, pero pesa en el score dado el Funnel público desde 2026-09-06): JWT en `localStorage`, rate limiting en memoria (aceptable mientras sea un solo worker).
+*(Evaluado contra "¿es razonable para un solo usuario de confianza en un deployment personal?", no contra un estándar de producto multi-usuario — ver nota de calibración.)*
+
+**Hallazgos Positivos**:
+- **El hallazgo crítico de la auditoría anterior está cerrado con evidencia verificable, no solo declarado**: `login_google` (`backend/app/api/auth.py:105-125`) ahora captura `cuenta_no_verificada_antes_de_este_login` *antes* de mutar `email_verified`, y anula `password_hash` si la cuenta no estaba verificada — cortando el vector de account-takeover por auto-link. Test de regresión hostil existe y pasa (`test_autolink_on_unverified_account_nullifies_attacker_planted_password`, confirmado en la corrida de 251 tests de esta auditoría).
+- Baseline de auth sólido y suficiente para el contexto: JWT de 15 min + refresh opaco hasheado con rotación, cookies `httpOnly` + CSRF double-submit desde Fase 26 (sin JWT en `localStorage`), bcrypt, política de contraseñas, rate limiting real (5/min) en login/registro/reset, revocación de refresh tokens *y* API keys al resetear contraseña.
+- `POST /push/subscribe` reasigna ownership entre usuarios con logging de auditoría en vez de bloquear (`backend/app/api/push.py:44-56`) — decisión correcta y documentada: bloquear rompería el caso legítimo de dispositivo compartido, y el riesgo real es bajo (el `endpoint` no es adivinable).
+- Sin secrets committeados: `.gitignore` excluye `.env`/`backend/.env`/`backend/venv/`, verificado con `git ls-files` (ninguno trackeado).
+
+**Áreas de Mejora (informativas, no bloqueantes bajo el modelo de amenaza actual)**:
+- `docker-compose.yml:41,75` sigue publicando 8000/3000 en `0.0.0.0` sin especificar interfaz — ya evaluado y aceptado en `docs/TODO.md` (host sin otra ruta de red pública confirmada por el usuario el 2026-09-16); se mantiene como nota, no como hallazgo activo.
+- Rate limiting en memoria y sin TTL/scopes en API keys — explícitamente movidos a "Fuera de scope" en `docs/ROADMAP.md` el 2026-09-19; no se recalculan acá porque el pivote ya cerró esa decisión con una justificación válida (un solo dueño de todas las keys).
 
 **Recomendaciones**:
-- **Prioridad 1, antes de más usuarios reales**: en el auto-link de `login_google`, invalidar el `password_hash` existente al vincular (o exigir confirmación de la contraseña actual) en vez de confiar en una fila sin verificar. Agregar un test que cubra explícitamente el escenario hostil (atacante pre-registra, víctima hace login con Google, la contraseña del atacante *no* debe seguir siendo válida).
-- Agregar el chequeo de ownership en `push.py` antes del upsert.
-- Confirmar la topología de red real del host de despliegue; acotar el bind de puertos si corresponde.
+1. Ninguna nueva. El único ítem de seguridad activo en `docs/TODO.md` (el `disabled_client` de Google) no es de código — ver Resumen Ejecutivo #1.
 
 ---
 
 ### 2.6 Documentación
-**Score**: 8/10
+**Score**: 8.5/10 | **Prioridad**: Baja
 
-**Hallazgos**:
-- Cobertura notable: `backend/docs/` (5 archivos: API_REFERENCE, ARCHITECTURE, BUSINESS_RULES, DEPLOYMENT, FRONTEND_INTEGRATION), `frontend/docs/` (5 archivos), `docs/ROADMAP.md` con historial de pivote y fases, `docs/TODO.md` con deuda técnica clasificada por urgencia y un registro de "Resueltos" fechado desde julio, 16 specs por fase en `docs/specs/`.
-- `CLAUDE.md` describe con precisión el estado actual del proyecto en general, pero tenía dos afirmaciones desactualizadas detectadas en esta auditoría (ya corregidas en este mismo cambio): decía que `EMAIL_PROVIDER` seguía en `console` en todos lados cuando `smtp` está configurado y verificado en el despliegue real desde el 2026-09-12.
-- Único punto débil real: `frontend/docs/STATE_AND_FETCHING.md` congelado en Fase 16 (ver 2.3) — es la excepción notable en un conjunto de documentación por lo demás disciplinado y activamente mantenido.
+**Hallazgos Positivos**:
+- Cobertura amplia y activamente mantenida: `backend/docs/` (5 archivos), `frontend/docs/` (5 archivos), `docs/ROADMAP.md` + `docs/CHANGELOG.md` + `docs/TODO.md`, 26 specs por fase en `docs/specs/`.
+- `CLAUDE.md` describe con precisión el estado actual verificado contra código: la afirmación sobre `app/services/` como "nascent... solo módulo hasta ahora" coincide con lo que hay en disco; la descripción del flujo de cookies httpOnly coincide con `auth_cookies.py`/`csrf.py`.
+- `frontend/docs/STATE_AND_FETCHING.md`, señalado como el único punto débil real en la auditoría anterior, está al día (ver 2.3).
+- `docs/TODO.md` mantiene un registro fechado de "Resueltos" desde julio — permite reconstruir por qué se tomó cada decisión sin tener que preguntar, y distingue con cuidado "resuelto" de "ya no aplica por el pivote" (ver 2.3).
 
-**Recomendaciones**:
-- Actualizar `STATE_AND_FETCHING.md` (único documento con deriva real detectada).
-- Considerar un check ligero (aunque sea manual, en la checklist de PR) de "¿esta fase tocó un doc que debía actualizarse?" dado que ya van dos veces que un doc de referencia queda desactualizado silenciosamente.
-
----
-
-### 2.7 UX / Usabilidad
-**Score**: 5.5/10
-
-**Hallazgos**:
-- Patrón de fallo silencioso repetido en 3 lugares (dashboard sin `isError`, formulario de ingreso mensual, `QuickTransactionModal`) — todos en el flujo más transitado de la app. El patrón correcto (`noValidate` + toast + error de campo) ya existe en el resto de los formularios desde Fase 12 §12.8; estos tres son la excepción, no la norma.
-- Bug de bajo impacto pero visible: `category-distribution` no expone `icon`, así que el desglose de categorías en el dashboard cae siempre al ícono genérico (`Wallet`).
-- `AccountUpdate` ignora silenciosamente cambios de `currency` — el usuario edita la moneda de una cuenta desde el frontend, la request sale, no hay error, y el cambio simplemente no se aplica.
-- Accesibilidad básica presente pero no exhaustiva: 32 usos de `aria-label`/`alt` en 57 componentes/páginas `.tsx` — cobertura parcial, no auditada campo por campo.
-- Cero tests de frontend confirmado (`Vitest`/RTL no configurado, sin archivos `*.test.*`/`*.spec.*`) — para una app que ya tuvo 3 bugs de UX de "silencio ante error" en producción, un test de "la query falla → se ve un mensaje de error" habría atrapado al menos uno de los tres.
+**Áreas de Mejora**:
+- `AGENTS.md` (99 líneas) no recibió la misma pasada de actualización que `CLAUDE.md`/`ROADMAP.md`/`TODO.md` el 2026-09-19 — ver Resumen Ejecutivo #2. Es el único documento de referencia con contenido verificablemente falso hoy (tests, capa de servicios, encabezado de pivote).
 
 **Recomendaciones**:
-- Los 3 fixes de "falla silenciosa" son quick wins de alto impacto relativo — la pantalla más usada de la app hoy no distingue "sin datos" de "algo se rompió".
-- Priorizar los primeros tests de frontend sobre exactamente estos casos (loading/error/empty state del dashboard) antes que cobertura general — es donde ya se probó que fallan features reales.
+1. Sincronizar `AGENTS.md` — único quick win real de esta área.
 
 ---
 
-## 3. Recomendaciones priorizadas
+### 2.7 UX/Usabilidad
+**Score**: 7.5/10 | **Prioridad**: Media
 
-### Quick wins (horas)
+**Hallazgos Positivos**:
+- Los 3 bugs de "falla silenciosa" de la auditoría anterior — todos en el flujo más transitado de la app — están resueltos con evidencia en código: dashboard con `isError`/`refetch` por sección (`frontend/app/(dashboard)/page.tsx:50-92`), formulario de ingreso mensual con `noValidate` + error de campo + foco (mismo archivo, Fase 24 §24.2), y el caso de "usuario nuevo sin cuentas" ya no aplica porque toda cuenta nueva recibe una cuenta por defecto en el registro desde Fase 8 (confirmado leyendo `QuickTransactionModal.tsx`, sin guard especial porque ya no hace falta).
+- `PUT /accounts/{id}` ahora aplica cambios de `currency` en vez de ignorarlos en silencio, y de paso corrigió un bug relacionado (`highlighted` se reseteaba a `false` en cualquier PUT que lo omitiera) — verificado en `backend/app/api/accounts.py:211-218`.
+- `category-distribution` expone `category_icon`, cerrando el bug de icono genérico en el desglose del dashboard.
 
-1. Chequear ownership antes de reasignar `user_id` en `POST /push/subscribe` (1-2h)
-2. Agregar manejo de `isError` + retry visible a las 4 queries del dashboard (2-3h)
-3. `noValidate` + error de campo visible en el formulario de ingreso mensual del dashboard (1-2h)
-4. Hacer que `PUT /accounts/{id}` aplique cambios de `currency` en vez de ignorarlos (1h)
-5. Exponer `category_icon` en el schema/query de `category-distribution` (1h)
-6. Actualizar `frontend/docs/STATE_AND_FETCHING.md` con las query keys de Fases 17-22 (2-3h)
-7. Confirmar topología de red del host y, si corresponde, acotar el bind de puertos en `docker-compose.yml` (30min-1h una vez confirmado)
+**Áreas de Mejora**:
+- Sigue sin haber tests de frontend (`Vitest`/RTL no configurado, cero archivos `*.test.*`/`*.spec.*`, confirmado con `find`) — riesgo real dado que 3 de los últimos bugs de UX fueron justo del tipo que un test de "la query falla → se ve un error" habría atrapado. `docs/TODO.md` ya lo tiene anotado en "🔵 Solo si el proyecto crece" — razonable para un solo dev, pero vale la pena no perder de vista si vuelve a aparecer un bug de la misma familia.
+- Accesibilidad básica presente pero parcial: 32 usos de `aria-label`/`alt` en 57 componentes/páginas — no exhaustivo, sin auditoría campo por campo.
+- Login con Google caído en producción es, ante todo, un problema de UX del día a día del único usuario (ver Resumen Ejecutivo #1) — el flujo de login por contraseña sigue funcionando como fallback, pero no es la experiencia diseñada.
 
-### Mejoras medianas (días)
-
-1. **Fix del account takeover de Google OAuth**: invalidar/reconfirmar contraseña al auto-linkear + test del escenario hostil (1-2 días — requiere decisión de producto sobre el flujo de re-confirmación, no solo código)
-2. Extraer el delta contable de `transactions.py` a una función pura compartida y testeada (1 día)
-3. Partir `schemas.py` por dominio (1-2 días)
-4. Cuenta por defecto al registrarse + fix de `QuickTransactionModal` (1 día)
-5. Test dedicado para `ensure_recurring_budgets_for_period` (0.5-1 día)
-6. Setup mínimo de Vitest + React Testing Library con los primeros tests sobre loading/error/empty state del dashboard (2-3 días)
-
-### Refactoring mayor (semanas)
-
-1. `app/services/` formal, empezando por `ledger.py` (2-3 semanas, incluye migrar la lógica ya extraída en `app/core/` bajo una convención consistente)
-2. Capa de excepciones de dominio para desacoplar reglas de negocio de `HTTPException` (1-2 semanas)
-3. JWT en cookie `httpOnly` en vez de `localStorage` (1-2 semanas — toca todo el flujo de auth del frontend)
-4. CI/CD (lint + test + build por push) (~1 semana)
+**Recomendaciones**:
+1. Si un cuarto bug de "falla silenciosa" aparece en el flujo principal, es la señal de bajar la prioridad de tests de frontend desde "solo si crece" a "ahora" — no antes.
 
 ---
 
-## 4. Próximos pasos sugeridos
+## 3. Recomendaciones Priorizadas
 
-### Acciones inmediatas (esta semana)
+### Quick Wins (Horas)
 
-1. Diseñar y aplicar el fix del account takeover de Google OAuth — es lo único de esta lista con severidad crítica confirmada.
-2. Los quick wins de UX del dashboard (isError + formulario de ingreso) — es la pantalla más visitada y ya tiene 3 bugs de la misma familia.
-3. Actualizar `STATE_AND_FETCHING.md` — barato y evita que el próximo cambio se apoye en información falsa.
+| # | Recomendación | Tiempo | Área |
+|---|---------------|--------|------|
+| 1 | Sincronizar `AGENTS.md` con el estado post-pivote 2026-09-19 (tests existen, `services/ledger.py` existe, cookies httpOnly) | 0.5-1h | Documentación |
+| 2 | Completar el OAuth consent screen de Google Cloud Console (branding real) como parte del plan B si la apelación del `disabled_client` falla | 1h (una vez que aplique) | UX |
 
-### Roadmap de mejoras (próximo mes)
+### Mejoras Medianas (Días)
 
-1. Extraer la lógica contable a una función compartida antes de que se le sume una cuarta copia (ej. transferencias entre cuentas, si entra al roadmap).
-2. Primeros tests de frontend, enfocados en los casos que ya se probó que fallan.
-3. Confirmar y, si corresponde, corregir la exposición de puertos de `docker-compose.yml`.
+| # | Recomendación | Tiempo | Área |
+|---|---------------|--------|------|
+| 1 | Extraer subcomponentes de `transactions/page.tsx` (646 líneas) | 0.5-1d | Estructura |
+| 2 | Migrar 2-3 routers más de `raise HTTPException` a `DomainError`, aprovechando el próximo touch de cada uno | 0.5d por router | Arquitectura/Modularidad |
+
+### Refactoring Mayor (Semanas)
+
+| # | Recomendación | Tiempo | Área |
+|---|---------------|--------|------|
+| 1 | Completar la migración de excepciones de dominio a los 10 routers restantes, si en algún momento se junta con otro trabajo que ya los toque (no como proyecto aislado) | 1-2 semanas repartidas | Arquitectura |
+
+Nota: a diferencia de la auditoría anterior, no hay refactorings mayores urgentes — Fases 23-26
+ya absorbieron el trabajo de mayor impacto (seguridad crítica, UX del flujo principal,
+arquitectura del código contable, cookies httpOnly).
 
 ---
 
-## 5. Métricas clave
+## 4. Próximos Pasos Sugeridos
 
-| Área | Score | Prioridad |
-|------|-------|-----------|
-| Estructura | 7.5/10 | Baja |
-| Arquitectura | 6.5/10 | Media |
-| Mantenibilidad | 6/10 | Media |
-| Modularidad | 5.5/10 | Media |
-| Seguridad | 5/10 | **Alta** |
-| Documentación | 8/10 | Baja |
-| UX/Usabilidad | 5.5/10 | Alta |
+### Acciones Inmediatas (Esta semana)
 
-**Score general**: 6.3/10
+1. **Sincronizar `AGENTS.md`**
+   - Por qué: es el único documento de referencia con contenido verificablemente falso hoy, y
+     lo consulta cualquier agente que no sea Claude Code.
+   - Cómo: alinear con las 3 secciones desactualizadas identificadas (línea 3, 5-12, 79).
+   - Resultado esperado: cualquier agente que arranque desde `AGENTS.md` parte de la misma
+     premisa que uno que arranque desde `CLAUDE.md`.
+
+2. **Seguir el workaround de Google OAuth mientras se resuelve la apelación**
+   - Por qué: es el único bug que afecta el uso diario real hoy.
+   - Cómo: nada que hacer en código — monitorear la respuesta de Google Cloud Console.
+   - Resultado esperado: login de Google restaurado, o migración al plan B (nuevo Client ID +
+     consent screen con branding) si la apelación falla.
+
+### Roadmap de Mejoras (Próximo mes)
+
+1. **Backlog priorizado ya definido en `docs/ROADMAP.md`** (filtros de fecha/categoría,
+   automatización de recurrentes, sinking funds) — no hay nada en esta auditoría que deba
+   competir con ese backlog; es la fuente de verdad para "qué construir después".
+   - Impacto: Alto (valor de uso directo, ya priorizado por el propio dueño del producto)
+   - Esfuerzo: días por feature
+   - Beneficio: mejor trackeo/análisis de gastos, el objetivo explícito del pivote 2026-09-19.
+
+2. **Migrar routers restantes a `DomainError` oportunistamente**
+   - Impacto: Medio (reduce acoplamiento HTTP↔dominio)
+   - Esfuerzo: horas por router, repartido
+   - Beneficio: cuando se necesite lógica de negocio más compleja (ej. transferencias entre
+     cuentas), ya no hay que decidir entre seguir el patrón viejo o el nuevo.
+
+---
+
+## 5. Métricas Clave
+
+| Área | Score | Prioridad | Estado |
+|------|-------|-----------|--------|
+| Estructura | 8/10 | Baja | ✅ |
+| Arquitectura | 7.5/10 | Media | ✅ |
+| Mantenibilidad | 7.5/10 | Baja | ✅ |
+| Modularidad | 7/10 | Media | ✅ |
+| Seguridad | 8.5/10 | Baja | ✅ |
+| Documentación | 8.5/10 | Baja | ⚠️ |
+| UX/Usabilidad | 7.5/10 | Media | ✅ |
+
+**Score General**: 7.6/10
+
+---
+
+## 6. Conclusión
+
+Oikos entra a este segundo pivote (vuelta a uso personal) en mejor estado del que salió del
+primero. La auditoría del 2026-09-15 encontró un bloqueante crítico real (account takeover) y
+tres bugs de "falla silenciosa" en la pantalla más usada de la app; las cuatro fases siguientes
+(23-26) los cerraron con evidencia verificable — no solo con una entrada en el changelog, sino
+con código leído línea por línea y 251 tests corridos en esta misma auditoría. El único
+documento que se quedó atrás en la actualización de hoy fue `AGENTS.md`, y el único bug activo
+que afecta el uso real (`disabled_client` de Google) no es un problema de código. El mayor
+espacio de mejora que queda — extender la capa de excepciones de dominio más allá de
+`transactions.py` — ya tiene un plan escrito y aceptado; no necesita una fase dedicada, solo
+paciencia para aplicarlo router por router.
+
+**Siguiente paso recomendado**: sincronizar `AGENTS.md` (quick win de 30-60 min) y luego volver
+al backlog priorizado de `docs/ROADMAP.md` — no hay deuda técnica pendiente que deba competir
+con las features de análisis de gastos que el propio pivote puso como prioridad.
+
+---
+
+*Reporte generado por Code Review Skill*
