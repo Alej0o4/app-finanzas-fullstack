@@ -56,7 +56,7 @@ Interfaz web para Oikos, construida con Next.js App Router, React, TypeScript, T
 
 ## Integración con backend
 
-- El token JWT se lee desde `localStorage` y se envía como `Authorization: Bearer <token>`.
+- La sesión se autentica por cookies httpOnly (Fase 26): la instancia Axios usa `withCredentials` y cada request lleva los cookies de sesión; en mutaciones se agrega el header `X-CSRF-Token` (valor del cookie `csrf_token`). No hay JWT en `localStorage`.
 - El frontend no recalcula saldos, progreso de presupuestos ni totales del dashboard.
 - Las categorías con `user_id = null` son compartidas del sistema.
 - Las transacciones y sus detalles se consumen desde el backend como fuente de verdad.

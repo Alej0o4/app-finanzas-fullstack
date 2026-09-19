@@ -166,17 +166,18 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     query key separada para "categorías ocultas" — `is_hidden` es un campo más de
     `GET /categories/`, filtrado client-side.
 
-- [ ] **JWT guardado en `localStorage`** (`frontend/lib/api.ts`).
-  - Riesgo de robo vía XSS. Alternativa: cookie `httpOnly` + `secure` + `sameSite`.
-  - Sube de prioridad al salir de la red privada Tailscale. Mitigado parcialmente en Fase 7:
-    el TTL del access token bajó de 60 a 15 min, así que la ventana de robo es más corta.
-  - **Diseño completo (decisiones J1–J8) en `docs/specs/fase_25_spec.md` §25.5** — cookie
-    flags, fallback de `get_current_user` a cookie sin romper el header de API key
-    (`oikos_pat_...`) de los Shortcuts de iOS, y CSRF vía double-submit cookie (hoy no
-    existe ningún mecanismo CSRF en el repo). **Implementación deliberadamente diferida** a
-    un spec propio (evaluado y no ejecutado en Fase 25, 2026-09-18): el blast radius cubre
-    todo el tráfico autenticado con usuarios reales activos y no hay suite de tests de
-    frontend que atrape una regresión ahí. Sigue abierto.
+- [x] ~~**JWT guardado en `localStorage`** (`frontend/lib/api.ts`)~~ — **resuelto.** *(2026-09-19,
+  Fase 26, `docs/specs/fase_26_spec.md`)* — migración a cookies `httpOnly`
+  (`access_token`/`refresh_token`/`csrf_token`) con CSRF double-submit (`X-CSRF-Token` en
+  mutaciones), fallback de `get_current_user` a cookie con el camino de API key
+  (`oikos_pat_...`) intacto, refresh/logout sin body, y producción consolidada en el dominio
+  HTTPS del Funnel (`COOKIE_SECURE=true` por default). Backend: 251 tests verdes; frontend:
+  tsc + eslint limpios. Corregido durante la revisión final: el Path del cookie
+  `refresh_token` era demasiado angosto (`/api/v1/auth/refresh`) y nunca llegaba a
+  `POST /auth/logout` (ruta hermana, no subruta), así que el logout desde el navegador no
+  revocaba nada server-side — se amplió a `/api/v1/auth` (cubre login/google/refresh/logout/
+  password-reset/verify-email), con un test de regresión nuevo
+  (`test_logout_via_cookie_only_revokes_refresh_token_server_side`).
 
 ---
 

@@ -5,7 +5,10 @@
 - Base path: `/api/v1`
 - Autenticación: `Authorization: Bearer <token>` en rutas protegidas. Además del JWT del
   flujo OAuth2, se aceptan **API keys personales** con prefijo `oikos_pat_` en el mismo
-  header (Fase 16 §16.1) — ver sección "API keys" abajo.
+  header (Fase 16 §16.1) — ver sección "API keys" abajo. Desde Fase 26 el token también
+  puede viajar como cookie de sesión `httpOnly` (`access_token`), que `get_current_user`
+  acepta como **fallback** cuando no viene header — ver "Cookies de sesión (Fase 26)" abajo.
+  El header sigue siendo el camino primario y los clientes no-browser no cambian nada.
 - Content type esperado: `application/json`, excepto login, que usa formulario OAuth2.
 - Rate limiting: `/api/v1/auth/login`, `POST /api/v1/users/`, `/api/v1/auth/password-reset/request`,
   `/api/v1/auth/resend-verification`, `/api/v1/auth/google` y `POST /api/v1/api-keys/` (5 req/min por IP via `slowapi`), y `POST /api/v1/transactions/`
@@ -19,6 +22,32 @@
   y no pueden verse ni editarse — el mecanismo es invisible para el cliente.
 
 ## Autenticación
+
+### Cookies de sesión (Fase 26)
+
+`POST /auth/login`, `POST /auth/google` y `POST /auth/refresh` setean tres cookies en su
+respuesta **además** del body `TokenResponse` (que no cambia, para no romper clientes
+no-browser):
+
+| Cookie | HttpOnly | Path | Max-Age |
+|---|---|---|---|
+| `access_token` | sí | `/` | 15 min (TTL del JWT) |
+| `refresh_token` | sí | `/api/v1/auth` | 30 días (Path angosto, cubre `/refresh` y `/logout`, Decisión B2) |
+| `csrf_token` | **no** | `/` | 30 días |
+
+Los tres llevan `SameSite=lax` y `Secure` según `COOKIE_SECURE` (env, default `true`; bajar a
+`false` solo en entornos que sirven HTTP plano a propósito, ej. `docker-compose.dev.yml`).
+
+- `get_current_user` acepta el cookie `access_token` como **fallback** cuando no viene el
+  header `Authorization` (Decisión B4): el header es el camino primario y solo si está ausente
+  se consulta el cookie. Clientes header-only (curl, API keys de Shortcuts) no pasan por CSRF.
+- Toda mutación autenticada **por cookie** debe mandar el header `X-CSRF-Token` con el valor
+  del cookie `csrf_token` (patrón double-submit, middleware en `app/core/csrf.py`, Decisión
+  B5). Sin cookie de sesión (cliente header-only o request sin autenticar) no se exige;
+  `GET`/`HEAD`/`OPTIONS` y las rutas `/auth/login`, `/auth/google` y `/auth/refresh` están
+  exentas. Rechazo: `403 {"detail": "Token CSRF inválido o ausente."}`.
+- `POST /auth/logout` y `DELETE /api/v1/users/me` limpian los tres cookies (`Max-Age=0`) en su
+  propia respuesta (Decisiones B7/B8) — el frontend ya no puede borrar cookies `httpOnly` por JS.
 
 ### `POST /api/v1/auth/login`
 
@@ -98,16 +127,21 @@ Rota el refresh token y devuelve un nuevo JWT.
 
 Entrada:
 
-- `refresh_token`: el refresh token actual.
+- `refresh_token`: el refresh token actual. **Opcional desde Fase 26**: si no viene en el
+  body, se lee del cookie `refresh_token` (el frontend ya no manda body). Si vienen ambos,
+  se usa el del body (flujo no-browser, misma semántica de rotación que siempre).
 
 Salida:
 
 - `access_token`: nuevo JWT firmado.
 - `refresh_token`: nuevo refresh token (el anterior queda invalidado).
 
+Además rota los tres cookies de sesión (los valores nuevos reemplazan a los viejos en la
+misma respuesta).
+
 Errores esperados:
 
-- `401` si el refresh token es inválido o expiró.
+- `401` si el refresh token es inválido o expiró (o no vino ni en body ni en cookie).
 
 ### `POST /api/v1/auth/logout`
 
@@ -115,11 +149,14 @@ Revoca el refresh token, cerrando la sesión.
 
 Entrada:
 
-- `refresh_token`: el refresh token a revocar.
+- `refresh_token`: el refresh token a revocar. **Opcional desde Fase 26**: si no viene, se
+  lee del cookie `refresh_token`.
 
 Salida:
 
 - `{"estado": "OK", "mensaje": "Sesion cerrada exitosamente."}`
+
+La respuesta limpia los tres cookies de sesión (`Max-Age=0`).
 
 ### `POST /api/v1/auth/password-reset/request`
 
@@ -351,7 +388,9 @@ Entrada:
 
 Respuestas:
 
-- `204` — cuenta eliminada (sin cuerpo de respuesta).
+- `204` — cuenta eliminada (sin cuerpo de respuesta); la respuesta también limpia los tres
+  cookies de sesión (Fase 26, Decisión B8) para no dejar un `access_token`/`refresh_token`
+  con apariencia válida apuntando a un `user_id` inexistente.
 - `401` — sin token o token inválido.
 - `403` — contraseña incorrecta (no se elimina nada).
 - `500` — fallo de base de datos a mitad de la cascada; la transacción hace `rollback` y

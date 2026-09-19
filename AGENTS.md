@@ -42,8 +42,8 @@ cd frontend && pnpm dev                          # http://localhost:3000
 - El esquema se gestiona con Alembic (`alembic upgrade head` desde `backend/`) — ya no se crean tablas con `Base.metadata.create_all()` en el arranque (solo los tests lo usan sobre SQLite en memoria).
 - Columnas de preferencias se agregan en runtime si no existen (`ALTER TABLE` incremental).
 - Categorías base del sistema se siembran en startup (`user_id IS NULL`).
-- Token JWT expira a los 60 min; guardado en `localStorage` como `jwt_token`.
-- Refresh token (30 días) para renovar sesión sin re-login; guardado en `localStorage` como `refresh_token`.
+- Sesión de navegador vía cookies httpOnly (Fase 26): `access_token` (HttpOnly, Path=/, 15 min), `refresh_token` (HttpOnly, Path=`/api/v1/auth`, 30 días) y `csrf_token` (NO HttpOnly, para el patrón double-submit via header `X-CSRF-Token` en mutaciones). Ya no hay JWT en `localStorage`.
+- El login/refresh rotan los cookies en su respuesta; logout y baja de cuenta los limpian (<code>Max-Age=0</code>). Los clientes no-browser (curl, API keys `oikos_pat_...`) siguen autenticando por header `Authorization`.
 
 ## Comandos
 

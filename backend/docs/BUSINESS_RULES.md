@@ -8,6 +8,22 @@
 - El JWT identifica al usuario mediante `sub`.
 - El login usa `OAuth2PasswordRequestForm` y recibe el correo en el campo `username`.
 
+### Sesión por cookies (Fase 26)
+
+- La sesión de navegador vive en tres cookies (`access_token` HttpOnly — Path `/` — 15 min;
+  `refresh_token` HttpOnly — Path `/api/v1/auth` — 30 días; `csrf_token` NO HttpOnly
+  — 30 días — para el patrón double-submit). `SameSite=lax` en los tres; `Secure` según
+  `COOKIE_SECURE`.
+- `get_current_user` acepta el header `Authorization` como camino **primario** y el cookie
+  `access_token` como fallback solo si no vino header: los clientes no-browser (curl, API
+  keys) no pasan por ninguna rama nueva.
+- Toda mutación autenticada **por cookie** debe mandar `X-CSRF-Token` con el valor del cookie
+  `csrf_token`; sin cookie de sesión (API key / JWT por header) o en métodos seguros
+  `GET`/`HEAD`/`OPTIONS` no se exige. Rechazo: `403 "Token CSRF inválido o ausente."`.
+- `logout` y `DELETE /users/me` limpian los tres cookies de sesión en su propia respuesta —
+  los cookies `httpOnly` no pueden borrarse desde JS, así que cada endpoint que termina una
+  sesión es responsable de limpiarlos.
+
 ### API keys (Fase 16 §16.1)
 
 - Una API key identifica exactamente a un usuario y **no tiene scopes en v1**: tiene los

@@ -78,8 +78,13 @@ Decisión importante:
 
 - Crea la instancia Axios base.
 - Usa `NEXT_PUBLIC_API_URL` como backend target y cae a `http://localhost:8000` en desarrollo.
-- Inserta automáticamente el JWT desde `localStorage` en `Authorization: Bearer <token>`.
-- Ante un `401`, limpia el token y redirige a `/login`.
+- Autentica por cookies httpOnly (Fase 26, Decisión F1): `withCredentials: true` en la
+  instancia — el JWT viaja como cookie `access_token`/`refresh_token` con cada request, el
+  frontend ya no lee/escribe tokens en `localStorage`. El interceptor de request agrega el
+  header `X-CSRF-Token` (valor del cookie `csrf_token`, legible por JS) en todo método que no
+  sea `GET`/`HEAD` (patrón double-submit, Decisión B5 del backend).
+- Ante un `401`, intenta renovar la sesión con `POST /auth/refresh` sin body (el cookie
+  `refresh_token` viaja solo) y, si la renovación falla, redirige a `/login`.
 
 Regla importante:
 
@@ -116,8 +121,10 @@ Convención:
 
 ### `lib/hooks/useRequireAuth.ts`
 
-- Guard de autenticación compartido: lee `jwt_token` de `localStorage` y redirige a `/login`
-  con `router.replace` si falta.
+- Guard de autenticación compartido: usa `haySesionActiva()` de `lib/authSession.ts`
+  (presencia del cookie `csrf_token` como señal de «hay sesión» — un indicador de UX, no un
+  chequeo de seguridad; la fuente de verdad es el 401 real del backend en cada request) y
+  redirige a `/login` con `router.replace` si no hay sesión.
 - Lo llaman los layouts de las rutas autenticadas: `(dashboard)/layout.tsx` y
   `app/capture/layout.tsx`. Si una futura ruta agrega otro layout autenticado, reutilizar este
   hook en vez de copiar el `useEffect`.

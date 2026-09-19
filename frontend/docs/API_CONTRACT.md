@@ -11,13 +11,14 @@ La regla base es simple: el frontend no recalcula saldos, progreso de presupuest
 - Base URL: `NEXT_PUBLIC_API_URL`
 - Fallback local: `http://localhost:8000`
 - Prefijo de versión: `/api/v1` — está centralizado en el `baseURL` del cliente Axios en `lib/api.ts` (`` `${NEXT_PUBLIC_API_URL}/api/v1` ``), no repetido en cada call site. Los ~45 call sites de la app llaman a rutas relativas sin prefijo (ej. `api.get('accounts/')`); las rutas documentadas abajo omiten `/api/v1` por brevedad pero es lo que efectivamente se resuelve en runtime.
-- Autenticación: `Authorization: Bearer <token>`
-- El token se lee desde `localStorage` en `lib/api.ts`
-- El refresh token se almacena en `localStorage` como `refresh_token`
+- Autenticación por **cookies httpOnly** (Fase 26, `docs/specs/fase_26_spec.md`): el backend setea tres cookies de sesión al autenticar — `access_token` (HttpOnly, 15 min), `refresh_token` (HttpOnly, 30 días, Path acotado a `/api/v1/auth`) y `csrf_token` (NO HttpOnly, legible por JS, mismo Max-Age que el refresh).
+- El frontend **ya no** lee/escribe JWT en `localStorage` (Decisión F1/F3/B9): la instancia Axios usa `withCredentials: true` y el cookie viaja solo en cada request al mismo origen.
+- El frontend **ya no** arma `Authorization: Bearer <token>` (Decisión F1): ese header queda reservado para clientes no-browser (API keys `oikos_pat_...`, que no usan cookies).
+- Mutaciones (todo método que no sea `GET`/`HEAD`): el interceptor de request de `lib/api.ts` agrega el header `X-CSRF-Token` con el valor del cookie `csrf_token` (patrón double-submit cookie, Decisión B5). Si el backend recibe una mutación con cookie de sesión pero sin ese header (o con valor distinto), responde `403` `{"detail": "Token CSRF inválido o ausente."}`.
 
-Si el backend responde `401`, el frontend intenta renovar el token via `POST /api/v1/auth/refresh` con el `refresh_token`. Si la renovación falla, limpia el token y redirige a `/login`.
+Si el backend responde `401`, el frontend intenta renovar la sesión con `POST /api/v1/auth/refresh` **sin body** — el cookie `refresh_token` (HttpOnly) viaja solo gracias a `withCredentials`, y también aplica en esta llamada puntual porque usa la instancia `api` configurada (Hallazgo 3/Decisión F1, no `axios` crudo). Si la renovación falla, redirige a `/login`.
 
-El access token expira en 15 min (bajado de 60 min en Fase 7, §2.5 de `docs/specs/fase_07_spec.md`) — el interceptor de refresh de `lib/api.ts` se dispara ~4 veces más seguido que antes. El código actual ya tiene protección contra refreshes concurrentes (flag `isRefreshing` + cola `failedQueue`), verificado como parte de Fase 7.
+El access token expira en 15 min (bajado de 60 min en Fase 7, §2.5 de `docs/specs/fase_07_spec.md`) — el interceptor de refresh de `lib/api.ts` se dispara ~4 veces más seguido que antes. El código tiene protección contra refreshes concurrentes (flag `isRefreshing` + cola `failedQueue`), verificado como parte de Fase 7 y mantenido en la reescritura de Fase 26 (Decisión F1).
 
 El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api/v1/auth/password-reset/confirm` y `GET /api/v1/auth/verify-email` (Fase 7, §2.1/§2.2), consumidos por `app/(auth)/forgot-password`, `reset-password` y `verify-email` respectivamente — ver detalle de payloads en `backend/docs/API_REFERENCE.md`.
 
@@ -27,23 +28,33 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
 
 ### Autenticación
 
-- `POST /api/v1/auth/login` → devuelve `access_token` + `refresh_token`
+- `POST /api/v1/auth/login` → autentica con `OAuth2PasswordRequestForm` (x-www-form-urlencoded:
+  `username` + `password`). La respuesta setea los tres cookies de sesión (Decisión B6). El body
+  sigue devolviendo `access_token` + `refresh_token` + `token_type` por compatibilidad con
+  clientes no-browser, pero el frontend **ya no los lee** (Fase 26, Decisión F3): el `Set-Cookie`
+  de la respuesta deja la sesión lista.
 - `POST /api/v1/auth/google` (Fase 20 §20.3) → login/registro con Google Identity Services.
   Body `{ id_token: string }` (el `credential` del callback de GIS). Respuesta con **la misma
-  forma exacta** que `POST /auth/login`: `{ access_token, refresh_token, token_type }` — el
-  frontend reutiliza el mismo manejo de tokens sin bifurcar lógica (Decisión 20.3.5/P6 del spec
-  de Fase 20). El backend resuelve internamente si es registro nuevo (crea el `User` con
-  `email_verified=True` + cuenta por defecto + categorías ocultas) o vinculación automática de
-  un email ya existente con contraseña. Consumido por `components/auth/GoogleAuthButton.tsx`,
-  que guarda los tokens en `localStorage` igual que el login, hace `GET /users/me` y redirige
-  según `has_transaction_history` (mismo criterio que `login/page.tsx`). Errores: `401` token de
-  Google inválido/rechazado (firma/audiencia), `403` correo de Google no verificado en el claim,
-  `503` backend sin `GOOGLE_CLIENT_ID` configurado. El frontend no renderiza el botón si
+  forma exacta** que `POST /auth/login`: `{ access_token, refresh_token, token_type }` + los
+  tres cookies de sesión (Decisión B6). El backend resuelve internamente si es registro nuevo
+  (crea el `User` con `email_verified=True` + cuenta por defecto + categorías ocultas) o
+  vinculación automática de un email ya existente con contraseña. Consumido por
+  `components/auth/GoogleAuthButton.tsx`, que hace `GET /users/me` y redirige según
+  `has_transaction_history` (mismo criterio que `login/page.tsx`); desde Fase 26 no guarda
+  tokens en `localStorage` (Decisión F3). Errores: `401` token de Google inválido/rechazado
+  (firma/audiencia), `403` correo de Google no verificado en el claim, `503` backend sin
+  `GOOGLE_CLIENT_ID` configurado. El frontend no renderiza el botón si
   `NEXT_PUBLIC_GOOGLE_CLIENT_ID` falta en build time, así que el `503` solo ocurre si ambas
   variables divergen (botón visible pero backend desconfigurado). Rate limit: 5 req/min, mismo
   que el resto de endpoints de auth anónimos.
-- `POST /api/v1/auth/refresh` → rota refresh token, devuelve nuevo JWT
-- `POST /api/v1/auth/logout` → revoca refresh token
+- `POST /api/v1/auth/refresh` → rota el refresh token y setea cookies nuevos. Desde Fase 26 el
+  frontend lo llama **sin body** (el cookie `refresh_token`, HttpOnly con Path
+  `/api/v1/auth`, viaja solo — Decisión F1/Hallazgo 3); el body `{ refresh_token }`
+  sigue siendo aceptado para clientes no-browser.
+- `POST /api/v1/auth/logout` → revoca el refresh token y limpia los tres cookies de sesión en
+  su propia respuesta (Decisión B7). Desde Fase 26 el frontend lo llama **sin body** (Decisión
+  F4) — el cookie viaja solo; el body `{ refresh_token }` sigue siendo aceptado para clientes
+  no-browser.
 - `GET /api/v1/users/me`
 - `PATCH /api/v1/users/me` (acepta `{ monthly_income }` — usado por la card "Balance del mes" del dashboard para fijar el ingreso mensual inline, Fase 11 §11.3)
 - `GET /api/v1/users/me/preferences`

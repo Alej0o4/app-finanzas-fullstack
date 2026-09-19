@@ -53,24 +53,21 @@ Más el **onboarding de 3 minutos** que lleva al usuario a su primer gráfico (F
 
 ---
 
-## Próxima fase planeada — Fase 26: JWT en cookies httpOnly
+## Fase 26 — completada (2026-09-19): JWT en cookies httpOnly
 
-**Spec propio ya escrito y sin preguntas abiertas: `docs/specs/fase_26_spec.md`.** Retoma el
-diseño de Fase 25 (§25.5, decisiones J1–J8), lo reverifica contra el código actual y lo
-desglosa en tareas Backend/Frontend concretas — no implementado todavía. Blast radius
-conocido: toca todo el flujo de auth del frontend (no solo `frontend/lib/api.ts` — el spec
-encontró 8 archivos, no 1) con usuarios reales ya activos, y el proyecto no tiene ninguna
-protección CSRF hoy — moverse a cookies sin resolver eso primero cambiaría un problema por
-otro. El camino de API keys (`Authorization: Bearer oikos_pat_...`, usado por Atajos de iOS
-reales) queda intacto en el diseño y no se ve afectado. **Decisión 2026-09-19:** el acceso de
-producción se consolida en el dominio HTTPS del Tailscale Funnel como único origen soportado
-para login por cookie (`COOKIE_SECURE=true` por default) — el acceso por IP directa de
-Tailscale queda deprecado para sesión de navegador, no para API keys (ver Decisión B10/F6 del
-spec).
+Retomó el diseño de Fase 25 (§25.5, decisiones J1–J8): `login`/`login_google`/`refresh` setean
+`access_token`/`refresh_token`/`csrf_token` como cookies `httpOnly` (más CSRF double-submit)
+además del body de siempre; `get_current_user` acepta el cookie como fallback detrás del
+header; el camino de API keys (`Authorization: Bearer oikos_pat_...`, Atajos de iOS) queda
+intacto. Producción se consolidó en el dominio HTTPS del Tailscale Funnel como único origen
+soportado para login por cookie (`COOKIE_SECURE=true` por default) — el acceso por IP directa
+de Tailscale queda deprecado para sesión de navegador, no para API keys. Dos correcciones
+encontradas en la revisión final antes de mergear (Path del cookie de refresh demasiado
+angosto para que el logout revocara server-side; deadlock en el interceptor de refresh del
+frontend si el refresh mismo devolvía 401) — ver `docs/CHANGELOG.md` para el detalle completo.
+Spec: `docs/specs/fase_26_spec.md`.
 
-**Por qué sube de prioridad:** el Tailscale Funnel está activo desde 2026-09-06 — la app es
-alcanzable desde internet público, no solo desde el tailnet, lo que acorta cuánto más se puede
-postergar el tradeoff de JWT en `localStorage`.
+No hay una próxima fase planeada todavía — ver "Backlog priorizado" abajo para las candidatas.
 
 ---
 

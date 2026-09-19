@@ -198,8 +198,8 @@ Regla:
 
 Comportamiento:
 
-- Inserta el JWT de `localStorage` en cada request.
-- Redirige a `/login` ante `401`.
+- Adjunta los cookies de sesión con `withCredentials: true` y agrega `X-CSRF-Token` (valor del cookie `csrf_token`) en todo método que no sea `GET`/`HEAD` (Fase 26).
+- Redirige a `/login` ante `401` (tras intentar renovar la sesión con `POST auth/refresh` sin body).
 
 Consecuencias para el estado:
 

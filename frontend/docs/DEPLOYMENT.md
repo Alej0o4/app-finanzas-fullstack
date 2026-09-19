@@ -43,7 +43,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ## Supuestos operativos
 
 - El backend debe estar disponible y autenticable antes de usar el frontend.
-- El JWT se guarda en `localStorage` y se envía por interceptor Axios.
+- La sesión de navegador viaja en cookies httpOnly (Fase 26): el cliente Axios usa `withCredentials: true` y agrega `X-CSRF-Token` en mutaciones. Ya no hay JWT en `localStorage`.
 - Un `401` fuerza limpieza del token y retorno al login.
 - La app espera que las rutas protegidas existan detrás de un backend funcional.
 
@@ -52,11 +52,11 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 - Usar HTTPS.
 - Asegurar que `NEXT_PUBLIC_API_URL` apunte al backend correcto.
 - Verificar que el backend permita el origen del frontend en CORS.
-- Revalidar la política de almacenamiento del token si se migra a cookies seguras.
+- Verificar `COOKIE_SECURE=true` en producción (Fase 26) y que el frontend se sirva por HTTPS con el origen en `ALLOWED_ORIGINS` (mismo origen de los cookies).
 
 ## Riesgos actuales
 
-- El token vive en `localStorage`.
+- La sesión depende de cookies `httpOnly` (`Secure` según `COOKIE_SECURE`; `SameSite=lax`).
 - No hay observabilidad ni logging de frontend centralizado.
 - No hay feature flagging ni despliegue por entornos múltiples.
 

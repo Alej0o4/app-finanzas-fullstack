@@ -48,5 +48,5 @@ En cada arranque, `main.py` ejecuta:
 - No hay sistema de roles o permisos avanzados.
 - No hay migraciones automáticas con Alembic (`create_all()` en startup).
 - No hay logging estructurado ni observabilidad avanzada.
-- JWT guardado en `localStorage` (vulnerable a XSS, acceptable para uso personal con Tailscale).
+- La sesión de navegador usa cookies `httpOnly` + CSRF double-submit desde Fase 26 (antes: JWT en `localStorage`, vulnerable a XSS). Los clientes no-browser (API keys `oikos_pat_...`) siguen autenticando por header `Authorization: Bearer` sin cookies.
 - Las rutas agregadas del dashboard incluyen resumen, progreso de presupuestos, serie temporal de flujo de caja y distribución por categoría.

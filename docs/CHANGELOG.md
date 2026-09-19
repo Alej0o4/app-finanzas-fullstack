@@ -9,6 +9,38 @@
 
 ---
 
+## Fase 26 — JWT de `localStorage` a cookies `httpOnly` (2026-09-19)
+
+Retomó el diseño que Fase 25 §25.5 dejó deliberadamente sin ejecutar (decisiones J1–J8):
+`login`/`login_google`/`refresh` ahora setean tres cookies de sesión (`access_token` HttpOnly
+15 min, `refresh_token` HttpOnly con Path acotado a `/api/v1/auth`, `csrf_token` NO HttpOnly)
+además del body `TokenResponse` de siempre (compatibilidad con clientes no-browser sin
+cambios); `get_current_user` gana un fallback de cookie detrás del header `Authorization`
+(camino primario, sin cambios para API keys `oikos_pat_...`); CSRF vía double-submit cookie
+(`app/core/csrf.py`, header `X-CSRF-Token` en toda mutación con cookie de sesión presente).
+`frontend/lib/api.ts` deja de leer/escribir `localStorage` y pasa a `withCredentials: true`
+(y 7 archivos más que también leían/escribían tokens — login, register, GoogleAuthButton,
+Sidebar, settings, useRequireAuth, useUserPreferences, ThemeToggle).
+
+**Decisión de despliegue tomada el mismo día:** producción se consolida en el dominio HTTPS
+del Tailscale Funnel como único origen soportado para login por cookie (`COOKIE_SECURE=true`
+por default) — el acceso por IP directa de Tailscale queda deprecado para sesión de navegador,
+no para API keys (Decisiones B10/F6).
+
+**Dos correcciones hechas en la revisión final, antes de mergear** (no estaban en el spec
+original): el Path del cookie `refresh_token` era demasiado angosto
+(`/api/v1/auth/refresh`) y nunca llegaba a `POST /auth/logout` — el logout por navegador no
+revocaba nada server-side, corregido ampliando el Path a `/api/v1/auth`; y el interceptor de
+refresh de `lib/api.ts` entraba en deadlock si el propio refresh devolvía 401 (sesión
+realmente expirada) — la versión anterior usaba `axios` crudo para evitar justo esta
+recursión, y el cambio a la instancia `api` (necesario para que viajen las cookies) la
+reintrodujo sin darse cuenta; corregido con un guard explícito por URL. 251 tests backend
+pasando, `tsc`/`eslint`/`prettier` limpios en frontend.
+
+Spec: `docs/specs/fase_26_spec.md`.
+
+---
+
 ## Fase 25 — Arquitectura: capa de servicios, tipos compartidos y deuda de tests (2026-09-18)
 
 Pagó deuda de arquitectura señalada por la auditoría del 2026-09-15 (`CODE_REVIEW.md`):
