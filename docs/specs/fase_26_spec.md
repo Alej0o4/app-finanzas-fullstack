@@ -132,25 +132,31 @@ propósito (ver Decisión J1 de `fase_25_spec.md`).
    `https:`, para decidir si manda un cookie `Secure`). Fijar `Secure=True` incondicional
    rompería el login para el 100% del acceso actual por IP de Tailscale (`http://100.76.235.30:
    3000`) — el único acceso hoy que sí es HTTPS real es el Tailscale Funnel
-   (`https://<host>.<tailnet>.ts.net`, activo desde 2026-09-06, CLAUDE.md), y ese acceso tiene
-   un problema aparte no resuelto por esta fase (ver Hallazgo 9). Se resuelve con un flag de
-   entorno, no un valor fijo (Decisión B3) — mismo patrón que `ENABLE_TAILSCALE_CORS` (Fase 7
-   §3.3, ya documentado como convención en `CLAUDE.md`).
+   (`https://<host>.<tailnet>.ts.net`, activo desde 2026-09-06, CLAUDE.md). El default de
+   `COOKIE_SECURE` cambia a `true` en la resolución final de esta fase — ver Hallazgo 9 y
+   Decisión B10, que consolidan el acceso de producción sobre ese dominio HTTPS.
 
-9. **Pregunta abierta, no resuelta por este spec: no está confirmado que el Tailscale Funnel
-   sirva frontend y backend bajo el mismo hostname público, y si no lo hace, ni cookies ni CSRF
-   arreglan el acceso autenticado desde ahí — es un problema de CORS/origen que ya existe hoy,
-   independiente de esta fase.** No hay ningún archivo de configuración de Funnel en el repo
-   (`tailscale serve`/`funnel` se configura en el host, fuera de git) — no se pudo verificar si
-   el hostname público `https://<host>.<tailnet>.ts.net` enruta tanto `:3000` como `:8000`, o
-   solo uno. Si el build de frontend que sirve Funnel sigue usando el
-   `NEXT_PUBLIC_API_URL=http://100.76.235.30:8000` por defecto de `docker-compose.yml`, una
-   página cargada por HTTPS desde el dominio `.ts.net` haciendo `fetch`/XHR a un endpoint
-   `http://` sería contenido mixto (bloqueado por el navegador) antes de que el cookie llegue a
-   importar, y `ALLOWED_ORIGINS` tampoco incluye ese hostname por default — es decir, el acceso
-   autenticado vía Funnel puede ya estar roto hoy (JWT-en-localStorage-era), y esta fase no lo
-   empeora ni lo arregla. Se documenta como pregunta abierta para el usuario (ver cierre del
-   documento) en vez de asumir una topología que no se puede confirmar desde el repo.
+9. **Resuelto el 2026-09-19, con el usuario, corriendo `tailscale funnel status` directo en el
+   host de despliegue (esta sesión corre en esa misma máquina) — no es una pregunta abierta.**
+   Salida real:
+
+   ```
+   https://alejo-yoga-6-13alc6.tail44159c.ts.net (Funnel on)
+   |-- /     proxy http://127.0.0.1:3000
+   |-- /api  proxy http://127.0.0.1:8000/api
+   ```
+
+   Funnel ya enruta frontend y backend **bajo el mismo hostname público**, con `/` al frontend
+   y `/api` al backend (que a su vez sirve todo bajo `/api/v1/...`, así que
+   `https://<host>/api/v1/auth/login` llega correctamente a `http://127.0.0.1:8000/api/v1/
+   auth/login`). Sin embargo, se confirmó el problema que este hallazgo anticipaba: el build de
+   frontend sigue usando `NEXT_PUBLIC_API_URL=http://100.76.235.30:8000` (default de
+   `docker-compose.yml`) — una página servida por HTTPS desde el dominio `.ts.net` haciendo
+   `fetch`/XHR a ese endpoint `http://` es contenido mixto activo, que los navegadores bloquean
+   por default. El acceso autenticado vía Funnel está roto hoy por este motivo, independiente de
+   cookies. **Decisión del usuario (2026-09-19): consolidar el acceso de producción en un solo
+   origen HTTPS vía este dominio de Funnel en vez de dejarlo como limitación conocida — ver
+   Decisión B10 (backend/infra) y F6 (frontend).**
 
 10. **No existe ningún mecanismo CSRF en el repo — confirmado de nuevo, sin cambios desde Fase
     25** (`grep -rni csrf backend frontend` solo devuelve comentarios/docs que *hablan de* CSRF,
@@ -306,26 +312,27 @@ original, sigue vigente): minimiza cuántas requests llevan el cookie de mayor p
 (30 días vs 15 min).
 
 **B3 — `COOKIE_SECURE`, variable de entorno nueva en `backend/app/core/security.py`, no un
-valor fijo — corrige J2 (Hallazgo 8).**
+valor fijo — corrige J2 (Hallazgo 8), y su default cambia a `true` tras la Decisión B10
+(resolución del 2026-09-19, ver Hallazgo 9).**
 
 ```python
 # backend/app/core/security.py — agregar junto a las demás env vars (después de GOOGLE_CLIENT_ID)
 
-# Flag de cookies (Fase 26). Default False porque el despliegue actual sirve HTTP plano sobre
-# la IP de Tailscale (ver Hallazgo 8 de docs/specs/fase_26_spec.md — ALLOWED_ORIGINS de
-# docker-compose.yml no tiene ningún origen https://, y no hay ningún reverse proxy en el repo
-# que termine TLS delante de backend/frontend). Un cookie Secure=True nunca se envía a un
-# origen http://, así que fijarlo en True incondicional rompería el login del 100% del acceso
-# actual. Mismo patrón que ENABLE_TAILSCALE_CORS (Fase 7 §3.3): un flag de entorno, no una
-# rama de código nueva, para poder pasar a True el día que el despliegue quede detrás de TLS
-# real (ej. si Tailscale Funnel termina sirviendo tanto frontend como backend bajo el mismo
-# hostname público — ver Hallazgo 9, todavía sin confirmar).
-COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+# Flag de cookies (Fase 26). Default True: el acceso de producción se consolida en el dominio
+# HTTPS de Tailscale Funnel (Decisión B10, docs/specs/fase_26_spec.md) — un cookie Secure=True
+# nunca se envía a un origen http://, así que este flag solo necesita bajar a False en entornos
+# que sirven HTTP plano a propósito (docker-compose.dev.yml, desarrollo local sin Funnel).
+# Mismo patrón que ENABLE_TAILSCALE_CORS (Fase 7 §3.3): un flag de entorno, no una rama de
+# código nueva, para no hardcodear una topología de red específica de este despliegue.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 ```
 
-`docker-compose.yml` gana una línea nueva en `backend.environment`:
-`COOKIE_SECURE: ${COOKIE_SECURE:-false}` — mismo estilo que `ENABLE_TAILSCALE_CORS: "true"` ya
-fijo en el compose de este despliegue.
+`docker-compose.yml` (producción) gana una línea nueva en `backend.environment`:
+`COOKIE_SECURE: ${COOKIE_SECURE:-true}`. `docker-compose.dev.yml` la fija explícita en `false`
+(desarrollo local sirve HTTP plano por diseño) — mismo estilo que `ENABLE_TAILSCALE_CORS` ya
+fijo en el compose de este despliegue. Ver Decisión B10 para el resto del cambio de
+configuración que esto presupone (sin B10, este default rompería el login del 100% del acceso
+actual por IP de Tailscale).
 
 **B4 — `get_current_user` gana el fallback de cookie, pero requiere dos cambios de firma, no
 uno (corrige la lectura literal de J3 — Hallazgo 1).**
@@ -552,6 +559,45 @@ Justificación, con evidencia del propio repo:
 - Consecuencia operativa a anunciar en el commit/PR: el primer deploy de esta fase desloguea a
   las 2 cuentas reales una vez. No hace falta backfill de datos ni migración de sesiones.
 
+**B10 — Consolidar el acceso de producción en un único origen HTTPS vía Tailscale Funnel —
+resuelve Hallazgo 9, decisión tomada con el usuario el 2026-09-19 en vez de dejarse como
+limitación conocida.** Cambia tres defaults en `docker-compose.yml` (producción; NO
+`docker-compose.dev.yml`, que sigue sirviendo HTTP local a propósito):
+
+```yaml
+# docker-compose.yml — backend.environment
+ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,https://alejo-yoga-6-13alc6.tail44159c.ts.net}
+COOKIE_SECURE: ${COOKIE_SECURE:-true}   # ya cubierto por Decisión B3
+
+# docker-compose.yml — frontend.build.args
+NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://alejo-yoga-6-13alc6.tail44159c.ts.net}
+```
+
+Con esto, la request del navegador a la API pasa de `http://100.76.235.30:8000` (IP directa,
+otro origen, HTTP plano) a `https://alejo-yoga-6-13alc6.tail44159c.ts.net/api/v1/...` — que
+Funnel reenvía a `http://127.0.0.1:8000/api/v1/...` (Hallazgo 9). El frontend queda servido
+por el **mismo origen** (mismo esquema+host+puerto: HTTPS, sin puerto explícito) que la API, lo
+que de hecho **simplifica** el resto del diseño: esa request ya no es cross-origin en absoluto,
+así que ni `CORSMiddleware` ni el `SameSite` del cookie tienen que resolver nada para el camino
+principal — `SameSite=Lax` (Decisión J2/B1) sigue siendo la elección correcta igual, ahora por
+redundancia con la política del navegador, no como único mecanismo.
+
+*Local IP directa (`http://100.76.235.30:3000`, sin pasar por Funnel) queda oficialmente
+deprecada para login por cookie* — con `COOKIE_SECURE=true`, un cookie `Secure` no se envía
+nunca a ese origen `http://`, así que un usuario que entre por la IP directa no podría loguear
+por cookie (sí puede seguir entrando por Funnel desde cualquier dispositivo del tailnet, no
+solo desde internet público — Funnel no le saca acceso a los miembros del tailnet, solo lo
+agrega desde afuera). El camino de API key (`Authorization: Bearer oikos_pat_...`, Atajos de
+iOS) no usa cookies en absoluto y sigue funcionando contra cualquier origen, IP incluida — sin
+cambios (Decisión B4/J7).
+
+*Alternativa descartada: mantener `COOKIE_SECURE=false` y aceptar el acceso HTTP-IP
+indefinidamente junto al HTTPS-Funnel.* Es la opción de menor esfuerzo inmediato, pero deja el
+cookie de sesión viajando sin cifrado en un camino que el proyecto sigue anunciando como
+soportado — exactamente el tipo de compromiso de seguridad que esta fase migra *lejos de*
+(salir de `localStorage`) sin terminar de resolverlo. El usuario pidió explícitamente resolver
+esto "de una vez, que quede bien a largo plazo" en vez de dejarlo como deuda técnica nueva.
+
 ### Frontend
 
 **F1 — `frontend/lib/api.ts`: reescritura del archivo completo, no un parche — corrige J5 con
@@ -692,6 +738,16 @@ sin ningún manejo de token propio) — no hay ningún otro call site que arme
 `Authorization: Bearer` a mano fuera de `lib/api.ts` (`grep -rn "Authorization" frontend` no
 devuelve nada más).
 
+**F6 — `NEXT_PUBLIC_API_URL` (build arg del frontend, `docker-compose.yml`) cambia de default
+— ⚠️ contrato compartido con B10, mismo valor exacto, coordinar en el mismo PR.** Solo cambia
+el *valor por defecto* de la variable de entorno de build; `frontend/lib/api.ts` ya construye
+`baseURL` como `` `${NEXT_PUBLIC_API_URL}/api/v1` `` (CLAUDE.md, sin cambios en esa línea por
+este ítem — F1 la reescribe por otros motivos, no por esto). El plumbing de Docker que propaga
+este build arg al frontend ya existe desde Fase 20 (CLAUDE.md: "el plumbing de Docker ya las
+propaga") — no hace falta tocar `frontend/Dockerfile`. Sin este cambio, F1 (`withCredentials:
+true`) no alcanza: el navegador seguiría pidiendo la API a un origen `http://` distinto,
+contenido mixto bloqueado antes de que cualquier cookie viaje (Hallazgo 9).
+
 ---
 
 ## Decisiones de testing
@@ -799,6 +855,12 @@ mínimo:
    ("si cambiás un contrato de API compartido, actualizá ambos docs en el mismo cambio").
    No es opcional — el contrato de auth cambia de fondo aunque el JSON body de
    TokenResponse no cambie de forma.
+
+9. Infra: `docker-compose.yml`/`.env` — `ALLOWED_ORIGINS`, `COOKIE_SECURE`,
+   `NEXT_PUBLIC_API_URL` (Decisiones B10, F6). No depende de código — puede aplicarse en
+   cualquier momento — pero tiene que estar aplicado ANTES de (7), porque la verificación
+   manual end-to-end solo tiene sentido accediendo vía el dominio de Funnel una vez que
+   `COOKIE_SECURE=true` es el default real.
 ```
 
 A diferencia del "no ejecutar en paralelo con nada" que recomendaba Fase 25 para este mismo
@@ -824,6 +886,7 @@ otros 6 ítems de esa fase, no sobre que este ítem en sí mismo sea estrictamen
 | F4 logout/baja de cuenta | — | `components/Sidebar.tsx`, `app/(dashboard)/settings/page.tsx` |
 | F5 sin cambios (confirmación) | — | `lib/hooks/useCurrentUser.ts` y todo el resto de `useQuery`/`api.get` — sin tocar |
 | Testing | `tests/test_auth.py` (clase nueva), `tests/test_csrf.py` (nuevo), `tests/test_api_keys.py` (1 test agregado) | Ninguno automatizado — checklist manual (T4) |
+| B10/F6 infra (origen único HTTPS) | `docker-compose.yml` (`ALLOWED_ORIGINS`, `COOKIE_SECURE` defaults) | `docker-compose.yml` (`NEXT_PUBLIC_API_URL` build arg default) |
 | Docs | `backend/docs/API_REFERENCE.md`, `backend/docs/BUSINESS_RULES.md` (si aplica) | `frontend/docs/API_CONTRACT.md` |
 
 ---
@@ -838,9 +901,6 @@ otros 6 ítems de esa fase, no sobre que este ítem en sí mismo sea estrictamen
   por `docs/TODO.md` (Decisión T4); no se agrega como parte de esta fase aunque sería la
   primera vez que un cambio de esta superficie no tiene ningún test automatizado del lado
   frontend que lo respalde. Riesgo aceptado explícitamente, no ignorado.
-- **Resolver la topología real del Tailscale Funnel (Hallazgo 9)** — no se puede resolver
-  desde el repo (la config de Funnel vive en el host, fuera de git). Se documenta como
-  pregunta abierta para el usuario, no como tarea de esta fase.
 - **Rate limiting distribuido** — sigue fuera de alcance por las mismas razones que
   `docs/ROADMAP.md` ya documenta (single-worker); sin relación con esta fase.
 - **Scopes/TTL obligatorio de API keys** — mencionados en `docs/TODO.md` como mejoras futuras
@@ -851,17 +911,22 @@ otros 6 ítems de esa fase, no sobre que este ítem en sí mismo sea estrictamen
 
 ---
 
-## Preguntas abiertas para el usuario
+## Decisiones resueltas con el usuario (2026-09-19)
 
-1. **Hallazgo 9 (Tailscale Funnel):** ¿el hostname público `https://<host>.<tailnet>.ts.net`
-   enruta hoy tanto el frontend (:3000) como el backend (:8000) bajo el mismo dominio, o solo
-   uno de los dos? Si es "solo uno", el acceso autenticado desde Funnel ya tiene un problema de
-   CORS/origen cruzado independiente de esta fase, y probablemente merece su propio hallazgo
-   en `docs/TODO.md` en vez de asumirse resuelto por esta spec.
-2. **Decisión B3 (`COOKIE_SECURE` default `false`):** ¿confirmás que el despliegue real sigue
-   sirviendo HTTP plano sobre la IP de Tailscale (sin ningún reverse proxy TLS agregado desde
-   la última vez que se tocó `docker-compose.yml`)? Si ya hay TLS delante del backend/frontend
-   que este repo no refleja, el default debería ser `true`, no `false`.
+Las dos preguntas que la primera versión de esta spec dejaba abiertas se resolvieron con el
+usuario el mismo día, verificando el estado real del host de despliegue en vez de asumirlo:
+
+1. **¿Funnel enruta frontend y backend bajo el mismo dominio?** Sí — confirmado corriendo
+   `tailscale funnel status` directo en el host (Hallazgo 9): `/` → frontend, `/api` → backend.
+   Encontró además un problema real no cubierto por J1–J8: el frontend sigue apuntando su
+   `NEXT_PUBLIC_API_URL` a la IP de Tailscale en HTTP plano, no al dominio de Funnel — contenido
+   mixto, bloqueado por el navegador.
+2. **¿El despliegue sigue siendo HTTP plano?** Sí para el acceso por IP directa; el dominio de
+   Funnel ya es HTTPS real. El usuario pidió resolver esto "de una vez, que quede bien a largo
+   plazo" en vez de dejarlo como deuda — se decidió consolidar el acceso de producción en el
+   dominio HTTPS de Funnel como único origen soportado para login por cookie (Decisión B10/F6),
+   con `COOKIE_SECURE=true` por default (Decisión B3 actualizada). El acceso por IP directa vía
+   navegador queda deprecado para sesión (no para API keys, que no usan cookies — Decisión B4).
 
 ---
 
@@ -879,3 +944,10 @@ otros 6 ítems de esa fase, no sobre que este ítem en sí mismo sea estrictamen
 - Ningún archivo del repositorio fuera de `docs/specs/fase_26_spec.md` (y el pointer en
   `docs/ROADMAP.md`) fue modificado al producir este documento — sigue siendo, en su
   totalidad, un documento de planificación.
+- **Actualización 2026-09-19, mismo día, con el usuario:** la primera versión de esta spec
+  dejaba dos preguntas abiertas (topología de Funnel, default de `COOKIE_SECURE`). Se
+  resolvieron verificando el host de despliegue real en vivo (`tailscale funnel status`, no
+  documentación desactualizada) y se agregaron las Decisiones B10/F6 (consolidar el acceso de
+  producción en el dominio HTTPS de Funnel) — ver "Decisiones resueltas con el usuario" arriba.
+  El resto del documento (Hallazgos 1-8, 10-14, Decisiones B1-B9, F1-F5, T1-T4) no cambió de
+  fondo, solo se ajustaron las referencias cruzadas al Hallazgo 9 y a B3.

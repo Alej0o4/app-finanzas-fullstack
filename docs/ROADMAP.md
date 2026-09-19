@@ -55,13 +55,18 @@ Más el **onboarding de 3 minutos** que lleva al usuario a su primer gráfico (F
 
 ## Próxima fase planeada — Fase 26: JWT en cookies httpOnly
 
-**Spec propio ya escrito: `docs/specs/fase_26_spec.md`.** Retoma el diseño de Fase 25 (§25.5,
-decisiones J1–J8), lo reverifica contra el código actual y lo desglosa en tareas Backend/Frontend
-concretas — no implementado todavía. Blast radius conocido: toca todo el flujo de auth del
-frontend (no solo `frontend/lib/api.ts` — el spec encontró 8 archivos, no 1) con usuarios reales
-ya activos, y el proyecto no tiene ninguna protección CSRF hoy — moverse a cookies sin resolver
-eso primero cambiaría un problema por otro. El camino de API keys (`Authorization: Bearer
-oikos_pat_...`, usado por Atajos de iOS reales) queda intacto en el diseño y no se ve afectado.
+**Spec propio ya escrito y sin preguntas abiertas: `docs/specs/fase_26_spec.md`.** Retoma el
+diseño de Fase 25 (§25.5, decisiones J1–J8), lo reverifica contra el código actual y lo
+desglosa en tareas Backend/Frontend concretas — no implementado todavía. Blast radius
+conocido: toca todo el flujo de auth del frontend (no solo `frontend/lib/api.ts` — el spec
+encontró 8 archivos, no 1) con usuarios reales ya activos, y el proyecto no tiene ninguna
+protección CSRF hoy — moverse a cookies sin resolver eso primero cambiaría un problema por
+otro. El camino de API keys (`Authorization: Bearer oikos_pat_...`, usado por Atajos de iOS
+reales) queda intacto en el diseño y no se ve afectado. **Decisión 2026-09-19:** el acceso de
+producción se consolida en el dominio HTTPS del Tailscale Funnel como único origen soportado
+para login por cookie (`COOKIE_SECURE=true` por default) — el acceso por IP directa de
+Tailscale queda deprecado para sesión de navegador, no para API keys (ver Decisión B10/F6 del
+spec).
 
 **Por qué sube de prioridad:** el Tailscale Funnel está activo desde 2026-09-06 — la app es
 alcanzable desde internet público, no solo desde el tailnet, lo que acorta cuánto más se puede
