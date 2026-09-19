@@ -69,6 +69,35 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   - Test nuevo: `test_subscribe_reassigns_ownership_across_users_and_logs_it`
     (`backend/tests/test_push.py`).
 
+- [ ] **Login con Google caído en producción — Google Cloud deshabilitó el proyecto/OAuth
+  client (2026-09-19).**
+  - Al intentar login con Google desde el celular: `Error 401: disabled_client`. Verificado
+    que no es un bug de código — `POST /api/v1/auth/google` y `GoogleAuthButton.tsx` no
+    cambiaron; `disabled_client` es un estado que pone Google Cloud sobre el OAuth Client ID
+    en sí, no algo que dependa de la app. Confirmado por el usuario: es el **proyecto de
+    Google Cloud Console** el deshabilitado (no la cuenta de Google personal) — al loguearse
+    ahí salió la pantalla de apelación ("Dinos por qué se debería restaurar tu cuenta").
+    Probable falso positivo de los sistemas antifraude automáticos de Google Cloud sobre
+    proyectos nuevos/personales, no una violación real de política — el flujo implementado
+    (`google.accounts.id.initialize`, Fase 20) solo pide el ID token estándar (email/nombre/
+    foto), sin scopes sensibles.
+  - Apelación enviada 2026-09-19, pendiente de respuesta de Google (puede tardar días).
+  - **Workaround usado mientras tanto:** el flujo de "olvidé mi contraseña"
+    (`POST /password-reset/request` + `/confirm`, Fase 7) no tiene ningún guard que impida
+    setear contraseña sobre una cuenta con `password_hash = NULL` (cuenta originada en
+    Google) — el usuario puede pedir el reset por email normal y quedar con login por
+    contraseña utilizable en cualquier dispositivo hasta que Google resuelva la apelación.
+    Esto no es una feature diseñada a propósito para este caso, es un efecto colateral de
+    cómo coexisten los dos flujos (P3/P4, Fase 20) — vale la pena, cuando haya tiempo,
+    decidir si además se quiere un botón explícito "agregar contraseña" en `/settings` para
+    cuentas solo-Google en vez de depender del flujo de recuperación.
+  - Si la apelación no prospera: recrear el proyecto/Client ID en Google Cloud Console y
+    actualizar `GOOGLE_CLIENT_ID`/`NEXT_PUBLIC_GOOGLE_CLIENT_ID` en el `.env` del despliegue
+    (ver Fase 20, `docs/specs/fase_20_spec.md`). De paso, completar bien el **OAuth consent
+    screen** (nombre real "Oikos", ícono, política de privacidad) — una pantalla de
+    consentimiento con branding genérico/incompleto es un factor plausible de por qué el
+    proyecto pudo haber sido flageado.
+
 - [ ] **`docker-compose.yml` publica backend (8000) y frontend (3000) en todas las
   interfaces, no solo Tailscale (auditoría 2026-09-15).**
   - Los puertos se publican como `"8000:8000"`/`"3000:3000"` (bind a `0.0.0.0`).
