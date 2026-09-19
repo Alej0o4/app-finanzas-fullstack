@@ -545,8 +545,47 @@ class TestLoginGoogle:
         assert user.google_id == "google-sub:auto-link@example.com"
         # P4: el correo de Google ya estaba verificado por Google → la cuenta queda activa.
         assert user.email_verified is True
-        # La contraseña sigue intacta — no se tocó el hash al vincular.
-        assert user.password_hash is not None
+        # Fase 23 (Decisión G1, corrige el bug de la auditoría 2026-09-15): la cuenta estaba
+        # SIN verificar antes de este login — cualquier password_hash preexistente nunca fue
+        # probado contra el dueño real del email (pudo ser plantado por un atacante), así que
+        # se anula al vincular. La cuenta queda Google-only hasta que su dueño fije una
+        # contraseña nueva (Settings/forgot-password, mismo flujo que Fase 22 ya construyó
+        # para cuentas Google-only puras).
+        assert user.password_hash is None
+
+    def test_autolink_on_unverified_account_nullifies_attacker_planted_password(self, client, monkeypatch, db_session):
+        """Escenario hostil completo (Fase 23, Decisión G1): un atacante se pre-registra
+        con el email de la víctima y su propia contraseña, nunca verifica el correo (un
+        solo POST, rate-limitado pero no bloqueado). Cuando la víctima real hace login con
+        Google con ese mismo correo, el auto-link debe anular esa contraseña plantada — si
+        no, quedaría válida para el atacante contra POST /auth/login (el bug original)."""
+        victim_email = "victima@example.com"
+        register_response = client.post(
+            "/api/v1/users/",
+            json={"email": victim_email, "full_name": "Atacante", "password": "PasswordDelAtacante1"},
+        )
+        assert register_response.status_code == 200, register_response.text
+
+        # La cuenta plantada por el atacante nunca se verifica.
+        user = db_session.query(models.User).filter(models.User.email == victim_email).first()
+        assert user.email_verified is False
+
+        # La víctima real hace login con Google usando el mismo correo.
+        response = self._login_google(client, monkeypatch, email=victim_email)
+        assert response.status_code == 200, response.text
+
+        db_session.refresh(user)
+        assert user.email_verified is True
+        assert user.password_hash is None  # Fase 23 (G1): contraseña plantada, anulada
+        assert user.google_id == f"google-sub:{victim_email}"
+
+        # La contraseña que el atacante plantó ya NO sirve contra esta cuenta.
+        ataque_login = client.post(
+            "/api/v1/auth/login",
+            data={"username": victim_email, "password": "PasswordDelAtacante1"},
+        )
+        assert ataque_login.status_code == 403
+        assert ataque_login.json()["detail"] == "Credenciales Inválidas"
 
     def test_existing_verified_password_account_is_idempotent_and_autolinked(
         self, client, monkeypatch, db_session, register_and_login
@@ -562,6 +601,16 @@ class TestLoginGoogle:
         assert stored.google_id == f"google-sub:{user['email']}"  # se setea igual
         assert stored.email_verified is True
         assert db_session.query(models.User).count() == 1  # sin duplicados, sin romper nada
+        # Fase 23 (Decisión G1, regresión): la cuenta YA estaba verificada antes de este
+        # login de Google — su password_hash ya era confiable (probado por el dueño real
+        # vía el flujo normal de verificación), así que vincular Google no debe tocarlo.
+        assert stored.password_hash is not None
+        # La contraseña original sigue funcionando end-to-end, no solo el hash intacto.
+        login_con_password = client.post(
+            "/api/v1/auth/login",
+            data={"username": user["email"], "password": user["password"]},
+        )
+        assert login_con_password.status_code == 200, login_con_password.text
 
     def test_unverified_email_claim_returns_403_and_creates_no_user(self, client, monkeypatch, db_session):
         response = self._login_google(client, monkeypatch, email="no-verificado@example.com", email_verified=False)

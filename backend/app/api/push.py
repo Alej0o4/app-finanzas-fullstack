@@ -6,6 +6,7 @@ sobre la misma fila de `notifications` (Decisión 13.2.3) — el push es un cana
 adicional sobre el aviso in-app, no un canal alternativo con su propio dato.
 """
 
+import logging
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,6 +16,8 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -42,10 +45,24 @@ def suscribir(
     """Registra/actualiza una suscripción push del usuario autenticado (upsert por
     `endpoint`). Si el endpoint ya existe — re-registro del mismo navegador/dispositivo,
     incluso tras un cierre de sesión con otro usuario — se actualiza la fila en vez de
-    duplicar (el estándar Web Push garantiza endpoint único por instalación)."""
+    duplicar (el estándar Web Push garantiza endpoint único por instalación).
+
+    Fase 23 (Decisión P1): la reasignación cross-usuario sigue permitida a propósito (no
+    hay forma de distinguir, solo con este request, el caso legítimo de dispositivo
+    compartido de un endpoint obtenido por otro medio) — pero queda logueada para
+    auditoría manual."""
     suscripcion = db.query(models.PushSubscription).filter(models.PushSubscription.endpoint == payload.endpoint).first()
 
     if suscripcion:
+        if suscripcion.user_id != current_user.id:
+            logger.warning(
+                "Suscripción push reasignada entre usuarios distintos (mismo endpoint)",
+                extra={
+                    "push_subscription_id": suscripcion.id,
+                    "previous_user_id": suscripcion.user_id,
+                    "new_user_id": current_user.id,
+                },
+            )
         suscripcion.user_id = current_user.id
         suscripcion.p256dh_key = payload.keys.p256dh
         suscripcion.auth_key = payload.keys.auth

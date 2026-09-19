@@ -8,6 +8,7 @@ flujo. El envío real a un navegador real queda fuera de lo que pytest puede cub
 tras la extracción de Fase 14 §14.2).
 """
 
+import logging
 from datetime import UTC, datetime
 
 from app.models import models
@@ -85,6 +86,34 @@ class TestPushSubscriptionEndpoints:
 
         # La fila sigue existiendo, sin tocar
         assert _contar_suscripciones(db_session) == 1
+
+    def test_subscribe_reassigns_ownership_across_users_and_logs_it(
+        self, client, test_user, other_user, caplog, db_session
+    ):
+        """Fase 23 (Decisión P1): el docstring de `suscribir()` documenta la reasignación
+        entre usuarios como intencional (dispositivo compartido) — este test confirma que
+        sigue funcionando igual (no se bloquea) y que ahora queda un log de auditoría."""
+        endpoint = "https://push.example.com/fcm/suscripcion-compartida"
+
+        primera = client.post("/api/v1/push/subscribe", json=_payload(endpoint), headers=other_user["headers"])
+        assert primera.status_code == 200, primera.text
+
+        with caplog.at_level(logging.WARNING, logger="app.api.push"):
+            segunda = client.post(
+                "/api/v1/push/subscribe",
+                json=_payload(endpoint, p256dh="p256dh-nuevo", auth="auth-nuevo"),
+                headers=test_user["headers"],
+            )
+        assert segunda.status_code == 200, segunda.text
+
+        # Comportamiento preservado: una sola fila, reasignada al segundo usuario (Hallazgo 6).
+        fila = db_session.query(models.PushSubscription).filter(models.PushSubscription.endpoint == endpoint).first()
+        assert fila.user_id == test_user["id"]
+        assert _contar_suscripciones(db_session) == 1
+
+        # Auditoría nueva: la reasignación cross-usuario queda logueada.
+        mensajes = [r.message for r in caplog.records if r.name == "app.api.push"]
+        assert any("reasignada" in m for m in mensajes)
 
 
 class TestPushSendFromBudgetAlerts:

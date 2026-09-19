@@ -87,14 +87,24 @@ def login_google(request: Request, body: schemas.GoogleLoginRequest, db: Session
     user = db.query(models.User).filter(models.User.email == normalized_email).first()
 
     if user:
-        # Auto-link (Decisión P3): si el correo ya existe como cuenta con contraseña, se
-        # vincula en vez de crear una duplicada o rechazar el login. No es account
-        # takeover: Google solo firma `email_verified=true` sobre correos que esa cuenta
-        # de Google controla — capacidad equivalente al reset de contraseña por email.
+        # Fase 23 (Decisión G1): capturar el estado ANTES de tocar `email_verified` — si se
+        # leyera después de la línea que lo pone en True, la condición sería siempre falsa y
+        # nunca anularía nada (mismo tipo de bug de orden lectura/escritura que la Decisión D4
+        # de docs/specs/fase_22_spec.md encontró para has_password).
+        cuenta_no_verificada_antes_de_este_login = not user.email_verified
+
         if not user.google_id:
             user.google_id = idinfo["sub"]
-        if not user.email_verified:
+
+        if cuenta_no_verificada_antes_de_este_login:
             user.email_verified = True
+            # Este login de Google es la primera prueba real de que esta cuenta controla el
+            # email — cualquier password_hash preexistente nunca fue probado contra su dueño
+            # real (pudo ser plantado por un atacante, ver docs/ROADMAP.md Fase 23 y
+            # CODE_REVIEW.md). Se anula: la cuenta queda Google-only hasta que su dueño fije
+            # una contraseña nueva (Settings/forgot-password, mismo flujo que Fase 22 ya
+            # construyó para cuentas Google-only puras — Decisión D1-D3 de fase_22_spec.md).
+            user.password_hash = None
     else:
         user = models.User(
             email=normalized_email,
