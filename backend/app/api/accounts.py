@@ -2,11 +2,12 @@ import calendar
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
@@ -81,7 +82,7 @@ def reconciliar_cuenta(
         .first()
     )
     if not cuenta:
-        raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+        raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
     neto = (
         db.query(
@@ -136,7 +137,7 @@ def obtener_resumen_mensual_cuenta(
         .first()
     )
     if not cuenta:
-        raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+        raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
     hoy = datetime.now(UTC)
     primer_dia = datetime(hoy.year, hoy.month, 1)
@@ -177,7 +178,7 @@ def obtener_cuenta(
 
     # Usamos tu misma lógica de validación para mantener coherencia
     if not cuenta or cuenta.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+        raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
     return cuenta
 
@@ -191,7 +192,7 @@ def actualizar_cuenta(
 ) -> models.Account:
     cuenta = db.query(models.Account).filter(models.Account.id == account_id).first()
     if not cuenta or cuenta.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="La cuenta a actualizar no existe o no tienes permisos.")
+        raise NotFoundError("La cuenta a actualizar no existe o no tienes permisos.")
 
     # Fase 24 §24.3 (Decisión C1): actualización parcial real — solo se aplican los
     # campos presentes en el body, no los defaults del schema (antes, un PUT que
@@ -211,10 +212,7 @@ def actualizar_cuenta(
     if "currency" in campos_enviados and cuenta_actualizada.currency != cuenta.currency:
         tiene_transacciones = db.query(models.Transaction).filter(models.Transaction.account_id == account_id).first()
         if tiene_transacciones:
-            raise HTTPException(
-                status_code=400,
-                detail="No se puede cambiar la moneda de una cuenta con transacciones asociadas.",
-            )
+            raise BadRequestError("No se puede cambiar la moneda de una cuenta con transacciones asociadas.")
         cuenta.currency = cuenta_actualizada.currency
 
     db.commit()
@@ -230,7 +228,7 @@ def toggle_destacada(
 ):
     cuenta = db.query(models.Account).filter(models.Account.id == account_id).first()
     if not cuenta or cuenta.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="La cuenta no existe o no tienes permisos.")
+        raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
     cuenta.highlighted = not cuenta.highlighted
     db.commit()
@@ -244,13 +242,11 @@ def eliminar_cuenta(
 ):
     cuenta = db.query(models.Account).filter(models.Account.id == account_id).first()
     if not cuenta or cuenta.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="La cuenta a eliminar no existe o no tienes permisos.")
+        raise NotFoundError("La cuenta a eliminar no existe o no tienes permisos.")
 
     tiene_transacciones = db.query(models.Transaction).filter(models.Transaction.account_id == account_id).first()
     if tiene_transacciones:
-        raise HTTPException(
-            status_code=400, detail="No se puede eliminar la cuenta porque tiene transacciones asociadas."
-        )
+        raise BadRequestError("No se puede eliminar la cuenta porque tiene transacciones asociadas.")
 
     cuenta.deleted_at = datetime.now(UTC)
     db.commit()

@@ -4,14 +4,21 @@ import logging
 import unicodedata
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy import desc, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.budget_alerts import evaluate_budget_thresholds_safely
 from app.core.database import get_db
-from app.core.exceptions import AccountNotFoundError, CategoryNotFoundError
+from app.core.exceptions import (
+    AccountNotFoundError,
+    BadRequestError,
+    CategoryNotFoundError,
+    ConflictError,
+    InternalServerError,
+    NotFoundError,
+)
 from app.core.rate_limit import key_func_por_usuario_o_ip, limiter
 
 # 🔒 Importamos a nuestro Guardia de Seguridad
@@ -55,21 +62,15 @@ def _resolver_categoria_por_nombre(db: Session, user_id: int, nombre: str, tipo:
 
     if propias:
         if len(propias) > 1:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Tenés más de una categoría propia llamada '{nombre}'. Usá category_id.",
-            )
+            raise ConflictError(f"Tenés más de una categoría propia llamada '{nombre}'. Usá category_id.")
         return propias[0]
     if sistema:
         if len(sistema) > 1:  # no debería pasar hoy (DEFAULT_CATEGORIES no tiene duplicados), defensivo
-            raise HTTPException(status_code=409, detail=f"Categoría '{nombre}' ambigua.")
+            raise ConflictError(f"Categoría '{nombre}' ambigua.")
         return sistema[0]
 
     nombres_validos = sorted({c.name for c in candidatas})
-    raise HTTPException(
-        status_code=404,
-        detail=f"Categoría '{nombre}' no encontrada. Válidas para {tipo}: {', '.join(nombres_validos)}.",
-    )
+    raise NotFoundError(f"Categoría '{nombre}' no encontrada. Válidas para {tipo}: {', '.join(nombres_validos)}.")
 
 
 def _resolver_cuenta(db: Session, user_id: int, account_id: int | None) -> models.Account:
@@ -87,13 +88,8 @@ def _resolver_cuenta(db: Session, user_id: int, account_id: int | None) -> model
 
     cuentas_usuario = db.query(models.Account).filter(models.Account.user_id == user_id).all()
     if len(cuentas_usuario) != 1:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Especificá account_id: tenés más de una cuenta."
-                if cuentas_usuario
-                else "No tenés ninguna cuenta activa."
-            ),
+        raise BadRequestError(
+            "Especificá account_id: tenés más de una cuenta." if cuentas_usuario else "No tenés ninguna cuenta activa."
         )
     return cuentas_usuario[0]
 
@@ -127,20 +123,14 @@ def crear_transaccion(
         )
         if existente:
             if existente.request_hash != request_hash:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Esta Idempotency-Key ya se usó con datos distintos.",
-                )
+                raise ConflictError("Esta Idempotency-Key ya se usó con datos distintos.")
             transaccion_previa = (
                 db.query(models.Transaction).filter(models.Transaction.id == existente.transaction_id).first()
             )
             if not transaccion_previa:
                 # La transacción original fue borrada (soft-delete) desde el envío
                 # original — ver caso borde en el spec de Fase 10, ítem 10.4.
-                raise HTTPException(
-                    status_code=409,
-                    detail="La transacción original de esta Idempotency-Key ya no existe.",
-                )
+                raise ConflictError("La transacción original de esta Idempotency-Key ya no existe.")
             return transaccion_previa
 
     # 🔒 1. Resolución de la cuenta (Fase 16 §16.2, Decisión 16.2.4 — ver
@@ -215,11 +205,11 @@ def crear_transaccion(
         )
         if existente:
             return db.query(models.Transaction).filter(models.Transaction.id == existente.transaction_id).first()
-        raise HTTPException(status_code=500, detail="Error interno al procesar la transacción contable.") from None
+        raise InternalServerError("Error interno al procesar la transacción contable.") from None
     except Exception:
         db.rollback()
         logger.exception("Error al crear transacción para el usuario %s", current_user.id)
-        raise HTTPException(status_code=500, detail="Error interno al procesar la transacción contable.") from None
+        raise InternalServerError("Error interno al procesar la transacción contable.") from None
 
     # 🚨 Hook Fase 13 §13.3 (motor de presupuestos): se evalúa tras confirmar el
     # movimiento contable y solo para gastos. Decisión 13.3.4: un fallo del motor NUNCA
@@ -252,7 +242,7 @@ def obtener_transacciones(
     current_user: models.User = Depends(get_current_user),
 ):
     if start_date and end_date and start_date > end_date:
-        raise HTTPException(status_code=400, detail="La fecha inicial no puede ser mayor que la fecha final.")
+        raise BadRequestError("La fecha inicial no puede ser mayor que la fecha final.")
 
     query = db.query(models.Transaction).filter(models.Transaction.user_id == current_user.id)
 
@@ -292,7 +282,7 @@ def eliminar_transaccion(
     transaccion = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
 
     if not transaccion or transaccion.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="La transacción no existe o no tienes permisos.")
+        raise NotFoundError("La transacción no existe o no tienes permisos.")
 
     # 1. Obtener la cuenta asociada a esta transacción
     cuenta = db.query(models.Account).filter(models.Account.id == transaccion.account_id).first()
@@ -309,7 +299,7 @@ def eliminar_transaccion(
     except Exception:
         db.rollback()
         logger.exception("Error al eliminar la transacción %s del usuario %s", transaction_id, current_user.id)
-        raise HTTPException(status_code=500, detail="Error al intentar eliminar y revertir saldos.") from None
+        raise InternalServerError("Error al intentar eliminar y revertir saldos.") from None
 
 
 @router.put("/{transaction_id}", response_model=schemas.TransactionResponse)
@@ -327,7 +317,7 @@ def actualizar_transaccion(
     )
 
     if not transaccion_db:
-        raise HTTPException(status_code=404, detail="Transacción no encontrada.")
+        raise NotFoundError("Transacción no encontrada.")
 
     # Categoría y fecha originales, capturadas ANTES de cualquier mutación: si el gasto se
     # reclasifica, hay que re-evaluar también la categoría de origen contra el período al
@@ -357,7 +347,7 @@ def actualizar_transaccion(
     )
 
     if not cuenta_nueva:
-        raise HTTPException(status_code=404, detail="La nueva cuenta asignada no existe o no te pertenece.")
+        raise NotFoundError("La nueva cuenta asignada no existe o no te pertenece.")
 
     categoria = (
         db.query(models.Category)
@@ -401,7 +391,7 @@ def actualizar_transaccion(
     except Exception:
         db.rollback()
         logger.exception("Error al actualizar la transacción %s del usuario %s", transaction_id, current_user.id)
-        raise HTTPException(status_code=500, detail="Error al recalcular saldos en la actualización.") from None
+        raise InternalServerError("Error al recalcular saldos en la actualización.") from None
 
     # 🚨 Hook Fase 13 §13.3 (motor de presupuestos): mismo criterio que en la creación —
     # después del commit contable, solo para gastos. Cada categoría se evalúa con su

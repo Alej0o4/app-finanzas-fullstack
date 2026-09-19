@@ -238,6 +238,15 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     trabajo incremental, router por router, la próxima vez que se toquen por otra razón —
     decisión explícita para no forzar una reescritura de 63 sitios en esta fase.
 
+- [x] **Extensión completa de `DomainError` a los 10 routers restantes — resuelto.**
+  *(2026-09-19, Fase 28, `docs/specs/fase_28_spec.md`)*
+  - Los 65 `raise HTTPException` que quedaban en `app/api/` (14 en `transactions.py` + los 10
+    routers restantes) migraron a `DomainError` y subclases, traducción mecánica 1:1 (mismo
+    `status_code`, mismo `detail`) — cero cambio de contrato de API. Taxonomía ampliada con
+    `BadRequestError`/`UnauthorizedError`/`ForbiddenError`/`NotFoundError`/`ConflictError`/
+    `ValidationError`/`InternalServerError`/`ServiceUnavailableError`. 251 tests en verde,
+    `ruff` limpio. Cierra el ítem de arriba: ya no es un piloto de un solo router.
+
 - [x] **`schemas.py` y `models.py` como archivos únicos — resuelto para `schemas.py`.**
   *(2026-09-18, Fase 25 §25.2 — mismo ítem que la entrada de arriba sobre `schemas.py`,
   entrada duplicada preexistente que apuntaba a la misma tarea)*
@@ -253,8 +262,12 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     página, porque sus listas de invalidación son demasiado heterogéneas para un hook
     único sin perder precisión.
 
-- [ ] **`transactions/page.tsx` creció a 604 líneas.**
-  - El code review de julio reportaba 380. La tendencia importa más que el número.
+- [x] **`transactions/page.tsx` creció a 604 líneas — resuelto.** *(2026-09-19, Fase 27,
+  `docs/specs/fase_27_spec.md`)*
+  - Descompuesto en `components/transactions/{TransactionFilters,TransactionList}.tsx` +
+    `components/modals/EditTransactionModal.tsx`. La página queda en 313 líneas como
+    orquestador (estado de filtros URL-synced, paginación, mutaciones). Refactor puro, sin
+    cambio de comportamiento — `pnpm lint`/`pnpm build` limpios.
 
 - [ ] **Tipos de dominio no compartidos backend→frontend.**
   - Enums en Python vs string unions en TS, mantenidos a mano.

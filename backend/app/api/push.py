@@ -9,10 +9,11 @@ adicional sobre el aviso in-app, no un canal alternativo con su propio dato.
 import logging
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.exceptions import NotFoundError, ServiceUnavailableError
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
@@ -29,9 +30,8 @@ def obtener_clave_vapid_publica():
     muestra dentro del dashboard, de todos modos ya autenticado)."""
     public_key = os.getenv("VAPID_PUBLIC_KEY")
     if not public_key:
-        raise HTTPException(
-            status_code=503,
-            detail="VAPID no está configurado en el servidor. Agregá VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT al entorno.",
+        raise ServiceUnavailableError(
+            "VAPID no está configurado en el servidor. Agregá VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT al entorno."
         )
     return {"public_key": public_key}
 
@@ -91,7 +91,7 @@ def desuscribir(
     suscripcion = db.query(models.PushSubscription).filter(models.PushSubscription.endpoint == payload.endpoint).first()
 
     if not suscripcion or suscripcion.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="La suscripción no existe o no tienes permisos.")
+        raise NotFoundError("La suscripción no existe o no tienes permisos.")
 
     db.delete(suscripcion)
     db.commit()

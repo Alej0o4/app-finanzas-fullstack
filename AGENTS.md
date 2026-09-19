@@ -83,7 +83,7 @@ No hay typecheck configurado. Tests: `pytest` desde `backend/` (SQLite en memori
 - Preferencias de usuario: `preferred_currency` (COP), `preferred_locale` (es-CO), `preferred_theme` (dark) vía `GET/PATCH /api/users/me/preferences`.
 - CORS configurado vía variable de entorno `ALLOWED_ORIGINS`.
 - Rate limiting en login via `slowapi` (5 req/min, en memoria — distribuido queda fuera de scope, ver ROADMAP).
-- Capa de servicios naciente: `app/services/ledger.py` (Fase 25) extrae la lógica contable compartida por `transactions.py`; la mayoría de la lógica de negocio de los otros 10 routers sigue inline (deuda técnica incremental, documentada en TODO.md).
+- Capa de servicios naciente: `app/services/ledger.py` (Fase 25) extrae la lógica contable compartida por `transactions.py`; la mayoría de la lógica de negocio de los otros 10 routers sigue inline (deuda técnica incremental, documentada en TODO.md). Capa de excepciones de dominio (`app/core/exceptions.py`) ya cubre los 10 routers (Fase 28, 2026-09-19) — todo `raise` de error de negocio usa `DomainError`/subclases, no `HTTPException` directo.
 - DB: PostgreSQL en Docker (`postgres:16-alpine`), datos en volumen `pgdata`. Backend lee `DATABASE_URL` de variable de entorno.
 - Frontend import alias `@/*` → raíz del proyecto.
 - `pnpm` (no npm).

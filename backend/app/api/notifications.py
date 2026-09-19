@@ -8,11 +8,12 @@ autenticados, sin vector de abuso nuevo — mismo criterio que budgets/dashboard
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.exceptions import NotFoundError
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
@@ -81,7 +82,7 @@ def marcar_leida(
     notificacion = db.query(models.Notification).filter(models.Notification.id == notification_id).first()
 
     if not notificacion or notificacion.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="La notificación no existe o no tienes permisos.")
+        raise NotFoundError("La notificación no existe o no tienes permisos.")
 
     notificacion.read_at = datetime.now(UTC)
     db.commit()
@@ -136,7 +137,7 @@ def eliminar_notificacion(
     notificacion = db.query(models.Notification).filter(models.Notification.id == notification_id).first()
 
     if not notificacion or notificacion.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="La notificación no existe o no tienes permisos.")
+        raise NotFoundError("La notificación no existe o no tienes permisos.")
 
     db.delete(notificacion)
     db.commit()

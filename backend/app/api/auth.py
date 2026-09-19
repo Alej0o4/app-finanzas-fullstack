@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request
 from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
@@ -11,6 +11,7 @@ from app.api.users import enviar_email_verificacion, inicializar_datos_usuario_n
 from app.core import auth_cookies, security  # 🆕 Fase 26: auth_cookies
 from app.core.database import get_db
 from app.core.email import render_email_html, send_email
+from app.core.exceptions import BadRequestError, ForbiddenError, ServiceUnavailableError, UnauthorizedError
 from app.core.rate_limit import limiter
 from app.models import models
 from app.schemas import schemas
@@ -30,18 +31,17 @@ def login(
     user = db.query(models.User).filter(models.User.email == normalized_email).first()
 
     if not user or user.password_hash is None:  # 🆕 Fase 20 §20.3 — cuenta solo-Google
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Credenciales Inválidas")
+        raise ForbiddenError("Credenciales Inválidas")
 
     if not security.verify_password(user_credentials.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Credenciales Inválidas")
+        raise ForbiddenError("Credenciales Inválidas")
 
     if not user.email_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
+        raise ForbiddenError(
+            {
                 "code": "EMAIL_NOT_VERIFIED",
                 "mensaje": "Verificá tu correo antes de iniciar sesión. Revisá tu bandeja de entrada.",
-            },
+            }
         )
 
     access_token = security.create_access_token(data={"sub": str(user.id)})
@@ -86,20 +86,17 @@ def login_google(
     mismo manejo de tokens sin bifurcar lógica (Historia de usuario 14).
     """
     if not security.GOOGLE_CLIENT_ID:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="El login con Google no está configurado en este entorno.",
-        )
+        raise ServiceUnavailableError("El login con Google no está configurado en este entorno.")
 
     try:
         idinfo = google_id_token.verify_oauth2_token(
             body.id_token, google_requests.Request(), security.GOOGLE_CLIENT_ID
         )
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de Google inválido.") from None
+        raise UnauthorizedError("Token de Google inválido.") from None
 
     if not idinfo.get("email_verified"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="El correo de Google no está verificado.")
+        raise ForbiddenError("El correo de Google no está verificado.")
 
     normalized_email = idinfo["email"].lower().strip()
     user = db.query(models.User).filter(models.User.email == normalized_email).first()
@@ -175,10 +172,7 @@ def refresh(
     # ambos, se usa el body (misma semántica de rotación/reuso que el flujo viejo).
     raw_refresh = body.refresh_token if body else request.cookies.get(auth_cookies.REFRESH_COOKIE_NAME)
     if raw_refresh is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token inválido o expirado",
-        )
+        raise UnauthorizedError("Refresh token inválido o expirado")
 
     token_hash = security.hash_token(raw_refresh)
     stored = (
@@ -192,10 +186,7 @@ def refresh(
     )
 
     if not stored:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token inválido o expirado",
-        )
+        raise UnauthorizedError("Refresh token inválido o expirado")
 
     stored.revoked_at = datetime.now(UTC)
 
@@ -312,11 +303,11 @@ def confirmar_restablecimiento_contrasena(
     )
 
     if not stored:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token inválido o expirado.")
+        raise BadRequestError("Token inválido o expirado.")
 
     user = db.query(models.User).filter(models.User.id == stored.user_id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token inválido o expirado.")
+        raise BadRequestError("Token inválido o expirado.")
 
     user.password_hash = security.get_password_hash(body.new_password)
     stored.used_at = datetime.now(UTC)
@@ -360,15 +351,11 @@ def verificar_email(token: str, db: Session = Depends(get_db)):
     )
 
     if not stored:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Token de verificación inválido o expirado."
-        )
+        raise BadRequestError("Token de verificación inválido o expirado.")
 
     user = db.query(models.User).filter(models.User.id == stored.user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Token de verificación inválido o expirado."
-        )
+        raise BadRequestError("Token de verificación inválido o expirado.")
 
     user.email_verified = True
     stored.used_at = datetime.now(UTC)

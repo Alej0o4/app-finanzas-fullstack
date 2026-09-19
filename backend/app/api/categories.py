@@ -1,10 +1,11 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
@@ -77,7 +78,7 @@ def obtener_categoria(
 
     # Las categorías del sistema tienen user_id NULL y deben ser visibles para todos.
     if not categoria or (categoria.user_id is not None and categoria.user_id != current_user.id):
-        raise HTTPException(status_code=404, detail="La categoría no existe o no tienes permisos.")
+        raise NotFoundError("La categoría no existe o no tienes permisos.")
 
     return schemas.CategoryResponse(
         id=categoria.id,
@@ -99,10 +100,10 @@ def actualizar_categoria(
     categoria = db.query(models.Category).filter(models.Category.id == category_id).first()
 
     if not categoria or (categoria.user_id != current_user.id and categoria.user_id is not None):
-        raise HTTPException(status_code=404, detail="La categoría no existe o no tienes permisos.")
+        raise NotFoundError("La categoría no existe o no tienes permisos.")
 
     if categoria.user_id is None:
-        raise HTTPException(status_code=403, detail="No se pueden modificar las categorías base del sistema.")
+        raise ForbiddenError("No se pueden modificar las categorías base del sistema.")
 
     categoria.name = categoria_actualizada.name
     categoria.type = categoria_actualizada.type
@@ -126,22 +127,19 @@ def eliminar_categoria(
     categoria = db.query(models.Category).filter(models.Category.id == category_id).first()
 
     if not categoria or (categoria.user_id != current_user.id and categoria.user_id is not None):
-        raise HTTPException(status_code=404, detail="La categoría no existe o no tienes permisos.")
+        raise NotFoundError("La categoría no existe o no tienes permisos.")
 
     if categoria.user_id is None:
-        raise HTTPException(status_code=403, detail="No se pueden eliminar las categorías base del sistema.")
+        raise ForbiddenError("No se pueden eliminar las categorías base del sistema.")
 
     tiene_transacciones = db.query(models.Transaction).filter(models.Transaction.category_id == category_id).first()
     if tiene_transacciones:
-        raise HTTPException(
-            status_code=400, detail="No se puede eliminar la categoría porque tiene transacciones asociadas."
-        )
+        raise BadRequestError("No se puede eliminar la categoría porque tiene transacciones asociadas.")
 
     tiene_presupuestos = db.query(models.Budget).filter(models.Budget.category_id == category_id).first()
     if tiene_presupuestos:
-        raise HTTPException(
-            status_code=400,
-            detail="No se puede eliminar la categoría porque tiene presupuestos activos. Elimínalos primero.",
+        raise BadRequestError(
+            "No se puede eliminar la categoría porque tiene presupuestos activos. Elimínalos primero."
         )
 
     categoria.deleted_at = datetime.now(UTC)
@@ -165,7 +163,7 @@ def ocultar_categoria(
         .first()
     )
     if not categoria:
-        raise HTTPException(status_code=404, detail="La categoría no existe o no tienes permisos.")
+        raise NotFoundError("La categoría no existe o no tienes permisos.")
     if not _esta_oculta(db, current_user.id, category_id):
         db.add(models.HiddenCategory(user_id=current_user.id, category_id=category_id))
         db.commit()

@@ -1,36 +1,20 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowRightLeft,
-  ArrowDownRight,
-  ArrowUpRight,
-  Trash2,
-  Pencil,
-  FilterX,
-  Circle,
-} from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
-import { useAppConfig } from '@/providers/AppConfigProvider';
+import { getApiError } from '@/lib/utils';
 import { useQueryParamState, useQueryParamsBatch } from '@/hooks/useQueryParamState';
 import { queryKeys } from '@/lib/queryKeys';
 import { useTransactions } from '@/lib/hooks/useTransactions';
 import { useAccounts } from '@/lib/hooks/useAccounts';
 import { useCategories } from '@/lib/hooks/useCategories';
-import EmptyState from '@/components/ui/EmptyState';
-import { useConfirmStore } from '@/store/useConfirmStore';
-import CategoryIcon from '@/components/ui/CategoryIcon';
-import ModalShell from '@/components/ui/ModalShell';
-import Button from '@/components/ui/Button';
-import Input from '@/components/ui/Input';
-import Select from '@/components/ui/Select';
+import TransactionFilters, { type DatePreset } from '@/components/transactions/TransactionFilters';
+import TransactionList from '@/components/transactions/TransactionList';
+import EditTransactionModal from '@/components/modals/EditTransactionModal';
 import Skeleton from '@/components/ui/Skeleton';
 import type { Transaction, UpdateTransactionPayload } from '@/types/api';
-
-type DatePreset = 'all' | '7d' | 'month' | 'year' | 'custom';
 
 const PAGE_SIZE = 50;
 
@@ -76,15 +60,16 @@ const getPresetDates = (preset: Exclude<DatePreset, 'custom'>) => {
 // 'custom' está en la whitelist de preset porque la propia página lo escribe cuando el
 // usuario edita fechas a mano (setDatePreset('custom')) — sin él, el chip "Todo el
 // histórico" se encendería por error con un rango custom activo.
-const validatePreset = (raw: string) =>
-  (['all', '7d', 'month', 'year', 'custom'] as const).includes(raw as DatePreset) ? raw : 'all';
+const validatePreset = (raw: string): DatePreset =>
+  (['all', '7d', 'month', 'year', 'custom'] as const).includes(raw as DatePreset)
+    ? (raw as DatePreset)
+    : 'all';
 
 const validateIdOrAll = (raw: string) => (raw === 'all' || /^\d+$/.test(raw) ? raw : 'all');
 
 const validateDateParam = (raw: string) => (/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : '');
 
 function TransactionsPageContent() {
-  const { config } = useAppConfig();
   const queryClient = useQueryClient();
   // Fase 12 §12.1: filtros sincronizados con la URL (start/end/category/account/preset).
   // El estado por defecto nunca aparece en el query string; un link copiado con filtros
@@ -121,25 +106,12 @@ function TransactionsPageContent() {
   // Edit modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [editDescription, setEditDescription] = useState('');
-  const [editAmount, setEditAmount] = useState('');
-  const [editType, setEditType] = useState('expense');
-  const [editDate, setEditDate] = useState(new Date().toISOString().split('T')[0]);
-  const [editAccountId, setEditAccountId] = useState('');
-  const [editCategoryId, setEditCategoryId] = useState('');
-  // Fase 12 §12.8.3: errores por campo (no globo nativo del navegador) + foco en el primero.
-  const [editErrors, setEditErrors] = useState<{
-    amount?: string;
-    description?: string;
-    accountId?: string;
-    categoryId?: string;
-    date?: string;
-  }>({});
-  const editAmountRef = useRef<HTMLInputElement>(null);
-  const editDescriptionRef = useRef<HTMLInputElement>(null);
-  const editAccountRef = useRef<HTMLSelectElement>(null);
-  const editCategoryRef = useRef<HTMLSelectElement>(null);
-  const editDateRef = useRef<HTMLInputElement>(null);
+  // Cada apertura del modal incrementa esta key para forzar un remount de
+  // EditTransactionModal: garantiza que el formulario siempre arranque desde los valores
+  // actuales de la transacción, incluso si se reabre la misma fila tras cancelar una edición
+  // sin guardar (mismo comportamiento que el openEditModal original, que reseteaba todos los
+  // campos explícitamente en cada click).
+  const [editSessionKey, setEditSessionKey] = useState(0);
 
   // Paginación
   const [skip, setSkip] = useState(0);
@@ -246,46 +218,8 @@ function TransactionsPageContent() {
 
   const openEditModal = (tx: Transaction) => {
     setEditingTransaction(tx);
-    setEditDescription(tx.description || '');
-    setEditAmount(String(tx.amount));
-    setEditType(tx.type);
-    setEditDate(tx.date ? tx.date.split('T')[0] : new Date().toISOString().split('T')[0]);
-    setEditAccountId(String(tx.account_id));
-    setEditCategoryId(String(tx.category_id));
-    setEditErrors({});
+    setEditSessionKey((prev) => prev + 1);
     setIsEditModalOpen(true);
-  };
-
-  const handleUpdate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingTransaction) return;
-
-    const errors: typeof editErrors = {};
-    const parsedAmount = Number(editAmount);
-    if (!editAmount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-      errors.amount = 'Ingresa un monto mayor a cero.';
-    }
-    if (!editDescription.trim()) errors.description = 'Ingresa una descripción.';
-    if (!editAccountId) errors.accountId = 'Elige una cuenta.';
-    if (!editCategoryId) errors.categoryId = 'Elige una categoría.';
-    if (!editDate) errors.date = 'Ingresa una fecha válida.';
-    setEditErrors(errors);
-
-    if (errors.amount) return editAmountRef.current?.focus();
-    if (errors.description) return editDescriptionRef.current?.focus();
-    if (errors.accountId) return editAccountRef.current?.focus();
-    if (errors.categoryId) return editCategoryRef.current?.focus();
-    if (errors.date) return editDateRef.current?.focus();
-
-    updateMutation.mutate({
-      id: editingTransaction.id,
-      description: editDescription,
-      amount: parsedAmount,
-      type: editType as 'income' | 'expense',
-      date: editDate,
-      account_id: Number(editAccountId),
-      category_id: Number(editCategoryId),
-    });
   };
 
   const handleLoadMore = () => {
@@ -313,325 +247,58 @@ function TransactionsPageContent() {
         </div>
       </div>
 
-      <div className="bg-surface border-border/70 shadow-background/20 min-w-0 space-y-4 overflow-x-hidden rounded-2xl border p-4 shadow-sm sm:p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-text-soft flex items-center gap-2 text-sm font-medium">
-            <FilterX size={16} className="text-text-muted" />
-            Filtros de feed
-          </div>
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            Limpiar filtros
-          </Button>
-        </div>
+      <TransactionFilters
+        datePreset={datePreset}
+        startDate={startDate}
+        endDate={endDate}
+        accountFilter={accountFilter}
+        categoryFilter={categoryFilter}
+        accounts={accounts}
+        categories={categories}
+        onApplyPreset={applyPreset}
+        onStartDateChange={(value) => {
+          resetPagination();
+          setFilterParams({ start: value || null, preset: 'custom' });
+        }}
+        onEndDateChange={(value) => {
+          resetPagination();
+          setFilterParams({ end: value || null, preset: 'custom' });
+        }}
+        onAccountFilterChange={(value) => {
+          resetPagination();
+          setAccountFilter(value);
+        }}
+        onCategoryFilterChange={(value) => {
+          resetPagination();
+          setCategoryFilter(value);
+        }}
+        onClearFilters={clearFilters}
+      />
 
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                { key: 'all', label: 'Todo el histórico' },
-                { key: '7d', label: 'Últimos 7 días' },
-                { key: 'month', label: 'Este mes' },
-                { key: 'year', label: 'Este año' },
-              ] as const
-            ).map((preset) => (
-              <button
-                key={preset.key}
-                type="button"
-                onClick={() => applyPreset(preset.key)}
-                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  datePreset === preset.key
-                    ? 'border-primary bg-primary/10 text-text'
-                    : 'border-border/70 bg-background text-text-muted hover:border-primary/60 hover:text-text'
-                }`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
+      <TransactionList
+        items={allItems}
+        accounts={accounts}
+        categories={categories}
+        total={total}
+        hasMore={hasMore}
+        loadingMore={loadingMore}
+        onEdit={openEditModal}
+        onDelete={(id) => deleteMutation.mutate(id)}
+        onLoadMore={handleLoadMore}
+      />
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
-            <Input
-              label="Fecha inicial"
-              type="date"
-              value={startDate}
-              onChange={(event) => {
-                resetPagination();
-                setFilterParams({ start: event.target.value || null, preset: 'custom' });
-              }}
-              className="bg-background"
-            />
-
-            <Input
-              label="Fecha final"
-              type="date"
-              value={endDate}
-              onChange={(event) => {
-                resetPagination();
-                setFilterParams({ end: event.target.value || null, preset: 'custom' });
-              }}
-              className="bg-background"
-            />
-
-            <Select
-              label="Cuenta"
-              value={accountFilter}
-              onChange={(event) => {
-                resetPagination();
-                setAccountFilter(event.target.value);
-              }}
-              className="bg-background"
-            >
-              <option value="all">Todas las cuentas</option>
-              {accounts?.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </Select>
-
-            <Select
-              label="Categoría"
-              value={categoryFilter}
-              onChange={(event) => {
-                resetPagination();
-                setCategoryFilter(event.target.value);
-              }}
-              className="bg-background"
-            >
-              <option value="all">Todas las categorías</option>
-              {categories?.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
-        {allItems.length === 0 ? (
-          <EmptyState
-            icon={<ArrowRightLeft size={48} className="opacity-20" />}
-            message="Aún no tienes movimientos registrados."
-          />
-        ) : (
-          <>
-            <div className="divide-border/40 divide-y">
-              {allItems.map((tx) => {
-                const isExpense = tx.type === 'expense';
-                const account = accounts?.find((a) => a.id === tx.account_id);
-                const category = categories?.find((c) => c.id === tx.category_id);
-
-                return (
-                  <div
-                    key={tx.id}
-                    className="hover:bg-surface-elevated group flex items-center justify-between gap-3 p-3 transition-colors sm:gap-4 sm:p-4 sm:px-6"
-                  >
-                    <div className="flex min-w-0 items-center space-x-3 sm:space-x-4">
-                      <div
-                        className={`bg-background border-border/60 hidden shrink-0 rounded-full border p-2.5 sm:block ${isExpense ? 'text-text-muted' : 'text-primary'}`}
-                      >
-                        {isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-text truncate text-sm font-medium">{tx.description}</p>
-                        <div className="text-text-muted mt-0.5 flex space-x-2 text-xs">
-                          <span className="truncate">{account?.name || 'Cuenta eliminada'}</span>
-                          <span className="hidden sm:inline">•</span>
-                          <span className="hidden items-center gap-1 sm:inline-flex">
-                            <CategoryIcon
-                              icon={category?.icon}
-                              size={12}
-                              fallback={<Circle size={12} className="opacity-30" />}
-                            />
-                            {category?.name || 'Sin categoría'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-2 sm:gap-6">
-                      <div className="text-right">
-                        <p
-                          className={`font-sans text-sm font-semibold tabular-nums sm:text-base ${isExpense ? 'text-text' : 'text-primary'}`}
-                        >
-                          {isExpense ? '-' : '+'}
-                          {formatCurrency(tx.amount, tx.currency)}
-                        </p>
-                        <p className="text-text-muted text-[11px] capitalize">
-                          {formatDate(tx.date, config.locale)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
-                        <button
-                          onClick={() => openEditModal(tx)}
-                          className="text-text-muted hover:text-text hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
-                          aria-label="Editar transacción"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          onClick={() =>
-                            useConfirmStore
-                              .getState()
-                              .confirm('¿Borrar esta transacción?', () =>
-                                deleteMutation.mutate(tx.id)
-                              )
-                          }
-                          className="text-text-muted hover:text-danger hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
-                          aria-label="Eliminar transacción"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {hasMore && (
-              <div className="border-border/40 flex justify-center border-t py-6">
-                <Button
-                  variant="secondary"
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  loading={loadingMore}
-                >
-                  {loadingMore ? 'Cargando...' : `Cargar más (${allItems.length} de ${total})`}
-                </Button>
-              </div>
-            )}
-
-            {!hasMore && allItems.length > 0 && (
-              <p className="text-text-muted border-border/40 border-t py-4 text-center text-sm">
-                Mostrando todas las {total} transacciones
-              </p>
-            )}
-          </>
-        )}
-      </div>
-
-      <ModalShell
-        isOpen={isEditModalOpen && !!editingTransaction}
-        onClose={() => setIsEditModalOpen(false)}
-        title="Editar movimiento"
-      >
-        {editingTransaction && (
-          <form onSubmit={handleUpdate} className="space-y-4" noValidate>
-            <div className="flex gap-4">
-              <button
-                type="button"
-                onClick={() => setEditType('expense')}
-                className={`flex-1 cursor-pointer rounded-xl border py-2 text-sm font-medium transition-colors ${editType === 'expense' ? 'bg-background border-border text-text' : 'text-text-muted hover:text-text border-transparent'}`}
-              >
-                Gasto
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditType('income')}
-                className={`flex-1 cursor-pointer rounded-xl border py-2 text-sm font-medium transition-colors ${editType === 'income' ? 'bg-primary/10 border-primary/20 text-primary' : 'text-text-muted hover:text-text border-transparent'}`}
-              >
-                Ingreso
-              </button>
-            </div>
-
-            <Input
-              ref={editAmountRef}
-              label="Valor"
-              type="number"
-              required
-              value={editAmount}
-              onChange={(e) => setEditAmount(e.target.value)}
-              error={editErrors.amount}
-              className="bg-background"
-            />
-
-            <Input
-              ref={editDescriptionRef}
-              label="Descripción"
-              type="text"
-              required
-              value={editDescription}
-              onChange={(e) => setEditDescription(e.target.value)}
-              error={editErrors.description}
-              className="bg-background"
-            />
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Select
-                ref={editAccountRef}
-                label="Cuenta"
-                required
-                value={editAccountId}
-                onChange={(e) => setEditAccountId(e.target.value)}
-                error={editErrors.accountId}
-                className="bg-background appearance-none"
-              >
-                <option value="" disabled>
-                  Selecciona...
-                </option>
-                {accounts?.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                ref={editCategoryRef}
-                label="Categoría"
-                required
-                value={editCategoryId}
-                onChange={(e) => setEditCategoryId(e.target.value)}
-                error={editErrors.categoryId}
-                className="bg-background appearance-none"
-              >
-                <option value="" disabled>
-                  Selecciona...
-                </option>
-                {categories
-                  ?.filter((c) => c.type === editType)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-              </Select>
-            </div>
-
-            <Input
-              ref={editDateRef}
-              label="Fecha"
-              type="date"
-              required
-              value={editDate}
-              onChange={(e) => setEditDate(e.target.value)}
-              error={editErrors.date}
-              className="bg-background"
-            />
-
-            <div className="mt-6 flex gap-3">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setIsEditModalOpen(false)}
-                className="flex-1"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                loading={updateMutation.isPending}
-                className="flex-1"
-              >
-                Guardar
-              </Button>
-            </div>
-          </form>
-        )}
-      </ModalShell>
+      {editingTransaction && (
+        <EditTransactionModal
+          key={editSessionKey}
+          isOpen={isEditModalOpen}
+          transaction={editingTransaction}
+          accounts={accounts}
+          categories={categories}
+          isSaving={updateMutation.isPending}
+          onClose={() => setIsEditModalOpen(false)}
+          onSave={(payload) => updateMutation.mutate(payload)}
+        />
+      )}
     </div>
   );
 }
