@@ -127,76 +127,90 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     implementar cuando `Dockerfile`/`docker-compose.yml` pasen a `--workers > 1` o más de una
     réplica.
 
-- [ ] **`frontend/docs/STATE_AND_FETCHING.md` (el mapa de query keys/invalidación) está
-  congelado en Fase 16 (auditoría 2026-09-15).**
-  - No menciona nada de Fases 17-22: `queryKeys.accounts.monthlySummary`/`budgetsProgress`
-    por cuenta (`frontend/lib/queryKeys.ts`), los params `account_id`/`currency` agregados
-    a `analytics.cashflow`/`analytics.categories`, las keys de categorías ocultas, ni las
-    mutations de settings de Fase 21/22. CLAUDE.md lo señala como el mapa autoritativo —
-    hoy es engañoso para cualquiera (agente o humano) que confíe en él en vez de grepear.
-    Mismo nivel de disciplina que ya se exige para `API_REFERENCE.md`/`API_CONTRACT.md`:
-    actualizar en el próximo touch a cualquiera de estas áreas.
-  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
+- [x] **`frontend/docs/STATE_AND_FETCHING.md` (el mapa de query keys/invalidación) estaba
+  congelado en Fase 16 (auditoría 2026-09-15) — resuelto.** *(2026-09-18, Fase 25 §25.6,
+  `docs/specs/fase_25_spec.md`, commit `6debfc1`)*
+  - Documenta ahora `userPreferences`, las keys por-cuenta (`monthlySummary`/
+    `budgetsProgress`/`categoryBreakdown`), los params `account_id`/`currency` de
+    analítica, las invalidaciones de mutations de Settings, y los 3 hooks compartidos
+    nuevos de §25.4. Corrección de precisión hecha en el mismo cierre: no existe ninguna
+    query key separada para "categorías ocultas" — `is_hidden` es un campo más de
+    `GET /categories/`, filtrado client-side.
 
 - [ ] **JWT guardado en `localStorage`** (`frontend/lib/api.ts`).
   - Riesgo de robo vía XSS. Alternativa: cookie `httpOnly` + `secure` + `sameSite`.
   - Sube de prioridad al salir de la red privada Tailscale. Mitigado parcialmente en Fase 7:
     el TTL del access token bajó de 60 a 15 min, así que la ventana de robo es más corta.
-  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
+  - **Diseño completo (decisiones J1–J8) en `docs/specs/fase_25_spec.md` §25.5** — cookie
+    flags, fallback de `get_current_user` a cookie sin romper el header de API key
+    (`oikos_pat_...`) de los Shortcuts de iOS, y CSRF vía double-submit cookie (hoy no
+    existe ningún mecanismo CSRF en el repo). **Implementación deliberadamente diferida** a
+    un spec propio (evaluado y no ejecutado en Fase 25, 2026-09-18): el blast radius cubre
+    todo el tráfico autenticado con usuarios reales activos y no hay suite de tests de
+    frontend que atrape una regresión ahí. Sigue abierto.
 
 ---
 
 ## 🟢 Modularidad — revisar cuando el código duela al modificarlo
 
-- [ ] **Lógica de negocio embebida en routers FastAPI — y la excepción ya existente apunta
-  al lado equivocado (actualizado 2026-09-15).**
-  - Los routers hacen de controller + service + repository. `app/services/` no existe
-    formalmente, pero ya emergió una capa de servicio ad-hoc dentro de `app/core/`:
-    `budget_alerts.py`, `budget_recurrence.py`, `notification_dispatch.py`,
-    `weekly_summary.py`, `user_deletion.py` — cada uno usado por 2+ routers o el scheduler.
-  - El problema: la extracción pasó para notificaciones/scheduling, **no** para el código
-    de mayor riesgo. La lógica contable (signo del delta: `income → +` / `expense → -`)
-    sigue copy-pasteada tres veces en `transactions.py` (`crear_transaccion`,
-    `actualizar_transaccion`, `eliminar_transaccion`) — es el código que mueve la plata de
-    otras personas, y es el que debería haberse extraído primero, no al final.
-  - Cuando se cree `app/services/`, empezar por un `ledger.py`/`transaction_accounting.py`
-    con esa lógica, usando `budget_alerts.py` como plantilla de cómo ya funciona
-    core/-como-service en este repo.
-  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
+- [x] **Lógica de negocio embebida en routers FastAPI — y la excepción ya existente apuntaba
+  al lado equivocado (actualizado 2026-09-15) — resuelto para el código de mayor riesgo.**
+  *(2026-09-18, Fase 25 §25.1, `docs/specs/fase_25_spec.md`, commit `6debfc1`)*
+  - `app/services/ledger.py` nace como el primer módulo real de `app/services/` — 4
+    funciones puras que reemplazan la lógica contable (signo del delta + `UPDATE` atómico)
+    que estaba copy-pasteada tres veces en `transactions.py` (`crear_transaccion`/
+    `actualizar_transaccion`/`eliminar_transaccion`), justo el código de mayor riesgo que
+    esta entrada señalaba como el que debía extraerse primero. Sigue el mismo patrón
+    "función pura + `db: Session`" que ya usaba `budget_alerts.py`.
+  - Los routers siguen siendo dueños de la transacción SQL (commit/rollback) — `ledger.py`
+    solo ejecuta los `UPDATE`, no comitea. Nuevo `test_ledger.py` (6 tests unit-level).
+  - No resuelto (a propósito, fuera de alcance de esta entrada): el resto de la lógica de
+    negocio de los otros 10 routers sigue viviendo inline — esta entrada solo apuntaba al
+    código contable de `transactions.py`.
 
-- [ ] **`schemas.py` (462 líneas, 49 clases) está más forzado que `models.py` (341 líneas,
-  14 clases) — priorizar partir schemas primero (auditoría 2026-09-15).**
-  - Los modelos están bien comentados y cada clase es autocontenida; separarlos no es
-    urgente. Los schemas mezclan auth/transacciones/notificaciones/push/API-keys en un solo
-    archivo plano sin separación por dominio — es el candidato real si solo se hace uno.
-  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
+- [x] **`schemas.py` (462 líneas, 49 clases) estaba más forzado que `models.py` (341 líneas,
+  14 clases) — priorizar partir schemas primero (auditoría 2026-09-15) — resuelto.**
+  *(2026-09-18, Fase 25 §25.2, `docs/specs/fase_25_spec.md`, commit `6debfc1`)*
+  - `schemas.py` tenía en realidad 48 clases, no 49 (corrección de precisión hecha en el
+    spec). Partido en 12 módulos por dominio bajo `app/schemas/`; `schemas.py` queda como
+    shim de re-exports (`from app.schemas import schemas` sigue funcionando igual en los
+    11 routers, cero archivos de `app/api/` tocados). `models.py` (en realidad 13 clases,
+    no 14) sigue sin partir — la propia auditoría ya lo marcaba como no urgente.
 
-- [ ] **`budget_recurrence.py` sin test dedicado para la lógica de generación de períodos
-  (auditoría 2026-09-15).**
-  - `test_budgets.py` solo verifica que el flag `is_recurring` sobreviva el round-trip;
-    nunca ejercita `ensure_recurring_budgets_for_period` directamente — es justo la lógica
-    detrás de la resolución de Fase 8 ("los presupuestos no sobreviven al cambio de mes",
-    ver nota de obsolescencia en 🟠 arriba) — vale la pena blindarlo con test antes de
-    tocarlo de nuevo.
-  - Nota positiva de la misma auditoría: Google OAuth, API keys y push sí están bien
-    testeados (`test_auth.py`, `test_api_keys.py`, `test_push.py`) — mejor cobertura de lo
-    que sugiere la narrativa de CLAUDE.md. El frontend sigue en cero tests, confirmado.
-  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
+- [x] **`budget_recurrence.py` sin test dedicado para la lógica de generación de períodos
+  (auditoría 2026-09-15) — resuelto.** *(2026-09-18, Fase 25 §25.7,
+  `docs/specs/fase_25_spec.md`, commit `6debfc1`)*
+  - `test_budget_recurrence.py` nuevo, 5 tests directos sobre
+    `ensure_recurring_budgets_for_period`: salto de año, plantilla más reciente con un gap
+    de varios meses, skip de una fila editada a mano, dos categorías independientes en el
+    mismo período, y la rama de `IntegrityError`/rollback bajo carrera. `test_budgets.py`
+    no cambió — sigue cubriendo el round-trip de `is_recurring` vía HTTP.
 
-- [ ] **Sin capa de excepciones de dominio.**
-  - Todo `raise HTTPException` mezclado con reglas de negocio.
-  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
+- [x] **Sin capa de excepciones de dominio — resuelto como piloto acotado, no como
+  cobertura completa.** *(2026-09-18, Fase 25 §25.3, `docs/specs/fase_25_spec.md`,
+  commit `6debfc1`)*
+  - `app/core/exceptions.py` (`DomainError` + `AccountNotFoundError`/
+    `CategoryNotFoundError`) + un único `exception_handler` en `main.py` que devuelve el
+    mismo shape `{"detail": ...}` que `HTTPException` ya devolvía — sin cambio de contrato
+    de API. Solo los 4 `raise HTTPException` con strings duplicados de `transactions.py`
+    migraron; los ~59 `raise HTTPException` restantes de los otros 10 routers quedan como
+    trabajo incremental, router por router, la próxima vez que se toquen por otra razón —
+    decisión explícita para no forzar una reescritura de 63 sitios en esta fase.
 
-- [ ] **`schemas.py` y `models.py` como archivos únicos.**
-  - Manejable a 6 entidades; el nuevo MVP agrega varias (tokens API, suscripciones push,
-    avisos) → partir por dominio.
-  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16, mismo ítem que el de arriba
-    sobre `schemas.py`/`models.py` — entrada duplicada preexistente, se deja para no perder
-    historial pero apunta a la misma tarea).
+- [x] **`schemas.py` y `models.py` como archivos únicos — resuelto para `schemas.py`.**
+  *(2026-09-18, Fase 25 §25.2 — mismo ítem que la entrada de arriba sobre `schemas.py`,
+  entrada duplicada preexistente que apuntaba a la misma tarea)*
+  - `models.py` sigue como archivo único — explícitamente fuera de alcance de Fase 25 (ver
+    entrada de arriba): ya está bien encapsulado por clase y la propia auditoría no lo
+    marcaba como urgente.
 
-- [ ] **Frontend: fetching duplicado por página.**
-  - `useQuery` + `queryFn` inline repetido. Extraer a `useAccounts`, `useCategories`, etc.
-  - **→ Programado en `docs/ROADMAP.md` Fase 25** (2026-09-16).
+- [x] **Frontend: fetching duplicado por página — resuelto.** *(2026-09-18, Fase 25 §25.4,
+  `docs/specs/fase_25_spec.md`, commit `6debfc1`)*
+  - `frontend/lib/hooks/{useAccounts,useCategories,useTransactions}.ts` reemplazan el
+    `useQuery` + `queryFn` inline en 19 call sites (10 de cuentas, 8 de categorías, 1 de
+    transacciones). Solo lecturas — las mutaciones (crear/editar/borrar) siguen inline por
+    página, porque sus listas de invalidación son demasiado heterogéneas para un hook
+    único sin perder precisión.
 
 - [ ] **`transactions/page.tsx` creció a 604 líneas.**
   - El code review de julio reportaba 380. La tendencia importa más que el número.

@@ -122,6 +122,18 @@ Convención:
   `app/capture/layout.tsx`. Si una futura ruta agrega otro layout autenticado, reutilizar este
   hook en vez de copiar el `useEffect`.
 
+### `lib/hooks/useAccounts.ts`, `useCategories.ts`, `useTransactions.ts` (Fase 25 §25.4)
+
+- Envuelven el `useQuery` + `queryFn` inline que antes se repetía por página (19 call sites
+  entre los tres). Solo lecturas — las mutaciones (crear/editar/borrar) siguen viviendo inline
+  en cada página, porque sus listas de invalidación son demasiado heterogéneas para un hook
+  único.
+- `useAccounts`/`useCategories` no toman argumentos obligatorios (aceptan un `{ enabled }`
+  opcional para queries condicionales); `useTransactions(params)` recibe el mismo
+  objeto de query params que ya arma `transactions/page.tsx` (`skip`, `limit`, `account_id`,
+  `category_id`, `start_date`, `end_date`).
+- Ver `frontend/docs/STATE_AND_FETCHING.md` para las query keys exactas que usan.
+
 ## Componentes compartidos
 
 ### `components/modals/TransactionModal.tsx`
