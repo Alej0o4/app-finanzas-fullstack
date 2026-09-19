@@ -1,13 +1,24 @@
 # Deuda Técnica Consciente — Oikos
 
 > Este archivo documenta atajos tomados a propósito y hallazgos de auditoría pendientes.
-> Repriorizado el **2026-08-22** tras el cambio de enfoque a producto multi-usuario
-> (ver [ROADMAP.md](ROADMAP.md)).
+> Repriorizado el **2026-08-22** tras el cambio de enfoque a producto multi-usuario, y de nuevo
+> el **2026-09-19** tras la vuelta a uso personal (ver [ROADMAP.md](ROADMAP.md)).
 
 Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
-> **Contexto del cambio:** varios items estaban clasificados como baja prioridad bajo el
-> supuesto "solo lo uso yo, en red privada Tailscale". Ese supuesto ya no aplica.
+> **2026-09-19 — vuelta a uso personal.** El supuesto "solo lo uso yo" que el párrafo de abajo
+> daba por invalidado el 2026-08-22 vuelve a aplicar, esta vez de forma deliberada y permanente,
+> no como default heredado. Los ítems de seguridad/producto multi-usuario que seguían abiertos
+> (🟡 API keys TTL/scopes, rate limiting distribuido) se movieron a "Fuera de scope" en
+> `ROADMAP.md` — no se van a implementar salvo que el contexto vuelva a cambiar. Los bugs que
+> afectan el uso real del dueño del producto (ej. login de Google caído) siguen siendo
+> prioritarios: esto no es "dejar de mantener el código", es dejar de invertir en hardening para
+> una amenaza que ya no existe.
+
+> **Contexto del cambio anterior (2026-08-22, histórico):** varios items estaban clasificados
+> como baja prioridad bajo el supuesto "solo lo uso yo, en red privada Tailscale". Ese supuesto
+> dejó de aplicar entonces por la apertura a multi-usuario — y volvió a aplicar el 2026-09-19,
+> ver nota arriba.
 
 > **2026-09-15 — Auditoría completa** (seguridad, arquitectura/mantenibilidad, UX/frontend)
 > corrida a pedido del usuario. Ítems nuevos marcados `(auditoría 2026-09-15)` abajo. También
@@ -25,7 +36,12 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ---
 
-## 🔴 Bloqueantes — antes de que exista un usuario que no seas tú
+## 🔴 Bloqueantes de seguridad (histórico — sin ítems abiertos desde el pivote a uso personal)
+
+> Esta sección se mantiene por su historial (el account-takeover de abajo fue real y grave) pero
+> ya no se alimenta activamente: con el pivote del 2026-09-19 no hay plan de abrir el producto a
+> otros usuarios, así que no se está auditando en busca de nuevos bloqueantes de esta clase. Si
+> el contexto cambia, retomar desde acá.
 
 - [x] **Account takeover vía auto-link de Google OAuth (auditoría de seguridad 2026-09-15) —
   resuelto.** *(2026-09-18, Fase 23, `docs/specs/fase_23_spec.md`, commit `6e4d11a`)*
@@ -135,26 +151,21 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🟡 Integridad y escala
 
-- [ ] **API keys: TTL opcional y scopes siguen siendo decisiones de producto abiertas
-  (revisión de seguridad 2026-09-06, ver Resueltos más abajo para lo ya corregido).**
-  - **TTL obligatorio**: sigue sin haber expiración forzada (criterio PAT de GitHub). El
-    fix de revocación en reset de contraseña (ver Resueltos) reduce el escenario de mayor
-    riesgo (persistencia tras un incidente detectado), pero no cubre una key filtrada en
-    un canal que el usuario nunca conecta con "mi cuenta está comprometida" (ej. un backup
-    de iCloud del Shortcut expuesto). Sugerido para v2 si se prioriza: TTL opcional con
-    default largo (ej. 1 año) en vez de "nunca".
-  - **Scopes**: se mantiene sin scopes en v1 (mismos permisos que el JWT). Dado que el
-    caso de uso principal (Shortcuts/apps de terceros) es exactamente el que más se
-    beneficiaría de un scope angosto ("solo crear transacciones"), vale la pena
-    reconsiderar si el catálogo de integraciones crece más allá de 1-2 automatizaciones
-    personales por usuario.
+- [x] **API keys: TTL opcional y scopes — cerrado como fuera de scope.** *(2026-09-19, pivote a
+  uso personal, ver `docs/ROADMAP.md`)*
+  - Eran decisiones de producto pensadas para un catálogo de usuarios con distintos niveles de
+    confianza entre sí. Con un solo dueño de todas las keys emitidas, el riesgo que TTL/scopes
+    mitigarían (una key de un usuario comprometiendo a otro, o key vieja de un tercero) no
+    aplica. Ver detalle previo en el historial de este archivo antes del 2026-09-19 si se
+    reconsidera en el futuro.
 
-- [ ] **Rate limiting en memoria (`slowapi`), sin backend distribuido.**
-  - No funciona con múltiples workers ni múltiples instancias — pero hoy el backend corre en
-    un solo worker sin réplicas, así que el problema no existe todavía. Diferido a propósito
-    en Fase 7 (`docs/specs/fase_07_spec.md` §2.6.1): diseño listo (Redis + `storage_uri`),
-    implementar cuando `Dockerfile`/`docker-compose.yml` pasen a `--workers > 1` o más de una
-    réplica.
+- [x] **Rate limiting en memoria (`slowapi`), sin backend distribuido — cerrado como fuera de
+  scope.** *(2026-09-19, pivote a uso personal, ver `docs/ROADMAP.md`)*
+  - Estaba "diferido a propósito" desde Fase 7 a la espera de que el despliegue escalara a
+    múltiples workers/réplicas. Con el pivote a uso personal permanente, esa escala no está
+    planeada — deja de ser "pendiente" y pasa a "no se va a hacer". Diseño (Redis +
+    `storage_uri`) sigue documentado en `docs/specs/fase_07_spec.md` §2.6.1 por si el contexto
+    cambia.
 
 - [x] **`frontend/docs/STATE_AND_FETCHING.md` (el mapa de query keys/invalidación) estaba
   congelado en Fase 16 (auditoría 2026-09-15) — resuelto.** *(2026-09-18, Fase 25 §25.6,
