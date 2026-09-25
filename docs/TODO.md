@@ -114,9 +114,9 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     consentimiento con branding genérico/incompleto es un factor plausible de por qué el
     proyecto pudo haber sido flageado.
 
-- [ ] **En mobile, el popover "Configurar visualización" de los gráficos de Analítica
+- [x] **En mobile, el popover "Configurar visualización" de los gráficos de Analítica
   (`ChartControlsPopover`) se abre fuera de la pantalla — no se pueden tocar varias de sus
-  opciones (detectado 2026-09-24).**
+  opciones — resuelto.** *(2026-09-24)*
   - **Reproducido y medido** con Playwright a 390×844 (viewport de celular real), logueado
     con el usuario de prueba, en `/analytics`: al tocar el botón "Configurar visualización"
     de cualquiera de los dos gráficos (`CashflowChart` o `CategoryDonutChart`), el panel
@@ -139,18 +139,33 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     viewport. Mismo bug en ambos gráficos porque ambos comparten el mismo componente
     (`ChartControlsPopover`) y el mismo patrón de header — no es un problema de un chart en
     particular.
-  - **Plan (sin implementar todavía):** alinear el `div` que envuelve a `ChartControlsPopover`
-    al borde derecho también en el layout apilado de mobile —
-    `self-end sm:self-auto` agregado a `CashflowChart.tsx:72` y `CategoryDonutChart.tsx:138`
-    — en vez de tocar la lógica de anclaje genérica de `ChartControlsPopover.tsx`. Restaura,
-    en mobile, el mismo supuesto ("el botón está pegado al borde derecho de la tarjeta") que
-    ya vale en desktop vía `sm:justify-between`, sin agregar clamping dinámico por
-    `getBoundingClientRect`/JS a un componente compartido que hoy solo tiene estos dos usos
-    (evaluado y descartado por ahora: overkill para 2 call sites idénticos; reconsiderar si
-    un tercer uso futuro introduce un layout distinto donde este arreglo no alcance).
-  - Archivos a tocar: `frontend/components/CashflowChart.tsx`,
+  - **Fix aplicado:** `self-end sm:self-auto` agregado al `div` que envuelve a
+    `ChartControlsPopover` en `CashflowChart.tsx:72` y `CategoryDonutChart.tsx:138` — en vez
+    de tocar la lógica de anclaje genérica de `ChartControlsPopover.tsx`, que queda igual.
+    Restaura, en mobile, el mismo supuesto ("el botón está pegado al borde derecho de la
+    tarjeta") que ya valía en desktop vía `sm:justify-between`, sin agregar clamping dinámico
+    por `getBoundingClientRect`/JS a un componente compartido que hoy solo tiene estos dos
+    usos (overkill para 2 call sites idénticos; reconsiderar si un tercer uso futuro
+    introduce un layout distinto donde este arreglo no alcance).
+  - **Verificado** re-midiendo con Playwright a 390×844 después del cambio: el botón pasa de
+    `x: 41` a `x: 300` (pegado al borde derecho de la tarjeta) y el panel pasa de
+    `x: -105` a `x: 154` — completamente dentro del viewport `[0, 390]` en ambos gráficos.
+    Repetido a 1280×900 (desktop) para confirmar que no cambió el comportamiento previo ahí
+    (`sm:self-auto` resetea el `self-end` por encima del breakpoint `sm`). `pnpm lint`,
+    `pnpm format` y `pnpm build` limpios.
+  - Archivos tocados: `frontend/components/CashflowChart.tsx`,
     `frontend/components/CategoryDonutChart.tsx`. `frontend/components/
-    ChartControlsPopover.tsx` no cambia.
+    ChartControlsPopover.tsx` no cambió.
+  - **Nota al margen, sin relación con este bug:** durante la verificación se detectó que el
+    contenedor `backend` de este despliegue corre una imagen Docker más vieja que el HEAD del
+    repo — construida 2026-09-19 08:41, **antes** del commit de Fase 26 (`ecbfe22`,
+    2026-09-19 11:22) que agregó `app/core/auth_cookies.py`. Con esa imagen, `POST
+    /auth/login` no setea ningún cookie de sesión (confirmado con `curl`, sin `Set-Cookie` en
+    la respuesta) y el frontend actual (que ya no manda `Authorization: Bearer`, solo cookies)
+    no puede loguearse contra ese backend — el login parece "no hacer nada" en vez de fallar
+    con un error visible. No se tocó nada de esto (está fuera del alcance de este ítem);
+    recomendable reconstruir/redeployar el backend (`docker compose up -d --build backend`)
+    cuando el dueño del proyecto lo confirme, ya que es una acción sobre el despliegue real.
 
 - [ ] **`docker-compose.yml` publica backend (8000) y frontend (3000) en todas las
   interfaces, no solo Tailscale (auditoría 2026-09-15).**
