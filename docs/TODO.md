@@ -114,6 +114,44 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     consentimiento con branding genérico/incompleto es un factor plausible de por qué el
     proyecto pudo haber sido flageado.
 
+- [ ] **En mobile, el popover "Configurar visualización" de los gráficos de Analítica
+  (`ChartControlsPopover`) se abre fuera de la pantalla — no se pueden tocar varias de sus
+  opciones (detectado 2026-09-24).**
+  - **Reproducido y medido** con Playwright a 390×844 (viewport de celular real), logueado
+    con el usuario de prueba, en `/analytics`: al tocar el botón "Configurar visualización"
+    de cualquiera de los dos gráficos (`CashflowChart` o `CategoryDonutChart`), el panel
+    (`ChartControlsPopover.tsx:39`, `absolute top-full right-0 ... min-w-[180px]`) se
+    renderiza con `boundingBox().x = -105` sobre un ancho de 180px — más de la mitad del
+    panel queda fuera del viewport a la izquierda, incluyendo, en el caso de la dona
+    (sección "Referencia" con 3 grupos de opciones), varios botones que quedan
+    completamente inalcanzables al tacto.
+  - **Causa raíz:** `ChartControlsPopover` ancla el panel con `right: 0` relativo al propio
+    botón disparador — asume que el botón vive pegado al borde derecho de la tarjeta. Eso es
+    cierto en desktop porque el header de `CashflowChart.tsx`/`CategoryDonutChart.tsx` usa
+    `flex flex-col ... sm:flex-row sm:items-center sm:justify-between` (el `justify-between`
+    empuja el botón a la derecha). Pero por debajo del breakpoint `sm` (640px) el header cae
+    a `flex-col`: el `div` que envuelve al botón (`className="flex flex-wrap items-center
+    gap-2"`, sin alineación propia) hereda `align-items: stretch` del padre y el botón queda
+    pegado al borde **izquierdo** de la tarjeta — confirmado por el propio
+    `boundingBox()` del botón (`x: 41`, cerca del borde izquierdo de un viewport de 390px).
+    Con el ancla `right-0` todavía apuntando a ese botón corrido a la izquierda, el panel
+    (~180-220px de ancho) no tiene espacio para desplegarse hacia la izquierda y sale del
+    viewport. Mismo bug en ambos gráficos porque ambos comparten el mismo componente
+    (`ChartControlsPopover`) y el mismo patrón de header — no es un problema de un chart en
+    particular.
+  - **Plan (sin implementar todavía):** alinear el `div` que envuelve a `ChartControlsPopover`
+    al borde derecho también en el layout apilado de mobile —
+    `self-end sm:self-auto` agregado a `CashflowChart.tsx:72` y `CategoryDonutChart.tsx:138`
+    — en vez de tocar la lógica de anclaje genérica de `ChartControlsPopover.tsx`. Restaura,
+    en mobile, el mismo supuesto ("el botón está pegado al borde derecho de la tarjeta") que
+    ya vale en desktop vía `sm:justify-between`, sin agregar clamping dinámico por
+    `getBoundingClientRect`/JS a un componente compartido que hoy solo tiene estos dos usos
+    (evaluado y descartado por ahora: overkill para 2 call sites idénticos; reconsiderar si
+    un tercer uso futuro introduce un layout distinto donde este arreglo no alcance).
+  - Archivos a tocar: `frontend/components/CashflowChart.tsx`,
+    `frontend/components/CategoryDonutChart.tsx`. `frontend/components/
+    ChartControlsPopover.tsx` no cambia.
+
 - [ ] **`docker-compose.yml` publica backend (8000) y frontend (3000) en todas las
   interfaces, no solo Tailscale (auditoría 2026-09-15).**
   - Los puertos se publican como `"8000:8000"`/`"3000:3000"` (bind a `0.0.0.0`).
