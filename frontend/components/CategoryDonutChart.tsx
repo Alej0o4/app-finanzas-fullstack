@@ -135,7 +135,7 @@ export default function CategoryDonutChart({
         <h2 className="text-text-soft text-lg font-medium">
           {netMode ? 'Distribución Neta por Categoría' : 'Distribución por Categorías'}
         </h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
           <ChartControlsPopover>
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">

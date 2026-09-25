@@ -69,7 +69,7 @@ export default function CashflowChart({
     <div className="bg-surface/80 border-border/70 shadow-background/20 rounded-2xl border p-6 shadow-sm backdrop-blur-sm">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-text-soft text-lg font-medium">Flujo de Caja</h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
           <ChartControlsPopover>
             <div className="flex flex-col gap-1">
               <p className="text-text-muted px-2 py-1 text-xs font-medium">Serie</p>
