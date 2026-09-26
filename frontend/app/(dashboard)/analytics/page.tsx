@@ -14,6 +14,7 @@ import {
   formatPeriodLabel,
   normalizeRef,
   shiftPeriodRef,
+  utcDayKey,
 } from '@/lib/dateRanges';
 import CashflowChart, { type AnalyticsSeries } from '@/components/CashflowChart';
 import CategoryDonutChart, {
@@ -152,19 +153,30 @@ function AnalyticsPageContent() {
   // Fase 29 §F6.2: con `?currency=` en la URL y `/accounts/` todavía en vuelo, `currencyOptions`
   // solo conoce la preferida, así que la moneda efectiva sería un chute — las queries dispararían
   // un fetch en una moneda que no es la elegida y después habría que corregirlo con un segundo
-  // fetch. Se espera a que las cuentas resuelvan (o fallen).
+  // fetch. Lo mismo con `?account=<id>`: sin `/accounts/` no se conoce la moneda de la cuenta,
+  // `selectedAccount` es `undefined` y la moneda efectiva cae a la preferida (un fetch en $0 COP
+  // para una cuenta USD, y luego el correcto). En los dos casos se espera a que las cuentas
+  // resuelvan (o fallen: si fallan, se sigue con la preferida en vez de dejar la vista colgada).
   //
   // El primer término conserva el `enabled` que ya estaba: esperar a que `effectiveCurrency`
   // estuviera resuelto (depende de /users/me y /accounts/, que llegan en paralelo) era el fix
   // del bug de la vista en $0 al seleccionar una cuenta USD.
-  const queriesEnabled = !!effectiveCurrency && (!currencyParam || !accountsPending);
+  const waitingForAccounts = (!!currencyParam || accountFilter !== 'all') && accountsPending;
+  const queriesEnabled = !!effectiveCurrency && !waitingForAccounts;
 
   // Un solo reloj para toda la vista: `buildDateRange` y `formatPeriodLabel` lo reciben
   // inyectado (módulo puro, testeable) y, además, el `end_date` del período en curso va dentro de
   // las query keys — si `now` cambiara en cada render, la key cambiaría también y TanStack
-  // vería una query nueva por render (refetch en loop). Congelado al montar, además, decide una
-  // sola vez dónde termina "el período actual".
-  const now = useMemo(() => new Date(), []);
+  // vería una query nueva por render (refetch en loop).
+  //
+  // Por eso `now` es el inicio del día UTC y no el instante: se recalcula en cada render pero
+  // solo cambia de identidad cuando cambia el día (memo sobre `utcDayKey`). El período en curso
+  // termina al FIN de ese día (`endOfUtcDay`, dentro de `buildDateRange`), así que una
+  // transacción capturada por el FAB después de montar —el backend la guarda con `now()` real—
+  // entra en el refetch que dispara su invalidación. Antes `now` quedaba congelado al montar y
+  // el techo del período nunca avanzaba.
+  const todayKey = utcDayKey(new Date());
+  const now = useMemo(() => new Date(`${todayKey}T00:00:00Z`), [todayKey]);
 
   // Un solo rango de fechas para las 3 secciones (KPIs, barras, dona) — ver `buildDateRange`.
   const dateRange = useMemo(
@@ -196,7 +208,12 @@ function AnalyticsPageContent() {
 
   const handleShiftPeriod = (delta: -1 | 1) => {
     if (!navigablePeriod) return;
-    setPeriodParams({ ref: shiftPeriodRef(navigablePeriod, activeRef, delta, now) });
+    const nextRef = shiftPeriodRef(navigablePeriod, activeRef, delta, now);
+    // El período actual va sin `ref` (default nunca escrito en la URL, Fase 13 §13.6): si `▶`
+    // aterriza en él se borra el param, igual que "Volver al período actual". Escribirlo dejaría
+    // el link fijado a este período después de que termine.
+    const landsOnCurrent = nextRef === normalizeRef(navigablePeriod, '', now);
+    setPeriodParams({ ref: landsOnCurrent ? null : nextRef });
   };
 
   const handleAccountChange = (next: string) => {
@@ -204,7 +221,8 @@ function AnalyticsPageContent() {
     // 17 §17.1.3), así que un `?currency=` anterior describiría un período que ya no se está
     // mirando. Se borra también al volver a "Todas las cuentas", donde el param vuelve a ser
     // opcional.
-    setAccountParams({ account: next, currency: null });
+    // "Todas las cuentas" es el default: se borra el param en vez de escribir `?account=all`.
+    setAccountParams({ account: next === 'all' ? null : next, currency: null });
   };
 
   const handleCurrencyChange = (next: string) => {
@@ -295,11 +313,11 @@ function AnalyticsPageContent() {
     return { totalIncome, totalExpense };
   }, [parsedTrendData]);
 
-  // Mientras la moneda del URL no se puede validar contra las cuentas, las queries están apagadas
+  // Mientras la moneda del URL (o la de la cuenta elegida) no se puede resolver contra las
+  // cuentas, las queries están apagadas
   // (`queriesEnabled`) y `isLoading` es false: sin este cierre la página pintaría un frame con los
   // totales en 0 y los gráficos vacíos antes de llegar a los datos correctos.
-  const waitingForCurrency = !!currencyParam && accountsPending;
-  if ((loadingTrends && loadingCategories) || waitingForCurrency) {
+  if ((loadingTrends && loadingCategories) || waitingForAccounts) {
     return (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Skeleton className="h-96 rounded-2xl" />

@@ -25,15 +25,14 @@ import {
   compareMonth,
   currentUtcMonth,
   formatMonthLabel,
+  formatMonthName,
+  formatMonthParam,
   monthTransactionsHref,
   parseMonthParam,
   shiftMonth,
   utcMonthRange,
-  type UtcMonth,
 } from '@/lib/dateRanges';
 import type { BudgetProgress, DashboardSummary } from '@/types/api';
-
-const toMonthParam = ({ year, month }: UtcMonth) => `${year}-${String(month).padStart(2, '0')}`;
 
 /**
  * Fase 29 §F5.1 (Q6, H10, supuesto 3): validador read-time de `?month=YYYY-MM`, mismo patrón
@@ -46,20 +45,9 @@ const validateMonthParam = (raw: string): string => {
   const current = currentUtcMonth(new Date());
   const parsed = parseMonthParam(raw);
   if (!parsed || compareMonth(parsed, current) > 0) {
-    return toMonthParam(current);
+    return formatMonthParam(current);
   }
   return raw;
-};
-
-/**
- * Fase 29 §F5.3: nombre del mes en minúscula y sin año (`"agosto"`) para los rótulos que ya
- * viven debajo del `PeriodNavigator`, donde el año está a la vista: "Balance de agosto" y no
- * "Balance de agosto 2026". `formatMonthLabel` ("Agosto 2026") es el rótulo del navegador.
- */
-const monthName = (year: number, month: number) => {
-  const label = formatMonthLabel(year, month);
-  const name = label.slice(0, label.lastIndexOf(' '));
-  return name.charAt(0).toLowerCase() + name.slice(1);
 };
 
 function DashboardScreen() {
@@ -95,18 +83,18 @@ function DashboardScreen() {
   const apiMonth = isCurrentMonth ? undefined : monthParam;
   const periodParams = isCurrentMonth ? undefined : { year, month };
 
-  // Techo del mes en curso recortado al inicio del día UTC. `utcMonthRange` corta el mes
-  // abierto en "ahora", y `now` es un objeto nuevo en cada render: ponerlo en las deps
-  // generaría una key distinta por render y un refetch constante. Recortarlo a las 00:00 UTC
-  // del día agrupa el mismo conjunto de transacciones (las fechas son por día a las 00:00 UTC,
-  // ver §F1) y solo cambia una vez al día.
+  // `now` es un objeto nuevo en cada render: ponerlo en las deps generaría una key distinta por
+  // render y un refetch constante. Se memoiza sobre el inicio del día UTC, que solo cambia una
+  // vez al día; `utcMonthRange` techa el mes en curso al FIN de ese día (`endOfUtcDay`), así
+  // que lo capturado hoy con hora real (`/capture`, atajos por API key) entra en las barras y
+  // en "Últimas 5" igual que en la tarjeta del summary.
   const todayUtcStart = Date.UTC(currentYear, currentMonth - 1, now.getUTCDate());
   const monthRange = useMemo(
     () => utcMonthRange(year, month, new Date(todayUtcStart)),
     [year, month, todayUtcStart]
   );
   const monthLabel = formatMonthLabel(year, month);
-  const monthNameLower = monthName(year, month);
+  const monthNameLower = formatMonthName(year, month);
 
   // La moneda preferida del usuario; config.currency es su espejo desde preferencias.
   const preferredCurrency = user?.preferred_currency ?? config.currency;
@@ -160,9 +148,13 @@ function DashboardScreen() {
   const flowBalanceValue = flowBalance == null ? null : Number(flowBalance);
   const flowIsPositive = (flowBalanceValue ?? 0) >= 0;
   const flowTrend =
-    flowBalanceValue === null ? undefined : flowIsPositive ? ('up' as const) : ('down' as const);
+    flowBalanceValue === null || summaryIsStale
+      ? undefined
+      : flowIsPositive
+        ? ('up' as const)
+        : ('down' as const);
   const flowColor =
-    flowBalanceValue === null
+    flowBalanceValue === null || summaryIsStale
       ? undefined
       : flowIsPositive
         ? 'var(--color-success)'
@@ -172,8 +164,18 @@ function DashboardScreen() {
   // locales — el backend decide con su reloj y en meses cerrados el balance es ingresos −
   // gastos reales, nunca `null` (User Story 12). Un balance negativo real (riesgo R1: el
   // sueldo no se registra como transacción) es un número, no un error.
-  const flowLabel =
-    summary?.monthly_flow_basis === 'actual' ? `Balance de ${monthNameLower}` : 'Te quedan…';
+  //
+  // Con `keepPreviousData`, mientras el summary del mes nuevo está en vuelo `summary` es el del
+  // mes ANTERIOR (`summaryIsStale`): su `monthly_flow_basis` y sus cifras describen otro mes, y
+  // pintarlas bajo el rótulo del mes nuevo mentiría ("Balance de julio" con el balance de
+  // agosto). Mientras dure el placeholder la tarjeta conserva su marco pero cambia las cifras
+  // por skeletons (ver el render) y el rótulo es el genérico del mes destino, que no afirma
+  // ninguna base — la base real solo se conoce cuando llega su propio summary.
+  const flowLabel = summaryIsStale
+    ? `Balance de ${monthNameLower}`
+    : summary?.monthly_flow_basis === 'actual'
+      ? `Balance de ${monthNameLower}`
+      : 'Te quedan…';
 
   // Fase 15 §15.5, Decisión 15.0.1 (revisada): originalmente `total === 1`, pero eso se
   // rompió al agregar la transacción semilla del ingreso declarado (§15.3.3) — con ella, la
@@ -200,6 +202,15 @@ function DashboardScreen() {
       ? summary?.first_transaction_month === null
       : compareMonth({ year, month }, floorMonth) <= 0;
 
+  // User Story 7: el mes en curso se ve con la URL limpia. Si `▶` aterriza en el mes actual se
+  // borra `?month=` en vez de escribirlo explícito — si no, el link queda fijado a ese mes y
+  // un marcador guardado hoy seguiría abriendo este mes después del cambio de mes.
+  const handleNextMonth = () => {
+    const target = shiftMonth(selectedMonth, 1);
+    const isTargetCurrent = compareMonth(target, { year: currentYear, month: currentMonth }) >= 0;
+    setMonthParam(isTargetCurrent ? '' : formatMonthParam(target));
+  };
+
   // Fase 19 §19.2.1/19.2.2: fila secundaria compacta dentro de la card principal — reemplaza
   // el grid de 2 columnas (Ingresos/Gastos). Se muestra siempre, aún con monthly_flow_balance
   // null (son sumas de transacciones del mes, no el ingreso declarado). En meses cerrados el
@@ -207,12 +218,16 @@ function DashboardScreen() {
   const incomeStatLabel = isCurrentMonth ? 'Ingresos del Mes' : `Ingresos de ${monthNameLower}`;
   const expenseStatLabel = isCurrentMonth ? 'Gastos del Mes' : `Gastos de ${monthNameLower}`;
 
+  // Placeholder del mes anterior en vuelo: los rótulos ya nombran el mes destino, así que las
+  // cifras (del mes anterior) se reemplazan por skeletons en vez de quedar bajo un rótulo ajeno.
   const secondaryStats = (
     <>
       <div className="flex-1">
         <p className="text-text-muted text-xs font-medium">{incomeStatLabel}</p>
         <div className="text-success mt-0.5 font-semibold tabular-nums">
-          {summary?.monthly_income_by_currency.length ? (
+          {summaryIsStale ? (
+            <Skeleton className="mt-1 h-5 w-28" />
+          ) : summary?.monthly_income_by_currency.length ? (
             summary.monthly_income_by_currency.map((b) => (
               <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
             ))
@@ -224,7 +239,9 @@ function DashboardScreen() {
       <div className="flex-1">
         <p className="text-text-muted text-xs font-medium">{expenseStatLabel}</p>
         <div className="text-danger mt-0.5 font-semibold tabular-nums">
-          {summary?.monthly_expense_by_currency.length ? (
+          {summaryIsStale ? (
+            <Skeleton className="mt-1 h-5 w-28" />
+          ) : summary?.monthly_expense_by_currency.length ? (
             summary.monthly_expense_by_currency.map((b) => (
               <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
             ))
@@ -275,8 +292,8 @@ function DashboardScreen() {
             debe flotar sobre el scroll. "Volver a este mes" solo fuera del mes en curso. */}
         <PeriodNavigator
           label={monthLabel}
-          onPrev={() => setMonthParam(toMonthParam(shiftMonth(selectedMonth, -1)))}
-          onNext={() => setMonthParam(toMonthParam(shiftMonth(selectedMonth, 1)))}
+          onPrev={() => setMonthParam(formatMonthParam(shiftMonth(selectedMonth, -1)))}
+          onNext={() => handleNextMonth()}
           prevDisabled={prevDisabled}
           nextDisabled={isCurrentMonth}
           onReset={isCurrentMonth ? undefined : () => setMonthParam('')}
@@ -285,7 +302,7 @@ function DashboardScreen() {
 
       {/* Summary Cards — la card principal mide flujo mensual (Fase 11 §11.3); el saldo total
           de cuentas vive ahora en /accounts como vista secundaria (§11.5). */}
-      <div className="space-y-6">
+      <div className="space-y-6" aria-busy={summaryIsStale}>
         {/* Fase 24 §24.1 (Decisión A2): bloque de error inline, mismo tono visual que
             CashflowChart.tsx:96-99 — distingue "falló la query" de "sin datos todavía". */}
         {loadingSummary ? (
@@ -307,7 +324,9 @@ function DashboardScreen() {
             color={flowColor}
             secondaryStats={secondaryStats}
           >
-            {flowBalanceValue !== null ? (
+            {summaryIsStale ? (
+              <Skeleton className="h-9 w-48 sm:h-10" />
+            ) : flowBalanceValue !== null ? (
               <span className={flowIsPositive ? '' : 'text-danger'}>
                 {formatCurrency(flowBalanceValue, preferredCurrency)}
               </span>
@@ -358,9 +377,13 @@ function DashboardScreen() {
               </form>
             ) : (
               // `basis: "actual"` nunca devuelve `null` (User Story 12): esta rama solo
-              // alcanza si el balance llega vacío sin ser el mes en curso, y muestra 0 en vez
-              // de dejar la cifra en blanco.
-              <p>{formatCurrency(flowBalanceValue ?? 0, preferredCurrency)}</p>
+              // alcanza si el balance llega vacío sin ser el mes en curso. Se muestra un guion
+              // y no `formatCurrency(0)`: un 0 inventado se leería como "balance en cero", que
+              // es un dato que el backend no mandó.
+              <p>
+                <span aria-hidden="true">—</span>
+                <span className="sr-only">Sin balance para {monthNameLower}</span>
+              </p>
             )}
           </SummaryCard>
         )}

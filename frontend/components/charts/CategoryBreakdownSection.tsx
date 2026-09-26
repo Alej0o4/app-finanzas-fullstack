@@ -38,13 +38,17 @@ export default function CategoryBreakdownSection({
   preferredCurrency,
   emptyMessage,
 }: CategoryBreakdownSectionProps) {
-  const [selectedCurrency, setSelectedCurrency] = useState(preferredCurrency);
+  // `null` = "la preferida", no una copia de ella: el padre pasa `config.currency` mientras
+  // `/users/me` no resolvió y la preferida real llega después (o cambia desde Ajustes). Un
+  // `useState(preferredCurrency)` capturaría solo el primer valor y quedaría pegado a él.
+  const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
   // Supuesto 2: si la moneda elegida no tiene gastos en el mes visible, se vuelve a la
   // preferida — resuelto en el render, sin `useEffect` ni estado espejo. La selección sigue
   // guardada, así que volver al mes anterior la restaura sola.
-  const currency = currencyOptions.includes(selectedCurrency)
-    ? selectedCurrency
-    : preferredCurrency;
+  const currency =
+    selectedCurrency && currencyOptions.includes(selectedCurrency)
+      ? selectedCurrency
+      : preferredCurrency;
 
   // `useMemo` para que el objeto de params no cambie de identidad en cada render: forma
   // parte de la query key a través de `queryKeys.dashboard.categoryBreakdown`.
@@ -80,7 +84,9 @@ export default function CategoryBreakdownSection({
           <SegmentedControl
             options={currencyOptions.map((value) => ({ value, label: value }))}
             value={currency}
-            onChange={setSelectedCurrency}
+            // Elegir la preferida vuelve a `null` en vez de fijar su código: así la selección
+            // sigue a la preferida si esta cambia después.
+            onChange={(next) => setSelectedCurrency(next === preferredCurrency ? null : next)}
             ariaLabel="Moneda de los gastos por categoría"
           />
         )}

@@ -209,7 +209,10 @@ ignoran.
 - El período es **UTC** en el backend y en el front (`lib/dateRanges.ts` ancla los límites con
   `Date.UTC`): un mes va del día 1 a las 00:00 UTC al último día a las 23:59:59 UTC. En el mes
   en curso el techo es "ahora", de modo que una transacción con fecha futura del mismo mes no
-  cuenta como gasto del mes en `summary` (sí contaría en un rango mal armado en hora local).
+  cuenta como gasto del mes en `summary` (sí contaría en un rango mal armado en hora local). Los
+  rangos que arma el front para el mes/período en curso (`utcMonthRange`, `buildDateRange`)
+  terminan en cambio al fin del día UTC de hoy: así incluyen lo capturado hoy con hora real y
+  no cambian en cada render (van en query keys).
 - Un `?month=` inválido o futuro no debe romper la vista: el front lo valida antes de pedirlo
   (`parseMonthParam`) y cae al mes actual. Si aun así llega un `422`, **hay dos formas** y no
   son intercambiables: `detail` como **string** — "Se deben enviar `year` y `month`, o

@@ -175,7 +175,7 @@ Comportamiento:
 Reglas:
 
 - Pasar `onReset` solo cuando el período visible no es el actual; en el período actual el botón no tiene sentido.
-- Las fechas y rótulos se arman con los helpers de `lib/dateRanges.ts` (`formatMonthLabel`, `formatPeriodLabel`, `shiftMonth`, `shiftPeriodRef`), no inline en la página.
+- Las fechas y rótulos se arman con los helpers de `lib/dateRanges.ts` (`formatMonthLabel`, `formatMonthName`, `formatMonthParam`, `formatPeriodLabel`, `shiftMonth`, `shiftPeriodRef`), no inline en la página.
 
 ## Componentes por dominio
 
@@ -185,7 +185,7 @@ Reglas:
 - Puede incluir bloques de métricas y transacciones recientes.
 - Debe delegar el formulario de creación a `TransactionModal`.
 - Navega por mes con `PeriodNavigator` (`?month=YYYY-MM`, Fase 29 §F5). Dos secciones viven en componente propio porque arrastran su propia query y sus estados de carga/error/vacío:
-  - `components/charts/CategoryBreakdownSection.tsx` — "Gastos por Categoría" del mes visible: chips de moneda (`SegmentedControl`, solo con más de una moneda) sobre `CategoryBreakdownBars`. Props: `monthKey?` (segmento de mes de la query key, `undefined` en el mes en curso), `range` (rango ISO del mes), `currencyOptions`, `preferredCurrency`, `emptyMessage?`. La moneda elegida es estado local; si no tiene gastos en el mes visible, se vuelve a la preferida en el render (sin `useEffect`).
+  - `components/charts/CategoryBreakdownSection.tsx` — "Gastos por Categoría" del mes visible: chips de moneda (`SegmentedControl`, solo con más de una moneda) sobre `CategoryBreakdownBars`. Props: `monthKey?` (segmento de mes de la query key, `undefined` en el mes en curso), `range` (rango ISO del mes; en el mes en curso termina al fin del día UTC de hoy), `currencyOptions`, `preferredCurrency`, `emptyMessage?`. La moneda elegida es estado local (`string | null`, donde `null` = "la preferida", así sigue a `preferredCurrency` si llega o cambia después del primer render); si no tiene gastos en el mes visible, se vuelve a la preferida en el render (sin `useEffect`).
   - `components/transactions/RecentTransactionsSection.tsx` — "Últimas 5 de {mes}" vía `useTransactions` (key `transactions`, así que editar o borrar también la refresca). Props: `range`, `monthName` (en minúscula), `viewAllHref` (link a `/transactions` filtrado al mes, de `monthTransactionsHref`). Formatea cada monto en la moneda de la transacción, no en la preferida.
 - El padre arma el rango y las opciones de moneda; las secciones solo los consumen.
 

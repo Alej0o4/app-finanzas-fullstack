@@ -108,9 +108,28 @@ export const compareMonth = (a: UtcMonth, b: UtcMonth): number =>
   a.year !== b.year ? a.year - b.year : a.month - b.month;
 
 /**
- * Rango ISO del mes pedido. El techo es "ahora" en el mes en curso y el último día del mes a las
- * 23:59:59.999Z en un mes pasado — el mismo criterio de `limites_mes_utc` (B1) en el backend, así
- * que el front y el server cuentan el mismo período.
+ * Fin del día UTC que contiene `now` (23:59:59.999Z) — el techo del período en curso.
+ *
+ * No es "ahora" a propósito: las transacciones creadas sin `date` (el `/capture` de
+ * `TransactionCaptureForm`, los atajos por API key) se guardan con el `now()` real del servidor,
+ * no a las 00:00 UTC como las del `TransactionModal`. Un techo en el inicio del día las dejaba
+ * afuera de las barras y de "Últimas 5" aunque la tarjeta del summary sí las contara, y un techo
+ * en "ahora" congelado al montar las perdía después de un refetch. El fin del día las incluye y,
+ * además, es estable durante todo el día: puede ir en una query key sin generar una key nueva
+ * por render.
+ */
+export const endOfUtcDay = (now: Date): Date =>
+  new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+
+/** `YYYY-MM-DD` del día UTC que contiene `date`. Estable dentro del día: sirve de dependencia de
+ *  memo para derivar un `now` que avanza al cambiar de día sin cambiar en cada render. */
+export const utcDayKey = (date: Date): string => toDateParam(date);
+
+/**
+ * Rango ISO del mes pedido. El techo es el fin del día UTC de hoy (`endOfUtcDay`) en el mes en
+ * curso y el último día del mes a las 23:59:59.999Z en un mes pasado. El backend corta el mes en
+ * curso en "ahora" (`limites_mes_utc`, B1); la diferencia es solo lo fechado más tarde hoy, y a
+ * cambio el rango no cambia en cada render ni deja afuera lo capturado hoy con hora real.
  */
 export const utcMonthRange = (
   year: number,
@@ -124,9 +143,15 @@ export const utcMonthRange = (
   const start = new Date(Date.UTC(year, month - 1, 1));
   const isCurrentMonth = year === now.getUTCFullYear() && month === now.getUTCMonth() + 1;
   // `Date.UTC(y, month, 0)` es el día 0 del mes siguiente, o sea el último del pedido.
-  const end = isCurrentMonth ? now : new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  const end = isCurrentMonth
+    ? endOfUtcDay(now)
+    : new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
   return { start_date: start.toISOString(), end_date: end.toISOString() };
 };
+
+/** `{ year, month }` → query param `YYYY-MM` (inverso de `parseMonthParam`). */
+export const formatMonthParam = ({ year, month }: UtcMonth): string =>
+  `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
 
 /**
  * Link a `/transactions` filtrado al mes completo, para el "Ver todas" del dashboard.
@@ -172,6 +197,14 @@ const partValue = (
 
 const dayOf = (date: Date) => partValue(date, { day: 'numeric' }, 'day');
 const monthOf = (date: Date) => partValue(date, { month: 'long' }, 'month');
+
+/**
+ * Nombre del mes en minúscula y sin año (`"agosto"`), para los rótulos que ya viven debajo del
+ * `PeriodNavigator`, donde el año está a la vista (Fase 29 §F5.3): "Balance de agosto" y no
+ * "Balance de agosto 2026". `formatMonthLabel` ("Agosto 2026") es el rótulo del navegador.
+ */
+export const formatMonthName = (year: number, month: number): string =>
+  monthOf(new Date(Date.UTC(year, month - 1, 1))).toLowerCase();
 const yearOf = (date: Date) => partValue(date, { year: 'numeric' }, 'year');
 
 /**
@@ -206,7 +239,8 @@ export const normalizeRef = (period: AnalyticsPeriod, ref: string, now: Date): s
  * de arriba, lo cual era confuso: Fase de discusión UX, 2026-09-06).
  *
  * `week` es la semana calendario lunes–domingo (Q13) y `month`/`year` arrancan en su límite de
- * calendario; los períodos pasados llegan completos y el actual termina hoy (Q34). `ref` se
+ * calendario; los períodos pasados llegan completos y el actual termina hoy (Q34) — al final del
+ * día UTC (`endOfUtcDay`), no en "ahora", por lo mismo que `utcMonthRange`. `ref` se
  * normaliza acá (y no en el caller) para que el rango nunca se construya sobre una fecha a mitad
  * de período ni futura.
  */
@@ -248,7 +282,7 @@ export const buildDateRange = (
   const start = periodStartUtc(preset, anchor);
   const isCurrentPeriod = start.getTime() === periodStartUtc(preset, now).getTime();
   const end = isCurrentPeriod
-    ? now
+    ? endOfUtcDay(now)
     : // Los períodos pasados van completos: fin de período menos 1 ms (23:59:59.999Z).
       new Date(periodEndUtc(preset, start).getTime() - 1);
 

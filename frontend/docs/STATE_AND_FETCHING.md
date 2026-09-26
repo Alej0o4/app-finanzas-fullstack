@@ -116,7 +116,9 @@ anterior hasta que llega el nuevo, en vez de volver a los skeletons. Aplica a:
 Con `keepPreviousData`, `isLoading` solo es `true` en la carga inicial; si un componente
 necesita distinguir "dato del mes anterior en pantalla", leer `isPlaceholderData` (el dashboard
 lo usa para que el formulario inline de ingreso mensual, que solo existe en el mes en curso, no
-parpadee con el placeholder al navegar hacia un mes pasado).
+parpadee con el placeholder al navegar hacia un mes pasado, y para que la tarjeta principal
+cambie sus cifras por skeletons —con `aria-busy`— en vez de pintar el balance del mes anterior
+bajo el rótulo del mes nuevo).
 
 ## Invalidation patterns
 
@@ -413,12 +415,17 @@ mes" arriba).
   "Vista específica" arriba)
 - Categorías: `analytics-categories` (con `neto` y los mismos segmentos opcionales de cuenta/moneda)
 - El rango de fechas de la key sale de `buildDateRange(period, ref, start, end, now)`
-  (`lib/dateRanges.ts`) con un `now` congelado al montar (`useMemo`): el `end_date` del período
-  en curso va dentro de la key, y un `now` nuevo por render daría una key nueva por render.
+  (`lib/dateRanges.ts`). El `end_date` del período en curso va dentro de la key, así que `now`
+  no puede cambiar en cada render: la página usa el inicio del día UTC, memoizado sobre
+  `utcDayKey(new Date())` — estable durante el día, pero avanza al cambiar de día (antes
+  quedaba congelado al montar). El período en curso termina al **fin del día UTC**
+  (`endOfUtcDay`, 23:59:59.999Z), no en "ahora": lo que se capture hoy con hora real
+  (`/capture`, atajos por API key) entra en el refetch que dispara su invalidación.
 - `enabled` (Fase 29 §F6.2): las dos queries esperan a que haya moneda efectiva **y**, si la URL
-  trae `?currency=`, a que `/accounts/` resuelva (o falle). Sin eso, mientras las cuentas cargan
-  las opciones de moneda solo conocen la preferida, la moneda efectiva caería a la preferida y
-  se haría un fetch en una moneda que no es la pedida, seguido de un segundo fetch correcto.
+  trae `?currency=` o `?account=<id>`, a que `/accounts/` resuelva (o falle). Sin eso, mientras
+  las cuentas cargan las opciones de moneda solo conocen la preferida (y la moneda de la cuenta
+  elegida es desconocida), la moneda efectiva caería a la preferida y se haría un fetch en una
+  moneda que no es la pedida, seguido de un segundo fetch correcto.
 
 ### Transacciones
 
