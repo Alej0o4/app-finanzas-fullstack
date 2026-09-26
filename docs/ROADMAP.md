@@ -213,9 +213,10 @@ solo muestra la moneda preferida y la única forma de ver otra es cambiar la con
 
 Surge del `/grilling` del 2026-09-26: llevar a `/transactions` el criterio de "Esta semana"
 (lunes → hoy) que la Fase 29 (Q13) introdujo en Analítica, y aprovechar para cerrar los ítems
-chicos de `docs/TODO.md` que la propia Fase 29 dejó anotados. **Estado: grilling cerrado,
-pendiente `/to-spec`** → `docs/specs/fase_30_spec.md`. Flujo completo de `docs/WORKFLOW.md`
-(spec corta), porque Q6 cambia un contrato de API.
+chicos de `docs/TODO.md` que la propia Fase 29 dejó anotados. **Estado: spec escrita el
+2026-09-26** → `docs/specs/fase_30_spec.md` (sin marcadores abiertos; siguiente paso
+`/analyze-spec 30`). Flujo completo de `docs/WORKFLOW.md` (spec corta), porque Q6 cambia un
+contrato de API.
 
 ### Estado del código relevado (2026-09-26)
 
