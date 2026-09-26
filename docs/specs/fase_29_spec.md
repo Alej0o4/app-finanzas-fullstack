@@ -322,7 +322,10 @@ conserva la Decisión 13.3.3 (gasto el día 1 del mes nuevo antes de abrir el da
 clonar plantillas en meses cerrados. Cambio de comportamiento aceptado: un gasto cargado con
 fecha atrasada en un mes cerrado ya no crea el presupuesto recurrente de ese mes, así que tampoco
 avisa umbrales de un mes pasado. Los presupuestos que sí existían en ese mes siguen evaluándose
-como hoy.
+como hoy. El guard aplica **solo** al motor de alertas: `GET /budgets/?month=&year=`
+(`budgets.py:75`), el otro caller que puede generar meses pasados, queda como está, fuera de
+alcance (decisión del dueño, 2026-09-26, tras `/analyze-spec`). El frontend no lo llama con
+período.
 
 **B6 — Schema `DashboardSummary`** (Q9, Q12). ⚠️ contrato compartido con F3.
 
@@ -376,8 +379,9 @@ a las opciones (F5.4). Cuesta un campo y un `DISTINCT` más.
 - `buildDateRange` se mueve aquí desde `analytics/page.tsx` y se reescribe como
   `(period, ref, customStart, customEnd, now)`: semana lunes–domingo UTC, mes y año, más
   `normalizeRef(period, ref, now)`.
-- Corrige los dos sitios del bug de borde de mes: `app/(dashboard)/page.tsx:44` y
-  `app/(dashboard)/accounts/[id]/page.tsx:59`.
+- Los dos sitios del bug de borde de mes pasan a usar estos helpers:
+  `app/(dashboard)/accounts/[id]/page.tsx:59` se corrige en el mismo paso que F1 (paso 5), y
+  `app/(dashboard)/page.tsx:44` dentro de F5 (paso 9), porque ese archivo se reescribe ahí.
 
 **F2 — Query keys** (supuesto 4, H7, H8). ⚠️ contrato de caché. En `frontend/lib/queryKeys.ts`,
 el segmento opcional **se omite** cuando no se pasa:
@@ -385,7 +389,10 @@ el segmento opcional **se omite** cuando no se pasa:
 - `budgets.progress(month?)` → `['budgets-progress']` \| `['budgets-progress', 'YYYY-MM']`.
 - `dashboard.categoryBreakdown(month?, currency?)` solo agrega los argumentos definidos.
 - Convención: el mes actual se cachea con la key sin mes, la misma que usa hoy (encaja con H10).
-- "Últimas 5 del mes" usa `useTransactions({limit: 5, start_date, end_date})`.
+- "Últimas 5 del mes" usa `useTransactions({limit: 5, start_date, end_date})`. Para cumplir el
+  `keepPreviousData` de F5.1, `useTransactions` (`lib/hooks/useTransactions.ts`) gana un segundo
+  parámetro opcional de opciones de `useQuery` (al menos `placeholderData`). Los callers actuales
+  no cambian.
   `dashboard.recentTransactions` se queda sin consumidor, así que se eliminan la factory y sus 3
   invalidaciones (`TransactionModal`, `TransactionCaptureForm`, `OnboardingIncomeStep`).
 - Los ~15 call sites de invalidación no cambian.
@@ -419,7 +426,7 @@ es deliberada desde la Fase 16.
   el banner de onboarding solo se muestran en el mes actual.
 - **F5.4 Presupuestos y barras** (Q4, Q6, Q7, Q16, supuesto 2). Si un mes pasado no tiene
   presupuestos, se muestra "No había presupuestos en <mes>". Las barras reciben el rango del mes
-  vía F1. Los chips (`SegmentedControl`) ofrecen las monedas de B7 más la preferida, y se ocultan
+  vía F1 (`utcMonthRange`), que reemplaza el inicio de mes local de `page.tsx:44`. Los chips (`SegmentedControl`) ofrecen las monedas de B7 más la preferida, y se ocultan
   si hay una sola. La selección vive en `useState` con la preferida por defecto. La moneda efectiva
   es `opciones.includes(sel) ? sel : preferida`, así el supuesto 2 se cumple sin `useEffect`. Se
   pasa `currency` a `CategoryBreakdownBars` y el mensaje vacío menciona el mes. Opciones =
@@ -452,8 +459,10 @@ formatear montos.
 **D — Documentación.**
 - Contrato de API (obligatorio según `CLAUDE.md`, en el mismo cambio):
   `backend/docs/API_REFERENCE.md` y `frontend/docs/API_CONTRACT.md` documentan los parámetros, los
-  422, los campos nuevos y que `balances` es el stock actual. También corrigen que la generación de
-  recurrentes la dispara además el motor de alertas.
+  422, los campos nuevos y que `balances` es el stock actual. En la sección de generación de
+  recurrentes (`API_REFERENCE.md` §`GET /dashboard/budgets-progress` y §notificaciones del motor
+  de alertas) se documenta que la dispara además el motor de alertas, pero solo para el mes actual
+  o posteriores (B5), y que `budgets-progress` genera solo en el mes actual (B3).
 - `backend/docs/BUSINESS_RULES.md`:
   - Las destacadas aplican solo al summary.
   - El progreso de presupuestos se calcula por el período consultado.
@@ -466,6 +475,8 @@ formatear montos.
   - Cambiar `preferred_currency` no invalida `dashboardSummary` ni `budgets-progress`
     (`useUserPreferences.ts`; preexistente, mitigado por el `staleTime`).
   - Techo inconsistente en `accounts/{id}/monthly-summary`.
+  - `GET /budgets/?month=&year=` sigue generando recurrentes en meses pasados (fuera del guard
+    de B5).
 - Al cierre: `docs/ROADMAP.md` y `docs/CHANGELOG.md`.
 
 ## Testing Decisions
@@ -518,7 +529,8 @@ período puras).
 3. [backend] app/schemas/dashboard.py + app/api/dashboard.py (summary y budgets-progress)
    + tests/test_dashboard.py — Decisiones B2, B3, B6, B7, T2, T3, T4, T5, T7.
    Depende de: 1   (no [P] con 2: T5 depende del cálculo de gasto que toca B4)
-4. [docs] API_REFERENCE.md + API_CONTRACT.md + BUSINESS_RULES.md — Decisión D (contrato).
+4. [docs] API_REFERENCE.md + API_CONTRACT.md + BUSINESS_RULES.md — Decisión D (contrato,
+   incluida la generación de recurrentes según B3/B5).
    Depende de: 3
 5. [frontend] [P] lib/dateRanges.ts (nuevo) + fix accounts/[id]/page.tsx:59 — Decisión F1.
    Depende de: —
@@ -527,7 +539,7 @@ período puras).
 7. [frontend] [P] AnalyticsSummary.tsx, CashflowChart.tsx, CategoryDonutChart.tsx (prop currency)
    — Decisión F7.
    Depende de: —
-8. [frontend] lib/queryKeys.ts + types/api.ts + retiro de recentTransactions en
+8. [frontend] lib/queryKeys.ts + lib/hooks/useTransactions.ts (opciones) + types/api.ts + retiro de recentTransactions en
    TransactionModal / TransactionCaptureForm / OnboardingIncomeStep — Decisiones F2, F3.
    Depende de: 3 (forma del contrato)
 9. [frontend] app/(dashboard)/page.tsx — Decisión F5.
@@ -552,7 +564,7 @@ El paso 1 bloquea todo el backend y el 3 fija el contrato del que dependen el 8 
 | B4, B5 | `app/core/budget_alerts.py` | — |
 | B6 | `app/schemas/dashboard.py` | — |
 | F1 | — | `lib/dateRanges.ts` (nuevo), `app/(dashboard)/accounts/[id]/page.tsx` |
-| F2 | — | `lib/queryKeys.ts`, `components/modals/TransactionModal.tsx`, `components/forms/TransactionCaptureForm.tsx`, `components/forms/OnboardingIncomeStep.tsx` |
+| F2 | — | `lib/queryKeys.ts`, `lib/hooks/useTransactions.ts`, `components/modals/TransactionModal.tsx`, `components/forms/TransactionCaptureForm.tsx`, `components/forms/OnboardingIncomeStep.tsx` |
 | F3 | — | `types/api.ts` |
 | F4 | — | `components/ui/SegmentedControl.tsx` (nuevo), `components/PeriodNavigator.tsx` (nuevo) |
 | F5 | — | `app/(dashboard)/page.tsx`, `components/charts/CategoryBreakdownBars.tsx` (mensaje vacío por mes) |
@@ -572,6 +584,8 @@ El paso 1 bloquea todo el backend y el 3 fija el contrato del que dependen el 8 
 - Alinear el mes UTC con la hora local, o la semana UTC de Analítica con la del resumen semanal en
   Bogotá (H11 → `docs/TODO.md`).
 - Unificar el techo de `accounts/{id}/monthly-summary` con el del summary.
+- Extender el guard de B5 a `GET /budgets/?month=&year=`, que sigue pudiendo generar recurrentes
+  en meses pasados (→ `docs/TODO.md`).
 - Suite de tests de frontend.
 
 ## Decisiones resueltas con el usuario (2026-09-26)
@@ -589,6 +603,15 @@ aceptando la recomendación en ambos:
    `expense_currencies` en `GET /dashboard/summary`, que cubre todas las cuentas con gasto en el
    mes pedido, más la preferida agregada por el front. Se descarta usar las monedas de las cuentas
    (la opción sin cambio de contrato), porque ofrecería monedas sin gasto en el mes.
+
+`/analyze-spec 29` (2026-09-26) dio 0 hallazgos CRÍTICO/ALTO, 2 MEDIO y 2 BAJO, y el dueño pidió
+aplicar los cuatro:
+
+3. **`GET /budgets/?month=&year=` fuera del guard de B5** — queda fuera de alcance y va a
+   `docs/TODO.md`.
+4. **`useTransactions` acepta opciones de `useQuery`** (F2), para el `keepPreviousData` de F5.1.
+5. **El fix de `page.tsx:44` va en F5 (paso 9)**, no en el paso 5.
+6. **Los docs de contrato documentan B3/B5** en la sección de generación de recurrentes (paso 4).
 
 ## Further Notes
 
