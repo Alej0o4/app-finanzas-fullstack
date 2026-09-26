@@ -70,8 +70,33 @@ export interface DashboardSummary {
    * Ingreso mensual declarado − gasto del mes (en la moneda preferida), calculado por el
    * backend (Fase 11 §11.3). `null` = el usuario no ha fijado monthly_income todavía;
    * distinguir de `undefined` (query en carga).
+   *
+   * Fase 29 (B2): en meses cerrados el mismo campo pasa a ser ingresos REALES registrados
+   * menos gastos reales, y nunca es `null` — por eso el rótulo de la tarjeta sale de
+   * `monthly_flow_basis` y no de comparar fechas locales.
    */
   monthly_flow_balance: number | null;
+  /**
+   * Qué hay detrás de `monthly_flow_balance` (Fase 29, Q12): `"declared"` = ingreso mensual
+   * declarado − gasto (solo en el mes en curso, y `null` sin `monthly_income`);
+   * `"actual"` = ingresos − gastos reales registrados (meses cerrados, nunca `null`).
+   * El backend lo decide con el reloj del servidor; el front rotula, no deduce.
+   */
+  monthly_flow_basis: 'declared' | 'actual';
+  /**
+   * Mes UTC `"YYYY-MM"` de la transacción más antigua del usuario, o `null` si no tiene
+   * ninguna (Fase 29, Q9). Es el límite inferior del `◀` del dashboard. Va sobre todas las
+   * cuentas, no solo las destacadas, porque gobierna la página entera.
+   */
+  first_transaction_month: string | null;
+  /**
+   * Monedas distintas con gasto en el mes consultado, sobre TODAS las cuentas (Fase 29, B7).
+   * Alimenta los chips de moneda de "Gastos por categoría" — que filtran las barras, y las
+   * barras cuentan todas las cuentas, a diferencia de `monthly_expense_by_currency`, que solo
+   * suma las destacadas. La preferida solo aparece si tiene gasto en el mes; el frontend la
+   * suma igual a las opciones.
+   */
+  expense_currencies: string[];
 }
 
 export interface CashflowItem {

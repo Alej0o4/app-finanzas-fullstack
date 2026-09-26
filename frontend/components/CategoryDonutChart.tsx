@@ -52,6 +52,10 @@ interface CategoryDonutChartProps {
   /** Fase 19 §19.3.4 — ingreso total del período, ya sumado en analytics/page.tsx desde
    *  cashflow-series. Denominador cuando referenceMode === 'income-total'. */
   totalIncomeForPeriod: number;
+  /** Fase 29 §F7 (H3): moneda de los montos (tooltip y leyenda). Antes se formateaban con la
+   *  preferida, así que elegir una cuenta USD mostraba los totales en formato COP. Si se omite,
+   *  cae a la preferida global. */
+  currency?: string;
 }
 
 export default function CategoryDonutChart({
@@ -67,8 +71,11 @@ export default function CategoryDonutChart({
   referenceMode,
   onReferenceModeChange,
   totalIncomeForPeriod,
+  currency,
 }: CategoryDonutChartProps) {
   const { config } = useAppConfig();
+  const activeCurrency = currency ?? config.currency;
+  const formatAmount = (amount: number) => formatCurrency(amount, activeCurrency);
   const originalCategoryData = useMemo(() => {
     const items =
       (data as CategoryDistributionItem[])?.map((item) => ({
@@ -247,8 +254,7 @@ export default function CategoryDonutChart({
                         <div className="border-border bg-surface-elevated shadow-background/30 rounded-lg border px-3 py-2 text-sm shadow-lg">
                           <p className="text-text font-medium">{item.category_name}</p>
                           <p className="text-text-soft mt-1">
-                            {netMode ? 'Gasto neto:' : 'Total:'}{' '}
-                            {formatCurrency(Number(item.value), config.currency)}
+                            {netMode ? 'Gasto neto:' : 'Total:'} {formatAmount(Number(item.value))}
                           </p>
                           <p className="text-text-muted">
                             {item.percentage.toFixed(1)}%
@@ -299,7 +305,7 @@ export default function CategoryDonutChart({
                       </span>
                     </div>
                     <span className="text-text-muted shrink-0">
-                      {formatCurrency(Number(item.value), config.currency)}
+                      {formatAmount(Number(item.value))}
                     </span>
                   </div>
                 );
