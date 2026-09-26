@@ -128,9 +128,9 @@ próxima fase (29) retoma el backlog priorizado abajo.
 ## Fase 29 — en definición (grilling 2026-09-26): navegación por mes y selector de moneda
 
 Primera fila del backlog ("Filtros de fecha y categoría en dashboard"), redefinida en el
-`/grilling` del 2026-09-26. **Estado: spec escrita (2026-09-26) en `docs/specs/fase_29_spec.md`, con 2
-`[NEEDS CLARIFICATION]` abiertos (B5 presupuestos retroactivos, B7 monedas de los chips);
-siguiente paso: resolverlos y correr `/analyze-spec 29`.** Esta sección es la entrada de ese paso — las
+`/grilling` del 2026-09-26. **Estado: spec escrita (2026-09-26) en `docs/specs/fase_29_spec.md`; B5 (guard
+de presupuestos retroactivos) y B7 (`expense_currencies`) resueltos con el dueño; siguiente paso
+`/analyze-spec 29`.** Esta sección es la entrada de ese paso — las
 decisiones de abajo ya están tomadas por el dueño, no son propuestas.
 
 **Cambio de alcance respecto al backlog original:** el **filtro por categoría queda fuera** (el

@@ -8,14 +8,14 @@
 >
 > Antes de escribirla, un `software-architect` contrastó el grilling con el código real
 > (2026-09-26). Encontró dos contradicciones entre decisiones Q y el código, y un bug que bloquea
-> Q5/Q14. Están en "Hallazgos de exploración" y las dos que necesitan al dueño quedan como
-> `[NEEDS CLARIFICATION]` en línea (**B7** y **F5.4**).
+> Q5/Q14. Están en "Hallazgos de exploración". Las dos que necesitaban al dueño (**B5**, **B7**)
+> se resolvieron el mismo día, ver "Decisiones resueltas con el usuario".
 >
 > **No implementa nada.** Solo se agregó este archivo y el pointer en `docs/ROADMAP.md`.
 
-**Estado:** spec escrita el 2026-09-26, **no lista para implementar**: tiene 2 marcadores
-`[NEEDS CLARIFICATION]` abiertos. Siguiente paso: el dueño los responde y después corre
-`/analyze-spec 29` (`docs/WORKFLOW.md` pasos 4–5).
+**Estado:** spec escrita el 2026-09-26. Los 2 marcadores `[NEEDS CLARIFICATION]` (B5, B7) se
+resolvieron con el dueño ese mismo día. Siguiente paso: `/analyze-spec 29`
+(`docs/WORKFLOW.md` paso 5).
 
 ---
 
@@ -315,15 +315,14 @@ Refactor sin cambio de comportamiento de `budget_alerts.py:32-60`, cubierto por 
 existentes de `test_budget_alerts.py` y `test_dashboard.py`. Si genera fricción, se puede diferir
 sin bloquear la fase: el summary usaría B1 y el motor de alertas conservaría su copia.
 
-**B5 — Presupuestos recurrentes retroactivos desde el motor de alertas** (Q7, H2).
-Default propuesto: en `evaluate_budget_thresholds_for_category`, llamar a
-`ensure_recurring_budgets_for_period` solo si `(year, month) >= mes actual UTC`. Así se conserva
-la Decisión 13.3.3 (gasto el día 1 del mes nuevo antes de abrir el dashboard) y deja de clonar
-plantillas en meses cerrados. Efecto visible: un gasto cargado con fecha atrasada en un mes cerrado
-ya no crea el presupuesto recurrente de ese mes, así que tampoco avisa umbrales de un mes pasado.
-[NEEDS CLARIFICATION: ¿se incluye este guard en la Fase 29, cambiando el comportamiento del motor
-de alertas para gastos con fecha atrasada, o se deja como está y se anota en `docs/TODO.md`,
-aceptando que un mes pasado pueda mostrar presupuestos creados después por un gasto atrasado?]
+**B5 — Presupuestos recurrentes retroactivos desde el motor de alertas** (Q7, H2). Resuelta con
+el dueño el 2026-09-26. En `evaluate_budget_thresholds_for_category`,
+`ensure_recurring_budgets_for_period` se llama solo si `(year, month) >= mes actual UTC`. Así se
+conserva la Decisión 13.3.3 (gasto el día 1 del mes nuevo antes de abrir el dashboard) y deja de
+clonar plantillas en meses cerrados. Cambio de comportamiento aceptado: un gasto cargado con
+fecha atrasada en un mes cerrado ya no crea el presupuesto recurrente de ese mes, así que tampoco
+avisa umbrales de un mes pasado. Los presupuestos que sí existían en ese mes siguen evaluándose
+como hoy.
 
 **B6 — Schema `DashboardSummary`** (Q9, Q12). ⚠️ contrato compartido con F3.
 
@@ -335,19 +334,18 @@ class DashboardSummary(BaseModel):
     monthly_flow_balance: Decimal | None = None                # null solo con basis "declared"
     monthly_flow_basis: Literal["declared", "actual"]          # nuevo
     first_transaction_month: str | None = None                 # nuevo, "YYYY-MM" UTC
-    expense_currencies: list[str] = []                         # nuevo, solo si B7 se confirma
+    expense_currencies: list[str] = []                         # nuevo (B7)
 ```
 
 El re-export de `schemas/schemas.py` no cambia, porque la clase conserva el nombre.
 
 **B7 — Monedas que ofrecen los chips del dashboard** (Q4, Q16, H1). ⚠️ contrato compartido con
-F5.4. Default propuesto: agregar un campo `expense_currencies: string[]` al summary con las monedas
-distintas que tienen gasto en el mes pedido, sobre **todas las cuentas** (el mismo universo que las
-barras que el chip filtra) y con la preferida primero. Cuesta un campo y un `DISTINCT` más.
-[NEEDS CLARIFICATION: ¿los chips del dashboard toman sus opciones de un campo nuevo
-`expense_currencies`, que cubre todas las cuentas con gasto en el mes (recomendado), o de las
-monedas de las cuentas del usuario, como en Analítica (Q14)? La segunda opción no cambia el
-contrato, pero ofrece monedas sin gasto en el mes.]
+F5.4. Resuelta con el dueño el 2026-09-26. Se agrega el campo `expense_currencies: string[]` al
+summary, con las monedas distintas que tienen gasto (`type == "expense"`) en el mes pedido, sobre
+**todas las cuentas** (el mismo universo que las barras que el chip filtra, no solo destacadas),
+con la preferida primero y el resto en orden alfabético (mismo `sort_key` que
+`monthly_expense_by_currency`). La preferida **no** se agrega si no tiene gasto: el front la suma
+a las opciones (F5.4). Cuesta un campo y un `DISTINCT` más.
 
 **Resumen del contrato ⚠️**
 
@@ -393,7 +391,7 @@ el segmento opcional **se omite** cuando no se pasa:
 - Los ~15 call sites de invalidación no cambian.
 
 **F3 — Tipos** (B6). `frontend/types/api.ts`: se agregan `monthly_flow_basis`,
-`first_transaction_month` y `expense_currencies` (si se confirma B7). `types/generated/api.ts` ya
+`first_transaction_month` y `expense_currencies`. `types/generated/api.ts` ya
 está desactualizado desde antes. Regenerarlo es opcional, porque la convivencia de ambos archivos
 es deliberada desde la Fase 16.
 
@@ -424,8 +422,8 @@ es deliberada desde la Fase 16.
   vía F1. Los chips (`SegmentedControl`) ofrecen las monedas de B7 más la preferida, y se ocultan
   si hay una sola. La selección vive en `useState` con la preferida por defecto. La moneda efectiva
   es `opciones.includes(sel) ? sel : preferida`, así el supuesto 2 se cumple sin `useEffect`. Se
-  pasa `currency` a `CategoryBreakdownBars` y el mensaje vacío menciona el mes.
-  [NEEDS CLARIFICATION: la fuente de las opciones depende de B7.]
+  pasa `currency` a `CategoryBreakdownBars` y el mensaje vacío menciona el mes. Opciones =
+  `summary.expense_currencies` ∪ preferida (B7).
 - **F5.5 Transacciones** (Q6, Q10, H5, H8). "Últimas 5 de <mes>" con `useTransactions` y un link
   "Ver todas" que usa `monthTransactionsHref`. El monto se formatea con `tx.currency`, no con
   `config.currency` (el bug de `page.tsx:404`).
@@ -468,7 +466,6 @@ formatear montos.
   - Cambiar `preferred_currency` no invalida `dashboardSummary` ni `budgets-progress`
     (`useUserPreferences.ts`; preexistente, mitigado por el `staleTime`).
   - Techo inconsistente en `accounts/{id}/monthly-summary`.
-  - H2, si B5 se difiere.
 - Al cierre: `docs/ROADMAP.md` y `docs/CHANGELOG.md`.
 
 ## Testing Decisions
@@ -495,9 +492,9 @@ reloj invalida el JWT de 15 minutos de `auth_headers` (`tests/conftest.py`). Su 
 - **T5** — `budgets-progress` en un mes pasado: con una plantilla recurrente vigente, un mes pasado
   sin filas devuelve `[]` y el conteo de `Budget` no cambia. Un presupuesto que sí existió muestra el
   gasto de ese mes. El mes actual explícito sigue generando los recurrentes.
-- **T6** — Si se confirma B5: un gasto con fecha de un mes cerrado no crea filas recurrentes en ese
+- **T6** — B5: un gasto con fecha de un mes cerrado no crea filas recurrentes en ese
   mes, y `test_budget_alerts.py` (gasto el día 1 del mes nuevo) sigue en verde.
-- **T7** — Si se confirma B7: `expense_currencies` incluye la moneda de una cuenta no destacada y
+- **T7** — B7: `expense_currencies` incluye la moneda de una cuenta no destacada y
   excluye una moneda sin gasto en el mes.
 - **T8** — `[verif]` Playwright en desktop y en 390×844:
   - Dashboard: `◀ ▶`, los dos límites, "Volver a este mes", chips que aparecen y desaparecen, y el
@@ -516,8 +513,7 @@ período puras).
 ```
 1. [backend] app/core/periods.py (nuevo) + tests/test_periods.py — Decisiones B1, T1.
    Depende de: —
-2. [backend] app/core/budget_alerts.py: spent_por_categoria_y_moneda usa B1 (+ guard de B5
-   si se confirma) + tests/test_budget_alerts.py — Decisiones B4, B5, T6.
+2. [backend] app/core/budget_alerts.py: spent_por_categoria_y_moneda usa B1 (+ guard de B5) + tests/test_budget_alerts.py — Decisiones B4, B5, T6.
    Depende de: 1
 3. [backend] app/schemas/dashboard.py + app/api/dashboard.py (summary y budgets-progress)
    + tests/test_dashboard.py — Decisiones B2, B3, B6, B7, T2, T3, T4, T5, T7.
@@ -581,8 +577,18 @@ El paso 1 bloquea todo el backend y el 3 fija el contrato del que dependen el 8 
 ## Decisiones resueltas con el usuario (2026-09-26)
 
 Las decisiones Q1–Q16 y los supuestos 1–6 de `docs/ROADMAP.md` §"Fase 29 — en definición" se
-resolvieron en el `/grilling` del 2026-09-26 y esta spec las toma como base. Las respuestas a los
-dos marcadores abiertos (B5, B7) se registrarán aquí cuando el dueño las dé.
+resolvieron en el `/grilling` del 2026-09-26 y esta spec las toma como base.
+
+Los dos marcadores `[NEEDS CLARIFICATION]` de la primera versión se resolvieron el mismo día,
+aceptando la recomendación en ambos:
+
+1. **B5 — ¿guard contra presupuestos retroactivos en el motor de alertas?** Sí, dentro de la
+   Fase 29. El motor de alertas solo genera recurrentes para el mes actual o posteriores. Se acepta
+   que un gasto atrasado en un mes cerrado ya no dispare avisos de ese mes.
+2. **B7 — ¿de dónde salen las opciones de los chips del dashboard?** De un campo nuevo
+   `expense_currencies` en `GET /dashboard/summary`, que cubre todas las cuentas con gasto en el
+   mes pedido, más la preferida agregada por el front. Se descarta usar las monedas de las cuentas
+   (la opción sin cambio de contrato), porque ofrecería monedas sin gasto en el mes.
 
 ## Further Notes
 
