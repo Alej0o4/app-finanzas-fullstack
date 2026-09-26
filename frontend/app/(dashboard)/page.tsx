@@ -9,7 +9,7 @@ import { formatCurrency, getApiError } from '@/lib/utils';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useSetMonthlyIncome } from '@/lib/hooks/useSetMonthlyIncome';
 import { useAppConfig } from '@/providers/AppConfigProvider';
-import { Suspense, useMemo, useRef, useState } from 'react';
+import { Suspense, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import BudgetRing from '@/components/charts/BudgetRing';
 import CategoryBreakdownSection from '@/components/charts/CategoryBreakdownSection';
 import RecentTransactionsSection from '@/components/transactions/RecentTransactionsSection';
@@ -50,6 +50,25 @@ const validateMonthParam = (raw: string): string => {
   return raw;
 };
 
+/** Determina el saludo según la hora LOCAL del dispositivo (Fase 30 F6, Q5/Q9). */
+const getGreeting = (hours: number): string => {
+  if (hours >= 5 && hours < 12) return 'Buenos días';
+  if (hours >= 12 && hours < 19) return 'Buenas tardes';
+  return 'Buenas noches';
+};
+
+// "¿Ya se montó en el cliente?" con `useSyncExternalStore` (Q9): el snapshot de servidor es
+// `false` y el de cliente `true`, así la hidratación usa `false` (igual que el SSR, sin
+// mismatch) y React re-renderiza una vez con `true`. No hay nada a lo que suscribirse: el valor
+// no cambia después del montaje. Evita `useState` + `useEffect` y su `eslint-disable`.
+const subscribeNoop = () => () => {};
+const useIsMounted = (): boolean =>
+  useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false
+  );
+
 function DashboardScreen() {
   const { config } = useAppConfig();
   const { data: user } = useCurrentUser();
@@ -64,6 +83,10 @@ function DashboardScreen() {
   // nunca se escribe — `setMonthParam('')` borra la clave y deja la URL del mes en curso limpia
   // (User Story 7).
   const [monthParam, setMonthParam] = useQueryParamState('month', '', validateMonthParam);
+
+  // Fase 30 F6 (Q5/Q9): detecta si ya se montó en el cliente para evitar hydration mismatch
+  // en el saludo dinámico. SSR renderiza 'Hola'; cliente tras montaje muestra el saludo por hora.
+  const isMounted = useIsMounted();
 
   const now = new Date();
   // Primitivos, no el objeto de `currentUtcMonth(now)`: dentro de las deps de un `useMemo` o de
@@ -281,7 +304,13 @@ function DashboardScreen() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="font-sans text-2xl font-bold tracking-tight sm:text-3xl">
-            Buenas tardes, {user?.full_name?.split(' ')[0] || 'de nuevo'}
+            {(() => {
+              if (!isMounted) return 'Hola'; // SSR: mismo contenido que cliente inicial
+              const hours = new Date().getHours();
+              const greeting = getGreeting(hours);
+              const name = user?.full_name?.split(' ')[0];
+              return name ? `${greeting}, ${name}` : greeting;
+            })()}
           </h1>
           <p className="text-text-muted mt-1 text-xs sm:text-sm">
             Aquí tienes el estado actual de tus finanzas orgánicas.

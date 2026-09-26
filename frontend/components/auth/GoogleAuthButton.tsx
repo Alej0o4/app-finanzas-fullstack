@@ -47,12 +47,12 @@ export default function GoogleAuthButton() {
 
         // Mismo criterio de destino que login/page.tsx:79-86 — funciona igual para un
         // registro nuevo (has_transaction_history=false → /capture) y para una usuaria
-        // recurrente que eligió Google (→ /dashboard).
+        // recurrente que eligió Google (→ `/`, el dashboard raíz).
         try {
           const meResponse = await api.get('users/me');
           const user = meResponse.data as UserResponse;
           queryClient.setQueryData(queryKeys.currentUser(), user);
-          router.push(user.has_transaction_history ? '/dashboard' : '/capture?onboarding=1');
+          router.push(user.has_transaction_history ? '/' : '/capture?onboarding=1');
         } catch {
           router.push('/capture');
         }

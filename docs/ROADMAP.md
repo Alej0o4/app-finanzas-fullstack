@@ -99,7 +99,8 @@ frontend si el refresh mismo devolvía 401) — ver `docs/CHANGELOG.md` para el 
 Spec: `docs/specs/fase_26_spec.md`.
 
 La Fase 29 (navegación por mes + selector de moneda) se completó el 2026-09-26 — ver "Fase 29 —
-completada" abajo.
+completada" abajo. La Fase 30 (chip "Esta semana" en Transacciones, KPIs de Analítica desde el
+backend y la deuda chica que dejó la Fase 29) también, el mismo día — ver "Fase 30 — completada".
 
 ---
 
@@ -209,14 +210,14 @@ solo muestra la moneda preferida y la única forma de ver otra es cambiar la con
 
 ---
 
-## Fase 30 — planificada (2026-09-26): semana calendario en Transacciones y deuda chica post-Fase 29
+## Fase 30 — completada (2026-09-26): semana calendario en Transacciones y deuda chica post-Fase 29
 
 Surge del `/grilling` del 2026-09-26: llevar a `/transactions` el criterio de "Esta semana"
 (lunes → hoy) que la Fase 29 (Q13) introdujo en Analítica, y aprovechar para cerrar los ítems
-chicos de `docs/TODO.md` que la propia Fase 29 dejó anotados. **Estado: spec escrita el
-2026-09-26** → `docs/specs/fase_30_spec.md` (sin marcadores abiertos; siguiente paso
-`/analyze-spec 30`). Flujo completo de `docs/WORKFLOW.md` (spec corta), porque Q6 cambia un
-contrato de API.
+chicos de `docs/TODO.md` que la propia Fase 29 dejó anotados. **Estado: implementada y cerrada
+el 2026-09-26** — spec en `docs/specs/fase_30_spec.md`, resumen en `docs/CHANGELOG.md`. Esta
+sección queda como registro del grilling que la originó (decisiones Q1–Q10, tomadas por el
+dueño). Flujo completo de `docs/WORKFLOW.md` (spec corta), porque Q6 cambia un contrato de API.
 
 ### Estado del código relevado (2026-09-26)
 

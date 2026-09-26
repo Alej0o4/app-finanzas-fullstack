@@ -200,36 +200,37 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     de edición no tiene selector de moneda) — el efecto observable es para callers directos
     de la API por ahora.
 
-- [ ] **Cambiar `preferred_currency` no invalida `dashboardSummary` ni `budgets-progress`
-  (Fase 29, preexistente).**
-  - `useUserPreferences` (`frontend/lib/hooks/useUserPreferences.ts`) invalida `currentUser` y
-    `dashboard.categoryBreakdown` al cambiar la moneda, pero no las dos queries que arman la
-    tarjeta de flujo y los anillos de presupuesto: siguen sirviendo desde cache montos
-    calculados con la moneda anterior hasta que el `staleTime` (1 min) las refresca.
-  - Con la navegación por mes el síntoma es el mismo: la tarjeta se rotula en la moneda nueva y
-    muestra sumas de la vieja. Es un bug de invalidación, no de contrato — la Fase 29 lo
-    mantuvo fuera de alcance y lo dejó anotado acá.
+- [x] **Cambiar `preferred_currency` no invalida `dashboardSummary` ni `budgets-progress`
+  (Fase 29, preexistente) — resuelto.** *(2026-09-26, Fase 30 F4, `docs/specs/fase_30_spec.md`)*
+  - `useUserPreferences` invalida ahora las tres raíces del dashboard al cambiar la moneda:
+    `dashboardSummary()` (todos los meses), `dashboard.categoryBreakdown()` (todos los
+    meses/monedas), y `budgets.progress()` (todos los meses). Llamadas sin argumento matchean
+    por prefijo. Analítica NO se invalida explícitamente (H2): su key ya lleva
+    `effectiveCurrency` como segmento, y al cambiar la moneda preferida la key cambia y
+    TanStack pide la nueva sola.
 
-- [ ] **El login redirige a `/dashboard`, que da 404 (encontrado en la verificación de la
-  Fase 29, preexistente).**
-  - `app/(auth)/login/page.tsx:84` y `components/auth/GoogleAuthButton.tsx:55` hacen
-    `router.push('/dashboard')` cuando el usuario ya tiene transacciones, pero el dashboard vive
-    en `/` (route group `(dashboard)`, sin segmento). No hay `middleware`/`redirects` que lo
-    rescate: tras loguearse con historial se cae en la página 404.
-  - Fix de flujo corto: cambiar ambos destinos a `'/'`. No se tocó en la Fase 29 para no mezclar
-    alcance.
+- [x] **El login redirige a `/dashboard`, que da 404 (encontrado en la verificación de la
+  Fase 29, preexistente) — resuelto.** *(2026-09-26, Fase 30 F5, `docs/specs/fase_30_spec.md`)*
+  - `app/(auth)/login/page.tsx` y `components/auth/GoogleAuthButton.tsx` ahora redirigen a
+    `'/'` (el dashboard raíz) para usuarios con historial, y a `/capture` para nuevos.
+    Fix de flujo corto: cambio de destino en ambos componentes.
 
-- [ ] **Hydration mismatch en el saludo del dashboard (preexistente, solo visible en dev).**
-  - `Buenas tardes, {user?.full_name?.split(' ')[0] || 'de nuevo'}` renderiza "de nuevo" en el
-    server y el nombre en el cliente (el usuario viene de cache), y React regenera el árbol.
-    Inofensivo en la práctica; se arregla difiriendo el nombre a después del montaje.
+- [x] **Hydration mismatch en el saludo del dashboard (preexistente, solo visible en dev)
+  — resuelto.** *(2026-09-26, Fase 30 F6, `docs/specs/fase_30_spec.md`)*
+  - Saludo dinámico con `useSyncExternalStore` (Fase 30 F6): SSR renderiza `"Hola"`; tras
+    el montaje calcula la hora local y muestra `"Buenos días" / "Buenas tardes" /
+    "Buenas noches"` con el primer nombre. Sin `useState` + `useEffect` (ni su
+    `eslint-disable`) y sin warning de hydration en consola; React re-renderiza una vez al
+    hidratar para pasar de "Hola" al saludo.
 
-- [ ] **Los KPIs de Analítica se suman en el navegador (encontrado en la Fase 29,
-  preexistente).**
-  - `app/(dashboard)/analytics/page.tsx` (`totals` en un `useMemo`) suma los buckets de
-    `cashflow-series` para obtener ingresos/gastos/balance del período. Contradice la regla de
-    `CLAUDE.md` de que el backend es la fuente de verdad de los agregados. Hoy da el mismo
-    número, pero conviene que `cashflow-series` devuelva los totales.
+- [x] **Los KPIs de Analítica se suman en el navegador (encontrado en la Fase 29,
+  preexistente) — resuelto.** *(2026-09-26, Fase 30 B1/F3, `docs/specs/fase_30_spec.md`)*
+  - `GET /api/v1/dashboard/cashflow-series` ahora devuelve `CashflowSeries` con
+    `total_income`, `total_expense`, `net` calculados en el backend (misma suma que los
+    buckets). El frontend usa estos totales directamente; elimina el `useMemo` de `totals`.
+    `AnalyticsSummary` recibe `net` por prop y ya no resta; `CategoryDonutChart` usa
+    `total_income` del backend como denominador del modo `income-total`. Contrato de API
+    roto a propósito (único consumidor es Analítica, no hay atajos ni scripts propios).
 
 ---
 
@@ -258,13 +259,12 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     calendario de Analítica (lunes–domingo) es UTC: los totales de ambos pueden diferir en el
     borde del domingo noche / lunes.
 
-- [ ] **Techo inconsistente en `GET /accounts/{id}/monthly-summary` (Fase 29, aceptado).**
-  - `api/accounts.py` acota el mes hasta el último día a las 23:59:59 aunque esté en curso,
-    mientras que `dashboard/summary` lo acota a "ahora" (`core/periods.limites_mes_utc`): una
-    transacción con fecha futura del mismo mes cuenta en la tarjeta de la cuenta y no en la del
-    dashboard.
-  - Unificarlo (y darle período consultable, como el summary) quedó fuera de alcance en la
-    Fase 29.
+- [x] **Techo inconsistente en `GET /accounts/{id}/monthly-summary` (Fase 29, aceptado)
+  — resuelto.** *(2026-09-26, Fase 30 B2, `docs/specs/fase_30_spec.md`)*
+  - `api/accounts.py` ahora usa `core.periods.limites_mes_utc` (techo = "ahora" en mes en
+    curso), igual que `dashboard/summary`. Una transacción con fecha futura del mismo mes ya
+    no cuenta en la tarjeta de la cuenta, cuadre con la tarjeta del dashboard. Los tests
+    (`TestMonthlySummaryCurrentMonthCeiling`) validan que la transacción de hoy sí cuenta.
 
 - [ ] **`GET /budgets/?month=&year=` sigue generando presupuestos recurrentes en meses
   cerrados (Fase 29, aceptado).**

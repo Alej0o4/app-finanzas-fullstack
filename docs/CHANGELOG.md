@@ -9,6 +9,47 @@
 
 ---
 
+## Fase 30 — Semana calendario en Transacciones, KPIs de Analítica desde backend, y deuda chica post-Fase 29 (2026-09-26)
+
+Sintetiza el `/grilling` del 2026-09-26 (`docs/specs/fase_30_spec.md`):
+
+**Backend (B1/B2):**
+- `GET /dashboard/cashflow-series` cambia su contrato: ahora devuelve `CashflowSeries` (`{ buckets, total_income, total_expense, net }`) en vez de `CashflowData[]`. Los totales se calculan en Python sobre las filas ya agrupadas (misma suma, sin segunda query), así el frontend no suma en cliente (Q6).
+- `GET /accounts/{id}/monthly-summary` usa `core.periods.limites_mes_utc` (techo = "ahora" en mes en curso), igual que `dashboard/summary`. Una transacción con fecha futura del mismo mes ya no cuenta; la de hoy sí.
+
+**Frontend (F1–F6):**
+- F1: `lib/dateRanges.ts` expone `currentCalendarPeriodRange(period, now)` — bordes del período en curso (semana/mes/año) en UTC, fin = hoy.
+- F2: `/transactions` reemplaza "Últimos 7 días" por "Esta semana" (lunes→hoy, UTC). 4 chips en una fila mobile; `?preset=7d` cae a "Todo el histórico".
+- F3: Analítica consume `total_income`/`total_expense`/`net` del backend; elimina suma en cliente; `AnalyticsSummary` recibe `net` por prop; `CategoryDonutChart` usa `total_income` del backend como denominador del modo `income-total`.
+- F4: Cambio de moneda preferida invalida las 3 raíces del dashboard (`summary`, `categoryBreakdown`, `budgets.progress`) por prefijo (todos los meses). Analítica NO se invalida (H2).
+- F5: Login (password + Google) redirige a `/` (dashboard) para usuarios con historial; nuevos siguen a `/capture`.
+- F6: Saludo dinámico sin hydration mismatch: SSR "Hola"; tras montaje `useSyncExternalStore` + `new Date().getHours()` → "Buenos días" (5–11), "Buenas tardes" (12–18), "Buenas noches" (19–4).
+
+**Tests (T1–T5):**
+- T1: Tests de `cashflow-series` adaptados a nueva forma + validación totales/buckets/currency/account_id/rango vacío.
+- T2: Tests de `monthly-summary` con transacción futura (no cuenta) + regresión de hoy.
+- T3: Invariante `category-distribution` vs `cashflow-series.total_income` actualizado.
+- T4: Playwright desktop y 390×844: chips, KPIs/dona, saludo, moneda, login.
+- T5: Suite completa `pytest` + `ruff` + `pnpm lint/format`.
+
+313 tests backend en verde, `ruff`/`eslint`/`prettier` limpios y `tsc --noEmit` sin errores. Sin
+migraciones (no toca `models.py`).
+
+**Desvíos y correcciones del cierre (`/analyze-spec 30 cierre`):**
+- `types/generated/api.ts` se había editado a mano; se regeneró con `openapi-typescript` desde el
+  schema de la app (sin servidor en `:8000`). Arrastra además el drift previo de fases
+  anteriores (Google login, `resend-verification`, refresh por cookie, `year`/`month` de la
+  Fase 29), que el archivo no reflejaba.
+- `useIsMounted` del saludo quedó como un `useSyncExternalStore` con suscripción vacía. Sí hay
+  un re-render al hidratar (el snapshot de servidor difiere del de cliente); la spec decía lo
+  contrario y se corrigió.
+- Se recuperó la sección de `SegmentedControl` en `frontend/docs/COMPONENTS_GUIDE.md`, que se
+  había reemplazado por error al documentar `AnalyticsSummary`/`CategoryDonutChart`.
+
+Spec: `docs/specs/fase_30_spec.md`.
+
+---
+
 ## Fase 29 — Navegación por mes en el dashboard y selector de moneda (2026-09-26)
 
 El dashboard deja de mostrar solo el mes en curso: `◀ Agosto 2026 ▶` en el encabezado, estado en

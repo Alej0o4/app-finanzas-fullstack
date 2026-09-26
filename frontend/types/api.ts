@@ -105,6 +105,17 @@ export interface CashflowItem {
   income: number;
 }
 
+/** Nueva forma de respuesta de GET /dashboard/cashflow-series a partir de Fase 30 (B1).
+ *  Antes era `CashflowItem[]`. Ahora es un objeto con buckets + totales, para que el
+ *  frontend no sume en cliente (Q6). Los `Decimal` llegan como string o number; se
+ *  normalizan con `Number(...)` igual que los buckets. */
+export interface CashflowSeries {
+  buckets: CashflowItem[];
+  total_income: number;
+  total_expense: number;
+  net: number;
+}
+
 export interface CategoryDistributionItem {
   category_id: number;
   category_name: string;

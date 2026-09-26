@@ -49,8 +49,9 @@ interface CategoryDonutChartProps {
   onHiddenCategoriesChange: (set: Set<string>) => void;
   referenceMode: ReferenceMode;
   onReferenceModeChange: (mode: ReferenceMode) => void;
-  /** Fase 19 §19.3.4 — ingreso total del período, ya sumado en analytics/page.tsx desde
-   *  cashflow-series. Denominador cuando referenceMode === 'income-total'. */
+  /** Fase 19 §19.3.4 — ingreso total del período. Desde Fase 30 F3 es `total_income` de
+   *  cashflow-series, calculado por el backend (antes se sumaba en analytics/page.tsx).
+   *  Denominador cuando referenceMode === 'income-total'. */
   totalIncomeForPeriod: number;
   /** Fase 29 §F7 (H3): moneda de los montos (tooltip y leyenda). Antes se formateaban con la
    *  preferida, así que elegir una cuenta USD mostraba los totales en formato COP. Si se omite,

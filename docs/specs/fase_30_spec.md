@@ -12,8 +12,8 @@
 >
 > **No implementa nada.** Solo se agregó este archivo y el pointer en `docs/ROADMAP.md`.
 
-**Estado:** spec escrita el 2026-09-26, sin marcadores `[NEEDS CLARIFICATION]`. Siguiente paso:
-`/analyze-spec 30`.
+**Estado:** implementada y cerrada el 2026-09-26 (`/analyze-spec 30` antes y al cierre). Los
+desvíos quedaron registrados en la entrada de la Fase 30 de `docs/CHANGELOG.md`.
 
 ---
 
@@ -274,7 +274,9 @@ verificación del frontend es con Playwright, como en la Fase 29 (supuesto 3). R
   fallback `"de nuevo"` desaparece: era la mitad del mismo mismatch.
 - "Montado" se detecta con `useSyncExternalStore` (snapshot de servidor `false`, de cliente
   `true`), no con `useState` + `useEffect`. Evita otro
-  `eslint-disable react-hooks/set-state-in-effect` y no produce un segundo render. La franja se
+  `eslint-disable react-hooks/set-state-in-effect`. *(Corregido al cerrar: sí hay un
+  re-render al hidratar, porque el snapshot de servidor difiere del de cliente; es el costo
+  esperado y no produce mismatch.)* La franja se
   resuelve en una función pura (hora → saludo), así se puede leer y revisar sin montar la página.
 - El saludo no se reprograma para cambiar solo al cruzar una franja con la página abierta: se
   recalcula en el siguiente render.

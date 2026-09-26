@@ -52,6 +52,18 @@ export function useUserPreferences() {
       if (body.preferred_currency) {
         queryClient.invalidateQueries({ queryKey: queryKeys.currentUser() });
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() });
+
+        // Fase 30 F4 (H1, H2): invalidar TODAS las raíces del dashboard para que
+        // el cambio de moneda preferida refresque todo el dashboard de inmediato
+        // (summary, categoryBreakdown, budgets-progress). Llamadas sin argumento
+        // matchean por prefijo todos los meses (y monedas) cacheados.
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
+        queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() });
+
+        // Analítica NO se invalida explícitamente: su key ya lleva `effectiveCurrency`
+        // como segmento (H2), y `effectiveCurrency` deriva de `currentUser.preferred_currency`
+        // que ya se invalida arriba. Al cambiar la moneda preferida la key cambia y
+        // TanStack pide la nueva sola. No agregar aquí "por las dudas".
       }
       if (body.apply_to_default_account) {
         // Fase 22 §22.1 (Decisión 22.1.6): la cuenta por defecto pudo cambiar de moneda

@@ -1,4 +1,3 @@
-import calendar
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -8,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.periods import limites_mes_utc
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
@@ -124,6 +124,8 @@ def obtener_resumen_mensual_cuenta(
     current_user: models.User = Depends(get_current_user),
 ):
     """Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
+    Actualizado Fase 30 B2: usa `core.periods.limites_mes_utc` para el techo del mes
+    en curso = "ahora", igual que `dashboard/summary`.
 
     `ingreso_del_mes - gasto_del_mes` calculado SOLO con transacciones reales de esa
     cuenta en el mes en curso (no eliminadas) — a diferencia de
@@ -140,9 +142,7 @@ def obtener_resumen_mensual_cuenta(
         raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
     hoy = datetime.now(UTC)
-    primer_dia = datetime(hoy.year, hoy.month, 1)
-    ultimo_dia_mes = calendar.monthrange(hoy.year, hoy.month)[1]
-    ultimo_dia = datetime(hoy.year, hoy.month, ultimo_dia_mes, 23, 59, 59)
+    primer_dia, limite = limites_mes_utc(hoy.year, hoy.month, hoy)
 
     def _total(tipo: str) -> Decimal:
         """Suma del mes de las transacciones de un tipo, ignorando borradas (mismo
@@ -153,7 +153,7 @@ def obtener_resumen_mensual_cuenta(
                 models.Transaction.account_id == account_id,
                 models.Transaction.type == tipo,
                 models.Transaction.date >= primer_dia,
-                models.Transaction.date <= ultimo_dia,
+                models.Transaction.date <= limite,
                 models.Transaction.deleted_at.is_(None),
             )
             .scalar()

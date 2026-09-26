@@ -273,11 +273,22 @@ class TestCashflowSeriesCurrency:
         )
         assert response.status_code == 200, response.text
 
-        serie = response.json()
+        data = response.json()
+        assert "buckets" in data
+        assert "total_income" in data
+        assert "total_expense" in data
+        assert "net" in data
+
+        serie = data["buckets"]
         assert len(serie) == 1  # mismo día → una sola entrada, sin duplicar por moneda
         assert Decimal(str(serie[0]["income"])) == Decimal("200000.00")
         # Pre-fix aquí se verían 50100.00 (los 100 USD sumados al gasto COP)
         assert Decimal(str(serie[0]["expense"])) == Decimal("50000.00")
+
+        # Totales = suma de buckets
+        assert Decimal(str(data["total_income"])) == Decimal("200000.00")
+        assert Decimal(str(data["total_expense"])) == Decimal("50000.00")
+        assert Decimal(str(data["net"])) == Decimal("150000.00")
 
     def test_explicit_currency_param_filters_to_that_currency(self, client, auth_headers, make_account, make_category):
         cuenta_cop, cuenta_usd = _create_cop_and_usd_accounts(make_account, auth_headers)
@@ -308,10 +319,186 @@ class TestCashflowSeriesCurrency:
         )
         assert response.status_code == 200, response.text
 
-        serie = response.json()
+        data = response.json()
+        assert "buckets" in data
+
+        serie = data["buckets"]
         assert len(serie) == 1
         assert Decimal(str(serie[0]["expense"])) == Decimal("100.00")
         assert Decimal(str(serie[0]["income"])) == Decimal("0")
+
+        # Totales
+        assert Decimal(str(data["total_income"])) == Decimal("0")
+        assert Decimal(str(data["total_expense"])) == Decimal("100.00")
+        assert Decimal(str(data["net"])) == Decimal("-100.00")
+
+
+class TestCashflowSeriesTotals:
+    """T1 — validaciones de totales en la nueva respuesta CashflowSeries (Fase 30 B1)."""
+
+    def test_totals_equal_sum_of_buckets(self, client, auth_headers, make_account, make_category):
+        """total_income y total_expense son la suma exacta de los buckets."""
+        cuenta = make_account(auth_headers, name="Cuenta COP", currency="COP", balance="1000000.00")
+        categoria_gasto = make_category(auth_headers, name="Comida", type="expense")
+        categoria_ingreso = make_category(auth_headers, name="Salario", type="income")
+
+        # Dos días distintos para tener múltiples buckets
+        hoy = datetime.now(UTC)
+        dia1 = datetime(hoy.year, hoy.month, 5, tzinfo=UTC).isoformat()
+        dia2 = datetime(hoy.year, hoy.month, 15, tzinfo=UTC).isoformat()
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="100000.00",
+            type="income",
+            account_id=cuenta["id"],
+            category_id=categoria_ingreso["id"],
+            date=dia1,
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="30000.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria_gasto["id"],
+            date=dia1,
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="50000.00",
+            type="income",
+            account_id=cuenta["id"],
+            category_id=categoria_ingreso["id"],
+            date=dia2,
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="20000.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria_gasto["id"],
+            date=dia2,
+        )
+
+        rango = _current_month_range_params()
+        response = client.get("/api/v1/dashboard/cashflow-series", params=rango, headers=auth_headers)
+        assert response.status_code == 200, response.text
+
+        data = response.json()
+        buckets = data["buckets"]
+
+        # Verificar totales = suma de buckets
+        expected_income = sum(Decimal(str(b["income"])) for b in buckets)
+        expected_expense = sum(Decimal(str(b["expense"])) for b in buckets)
+        expected_net = expected_income - expected_expense
+
+        assert Decimal(str(data["total_income"])) == expected_income
+        assert Decimal(str(data["total_expense"])) == expected_expense
+        assert Decimal(str(data["net"])) == expected_net
+        assert expected_income == Decimal("150000.00")
+        assert expected_expense == Decimal("50000.00")
+        assert expected_net == Decimal("100000.00")
+
+    def test_totals_respect_currency_filter(self, client, auth_headers, make_account, make_category):
+        """Los totales respetan `currency`: una transacción en USD no entra en totales de COP."""
+        cuenta_cop, cuenta_usd = _create_cop_and_usd_accounts(make_account, auth_headers)
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="50000.00",
+            type="expense",
+            account_id=cuenta_cop["id"],
+            category_id=categoria["id"],
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta_usd["id"],
+            category_id=categoria["id"],
+        )
+
+        # Sin filtro → default COP
+        response_cop = client.get(
+            "/api/v1/dashboard/cashflow-series", params=_current_month_range_params(), headers=auth_headers
+        )
+        assert response_cop.status_code == 200
+        data_cop = response_cop.json()
+        assert Decimal(str(data_cop["total_expense"])) == Decimal("50000.00")
+
+        # Con filtro USD
+        response_usd = client.get(
+            "/api/v1/dashboard/cashflow-series",
+            params={**_current_month_range_params(), "currency": "USD"},
+            headers=auth_headers,
+        )
+        assert response_usd.status_code == 200
+        data_usd = response_usd.json()
+        assert Decimal(str(data_usd["total_expense"])) == Decimal("100.00")
+        assert Decimal(str(data_usd["total_income"])) == Decimal("0")
+
+    def test_totals_respect_account_id_filter(self, client, auth_headers, make_account, make_category):
+        """Los totales respetan `account_id`: una transacción de otra cuenta no entra."""
+        cuenta_a = make_account(auth_headers, name="Cuenta A", currency="COP", balance="1000000.00")
+        cuenta_b = make_account(auth_headers, name="Cuenta B", currency="COP", balance="1000000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="70000.00",
+            type="expense",
+            account_id=cuenta_a["id"],
+            category_id=categoria["id"],
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="20000.00",
+            type="expense",
+            account_id=cuenta_b["id"],
+            category_id=categoria["id"],
+        )
+
+        rango = _current_month_range_params()
+
+        response_a = client.get(
+            "/api/v1/dashboard/cashflow-series", params={**rango, "account_id": cuenta_a["id"]}, headers=auth_headers
+        )
+        assert response_a.status_code == 200
+        data_a = response_a.json()
+        assert Decimal(str(data_a["total_expense"])) == Decimal("70000.00")
+
+        response_b = client.get(
+            "/api/v1/dashboard/cashflow-series", params={**rango, "account_id": cuenta_b["id"]}, headers=auth_headers
+        )
+        assert response_b.status_code == 200
+        data_b = response_b.json()
+        assert Decimal(str(data_b["total_expense"])) == Decimal("20000.00")
+
+    def test_empty_range_returns_empty_buckets_and_zero_totals(self, client, auth_headers, make_account):
+        """Un rango sin transacciones responde buckets=[] y totales en 0.00, nunca null."""
+        make_account(auth_headers, name="Cuenta COP", currency="COP", balance="1000000.00")
+        # Rango en el futuro lejano
+        futuro = datetime(2099, 1, 1, tzinfo=UTC).isoformat()
+        response = client.get(
+            "/api/v1/dashboard/cashflow-series",
+            params={"start_date": futuro, "end_date": futuro},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["buckets"] == []
+        assert Decimal(str(data["total_income"])) == Decimal("0.00")
+        assert Decimal(str(data["total_expense"])) == Decimal("0.00")
+        assert Decimal(str(data["net"])) == Decimal("0.00")
 
 
 class TestCashflowSeriesAccountFilter:
@@ -349,9 +536,11 @@ class TestCashflowSeriesAccountFilter:
             headers=auth_headers,
         )
         assert solo_a.status_code == 200, solo_a.text
-        serie_a = solo_a.json()
+        data_a = solo_a.json()
+        serie_a = data_a["buckets"]
         assert len(serie_a) == 1
         assert Decimal(str(serie_a[0]["expense"])) == Decimal("70000.00")
+        assert Decimal(str(data_a["total_expense"])) == Decimal("70000.00")
 
         solo_b = client.get(
             "/api/v1/dashboard/cashflow-series",
@@ -359,9 +548,11 @@ class TestCashflowSeriesAccountFilter:
             headers=auth_headers,
         )
         assert solo_b.status_code == 200, solo_b.text
-        serie_b = solo_b.json()
+        data_b = solo_b.json()
+        serie_b = data_b["buckets"]
         assert len(serie_b) == 1
         assert Decimal(str(serie_b[0]["expense"])) == Decimal("20000.00")
+        assert Decimal(str(data_b["total_expense"])) == Decimal("20000.00")
 
     def test_foreign_account_id_returns_404(self, client, auth_headers, other_user, make_account):
         cuenta_ajena = make_account(other_user["headers"], balance="1000.00")
@@ -792,14 +983,14 @@ class TestMonoCurrencyRegression:
         assert progreso["percentage"] == pytest.approx(30.0)
 
         # 2. cashflow-series: default y currency explícita devuelven exactamente lo mismo
-        serie_default = client.get("/api/v1/dashboard/cashflow-series", params=rango, headers=auth_headers).json()
-        serie_explicita = client.get(
+        data_default = client.get("/api/v1/dashboard/cashflow-series", params=rango, headers=auth_headers).json()
+        data_explicita = client.get(
             "/api/v1/dashboard/cashflow-series", params={**rango, "currency": "COP"}, headers=auth_headers
         ).json()
-        assert serie_default == serie_explicita
-        assert len(serie_default) == 1
-        assert Decimal(str(serie_default[0]["income"])) == Decimal("1000.00")
-        assert Decimal(str(serie_default[0]["expense"])) == Decimal("300.00")
+        assert data_default == data_explicita
+        assert len(data_default["buckets"]) == 1
+        assert Decimal(str(data_default["buckets"][0]["income"])) == Decimal("1000.00")
+        assert Decimal(str(data_default["buckets"][0]["expense"])) == Decimal("300.00")
 
         # 3. category-distribution: totales íntegros, sin pérdida ni mezcla
         distribucion = client.get("/api/v1/dashboard/category-distribution", params=rango, headers=auth_headers).json()
@@ -809,23 +1000,24 @@ class TestMonoCurrencyRegression:
 
 
 class TestCategoryDistributionCashflowEquivalence:
-    """Fase 19 §19.3.5 (Decisión 19.3.4): invariante de equivalencia de agregados.
+    """Fase 19 §19.3.5 (Decisión 19.3.4), actualizado Fase 30 T3: invariante de
+    equivalencia de agregados.
 
     `category-distribution` (con `type=income`) y `cashflow-series` filtran por los
     MISMOS tres predicados (user_id, currency, rango de fechas) — ver Hallazgo 10 de
     `docs/specs/fase_19_spec.md`. Para los mismos parámetros debe cumplirse:
 
         sum(item.total de category-distribution, type=income)
-        == sum(item.income de cashflow-series)
+        == cashflow-series.total_income
 
     La métrica "% del ingreso por categoría" (Decisión 19.3.4) divide cada categoría
-    contra `totals.totalIncome`, sumado en cliente desde `cashflow-series` — comparte
+    contra `cashflow-series.total_income` (ya no se suma en el cliente) — comparte
     denominador con `category-distribution` solo si esta igualdad se mantiene. Este
     test convierte una igualdad hoy accidental en un invariante probado: si un cambio
     futuro toca el filtro de un endpoint sin tocar el otro, esto lo señala.
     """
 
-    def test_category_distribution_income_total_equals_cashflow_series_income_total(
+    def test_category_distribution_income_total_equals_cashflow_series_total_income(
         self, client, auth_headers, make_account, make_category
     ):
         # Ingresos en ≥2 categorías distintas (misma moneda/mismo rango) + un gasto:
@@ -863,9 +1055,10 @@ class TestCategoryDistributionCashflowEquivalence:
         rango = _current_month_range_params()
 
         # cashflow-series sin `currency` → default COP (moneda preferida)
-        serie = client.get("/api/v1/dashboard/cashflow-series", params=rango, headers=auth_headers)
-        assert serie.status_code == 200, serie.text
-        total_income_serie = sum(Decimal(str(item["income"])) for item in serie.json())
+        response = client.get("/api/v1/dashboard/cashflow-series", params=rango, headers=auth_headers)
+        assert response.status_code == 200, response.text
+        data = response.json()
+        total_income_serie = Decimal(str(data["total_income"]))
 
         # category-distribution con type=income, mismo rango y misma moneda default
         distribucion = client.get(

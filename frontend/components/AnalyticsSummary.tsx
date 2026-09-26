@@ -7,6 +7,9 @@ import { useAppConfig } from '@/providers/AppConfigProvider';
 interface AnalyticsSummaryProps {
   totalIncome: number;
   totalExpense: number;
+  /** Neto del período (ingresos - gastos), calculado por el backend (Fase 30 F3, H3).
+   *  El frontend ya no resta; usa este valor directamente. */
+  net: number;
   /** Fase 29 §F7 (H3): moneda en la que vienen los montos. Antes se formateaban siempre con la
    *  preferida, así que una cuenta USD se leía como COP. Si se omite, cae a la preferida global
    *  (mismo criterio que `CategoryBreakdownBars`). */
@@ -16,12 +19,12 @@ interface AnalyticsSummaryProps {
 export default function AnalyticsSummary({
   totalIncome,
   totalExpense,
+  net,
   currency,
 }: AnalyticsSummaryProps) {
   const { config } = useAppConfig();
   const activeCurrency = currency ?? config.currency;
   const formatAmount = (amount: number) => formatCurrency(amount, activeCurrency);
-  const total = totalIncome - totalExpense;
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -39,8 +42,8 @@ export default function AnalyticsSummary({
       />
       <SummaryCard
         label="Balance Neto"
-        value={formatAmount(total)}
-        color={total >= 0 ? 'var(--color-success)' : 'var(--color-danger)'}
+        value={formatAmount(net)}
+        color={net >= 0 ? 'var(--color-success)' : 'var(--color-danger)'}
       />
     </div>
   );

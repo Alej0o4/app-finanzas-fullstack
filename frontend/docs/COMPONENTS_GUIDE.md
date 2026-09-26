@@ -152,6 +152,53 @@ Reglas:
 - Pasar siempre `ariaLabel`: los chips de moneda y los presets de período se ven idénticos y sin él un lector de pantalla no distingue qué son.
 - Con una sola opción no tiene sentido renderizarlo (así lo hacen los chips de moneda del dashboard y de Analítica).
 
+### `components/AnalyticsSummary.tsx`
+
+Responsabilidad:
+
+- Pintar la tarjeta de KPIs de Analítica (Ingresos / Gastos / Balance Neto).
+
+Props principales:
+
+- `totalIncome: number`
+- `totalExpense: number`
+- `net: number` — **Fase 30 F3 (H3)**: neto del período (ingresos − gastos), calculado por el backend. El frontend ya no resta; usa este valor directamente.
+- `currency?: string` — Fase 29 §F7: moneda en la que vienen los montos. Si se omite, cae a la preferida global (`config.currency`); la página siempre pasa la moneda efectiva de la vista, para que una cuenta USD no se formatee como COP.
+
+Comportamiento:
+
+- Calcula `color` del balance neto en función de `net` (no de `totalIncome - totalExpense`).
+- Usa `formatCurrency` con la moneda activa.
+
+Reglas:
+
+- No recalcular totales en el componente: el backend es la fuente de verdad.
+
+### `components/CategoryDonutChart.tsx`
+
+Responsabilidad:
+
+- Pintar la distribución por categorías (dona de Recharts) con controles de tipo (gastos/ingresos), modo (bruto/neto), referencia (% de gastos vs % del ingreso total) y categorías ocultas.
+
+Props principales:
+
+- `data: CategoryDistributionItem[] | undefined`
+- `categoryType`, `onCategoryTypeChange`
+- `netMode`, `onNetModeChange`
+- `hiddenCategories`, `onHiddenCategoriesChange`
+- `referenceMode`, `onReferenceModeChange`
+- `totalIncomeForPeriod: number` — **Fase 19 §19.3.4, actualizado Fase 30 F3**: ingreso total del período. Ahora viene de `cashflow-series.total_income` (calculado por el backend), no se suma en el cliente. Denominador cuando `referenceMode === 'income-total'`.
+- `currency?: string` — Fase 29 §F7: moneda de los montos (tooltip y leyenda).
+
+Comportamiento:
+
+- Calcula porcentaje de cada categoría contra el denominador correcto (subtotal de gastos o `totalIncomeForPeriod`).
+- `hiddenCategories` filtra visualmente; el porcentaje de items visibles NO se re-normaliza si se usa referencia al ingreso total.
+
+Reglas:
+
+- No sumar `totalIncomeForPeriod` en el cliente: viene del backend.
+
 ### `components/PeriodNavigator.tsx`
 
 Responsabilidad:
