@@ -98,7 +98,7 @@ angosto para que el logout revocara server-side; deadlock en el interceptor de r
 frontend si el refresh mismo devolvía 401) — ver `docs/CHANGELOG.md` para el detalle completo.
 Spec: `docs/specs/fase_26_spec.md`.
 
-No hay una próxima fase planeada todavía — ver "Backlog priorizado" abajo para las candidatas.
+La siguiente fase planeada es la 29 — ver "Fase 29 — en definición" abajo.
 
 ---
 
@@ -122,6 +122,89 @@ Con esto, la deuda de modularidad de `docs/TODO.md` 🟢 queda cerrada salvo la 
 español/inglés (documentada como irrelevante en solitario) y la migración oportunista de call
 sites a tipos generados desde OpenAPI (sin fecha, convivencia deliberada desde Fase 16 §16.3). La
 próxima fase (29) retoma el backlog priorizado abajo.
+
+---
+
+## Fase 29 — en definición (grilling 2026-09-26): navegación por mes y selector de moneda
+
+Primera fila del backlog ("Filtros de fecha y categoría en dashboard"), redefinida en el
+`/grilling` del 2026-09-26. **Estado: grilling cerrado con entendimiento compartido; siguiente
+paso `/to-spec` → `docs/specs/fase_29_spec.md`.** Esta sección es la entrada de ese paso — las
+decisiones de abajo ya están tomadas por el dueño, no son propuestas.
+
+**Cambio de alcance respecto al backlog original:** el **filtro por categoría queda fuera** (el
+dueño quiere pensarlo más a fondo, ver "Fuera de la Fase 29" abajo). En su lugar entra un
+**selector de moneda**: la necesidad real detectada es que "Gastos por categoría" del dashboard
+solo muestra la moneda preferida y la única forma de ver otra es cambiar la configuración.
+
+### Estado del código relevado (2026-09-26)
+
+- `GET /dashboard/summary` no recibe parámetros: fijo al mes en curso (día 1 → hoy, UTC), y
+  cuenta **solo cuentas destacadas** si hay alguna. Ya devuelve `monthly_expense_by_currency`
+  (las monedas con gasto en el mes, preferida primero).
+- `GET /dashboard/budgets-progress` solo conoce el mes actual y llama
+  `ensure_recurring_budgets_for_period` (genera presupuestos recurrentes al consultarse).
+- `cashflow-series` y `category-distribution` ya aceptan `start_date`/`end_date`/`currency`/
+  `account_id`. `GET /transactions/` acepta `start_date`/`end_date`/`category_id`, y
+  `/transactions` en el front ya lee `?start=&end=` de la URL.
+- `User.monthly_income` es un valor único **sin historial** (`models.py:31`).
+- Analítica (`analytics/page.tsx`) tiene presets semana (últimos 7 días móviles) / mes / año /
+  personalizado, todos terminando en *hoy*, con estado en la URL. Su moneda se deriva del filtro
+  de cuenta ("Todas las cuentas" = preferida) y muestra un aviso de "cuentas en otra moneda no
+  incluidas". No tiene selector de moneda libre.
+- **Bug** — `app/(dashboard)/page.tsx:404`: el monto de "Transacciones recientes" se formatea con
+  `config.currency` en vez de `tx.currency` (una transacción en USD se muestra como COP).
+- **Inconsistencia** — `app/(dashboard)/page.tsx:44`: las barras por categoría del dashboard
+  mandan el inicio de mes en hora **local** (`new Date(y, m, 1)`), mientras el backend calcula
+  el mes de `summary` en **UTC** → en UTC-5 una transacción del día 1 entre 00:00 y 05:00 UTC
+  cuenta en la tarjeta pero no en las barras.
+
+### Decisiones tomadas con el dueño
+
+| # | Decisión | Resolución |
+|---|---|---|
+| Q1 | ¿Qué pantalla? | **Ambas**: el dashboard (`/`) se vuelve navegable **por mes completo** (no rangos libres — `monthly_income`, presupuestos y alertas son mensuales); Analítica sigue siendo la pantalla de rangos libres. |
+| Q2 | ¿Cómo se eligen fechas? | Dashboard: navegador `◀ ▶` de meses. Analítica: navegador `◀ ▶` aplicado al preset elegido (semana/mes/año) + el personalizado tal como está. |
+| Q3 | Filtro por categoría | **Fuera de la Fase 29** — reemplazado por el selector de moneda (Q4/Q5). |
+| Q4 | Selector de moneda en "Gastos por categoría" del dashboard | Chips/segmented (`COP \| USD`) en el encabezado de la sección. Opciones = monedas de `summary.monthly_expense_by_currency` del mes elegido + la preferida siempre. **Oculto si hay una sola moneda.** Estado en `useState`, default la preferida. |
+| Q5 | ¿Selector de moneda también en Analítica? | **Sí**, mismo componente de chips (ver Q14). |
+| Q6 | ¿Qué sigue al mes elegido en el dashboard? | **Todo**: tarjeta ingresos/gastos/balance, presupuestos, "Gastos por categoría" y transacciones (pasan a "últimas 5 **del mes**" + link "ver todas" a `/transactions?start=&end=` de ese mes). Mes en la URL: `?month=YYYY-MM`. |
+| Q7 | Presupuestos recurrentes en meses pasados | `ensure_recurring_budgets_for_period` se llama **solo para el mes actual** (como hoy). Meses pasados muestran solo los presupuestos que existieron; si no hay, estado vacío "No había presupuestos en <mes>". Nada de filas retroactivas. |
+| Q8 | Balance de flujo en meses pasados | Mes actual: `monthly_income − gasto` (sin cambio). **Meses cerrados: ingresos reales registrados − gastos reales**, calculado en el backend. Sin historial de `monthly_income`, sin migración. |
+| Q9 | Límites de navegación | `▶` bloqueado en el mes actual (sin futuro). `◀` hasta el mes de la **primera transacción**, expuesto por el backend en `summary` (`first_transaction_month`). |
+| Q10 | Bug de `tx.currency` en transacciones recientes | Se arregla **dentro de la Fase 29** (misma sección que se modifica). |
+| Q11 | Contrato de API del mes | `GET /dashboard/summary` y `GET /dashboard/budgets-progress` aceptan `?year=&month=` (enteros, opcionales, **ambos o ninguno**; default = mes actual). **422** (`ValidationError`) si el mes es futuro, está incompleto o `month` fuera de 1–12. |
+| Q12 | ¿Cómo sabe el front qué balance ve? | Campo nuevo en `summary`: `monthly_flow_basis: "declared" \| "actual"` junto a `monthly_flow_balance`. El front elige el rótulo ("Te quedan…" / "Balance de agosto"). En meses pasados el balance nunca es `null`. |
+| Q13 | Navegador en Analítica | "Semana" pasa a **semana calendario lunes–domingo** ("Esta semana" = lunes → hoy). Estado **absoluto** en la URL: `?ref=YYYY-MM-DD` (inicio del período), no un offset relativo. Período actual termina hoy, pasados completos, `▶` bloqueado en el actual. El personalizado no tiene `◀ ▶`. |
+| Q14 | Selector de moneda en Analítica | Opciones = monedas distintas de las cuentas del usuario (`accounts/` ya se carga ahí, sin endpoint nuevo). Visible solo con "Todas las cuentas"; con una cuenta elegida la moneda es la de la cuenta (como hoy). **Elimina el aviso de "cuentas en otra moneda no incluidas".** Estado en la URL (`?currency=`), consistente con los demás filtros de Analítica. |
+| Q15 | UI del navegador del dashboard | `◀ Agosto 2026 ▶` en el encabezado de la página, sobre la tarjeta principal, **no sticky**. Botón "Volver a este mes" fuera del mes actual. El formulario inline de ingreso mensual (Fase 11) solo aparece en el mes actual. FAB/captura sin cambios (siempre fecha de hoy). |
+| Q16 | Cuentas destacadas | Se **mantiene** el comportamiento actual (`summary` cuenta solo destacadas si hay; barras y presupuestos cuentan todas) — también para el balance "actual" de meses pasados. Unificarlo es una decisión de producto aparte → anotar como deuda en `docs/TODO.md`. |
+
+### Supuestos aceptados (sin pregunta dedicada)
+
+1. **Bordes de mes en UTC** en el front, con un único helper de rango de mes (mismo criterio que
+   `buildDateRange` de Analítica) — corrige la inconsistencia de `page.tsx:44`.
+2. Si al cambiar de mes la moneda elegida en los chips del dashboard no tiene gastos en ese mes,
+   vuelve a la preferida.
+3. `?ref=` a mitad de período se normaliza al inicio del período; `?ref=`/`?month=` futuro o
+   inválido se trata como el período actual (no rompe la página).
+4. Las query keys de TanStack incluyen el mes; las mutaciones siguen invalidando por prefijo, de
+   modo que capturar una transacción refresca cualquier mes en caché. Actualizar
+   `frontend/docs/STATE_AND_FETCHING.md`.
+5. Verificación: tests pytest de los parámetros nuevos (mes pasado, mes futuro → 422, año/mes
+   incompleto → 422, `monthly_flow_basis`, balance "actual", no generación retroactiva de
+   presupuestos, `first_transaction_month`) + prueba con Playwright en desktop y 390×844.
+6. Contrato de API cambia → actualizar **ambos** `backend/docs/API_REFERENCE.md` y
+   `frontend/docs/API_CONTRACT.md`.
+
+### Fuera de la Fase 29
+
+- **Filtro por categoría** (dashboard o Analítica) — el dueño lo quiere revisar más a fondo;
+  queda en el backlog como fila propia.
+- Presets "últimos 3 / 12 meses" en Analítica (el personalizado ya los cubre).
+- Navegación por mes en `/budgets`.
+- Unificar el criterio de cuentas destacadas entre `summary` y el resto (→ `docs/TODO.md`).
+- Historial de `monthly_income`.
 
 ---
 
@@ -153,7 +236,8 @@ Ver también `docs/TODO.md` para deuda técnica y bugs confirmados no ligados a 
 ## Backlog priorizado — reordenado 2026-09-19 para uso personal
 
 Con las Fases 27–28 cerradas (arriba), este backlog retoma la numeración desde **Fase 29**: el
-primer candidato de la tabla de abajo (filtros de fecha/categoría) es el siguiente a especificar.
+primer candidato de la tabla de abajo (navegación por mes + selector de moneda) está en
+definición — ver "Fase 29 — en definición" arriba.
 
 Criterio de prioridad: ¿esto hace que trackear y entender mis propios gastos sea más fácil o más
 claro? Ya no hay criterio de "adquisición", "retención de usuarios" ni "efecto wow" de
@@ -161,7 +245,8 @@ marketing — se reformulan abajo en términos de valor de uso personal directo.
 
 | Prioridad | Feature | Nota |
 |---|---|---|
-| Alta | **Filtros de fecha y categoría en dashboard** | Subida de prioridad (antes "Media, cuando haya datos de uso reales" — ya hay ~2 meses de datos reales). Es la feature de *análisis* más directa: sin poder recortar por rango/categoría, "análisis de gastos" se queda en el resumen mensual fijo. |
+| Alta | **Navegación por mes en dashboard + selector de moneda** → **Fase 29, en definición** | Antes "Filtros de fecha y categoría en dashboard"; redefinida en el grilling 2026-09-26 (ver sección "Fase 29" arriba). El filtro por categoría se separó a su propia fila. |
+| Media | **Filtro por categoría** (dashboard/Analítica) | Separado de la Fase 29 el 2026-09-26 — el dueño quiere revisarlo más a fondo antes de decidir alcance (¿una o varias categorías? ¿qué gráficos filtra? interacción con "ocultar categoría" de la dona). `GET /transactions/` ya soporta `category_id`; `category-distribution`/`cashflow-series` todavía no. |
 | Alta | **Automatización de ingresos/gastos recurrentes** | El scheduler ya existe desde Fase 14. Reduce fricción de captura, que es tiempo que se puede invertir en mirar los datos en vez de cargarlos. |
 | Alta | **Sinking funds** (gastos distribuidos en cuotas mensuales virtuales) | Validado por YNAB para presupuesto personal serio. Encaja directo con "cuánto me queda" del dashboard de flujo. |
 | Media | **Vistas de tendencia / comparación entre meses** (nueva candidata) | No estaba en el backlog anterior porque el enfoque previo priorizaba features de producto sobre profundidad analítica. Encaja con el objetivo explícito de "que me facilite el análisis de mi dinero" — a definir alcance en una próxima sesión de spec. |
