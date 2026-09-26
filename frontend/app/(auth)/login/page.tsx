@@ -75,13 +75,14 @@ function LoginForm() {
 
       // Fase 19 §19.1.4/19.1.5: la Decisión 10.1.4 de Fase 10 ("login siempre redirige a
       // /capture") queda resuelta aquí — un usuario recurrente con 2+ transacciones va
-      // directo al dashboard. Fallback a /capture si el fetch falla (no bloquear el login
-      // por una pieza no crítica, mismo criterio que el envío de email de verificación).
+      // directo al dashboard (raíz `/`). Fallback a /capture si el fetch falla (no bloquear
+      // el login por una pieza no crítica, mismo criterio que el envío de email de
+      // verificación).
       try {
         const meResponse = await api.get('users/me');
         const user = meResponse.data as UserResponse;
         queryClient.setQueryData(queryKeys.currentUser(), user); // evita refetch en destino
-        router.push(user.has_transaction_history ? '/dashboard' : '/capture');
+        router.push(user.has_transaction_history ? '/' : '/capture');
       } catch {
         router.push('/capture');
       }

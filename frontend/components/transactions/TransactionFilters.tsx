@@ -6,11 +6,11 @@ import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import type { Account, Category } from '@/types/api';
 
-export type DatePreset = 'all' | '7d' | 'month' | 'year' | 'custom';
+export type DatePreset = 'all' | 'week' | 'month' | 'year' | 'custom';
 
 const PRESETS = [
   { key: 'all', label: 'Todo el histórico' },
-  { key: '7d', label: 'Últimos 7 días' },
+  { key: 'week', label: 'Esta semana' },
   { key: 'month', label: 'Este mes' },
   { key: 'year', label: 'Este año' },
 ] as const;

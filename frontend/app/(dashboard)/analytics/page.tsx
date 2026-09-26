@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
-import type { CashflowItem, CategoryDistributionItem } from '@/types/api';
+import type { CashflowSeries, CategoryDistributionItem } from '@/types/api';
 import { api } from '@/lib/api';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useAccounts } from '@/lib/hooks/useAccounts';
@@ -255,7 +255,7 @@ function AnalyticsPageContent() {
           account_id: accountId,
         },
       });
-      return res.data;
+      return res.data as CashflowSeries;
     },
   });
 
@@ -289,14 +289,14 @@ function AnalyticsPageContent() {
     },
   });
 
+  // trendData ahora es CashflowSeries (Fase 30 F3): { buckets, total_income, total_expense, net }
   const parsedTrendData = useMemo(() => {
-    return (
-      (trendData as CashflowItem[])?.map((item) => ({
-        ...item,
-        expense: Number(item.expense),
-        income: Number(item.income),
-      })) || []
-    );
+    const buckets = (trendData as CashflowSeries | undefined)?.buckets ?? [];
+    return buckets.map((item) => ({
+      ...item,
+      expense: Number(item.expense),
+      income: Number(item.income),
+    }));
   }, [trendData]);
 
   const visibleTrendData = useMemo(() => {
@@ -307,11 +307,14 @@ function AnalyticsPageContent() {
     }));
   }, [parsedTrendData, seriesMode]);
 
-  const totals = useMemo(() => {
-    const totalIncome = parsedTrendData.reduce((sum, item) => sum + item.income, 0);
-    const totalExpense = parsedTrendData.reduce((sum, item) => sum + item.expense, 0);
-    return { totalIncome, totalExpense };
-  }, [parsedTrendData]);
+  // Totales del backend (Fase 30 F3), sin sumar en el cliente. `Number(...)` porque los
+  // `Decimal` pueden llegar como string o number; sin datos todavía, cero.
+  const trendSeries = trendData as CashflowSeries | undefined;
+  const totals = {
+    totalIncome: Number(trendSeries?.total_income ?? 0),
+    totalExpense: Number(trendSeries?.total_expense ?? 0),
+    net: Number(trendSeries?.net ?? 0),
+  };
 
   // Mientras la moneda del URL (o la de la cuenta elegida) no se puede resolver contra las
   // cuentas, las queries están apagadas
@@ -421,6 +424,7 @@ function AnalyticsPageContent() {
       <AnalyticsSummary
         totalIncome={totals.totalIncome}
         totalExpense={totals.totalExpense}
+        net={totals.net}
         currency={effectiveCurrency}
       />
 

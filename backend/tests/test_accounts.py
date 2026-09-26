@@ -4,7 +4,11 @@ Fase 11: el endpoint GET /api/v1/accounts/summary. Fase 16: `opening_balance` en
 creación y el endpoint POST /api/v1/accounts/{id}/reconcile (Decisión 16.4.2).
 """
 
+from calendar import monthrange
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+
+import pytest
 
 from app.models import models
 
@@ -258,6 +262,107 @@ class TestMonthlySummary:
     def test_nonexistent_account_returns_404(self, client, auth_headers):
         response = client.get("/api/v1/accounts/999999/monthly-summary", headers=auth_headers)
         assert response.status_code == 404
+
+
+class TestMonthlySummaryCurrentMonthCeiling:
+    """T2 — Fase 30 B2: `monthly-summary` usa `limites_mes_utc` (techo = "ahora" en mes en curso).
+
+    Mismo helper y mismo `skip` que `TestFutureDatedTransactionExcludedFromCurrentMonth
+    ._fecha_futura_mismo_mes`: el último día del mes no hay "futuro dentro del mes".
+    """
+
+    def _crear_transaccion(self, client, headers, **overrides) -> dict:
+        payload = {"amount": "100.00", "type": "expense", "description": "tx monthly summary"}
+        payload.update(overrides)
+        response = client.post("/api/v1/transactions/", json=payload, headers=headers)
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    @staticmethod
+    def _fecha_futura_mismo_mes() -> str | None:
+        hoy = datetime.now(UTC)
+        ultimo_dia_mes = monthrange(hoy.year, hoy.month)[1]
+        if hoy.day >= ultimo_dia_mes:
+            return None  # hoy es el último día del mes: no hay "futuro" dentro del mismo mes
+        manana = hoy + timedelta(days=1)
+        return datetime(manana.year, manana.month, manana.day, tzinfo=UTC).isoformat()
+
+    def test_excludes_future_dated_transaction_in_current_month(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """Una transacción con fecha futura DENTRO del mes en curso NO cuenta en
+        monthly_income ni monthly_expense (techo = ahora)."""
+        fecha_futura = self._fecha_futura_mismo_mes()
+        if fecha_futura is None:
+            pytest.skip("hoy es el último día del mes")
+
+        cuenta = make_account(auth_headers, currency="COP", balance="1000000.00")
+        categoria_gasto = make_category(auth_headers, name="Comida", type="expense")
+        categoria_ingreso = make_category(auth_headers, name="Salario", type="income")
+
+        # Transacción de HOY (debe contar)
+        self._crear_transaccion(
+            client,
+            auth_headers,
+            amount="10000.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria_gasto["id"],
+        )
+        # Transacción MAÑANA (futuro dentro del mes — NO debe contar)
+        self._crear_transaccion(
+            client,
+            auth_headers,
+            amount="50000.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria_gasto["id"],
+            date=fecha_futura,
+        )
+        # Ingreso de HOY (debe contar)
+        self._crear_transaccion(
+            client,
+            auth_headers,
+            amount="20000.00",
+            type="income",
+            account_id=cuenta["id"],
+            category_id=categoria_ingreso["id"],
+        )
+        # Ingreso MAÑANA (futuro — NO debe contar)
+        self._crear_transaccion(
+            client,
+            auth_headers,
+            amount="100000.00",
+            type="income",
+            account_id=cuenta["id"],
+            category_id=categoria_ingreso["id"],
+            date=fecha_futura,
+        )
+
+        response = client.get(f"/api/v1/accounts/{cuenta['id']}/monthly-summary", headers=auth_headers)
+        assert response.status_code == 200, response.text
+        resumen = response.json()
+
+        # Solo la transacción de HOY debe contar
+        assert Decimal(str(resumen["monthly_expense"])) == Decimal("10000.00")
+        assert Decimal(str(resumen["monthly_income"])) == Decimal("20000.00")
+        assert Decimal(str(resumen["monthly_flow_balance"])) == Decimal("10000.00")
+
+    def test_today_transaction_still_counts(self, client, auth_headers, make_account, make_category):
+        """Regresión: una transacción de HOY SÍ cuenta en la tarjeta de la cuenta."""
+        cuenta = make_account(auth_headers, currency="COP", balance="1000000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        self._crear_transaccion(
+            client, auth_headers, amount="7500.00", type="expense", account_id=cuenta["id"], category_id=categoria["id"]
+        )
+
+        response = client.get(f"/api/v1/accounts/{cuenta['id']}/monthly-summary", headers=auth_headers)
+        assert response.status_code == 200, response.text
+        resumen = response.json()
+
+        assert Decimal(str(resumen["monthly_expense"])) == Decimal("7500.00")
+        assert Decimal(str(resumen["monthly_flow_balance"])) == Decimal("-7500.00")
 
 
 class TestUpdateAccount:

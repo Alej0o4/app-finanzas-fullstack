@@ -65,3 +65,18 @@ class CategoryDistributionData(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- CASH FLOW SERIES (Fase 30 B1) ---
+class CashflowSeries(BaseModel):
+    """Respuesta de GET /dashboard/cashflow-series a partir de Fase 30.
+
+    Antes devolvía `list[CashflowData]`. Ahora devuelve un objeto con los buckets y
+    los totales del período calculados en Python (misma suma que los buckets), para
+    que el frontend no tenga que sumar en cliente (Q6).
+    """
+
+    buckets: list[CashflowData]
+    total_income: Decimal
+    total_expense: Decimal
+    net: Decimal

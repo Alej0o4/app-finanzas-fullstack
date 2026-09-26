@@ -196,14 +196,22 @@ solo, sin disparar la query de lista completa.
 
 ### Actualizar preferencias / fijar ingreso mensual (Settings, Fase 21/22)
 
-`useUserPreferences.ts` invalida tras un `PATCH /users/me/preferences` (Decisión 22.1.6):
+`useUserPreferences.ts` invalida tras un `PATCH /users/me/preferences` (Decisión 22.1.6,
+actualizado Fase 30 F4):
 
 - `userPreferences`
 - `currentUser`
 - `dashboard-category-breakdown`
+- `dashboardSummary` — invalidado por prefijo (todos los meses cacheados).
+- `budgets-progress` — invalidado por prefijo (todos los meses cacheados).
 - `accounts` — condicionalmente: solo si la moneda preferida cambió (las cuentas no cambian
   de moneda, pero los agregados del dashboard que dependen de `preferred_currency` sí
   necesitan revalidarse).
+
+**Analítica NO se invalida explícitamente** (Fase 30 F4, H2): su key ya lleva
+`effectiveCurrency` como segmento, y `effectiveCurrency` deriva de
+`currentUser.preferred_currency` que ya se invalida arriba. Al cambiar la moneda preferida la
+key cambia y TanStack pide la nueva sola. No agregar aquí "por las dudas".
 
 ## Estado local
 

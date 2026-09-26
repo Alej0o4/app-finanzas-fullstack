@@ -268,7 +268,7 @@ def obtener_progreso_presupuestos(
     return progreso_lista
 
 
-@router.get("/cashflow-series", response_model=list[schemas.CashflowData])
+@router.get("/cashflow-series", response_model=schemas.CashflowSeries)
 def obtener_serie_flujo_caja(
     start_date: datetime,
     end_date: datetime,
@@ -324,10 +324,25 @@ def obtener_serie_flujo_caja(
             .all()
         )
 
-        return [
+        buckets = [
             {"date_label": r.date_label, "income": r.income or Decimal("0.00"), "expense": r.expense or Decimal("0.00")}
             for r in rows
         ]
+
+        # Totales calculados en Python sobre las filas ya agrupadas (misma suma, sin
+        # segunda query). Así los totales son por construcción la suma de los buckets
+        # con los mismos filtros, y el invariante con category-distribution (H4) no
+        # depende de mantener dos consultas alineadas.
+        total_income = sum((b["income"] for b in buckets), Decimal("0.00"))
+        total_expense = sum((b["expense"] for b in buckets), Decimal("0.00"))
+        net = total_income - total_expense
+
+        return {
+            "buckets": buckets,
+            "total_income": total_income,
+            "total_expense": total_expense,
+            "net": net,
+        }
     except Exception:
         logger.exception("Error in cashflow-series")
         raise InternalServerError("Error al obtener serie de flujo de caja") from None

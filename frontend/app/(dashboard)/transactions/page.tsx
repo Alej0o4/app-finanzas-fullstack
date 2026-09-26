@@ -15,6 +15,7 @@ import TransactionList from '@/components/transactions/TransactionList';
 import EditTransactionModal from '@/components/modals/EditTransactionModal';
 import Skeleton from '@/components/ui/Skeleton';
 import type { Transaction, UpdateTransactionPayload } from '@/types/api';
+import { currentCalendarPeriodRange } from '@/lib/dateRanges';
 
 const PAGE_SIZE = 50;
 
@@ -27,30 +28,15 @@ const formatDateBoundaryForBackend = (value: string, boundary: 'start' | 'end') 
 };
 
 const getPresetDates = (preset: Exclude<DatePreset, 'custom'>) => {
-  const today = new Date();
-  const endDate = today.toISOString().slice(0, 10);
-
   if (preset === 'all') {
     return { startDate: '', endDate: '' };
   }
 
-  if (preset === '7d') {
-    const start = new Date(today);
-    start.setDate(today.getDate() - 6);
-    return { startDate: start.toISOString().slice(0, 10), endDate };
-  }
-
-  if (preset === 'month') {
-    return {
-      startDate: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`,
-      endDate,
-    };
-  }
-
-  return {
-    startDate: `${today.getFullYear()}-01-01`,
-    endDate,
-  };
+  // Usa currentCalendarPeriodRange (F1) para week/month/year — misma lógica que Analítica
+  // y el dashboard. El fin es "hoy" (endOfUtcDay), no el domingo ni fin de mes calendario.
+  const now = new Date();
+  const range = currentCalendarPeriodRange(preset, now);
+  return { startDate: range.start_date, endDate: range.end_date };
 };
 
 // Fase 13 §13.6: whitelist read-time de los query params. Un link inválido
@@ -60,8 +46,10 @@ const getPresetDates = (preset: Exclude<DatePreset, 'custom'>) => {
 // 'custom' está en la whitelist de preset porque la propia página lo escribe cuando el
 // usuario edita fechas a mano (setDatePreset('custom')) — sin él, el chip "Todo el
 // histórico" se encendería por error con un rango custom activo.
+// '7d' ya no está en la whitelist: un link viejo con ?preset=7d cae a 'all' (Q2), o a
+// 'custom' si trae start/end (ver datePreset en el componente).
 const validatePreset = (raw: string): DatePreset =>
-  (['all', '7d', 'month', 'year', 'custom'] as const).includes(raw as DatePreset)
+  (['all', 'week', 'month', 'year', 'custom'] as const).includes(raw as DatePreset)
     ? (raw as DatePreset)
     : 'all';
 
@@ -83,7 +71,11 @@ function TransactionsPageContent() {
     validateIdOrAll
   );
   const [accountFilter, setAccountFilter] = useQueryParamState('account', 'all', validateIdOrAll);
-  const [datePreset] = useQueryParamState('preset', 'all', validatePreset);
+  const [rawDatePreset] = useQueryParamState('preset', 'all', validatePreset);
+  // Un link viejo (?preset=7d&start=…&end=…) normaliza el preset a 'all' pero conserva las
+  // fechas: con un rango activo el chip correcto es 'custom', no "Todo el histórico".
+  const datePreset: DatePreset =
+    rawDatePreset === 'all' && (startDate || endDate) ? 'custom' : rawDatePreset;
   const setFilterParams = useQueryParamsBatch();
 
   // Un link compartido puede traer solo `preset` explícito (ej. ?preset=month&category=3):
@@ -93,7 +85,7 @@ function TransactionsPageContent() {
     if (
       !startDate &&
       !endDate &&
-      (datePreset === '7d' || datePreset === 'month' || datePreset === 'year')
+      (datePreset === 'week' || datePreset === 'month' || datePreset === 'year')
     ) {
       const nextDates = getPresetDates(datePreset);
       setFilterParams({ start: nextDates.startDate || null, end: nextDates.endDate || null });

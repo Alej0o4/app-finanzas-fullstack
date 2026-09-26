@@ -126,6 +126,26 @@ export const endOfUtcDay = (now: Date): Date =>
 export const utcDayKey = (date: Date): string => toDateParam(date);
 
 /**
+ * Bordes del período de calendario en curso (semana/mes/año) en UTC, para F1 (Fase 30).
+ *
+ * Devuelve las fechas `YYYY-MM-DD` del inicio (lunes 00:00 o día 1 00:00 o 1 ene 00:00)
+ * y el fin (hoy a 23:59:59) del período que contiene `now`. Encapsula el criterio en
+ * este módulo en vez de exportar `periodStartUtc` suelto, para que `/transactions`
+ * no arme fechas por su cuenta.
+ *
+ * El fin es hoy, no el domingo ni el último día del mes: mismo corte que el período
+ * en curso de Analítica (Q1, supuesto 1 del grilling de la Fase 30).
+ */
+export const currentCalendarPeriodRange = (
+  period: CalendarPeriod,
+  now: Date
+): { start_date: string; end_date: string } => {
+  const start = periodStartUtc(period, now);
+  const end = endOfUtcDay(now);
+  return { start_date: toDateParam(start), end_date: toDateParam(end) };
+};
+
+/**
  * Rango ISO del mes pedido. El techo es el fin del día UTC de hoy (`endOfUtcDay`) en el mes en
  * curso y el último día del mes a las 23:59:59.999Z en un mes pasado. El backend corta el mes en
  * curso en "ahora" (`limites_mes_utc`, B1); la diferencia es solo lo fechado más tarde hoy, y a

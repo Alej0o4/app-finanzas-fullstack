@@ -32,6 +32,7 @@ from app.schemas.dashboard import (
     BalanceByCurrency,
     BudgetProgress,
     CashflowData,
+    CashflowSeries,
     CategoryDistributionData,
     DashboardSummary,
 )
@@ -75,6 +76,7 @@ __all__ = [
     "BudgetProgress",
     "BudgetResponse",
     "CashflowData",
+    "CashflowSeries",
     "CategoryBase",
     "CategoryCreate",
     "CategoryDistributionData",

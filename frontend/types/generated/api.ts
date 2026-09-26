@@ -21,6 +21,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/auth/google': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Login Google
+     * @description Login/registro con ID token de Google Identity Services (Fase 20 §20.3).
+     *
+     *     Google ya verificó la identidad del usuario (firma + `email_verified`), así que esta
+     *     cuenta nace directamente verificada — sin pasar por `enviar_email_verificacion()`
+     *     (Decisión P4). Respuesta con la MISMA forma que `login()`: el frontend reutiliza el
+     *     mismo manejo de tokens sin bifurcar lógica (Historia de usuario 14).
+     */
+    post: operations['login_google_api_v1_auth_google_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/auth/refresh': {
     parameters: {
       query?: never;
@@ -112,6 +137,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/auth/resend-verification': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reenviar Verificacion
+     * @description Reenvía el email de verificación (mismo patrón anti-enumeración que password-reset:
+     *     siempre responde 200, exista o no el correo, y no revela si ya estaba verificado).
+     */
+    post: operations['reenviar_verificacion_api_v1_auth_resend_verification_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/transactions/': {
     parameters: {
       query?: never;
@@ -176,7 +222,8 @@ export interface paths {
     get: operations['obtener_usuario_actual_api_v1_users_me_get'];
     put?: never;
     post?: never;
-    delete?: never;
+    /** Eliminar Cuenta Propia */
+    delete: operations['eliminar_cuenta_propia_api_v1_users_me_delete'];
     options?: never;
     head?: never;
     /** Actualizar Perfil */
@@ -257,6 +304,8 @@ export interface paths {
     /**
      * Obtener Resumen Mensual Cuenta
      * @description Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
+     *     Actualizado Fase 30 B2: usa `core.periods.limites_mes_utc` para el techo del mes
+     *     en curso = "ahora", igual que `dashboard/summary`.
      *
      *     `ingreso_del_mes - gasto_del_mes` calculado SOLO con transacciones reales de esa
      *     cuenta en el mes en curso (no eliminadas) — a diferencia de
@@ -662,6 +711,11 @@ export interface paths {
      *     `endpoint`). Si el endpoint ya existe — re-registro del mismo navegador/dispositivo,
      *     incluso tras un cierre de sesión con otro usuario — se actualiza la fila en vez de
      *     duplicar (el estándar Web Push garantiza endpoint único por instalación).
+     *
+     *     Fase 23 (Decisión P1): la reasignación cross-usuario sigue permitida a propósito (no
+     *     hay forma de distinguir, solo con este request, el caso legítimo de dispositivo
+     *     compartido de un endpoint obtenido por otro medio) — pero queda logueada para
+     *     auditoría manual.
      */
     post: operations['suscribir_api_v1_push_subscribe_post'];
     /**
@@ -1014,6 +1068,24 @@ export interface components {
       /** Expense */
       expense: string;
     };
+    /**
+     * CashflowSeries
+     * @description Respuesta de GET /dashboard/cashflow-series a partir de Fase 30.
+     *
+     *     Antes devolvía `list[CashflowData]`. Ahora devuelve un objeto con los buckets y
+     *     los totales del período calculados en Python (misma suma que los buckets), para
+     *     que el frontend no tenga que sumar en cliente (Q6).
+     */
+    CashflowSeries: {
+      /** Buckets */
+      buckets: components['schemas']['CashflowData'][];
+      /** Total Income */
+      total_income: string;
+      /** Total Expense */
+      total_expense: string;
+      /** Net */
+      net: string;
+    };
     /** CategoryBase */
     CategoryBase: {
       /** Name */
@@ -1032,6 +1104,8 @@ export interface components {
       category_id: number;
       /** Category Name */
       category_name: string;
+      /** Category Icon */
+      category_icon?: string | null;
       /** Total */
       total: string;
     };
@@ -1067,6 +1141,30 @@ export interface components {
       monthly_expense_by_currency: components['schemas']['BalanceByCurrency'][];
       /** Monthly Flow Balance */
       monthly_flow_balance?: string | null;
+      /**
+       * Monthly Flow Basis
+       * @enum {string}
+       */
+      monthly_flow_basis: 'declared' | 'actual';
+      /** First Transaction Month */
+      first_transaction_month?: string | null;
+      /**
+       * Expense Currencies
+       * @default []
+       */
+      expense_currencies: string[];
+    };
+    /**
+     * GoogleLoginRequest
+     * @description ID token firmado de Google Identity Services (Fase 20 §20.3).
+     *
+     *     El backend lo verifica contra el JWKS de Google (`verify_oauth2_token`) y emite los
+     *     tokens de Oikos con la misma forma que `POST /auth/login` — el frontend no bifurca
+     *     lógica de manejo de tokens (Decisión 20.3.5/P1).
+     */
+    GoogleLoginRequest: {
+      /** Id Token */
+      id_token: string;
     };
     /** HTTPValidationError */
     HTTPValidationError: {
@@ -1152,6 +1250,11 @@ export interface components {
       preferred_theme?: string | null;
       /** Weekly Summary Enabled */
       weekly_summary_enabled?: boolean | null;
+      /**
+       * Apply To Default Account
+       * @default false
+       */
+      apply_to_default_account: boolean;
     };
     /**
      * PushSubscriptionCreate
@@ -1190,6 +1293,14 @@ export interface components {
     RefreshRequest: {
       /** Refresh Token */
       refresh_token: string;
+    };
+    /** ResendVerificationRequest */
+    ResendVerificationRequest: {
+      /**
+       * Email
+       * Format: email
+       */
+      email: string;
     };
     /** TokenResponse */
     TokenResponse: {
@@ -1308,6 +1419,14 @@ export interface components {
       password: string;
     };
     /**
+     * UserDeleteRequest
+     * @description Reconfirmación de contraseña para `DELETE /users/me` (Fase 21 §21.2, Decisión A4).
+     */
+    UserDeleteRequest: {
+      /** Password */
+      password: string;
+    };
+    /**
      * UserProfileUpdate
      * @description Dato financiero de dominio, separado de PreferencesUpdate (Decisión 1.1 del spec).
      *
@@ -1346,6 +1465,16 @@ export interface components {
       preferred_theme: string;
       /** Monthly Income */
       monthly_income?: string | null;
+      /**
+       * Has Transaction History
+       * @default false
+       */
+      has_transaction_history: boolean;
+      /**
+       * Has Password
+       * @default false
+       */
+      has_password: boolean;
     };
     /** ValidationError */
     ValidationError: {
@@ -1402,7 +1531,7 @@ export interface operations {
       };
     };
   };
-  refresh_api_v1_auth_refresh_post: {
+  login_google_api_v1_auth_google_post: {
     parameters: {
       query?: never;
       header?: never;
@@ -1411,7 +1540,40 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['RefreshRequest'];
+        'application/json': components['schemas']['GoogleLoginRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TokenResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  refresh_api_v1_auth_refresh_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['RefreshRequest'] | null;
       };
     };
     responses: {
@@ -1442,9 +1604,9 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody: {
+    requestBody?: {
       content: {
-        'application/json': components['schemas']['LogoutRequest'];
+        'application/json': components['schemas']['LogoutRequest'] | null;
       };
     };
     responses: {
@@ -1544,6 +1706,39 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  reenviar_verificacion_api_v1_auth_resend_verification_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ResendVerificationRequest'];
+      };
+    };
     responses: {
       /** @description Successful Response */
       200: {
@@ -1751,6 +1946,37 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['UserResponse'];
+        };
+      };
+    };
+  };
+  eliminar_cuenta_propia_api_v1_users_me_delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UserDeleteRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
         };
       };
     };
@@ -2404,7 +2630,12 @@ export interface operations {
   };
   obtener_resumen_api_v1_dashboard_summary_get: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Año del mes a consultar (UTC); enviar junto a `month`, o ninguno */
+        year?: number | null;
+        /** @description Mes a consultar entre 1 y 12 (UTC); enviar junto a `year`, o ninguno */
+        month?: number | null;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -2420,11 +2651,24 @@ export interface operations {
           'application/json': components['schemas']['DashboardSummary'];
         };
       };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
     };
   };
   obtener_progreso_presupuestos_api_v1_dashboard_budgets_progress_get: {
     parameters: {
       query?: {
+        /** @description Año del mes a consultar (UTC); enviar junto a `month`, o ninguno */
+        year?: number | null;
+        /** @description Mes a consultar entre 1 y 12 (UTC); enviar junto a `year`, o ninguno */
+        month?: number | null;
         /** @description Si se pasa, solo devuelve presupuestos en esa moneda */
         currency?: string | null;
       };
@@ -2463,6 +2707,8 @@ export interface operations {
         period?: string;
         /** @description Moneda a filtrar; por defecto la preferida del usuario */
         currency?: string | null;
+        /** @description Filtra a las transacciones de una sola cuenta */
+        account_id?: number | null;
       };
       header?: never;
       path?: never;
@@ -2476,7 +2722,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['CashflowData'][];
+          'application/json': components['schemas']['CashflowSeries'];
         };
       };
       /** @description Validation Error */

@@ -66,14 +66,16 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
 - `GET /api/v1/accounts/`
 - `GET /api/v1/accounts/summary` — saldo total por moneda de **TODAS** las cuentas del usuario, sin filtro de destacadas (Fase 11 §11.5). Devuelve `BalanceByCurrency[]`. Es distinto de `GET /dashboard/summary`, cuyo array `balances` sí filtra por cuentas destacadas cuando existen; este endpoint alimenta el encabezado de `accounts/page.tsx`, cuya lista tampoco filtra, para que el total coincida con las tarjetas listadas.
 - `GET /api/v1/accounts/{account_id}`
-- `GET /api/v1/accounts/{account_id}/monthly-summary` (Fase 17 §17.1.2, Decisión 17.1.2) —
-  saldo/balance del mes de **una sola cuenta**, derivado de sus transacciones del mes actual
-  (`monthly_income − monthly_expense`). A diferencia del `monthly_flow_balance` del dashboard
-  (que usa ingreso declarado y puede ser `null`), este endpoint **nunca** devuelve `null` para
-  `monthly_flow_balance`: sin transacciones devuelve `0`. Responde `AccountMonthlySummary`:
-  `{ currency, monthly_income, monthly_expense, monthly_flow_balance }`. Los montos
-  `Decimal` llegan serializados como `string` (Decisión 15.6) — el frontend los normaliza
-  con `Number(...)` antes de formatear (ver `AccountMonthlyBalanceCard`).
+- `GET /api/v1/accounts/{account_id}/monthly-summary` (Fase 17 §17.1.2, Decisión 17.1.2,
+  actualizado Fase 30 B2) — saldo/balance del mes de **una sola cuenta**, derivado de sus
+  transacciones del mes actual (`monthly_income − monthly_expense`). **Actualizado Fase 30 B2**:
+  usa `core.periods.limites_mes_utc` para que el techo del mes en curso sea "ahora" (igual que
+  `dashboard/summary`), en vez del fin de mes calendario. A diferencia del `monthly_flow_balance`
+  del dashboard (que usa ingreso declarado y puede ser `null`), este endpoint **nunca** devuelve
+  `null` para `monthly_flow_balance`: sin transacciones devuelve `0`. Responde
+  `AccountMonthlySummary`: `{ currency, monthly_income, monthly_expense, monthly_flow_balance }`.
+  Los montos `Decimal` llegan serializados como `string` (Decisión 15.6) — el frontend los
+  normaliza con `Number(...)` antes de formatear (ver `AccountMonthlyBalanceCard`).
 - `POST /api/v1/accounts/`
 - `PUT /api/v1/accounts/{account_id}` — actualización **parcial** desde Fase 24 §24.3
   (Decisión C1): solo aplica los campos presentes en el body, sin resetear a los defaults del
@@ -180,10 +182,16 @@ ignoran.
   lo usa en `accounts/[id]` (las queries propias por cuenta pasan la moneda de la cuenta,
   no la preferida global). Si se omite, se devuelven todas las monedas. Desde Fase 29 acepta
   los mismos `year`/`month` que `summary`, combinables con `currency`.
-- `GET /api/v1/dashboard/cashflow-series` — parámetro opcional `currency` (Fase 11 §11.1): filtra la serie a una sola moneda; si se omite, el backend usa `preferred_currency` del usuario. El frontend lo pasa explícito (Decisión 11.1.1 del spec de Fase 11). Desde la corrección UX
-  post-Fase 19 acepta también `account_id: int`, mismo contrato que en `category-distribution`
-  (ortogonal a `currency`, `404` si la cuenta es ajena).
-- `GET /api/v1/dashboard/category-distribution` — mismo parámetro opcional `currency` que cashflow-series; soporta además `neto=true` para calcular gasto neto por categoría. Desde
+- `GET /api/v1/dashboard/cashflow-series` — **Actualizado Fase 30 (B1/F3)**: ahora devuelve
+  `CashflowSeries` (`{ buckets, total_income, total_expense, net }`) en vez de una lista
+  directa de items. Los totales se calculan en el backend (misma suma que los buckets) para
+  que el frontend no sume en cliente (Q6). Parámetros: `start_date`, `end_date`, `period`,
+  `currency` (opcional, default `preferred_currency`), `account_id` (opcional). Un rango sin
+  transacciones responde `buckets: []` y totales en `"0.00"`. El gráfico de barras consume
+  `data.buckets`; los KPIs y la dona usan `data.total_income`, `data.total_expense`,
+  `data.net` directamente.
+- `GET /api/v1/dashboard/category-distribution` — mismo parámetro opcional `currency` que
+  cashflow-series; soporta además `neto=true` para calcular gasto neto por categoría. Desde
   Fase 17 §17.1.3 acepta `account_id: int` (Decisión 17.1.3) para restringir el desglose a
   las transacciones de una sola cuenta — el frontend de `accounts/[id]` pasa `account_id` y
   `currency` **ambos explícitos** (son ortogonales: la moneda de una cuenta no tiene por qué

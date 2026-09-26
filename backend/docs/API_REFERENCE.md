@@ -515,11 +515,13 @@ Errores esperados:
 
 - `404` si la cuenta no existe o no pertenece al usuario autenticado.
 
-### `GET /api/v1/accounts/{account_id}/monthly-summary` (Fase 17 §17.1.4)
+### `GET /api/v1/accounts/{account_id}/monthly-summary` (Fase 17 §17.1.4, actualizado Fase 30 B2)
 
 Balance del mes en curso de una sola cuenta (Decisión 17.1.4): `ingreso_del_mes −
 gasto_del_mes` calculado con las transacciones reales de **esa cuenta** en el mes actual
-(no eliminadas). Vive en `accounts.py` porque usa la misma verificación de pertenencia que
+(no eliminadas). **Actualizado Fase 30 B2**: usa `core.periods.limites_mes_utc` para que el
+techo del mes en curso sea "ahora" (igual que `dashboard/summary`), en vez del fin de mes
+calendario. Vive en `accounts.py` porque usa la misma verificación de pertenencia que
 `reconciliar_cuenta`. A diferencia de `GET /api/v1/dashboard/summary`, NO usa
 `User.monthly_income` (un valor declarado, global) — el resultado se deriva íntegramente de
 transacciones, así que **nunca es `null`** (mínimo `0.00`).
@@ -855,9 +857,10 @@ La generación perezosa de filas a partir de la plantilla `is_recurring` (Fase 8
   Fase 29 a propósito (deuda registrada en `docs/TODO.md`); el frontend no lo llama con
   período.
 
-### `GET /api/v1/dashboard/cashflow-series`
+### `GET /api/v1/dashboard/cashflow-series` (actualizado Fase 30)
 
-Devuelve una serie temporal de flujo de caja agrupada por día o por mes.
+Devuelve una serie temporal de flujo de caja agrupada por día o por mes, **más los totales
+del período calculados por el backend**. El frontend ya no suma en cliente (Q6).
 
 Parámetros:
 
@@ -871,11 +874,15 @@ Parámetros:
   `404` si la cuenta no existe o no pertenece al usuario autenticado). Agregado para que
   Analítica pueda mostrar el flujo de una cuenta específica en vez de solo la agregada.
 
-Salida:
+Salida (`CashflowSeries`):
 
-- `date_label`
-- `income`
-- `expense`
+- `buckets`: array de `{date_label, income, expense}` — misma forma y orden que la lista
+  anterior, para compatibilidad con el gráfico de barras.
+- `total_income`: suma de `income` de todos los buckets (Decimal serializado como string).
+- `total_expense`: suma de `expense` de todos los buckets (Decimal serializado como string).
+- `net`: `total_income - total_expense` (Decimal serializado como string).
+
+Un rango sin transacciones responde `buckets: []` y los tres totales en `"0.00"`, nunca `null`.
 
 ### `GET /api/v1/dashboard/category-distribution`
 
