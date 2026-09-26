@@ -43,7 +43,7 @@ Every spec large enough to have more than one implementation step includes an `#
 - Each step names the `Decisión` IDs it implements, so `/analyze-spec` can check that every decision has a step and every step has a decision.
 - `[docs]` steps are mandatory whenever a shared API contract changes (both `backend/docs/API_REFERENCE.md` and `frontend/docs/API_CONTRACT.md`, per `CLAUDE.md`).
 
-Before implementing a spec, and again when closing the phase, run `/analyze-spec` (`.claude/skills/analyze-spec/SKILL.md`).
+Before implementing a spec, and again when closing the phase, run `/analyze-spec` (`.claude/skills/analyze-spec/SKILL.md`). Where each of these steps sits in the overall sequence is defined in `docs/WORKFLOW.md`.
 
 ## When a skill says "publish to the issue tracker"
 

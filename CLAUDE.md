@@ -115,6 +115,7 @@ This repo maintains its own detailed docs — check them before inferring behavi
 - `frontend/docs/STATE_AND_FETCHING.md` — React Query key/invalidation patterns.
 - `frontend/docs/COMPONENTS_GUIDE.md`, `frontend/docs/UI_SYSTEM.md` — reusable components and visual tokens.
 - `docs/TODO.md` — technical debt and confirmed bugs, tagged by urgency, with resolution dates. Reprioritized 2026-08-22 for the multi-user pivot.
+- `docs/WORKFLOW.md` — **read this before starting any feature, phase, or bug fix.** The development sequence: when a change needs a spec, the full flow (`/grilling` → `/to-spec` → `/analyze-spec` → implement → `/run-tests` → `/code-review` → `/analyze-spec cierre` → closing docs → PR), and the short flow for bugs.
 - `docs/ROADMAP.md` — **read this first for anything architectural.** Records the 2026-08-22 pivot, the five MVP components, what's still genuinely open (Phase 26 JWT-to-cookies, deferred items), the prioritized backlog, and what remains out of scope (broker integrations, credit-card rewards engines, dynamic themes, i18n). Phase-by-phase history (Phases 0–25, all complete) moved to `docs/CHANGELOG.md` to keep the roadmap itself short — each entry there is a 3–5 line summary pointing at its `docs/specs/fase_NN_spec.md`.
 - `docs/specs/` — detailed per-phase implementation specs (file-level tasks, design decisions) written before implementing a phase. `fase_07_spec.md` covers everything implemented in Phase 7.
 
