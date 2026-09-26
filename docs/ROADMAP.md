@@ -209,6 +209,69 @@ solo muestra la moneda preferida y la única forma de ver otra es cambiar la con
 
 ---
 
+## Fase 30 — planificada (2026-09-26): semana calendario en Transacciones y deuda chica post-Fase 29
+
+Surge del `/grilling` del 2026-09-26: llevar a `/transactions` el criterio de "Esta semana"
+(lunes → hoy) que la Fase 29 (Q13) introdujo en Analítica, y aprovechar para cerrar los ítems
+chicos de `docs/TODO.md` que la propia Fase 29 dejó anotados. **Estado: grilling cerrado,
+pendiente `/to-spec`** → `docs/specs/fase_30_spec.md`. Flujo completo de `docs/WORKFLOW.md`
+(spec corta), porque Q6 cambia un contrato de API.
+
+### Estado del código relevado (2026-09-26)
+
+- `components/transactions/TransactionFilters.tsx:11-16`: chips `Todo el histórico / Últimos 7
+  días / Este mes / Este año` (`DatePreset = 'all' | '7d' | 'month' | 'year' | 'custom'`).
+- `app/(dashboard)/transactions/page.tsx:28-53` (`getPresetDates`) mezcla getters **locales**
+  (`getFullYear()`/`getMonth()`/`setDate`) con `toISOString()` (**UTC**) — mismo tipo de bug que
+  la Fase 29 corrigió en el dashboard (H4): después de las 19:00 hora Bogotá "Este mes" puede
+  arrancar en un mes y terminar en otro. `lib/dateRanges.ts` ya tiene la semana lunes–domingo en
+  UTC (`periodStartUtc`, hoy no exportada).
+- `GET /dashboard/cashflow-series` responde una **lista pelada** (`list[CashflowData]`); su único
+  consumidor es `analytics/page.tsx:249`, que suma los totales en un `useMemo` (`totals`,
+  `:310`) — también los usa la dona como denominador (`income-total`).
+- `GET /accounts/{id}/monthly-summary` arma su techo a mano (`api/accounts.py:142-145`, último
+  día 23:59:59) en vez de `core/periods.limites_mes_utc` (techo = ahora en el mes en curso).
+- `lib/hooks/useUserPreferences.ts:53-54` invalida solo `currentUser` y
+  `dashboard.categoryBreakdown` al cambiar la moneda preferida.
+- `app/(auth)/login/page.tsx:84` y `components/auth/GoogleAuthButton.tsx:55` redirigen a
+  `/dashboard` (404; el dashboard vive en `/`).
+- `app/(dashboard)/page.tsx:284`: el saludo dice **siempre** "Buenas tardes" y además produce un
+  hydration mismatch ("de nuevo" en el server, el nombre en el cliente).
+
+### Decisiones tomadas con el dueño
+
+| # | Decisión | Resolución |
+|---|---|---|
+| Q1 | ¿Qué reemplaza a "Últimos 7 días"? | Chip **"Esta semana"** (lunes → hoy, UTC), misma semántica que Analítica. Los tres presets (semana/mes/año) calculan sus fechas con `lib/dateRanges.ts` (exportando el cálculo de inicio de período) — elimina la mezcla local/UTC de `getPresetDates`. |
+| Q2 | Links viejos con `?preset=7d` | **Sin alias**: `7d` sale de la whitelist y cae a `all` (uso personal, no hay links compartidos que valga preservar). |
+| Q3 | `◀ ▶` en Transacciones | **Fuera de la Fase 30** — anotado en el backlog abajo. |
+| Q4 | Ítems de `docs/TODO.md` que entran | Los tres 🟠 triviales (invalidación por moneda, redirect `/dashboard`, hydration del saludo) + **KPIs de Analítica desde el backend** + **techo de `monthly-summary`**. |
+| Q5 | Saludo | Depende de la **hora local del navegador** (es un saludo, no un borde de datos), calculado en cliente tras el montaje. |
+| Q6 | Contrato de los KPIs de Analítica | `cashflow-series` pasa a responder un **objeto** `{ buckets: [...], total_income, total_expense, net }`. Rompe la forma, aceptado porque tiene un solo consumidor y el dueño confirmó que **no hay atajos/scripts propios que lo lean** (las API keys solo crean transacciones). Se elimina el `useMemo` de `totals`; la dona usa `total_income` del backend. |
+| Q7 | Techo de `monthly-summary` | Solo **unificar** usando `limites_mes_utc` (techo = ahora en el mes en curso). **Sin** período consultable `?year=&month=` (la vista por cuenta no navega por mes). |
+| Q8 | Qué invalidar al cambiar la moneda preferida | **Todo el prefijo `dashboard`** + las queries de Analítica que dependen de la moneda por defecto (verificar las keys al escribir la spec). |
+| Q9 | Franjas del saludo | "Buenos días" 5:00–11:59, "Buenas tardes" 12:00–18:59, "Buenas noches" 19:00–4:59. Antes del montaje: **"Hola"**, con el nombre también diferido, para que server y cliente rendericen igual. |
+| Q10 | Flujo de trabajo | **Flujo completo** (`/to-spec` → `/analyze-spec` → implementar → `/run-tests` → `/code-review` → `/analyze-spec cierre` → docs → PR), spec corta. |
+
+### Supuestos aceptados (sin pregunta dedicada)
+
+1. "Esta semana" termina **hoy** (igual que el período en curso de Analítica), no el domingo.
+2. Contrato de API cambia → actualizar **ambos** `backend/docs/API_REFERENCE.md` y
+   `frontend/docs/API_CONTRACT.md`, y regenerar `frontend/types/generated/api.ts`.
+3. Verificación: pytest de la forma nueva de `cashflow-series` (totales = suma de buckets, filtro
+   por moneda/cuenta) y del techo de `monthly-summary` (transacción con fecha futura del mes en
+   curso no cuenta) + prueba con Playwright de los chips de `/transactions` en desktop y 390×844.
+4. Al cerrar, marcar como resueltos en `docs/TODO.md` los 5 ítems que entran.
+
+### Fuera de la Fase 30
+
+- `◀ ▶` en los chips de `/transactions` (Q3).
+- Guard de `GET /budgets/?month=&year=` en meses cerrados (sin call site en el frontend).
+- Unificar el filtro de cuentas destacadas; alinear el mes UTC con la hora Bogotá.
+- Login con Google caído (externo), puertos de docker (teórico), codegen de tipos y nomenclatura.
+
+---
+
 ## Pendientes abiertos
 
 - [ ] **Login con Google caído en producción** (`disabled_client`) — sigue siendo prioritario
@@ -238,7 +301,8 @@ Ver también `docs/TODO.md` para deuda técnica y bugs confirmados no ligados a 
 
 Con las Fases 27–28 cerradas (arriba), este backlog retoma la numeración desde **Fase 29**: el
 primer candidato de la tabla de abajo (navegación por mes + selector de moneda) se completó como
-Fase 29 el 2026-09-26; la próxima fase sale del resto de la tabla.
+Fase 29 el 2026-09-26. La Fase 30 (arriba) es de ajustes chicos post-Fase 29, no sale de esta
+tabla; la siguiente fase de features sale del resto de la tabla.
 
 Criterio de prioridad: ¿esto hace que trackear y entender mis propios gastos sea más fácil o más
 claro? Ya no hay criterio de "adquisición", "retención de usuarios" ni "efecto wow" de
@@ -251,6 +315,7 @@ marketing — se reformulan abajo en términos de valor de uso personal directo.
 | Alta | **Sinking funds** (gastos distribuidos en cuotas mensuales virtuales) | Validado por YNAB para presupuesto personal serio. Encaja directo con "cuánto me queda" del dashboard de flujo. |
 | Media | **Vistas de tendencia / comparación entre meses** (nueva candidata) | No estaba en el backlog anterior porque el enfoque previo priorizaba features de producto sobre profundidad analítica. Encaja con el objetivo explícito de "que me facilite el análisis de mi dinero" — a definir alcance en una próxima sesión de spec. |
 | Media | **Registro por nota de voz con IA** | Reencuadrada como conveniencia de captura personal, no "efecto wow" de marketing. Depende de la captura por nombre (Fase 16, ya lista). |
+| Baja | **`◀ ▶` en los chips de `/transactions`** | Separado de la Fase 30 (Q3) el 2026-09-26. Mismo patrón que Analítica (`?ref=`, título dinámico); falta decidir cómo convive con las fechas editadas a mano. |
 | Baja | **Multi-moneda ampliado** (tasas de cambio) | El modelo ya soporta agrupación por moneda; la conversión no está y no se necesita todavía. |
 | Baja | **Sincronización offline** | Las columnas `updated_at` de Fase 8 la dejan preparada. |
 
