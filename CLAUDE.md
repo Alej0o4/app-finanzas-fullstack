@@ -122,7 +122,7 @@ This repo maintains its own detailed docs — check them before inferring behavi
 
 ### Issue tracker
 
-Local markdown, not GitHub Issues despite the GitHub remote: specs at `docs/specs/fase_NN_spec.md` (existing per-phase convention), tickets/wayfinder tracking under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+Local markdown, not GitHub Issues despite the GitHub remote: specs at `docs/specs/fase_NN_spec.md` (existing per-phase convention), tickets/wayfinder tracking under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md` — it also defines two Oikos additions to the `/to-spec` template (`[NEEDS CLARIFICATION: …]` markers, and a tagged `## Orden de ejecución` with `[backend]`/`[frontend]`/`[P]`/`Depende de:`). Run `/analyze-spec` before implementing a spec and again when closing the phase.
 
 ### Domain docs
 
