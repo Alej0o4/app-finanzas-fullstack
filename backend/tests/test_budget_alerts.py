@@ -10,6 +10,8 @@ verifica el resultado en la bandeja (`GET /api/v1/notifications/`).
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from app.models import models
+
 
 def _now_month_year() -> tuple[int, int]:
     now = datetime.now(UTC)
@@ -21,6 +23,13 @@ def _next_month_year() -> tuple[int, int]:
     return next_month.month, next_month.year
 
 
+def _previous_month_year() -> tuple[int, int]:
+    now = datetime.now(UTC)
+    if now.month == 1:
+        return 12, now.year - 1
+    return now.month - 1, now.year
+
+
 def _notificaciones(client, headers: dict) -> list[dict]:
     response = client.get("/api/v1/notifications/", headers=headers)
     assert response.status_code == 200, response.text
@@ -28,7 +37,14 @@ def _notificaciones(client, headers: dict) -> list[dict]:
 
 
 def _crear_presupuesto(
-    client, headers: dict, categoria_id: int, amount: str, currency: str, month: int, year: int
+    client,
+    headers: dict,
+    categoria_id: int,
+    amount: str,
+    currency: str,
+    month: int,
+    year: int,
+    is_recurring: bool = False,
 ) -> dict:
     response = client.post(
         "/api/v1/budgets/",
@@ -38,6 +54,7 @@ def _crear_presupuesto(
             "month": month,
             "year": year,
             "category_id": categoria_id,
+            "is_recurring": is_recurring,
         },
         headers=headers,
     )
@@ -278,3 +295,88 @@ class TestBudgetAlertsEngine:
         por_budget = {n["budget_id"]: n["type"] for n in notificaciones}
         assert por_budget[presupuesto_cop["id"]] == "budget_threshold_80"
         assert por_budget[presupuesto_usd["id"]] == "budget_threshold_80"
+
+
+class TestClosedMonthDoesNotGenerateRecurringBudgets:
+    """Fase 29 (Decisión B5, Hallazgo H2, T6): el motor de alertas solo genera
+    presupuestos recurrentes para el mes actual o posteriores.
+
+    Antes, cargar un gasto con fecha atrasada clonaba la plantilla recurrente más
+    reciente en ese mes cerrado —incluso tomando una plantilla de un mes posterior— y
+    podía disparar avisos de umbrales de un mes que ya había terminado. Con el
+    dashboard navegable por mes eso se volvía visible: un mes pasado mostraría
+    presupuestos que nunca existieron.
+    """
+
+    def test_expense_dated_in_closed_month_does_not_generate_recurring_budget_in_it(
+        self, client, auth_headers, db_session, test_user, make_account, make_category
+    ):
+        cuenta = make_account(auth_headers, balance="1000000.00")
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        month, year = _now_month_year()
+        mes_pasado, anio_pasado = _previous_month_year()
+
+        # Plantilla recurrente vigente en el MES ACTUAL: es la que el motor clonaría
+        # retroactivamente en el mes cerrado.
+        _crear_presupuesto(client, auth_headers, categoria["id"], "1000.00", "COP", month, year, is_recurring=True)
+
+        # Gasto del 15 del mes cerrado, monto que superaría el 80% del presupuesto clonado.
+        _crear_gasto(
+            client,
+            auth_headers,
+            cuenta["id"],
+            categoria["id"],
+            "900.00",
+            date=datetime(anio_pasado, mes_pasado, 15).isoformat(),
+        )
+
+        filas_mes_pasado = (
+            db_session.query(models.Budget)
+            .filter(
+                models.Budget.user_id == test_user["id"],
+                models.Budget.month == mes_pasado,
+                models.Budget.year == anio_pasado,
+            )
+            .all()
+        )
+        assert filas_mes_pasado == []
+        # Sin presupuesto en ese mes no hay contra qué evaluar → ni un solo aviso
+        assert _notificaciones(client, auth_headers) == []
+
+    def test_expense_dated_in_current_or_future_month_still_generates_the_recurring_budget(
+        self, client, auth_headers, db_session, test_user, make_account, make_category
+    ):
+        """Contracara del guard: la Decisión 13.3.3 (gasto el primer día del mes nuevo
+        antes de abrir el dashboard) sigue intacta — es el motivo del `>=` con el mes
+        actual, no del `>`."""
+        cuenta = make_account(auth_headers, balance="1000000.00")
+        categoria = make_category(auth_headers, name="Vivienda", type="expense")
+        mes_siguiente, anio_siguiente = _next_month_year()
+
+        # Plantilla recurrente en el mes ACTUAL; el gasto va al mes siguiente, donde la
+        # fila recurrente todavía no existe porque el dashboard no se ha abierto.
+        _crear_presupuesto(
+            client, auth_headers, categoria["id"], "1000.00", "COP", *_now_month_year(), is_recurring=True
+        )
+        _crear_gasto(
+            client,
+            auth_headers,
+            cuenta["id"],
+            categoria["id"],
+            "900.00",
+            date=datetime(anio_siguiente, mes_siguiente, 1).isoformat(),
+        )
+
+        filas_mes_siguiente = (
+            db_session.query(models.Budget)
+            .filter(
+                models.Budget.user_id == test_user["id"],
+                models.Budget.month == mes_siguiente,
+                models.Budget.year == anio_siguiente,
+            )
+            .all()
+        )
+        assert len(filas_mes_siguiente) == 1
+        assert filas_mes_siguiente[0].is_recurring is True
+        # Y el aviso se dispara igual: el presupuesto generado por el motor se evalúa
+        assert len(_notificaciones(client, auth_headers)) == 1

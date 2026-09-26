@@ -67,7 +67,12 @@
   toda cuenta cuadra con discrepancia `0.00`. Eso establece una línea de base limpia hacia
   adelante, pero **no detecta desviaciones que ya hayan ocurrido antes de la migración** — no
   existe un snapshot histórico del saldo para auditar el pasado.
-- `highlighted` marca una cuenta como destacada para el dashboard. Si no hay cuentas destacadas, el dashboard muestra todas.
+- `highlighted` marca una cuenta como destacada para el dashboard. Si no hay cuentas destacadas,
+  el dashboard muestra todas. Desde Fase 29 el filtro aplica **solo a los agregados de
+  `GET /dashboard/summary`** (`balances`, `monthly_income_by_currency`,
+  `monthly_expense_by_currency`); las barras de `category-distribution`, el `spent` de los
+  presupuestos y los campos `first_transaction_month` / `expense_currencies` del summary usan
+  todas las cuentas (ver la sección "Dashboard").
 
 ## Categorías
 
@@ -114,10 +119,27 @@
 
 ## Presupuestos
 
-- Un usuario solo puede tener un presupuesto por categoría, mes y año.
+- Un usuario solo puede tener un presupuesto por categoría, mes, año **y moneda** (Fase 17
+  §17.2.2: la unicidad es un índice único parcial sobre filas activas,
+  `(user_id, category_id, month, year, currency)` — dos presupuestos de la misma categoría en
+  el mismo período son válidos si están en monedas distintas).
 - La categoría del presupuesto debe existir y estar disponible para el usuario.
-- El progreso del presupuesto se calcula sobre gastos del mes actual.
-- Los presupuestos también pueden listarse por mes y año.
+- El progreso del presupuesto se calcula sobre los gastos del **período consultado**, no solo
+  del mes actual (Fase 29): `GET /dashboard/budgets-progress` con `?year=&month=` devuelve los
+  presupuestos de ese mes con su gasto real de ese mes. El `spent` suma transacciones de
+  **todas** las cuentas del usuario en la moneda del presupuesto — no solo las destacadas — y
+  sale del mismo cálculo que el motor de alertas, para que la vista y el aviso no divergan.
+- La generación perezosa de las filas recurrentes (plantilla `is_recurring`) depende del
+  caller: `budgets-progress` genera **solo para el mes actual**, y el motor de alertas
+  (disparado por crear/actualizar un gasto, con el mes de la fecha de esa transacción) genera
+  solo para el mes actual **o posterior** (Fase 29). Por eso un gasto cargado con fecha
+  atrasada en un mes cerrado ya no crea presupuestos retroactivos ni dispara avisos de ese
+  mes; los presupuestos que ya existían en ese mes siguen evaluándose. `GET /budgets/?month=&year=`
+  sigue generando para cualquier período, incluidos los ya cerrados (fuera del guard de la
+  Fase 29, registrado en `docs/TODO.md`).
+- Los presupuestos se pueden listar por mes y año en `GET /budgets/` (filtros opcionales y
+  combinables). Ese listado no calcula progreso: el gasto real por presupuesto solo lo entrega
+  `GET /dashboard/budgets-progress`.
 
 ## Eliminaciones
 
@@ -133,6 +155,24 @@
 - El resumen usa datos agregados del backend.
 - El progreso de presupuestos ya sale calculado para uso directo del Frontend.
 - El dashboard expone además serie temporal de flujo de caja y distribución por categoría.
+- El período consultado (`?year=&month=`, ambos o ninguno) es un mes calendario **UTC**: sin
+  parámetros es el mes actual. El mes en curso tiene techo "ahora" — una transacción con fecha
+  futura del mismo mes no cuenta como gasto del mes — y un mes ya cerrado llega hasta el
+  último día a las 23:59:59.
+- `balances` es siempre el saldo **actual** (stock) de las cuentas, con independencia del mes
+  consultado: no es un saldo histórico ni una foto del mes pedido.
+- `monthly_flow_balance` tiene dos bases y `monthly_flow_basis` dice cuál: `"declared"` en el
+  mes en curso (ingreso mensual declarado − gasto del mes, `null` si el usuario todavía no
+  fijó `monthly_income`) y `"actual"` en un mes cerrado (ingresos reales registrados − gastos
+  reales, nunca `null`). En las dos bases solo cuenta la moneda preferida: no hay conversión
+  de moneda en ningún punto.
+- El filtro de cuentas destacadas y el resto de las cuentas usan universos distintos **dentro
+  del mismo dashboard** (ver la sección "Cuentas"). Es una inconsistencia conocida, no una
+  decisión redondeada, y está registrada en `docs/TODO.md`.
+- `first_transaction_month` (mes UTC de la transacción más antigua, sobre todas las cuentas) e
+  `expense_currencies` (monedas con gasto en el mes, sobre todas las cuentas) existen para que
+  el frontend navegue el mes y ofrezca el selector de moneda sin recalcular nada; ninguno de
+  los dos está restringido a las cuentas destacadas.
 
 ## Notificaciones (Fase 13 §13.5 / Fase 14 §14.7)
 

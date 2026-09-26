@@ -200,9 +200,59 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     de edición no tiene selector de moneda) — el efecto observable es para callers directos
     de la API por ahora.
 
+- [ ] **Cambiar `preferred_currency` no invalida `dashboardSummary` ni `budgets-progress`
+  (Fase 29, preexistente).**
+  - `useUserPreferences` (`frontend/lib/hooks/useUserPreferences.ts`) invalida `currentUser` y
+    `dashboard.categoryBreakdown` al cambiar la moneda, pero no las dos queries que arman la
+    tarjeta de flujo y los anillos de presupuesto: siguen sirviendo desde cache montos
+    calculados con la moneda anterior hasta que el `staleTime` (1 min) las refresca.
+  - Con la navegación por mes el síntoma es el mismo: la tarjeta se rotula en la moneda nueva y
+    muestra sumas de la vieja. Es un bug de invalidación, no de contrato — la Fase 29 lo
+    mantuvo fuera de alcance y lo dejó anotado acá.
+
 ---
 
 ## 🟡 Integridad y escala
+
+- [ ] **El filtro de cuentas destacadas no es el mismo en todo el dashboard (Fase 29,
+  aceptado).**
+  - `GET /dashboard/summary` filtra `balances`, `monthly_income_by_currency` y
+    `monthly_expense_by_currency` por `highlighted`; en cambio las barras de
+    `category-distribution`, el `spent` de los presupuestos y los campos nuevos
+    `first_transaction_month` / `expense_currencies` cuentan **todas** las cuentas.
+  - Consecuencia visible: la tarjeta de flujo puede no cuadrar con las barras, y una cuenta no
+    destacada aporta a las barras pero no a la tarjeta. Todo usuario nace con su cuenta por
+    defecto destacada, así que el caso "no hay ninguna" es raro.
+  - La Fase 29 lo mantiene a propósito (Decisión Q16) y lo dejó escrito en
+    `backend/docs/BUSINESS_RULES.md`. Unificarlo es una decisión de producto: qué hacer con las
+    cuentas no destacadas (agregarlas al filtro, o sacarlas del filtro y sumar todo).
+
+- [ ] **Mes UTC contra hora Bogotá, y la semana del resumen semanal contra la de Analítica
+  (Fase 29, aceptado).**
+  - El "mes actual" se resuelve en UTC (Decisión B1), así que desde las 19:00 hora Bogotá del
+    último día el backend ya está en el mes siguiente. Es preexistente y la fase no lo empeora;
+    el desfase se acepta como supuesto 1 de la spec, documentado en
+    `backend/docs/API_REFERENCE.md`.
+  - `core/weekly_summary.py` calcula la semana en `America/Bogota` mientras que la semana
+    calendario de Analítica (lunes–domingo) es UTC: los totales de ambos pueden diferir en el
+    borde del domingo noche / lunes.
+
+- [ ] **Techo inconsistente en `GET /accounts/{id}/monthly-summary` (Fase 29, aceptado).**
+  - `api/accounts.py` acota el mes hasta el último día a las 23:59:59 aunque esté en curso,
+    mientras que `dashboard/summary` lo acota a "ahora" (`core/periods.limites_mes_utc`): una
+    transacción con fecha futura del mismo mes cuenta en la tarjeta de la cuenta y no en la del
+    dashboard.
+  - Unificarlo (y darle período consultable, como el summary) quedó fuera de alcance en la
+    Fase 29.
+
+- [ ] **`GET /budgets/?month=&year=` sigue generando presupuestos recurrentes en meses
+  cerrados (Fase 29, aceptado).**
+  - El guard de la Decisión B5 acota al mes actual la generación tanto en
+    `dashboard/budgets-progress` como en el motor de alertas, pero este tercer caller quedó
+    fuera a propósito: listar un mes pasado por la API crea las filas que la plantilla
+    recurrente habría generado, igual que antes de la fase.
+  - Ningún call site del frontend lo usa con período, así que no hay efecto en la app; queda
+    anotado para que no se lea como un descuido cuando se toque `budgets.py`.
 
 - [x] **API keys: TTL opcional y scopes — cerrado como fuera de scope.** *(2026-09-19, pivote a
   uso personal, ver `docs/ROADMAP.md`)*
