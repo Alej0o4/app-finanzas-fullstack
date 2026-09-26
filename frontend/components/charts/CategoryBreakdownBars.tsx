@@ -19,6 +19,9 @@ interface CategoryBreakdownBarsProps {
   /** Moneda para formatear los montos. Si se omite, cae a la preferida global (retrocompatible
    *  con el dashboard, Fase 17 §17.1 — la vista por cuenta pasa la moneda real de la cuenta). */
   currency?: string;
+  /** Fase 29 §F5.4: el dashboard navega por mes, así que su mensaje de "sin gastos" nombra el
+   *  mes visible. Si se omite queda el texto genérico (vista por cuenta, sin período). */
+  emptyMessage?: string;
 }
 
 /**
@@ -35,6 +38,7 @@ export default function CategoryBreakdownBars({
   isError = false,
   onRetry,
   currency,
+  emptyMessage,
 }: CategoryBreakdownBarsProps) {
   const { config } = useAppConfig();
   const rows = data ?? [];
@@ -70,7 +74,7 @@ export default function CategoryBreakdownBars({
       ) : rows.length === 0 ? (
         <EmptyState
           icon={<Wallet size={48} className="opacity-20" />}
-          message="No hay gastos registrados este mes."
+          message={emptyMessage ?? 'No hay gastos registrados este mes.'}
           description="El desglose por categoría aparecerá cuando registres movimientos."
         />
       ) : (

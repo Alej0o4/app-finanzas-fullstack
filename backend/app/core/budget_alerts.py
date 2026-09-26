@@ -7,7 +7,6 @@ no reintroducir el bug de mezclar monedas que ya se corrigió una vez ahí.
 """
 
 import logging
-from calendar import monthrange
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -16,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.notification_dispatch import crear_y_enviar_notificacion
+from app.core.periods import limites_mes_utc
 from app.models import models
 
 logger = logging.getLogger(__name__)
@@ -39,18 +39,15 @@ def spent_por_categoria_y_moneda(
     `evaluate_budget_thresholds_for_category` (escritura de avisos). El motor de
     alertas NO recalcula el gasto de otra forma para no divergir del dashboard.
     """
-    primer_dia = datetime(year, month, 1)
-    ultimo_dia = datetime(year, month, monthrange(year, month)[1], 23, 59, 59)
-    # Si `month`/`year` es el mes en curso, el límite superior real es hoy, no el fin de
-    # calendario del mes — de lo contrario una transacción con fecha futura (mismo mes)
-    # ya cuenta como "gastado" acá aunque category-distribution/cashflow-series (Fase 11
-    # §11.4/Fase 17 §17.1.3) la excluyan por acotar a `hoy`. Para un mes ya cerrado, `hoy`
-    # cae después de `ultimo_dia` y no cambia nada. Para un mes FUTURO (presupuesto/gasto
-    # ya creados para el próximo período, ver test_two_budgets_same_category_
-    # different_currencies_evaluate_own_spent_by_currency) no se acota — `hoy` está antes
-    # de que ese mes empiece, y ese período se evalúa completo desde que se crea.
-    ahora = datetime.now(UTC).replace(tzinfo=None)
-    limite = ahora if primer_dia <= ahora <= ultimo_dia else ultimo_dia
+    # El rango lo acota `core/periods.limites_mes_utc`: techo "ahora" en el mes en curso
+    # (para que una transacción con fecha futura del mismo mes no cuente como "ya
+    # gastado" acá, mientras category-distribution/cashflow-series sí la acotan a `hoy` —
+    # Fase 11 §11.4/Fase 17 §17.1.3) y mes completo en cualquier otro período, incluido
+    # un mes FUTURO: los presupuestos anticipados (creados para el próximo período, ver
+    # test_two_budgets_same_category_different_currencies_evaluate_own_spent_by_currency)
+    # se evalúan completos desde que existen. Esa semántica de mes futuro es
+    # obligatoria y es la razón por la que `limites_mes_utc` no valida nada.
+    primer_dia, limite = limites_mes_utc(year, month, datetime.now(UTC))
 
     spent_rows = (
         db.query(
@@ -111,7 +108,19 @@ def evaluate_budget_thresholds_for_category(db: Session, user_id: int, category_
     # Decisión 13.3.3 (hallazgo 6): si el usuario registra un gasto el primer día de un
     # mes nuevo antes de abrir el dashboard, la fila recurrente de ese mes no existe —
     # sin este paso el aviso de ese mes nunca se dispararía hasta visitar el dashboard.
-    ensure_recurring_budgets_for_period(db, user_id, month, year)
+    #
+    # Fase 29 (Decisión B5, hallazgo H2) acota el paso a períodos >= mes actual UTC. Antes
+    # se llamaba siempre, y como esta función se dispara con la fecha de la transacción,
+    # un gasto cargado con fecha atrasada clonaba la plantilla recurrente en un mes ya
+    # cerrado (incluso tomando una plantilla de un mes posterior) y podía disparar avisos
+    # de umbrales de un mes que ya terminó. Con el guard, mirar el histórico ya no crea
+    # presupuestos retroactivos. Cambio de comportamiento aceptado: un gasto con fecha
+    # atrasada en un mes cerrado ya no crea el presupuesto recurrente de ese mes ni avisa
+    # sus umbrales; los presupuestos que YA existían en ese mes siguen evaluándose igual
+    # (el `if` solo envuelve la generación, no el chequeo de filas de abajo).
+    ahora = datetime.now(UTC)
+    if (year, month) >= (ahora.year, ahora.month):
+        ensure_recurring_budgets_for_period(db, user_id, month, year)
 
     presupuestos = (
         db.query(models.Budget)

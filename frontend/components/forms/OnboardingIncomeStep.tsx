@@ -75,7 +75,6 @@ export default function OnboardingIncomeStep({
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.recentTransactions() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() }),
         queryClient.invalidateQueries({ queryKey: ['analytics-cashflow'] }),

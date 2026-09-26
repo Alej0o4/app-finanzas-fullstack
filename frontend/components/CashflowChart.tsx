@@ -44,6 +44,10 @@ interface CashflowChartProps {
   seriesMode: AnalyticsSeries;
   onSeriesModeChange: (mode: AnalyticsSeries) => void;
   periodType: 'day' | 'month';
+  /** Fase 29 §F7 (H3): moneda de los montos del gráfico (ejes, tooltip y rótulos de las
+   *  barras). Antes se usaba siempre la preferida, y con una cuenta USD el eje salía con
+   *  formato COP. Si se omite, cae a la preferida global. */
+  currency?: string;
 }
 
 export default function CashflowChart({
@@ -53,17 +57,22 @@ export default function CashflowChart({
   seriesMode,
   onSeriesModeChange,
   periodType,
+  currency,
 }: CashflowChartProps) {
   const { config } = useAppConfig();
+  const activeCurrency = currency ?? config.currency;
+  const formatAmount = (amount: number) => formatCurrency(amount, activeCurrency);
   const yAxisWidth = useMemo(() => {
     if (data.length === 0) return 84;
     const maxValue = Math.max(
       ...data.flatMap((item) => [Number(item.income), Number(item.expense)]),
       0
     );
-    const labelLength = formatCurrency(maxValue, config.currency).length;
+    // Se formatea acá y no con `formatAmount` a propósito: la función se recrea en cada render,
+    // entonces meterla en las deps del useMemo lo dejaría sin memoizar.
+    const labelLength = formatCurrency(maxValue, activeCurrency).length;
     return Math.min(Math.max(labelLength * 8 + 30, 84), 160);
-  }, [data, config.currency]);
+  }, [data, activeCurrency]);
 
   return (
     <div className="bg-surface/80 border-border/70 shadow-background/20 rounded-2xl border p-6 shadow-sm backdrop-blur-sm">
@@ -121,7 +130,7 @@ export default function CashflowChart({
                 axisLine={false}
                 width={yAxisWidth}
                 tickMargin={10}
-                tickFormatter={(value) => formatCurrency(Number(value), config.currency)}
+                tickFormatter={(value) => formatAmount(Number(value))}
               />
               <Tooltip
                 cursor={{ fill: 'var(--color-border)', opacity: 0.35 }}
@@ -131,7 +140,7 @@ export default function CashflowChart({
                   borderRadius: '8px',
                   color: 'var(--color-text)',
                 }}
-                formatter={(value) => [formatCurrency(Number(value) || 0, config.currency), '']}
+                formatter={(value) => [formatAmount(Number(value) || 0), '']}
                 labelFormatter={(label) => `Fecha: ${label}`}
               />
               {seriesMode !== 'expense' && (
@@ -146,7 +155,7 @@ export default function CashflowChart({
                     <LabelList
                       dataKey="income"
                       position="top"
-                      formatter={(v) => formatCurrency(Number(v), config.currency)}
+                      formatter={(v) => formatAmount(Number(v))}
                       style={{ fill: 'var(--color-text-muted)', fontSize: 11 }}
                     />
                   )}
@@ -164,7 +173,7 @@ export default function CashflowChart({
                     <LabelList
                       dataKey="expense"
                       position="top"
-                      formatter={(v) => formatCurrency(Number(v), config.currency)}
+                      formatter={(v) => formatAmount(Number(v))}
                       style={{ fill: 'var(--color-text-muted)', fontSize: 11 }}
                     />
                   )}

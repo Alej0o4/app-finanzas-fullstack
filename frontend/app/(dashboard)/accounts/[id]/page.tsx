@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { currentUtcMonth, utcMonthRange } from '@/lib/dateRanges';
 import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useConfirmStore } from '@/store/useConfirmStore';
@@ -51,13 +52,14 @@ export default function AccountDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  // Fechas del mes en curso (mismo patrón EXACTO que dashboard/page.tsx:35-41 —
-  // .toISOString() sin armar strings con getters locales: el backend interpreta las fechas
-  // como UTC y los getters locales recortaban "ahora" 5 horas en America/Bogota, excluyendo
-  // transacciones recién creadas — precedente de bugs de zona horaria Fase 15/parada UX).
+  // Fechas del mes en curso (Fase 29 §F1): los límites salen del helper compartido de
+  // `lib/dateRanges.ts`, que ancla todo en UTC con `Date.UTC`. Antes se armaban con getters
+  // locales (`new Date(now.getFullYear(), now.getMonth(), 1)`) y recién ahí se serializaban a
+  // UTC — esa mezcla dejaba el inicio de mes desplazado 5 horas en America/Bogota y afuera las
+  // transacciones del día 1 (H4, el mismo bug de borde de mes que tenía el dashboard).
   const now = new Date();
-  const monthStartISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const todayISO = now.toISOString();
+  const { year, month } = currentUtcMonth(now);
+  const { start_date: monthStartISO, end_date: todayISO } = utcMonthRange(year, month, now);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);

@@ -702,8 +702,10 @@ Filtros opcionales:
 - `year`
 
 Cuando se pasan `month` y `year`, antes de listar se generan las filas recurrentes
-pendientes de ese período (generación perezosa). Sin filtros devuelve el historial completo
-sin generar nada.
+pendientes de ese período (generación perezosa) — **también si el período ya está
+cerrado**: este endpoint es el único caller de la generación que no acota al mes actual
+(ver "Generación de presupuestos recurrentes" en la sección Dashboard). Sin filtros
+devuelve el historial completo sin generar nada.
 
 ### `PUT /api/v1/budgets/{budget_id}`
 
@@ -724,25 +726,83 @@ disponible para crear uno nuevo de inmediato.
 
 ### `GET /api/v1/dashboard/summary`
 
-Devuelve resumen financiero del mes actual. Solo incluye cuentas marcadas como destacadas (`highlighted=true`); si no hay destacadas, incluye todas. Las monedas se ordenan por la moneda preferida del usuario primero.
+Devuelve el resumen financiero del mes consultado, por defecto el **mes actual**. Las monedas
+se ordenan por la moneda preferida del usuario primero.
 
-Devuelve:
+Parámetros (Fase 29, ambos o ninguno):
 
-- `balances`: array de `{currency, total}` — saldo total por moneda.
+- `year` (opcional): año del mes a consultar.
+- `month` (opcional): mes a consultar, `1..12`.
+
+Sin ninguno de los dos el período es el mes actual y los valores de los campos preexistentes
+son los mismos que antes de la Fase 29 (lo único nuevo son los tres campos agregados más
+abajo). La resolución del período y el acotado del rango viven en `app/core/periods.py`
+(`resolver_mes` y `limites_mes_utc`) y son **UTC**, no la hora local del usuario: el límite
+superior es "ahora" en el mes en curso y el último día a las 23:59:59 en uno ya cerrado. El
+techo en "ahora" evita que una transacción con fecha futura del mismo mes cuente como gasto
+del mes en este endpoint pero no en `category-distribution` / `cashflow-series`, que sí acotan
+a `hoy` (Fase 11 §11.4, Fase 17 §17.1.3).
+
+Errores esperados:
+
+- `422` de dominio — `{"detail": "<mensaje>"}`, con `detail` como string:
+  - "Se deben enviar `year` y `month`, o ninguno." si viene solo uno de los dos.
+  - "`month` debe ser un número entre 1 y 12." si `month` está fuera de rango.
+  - "`year` debe ser un año entre 1 y 9999." si `year` está fuera de rango — el piso no es
+    cosmético: sin él, `datetime(0, …)` del cálculo del rango lanzaría `ValueError` y el
+    cliente vería un `500`.
+  - "No se puede consultar un mes futuro." si `(year, month)` es posterior al mes actual del
+    servidor.
+- `422` de FastAPI — `{"detail": [ ... ]}`, con `detail` como **lista** de errores por campo,
+  si `year` o `month` no son enteros (`?year=abc`). Es la primera validación de este archivo
+  que usa la 422 de dominio de `app/core/exceptions.py`: las dos formas conviven y conviene
+  distinguirlas al parsear la respuesta.
+
+Devuelve (`DashboardSummary`):
+
+- `balances`: array de `{currency, total}` — saldo **actual** (stock) de las cuentas por
+  moneda. No depende del mes consultado: no es un saldo histórico ni una foto del mes pedido.
 - `monthly_income_by_currency`: array de `{currency, total}` — ingresos del mes por moneda.
 - `monthly_expense_by_currency`: array de `{currency, total}` — gastos del mes por moneda.
-- `monthly_flow_balance` (Fase 11 §11.3): ingreso mensual declarado por el usuario
-  (`User.monthly_income`) menos el gasto del mes en su moneda preferida; `null` si el
-  usuario aún no ha fijado `monthly_income` (el frontend distingue "0" de "sin definir").
-  Los gastos en otras monedas no restan — misma limitación de "una moneda a la vez"
-  documentada para `cashflow-series` y `category-distribution`.
+- `monthly_flow_balance` (Fase 11 §11.3, Fase 29): el significado lo determina
+  `monthly_flow_basis`:
+  - `"declared"` (**mes en curso**) — `User.monthly_income` menos el gasto del mes en la
+    moneda preferida; `null` si el usuario todavía no ha fijado `monthly_income` (el frontend
+    distingue "0" de "sin definir").
+  - `"actual"` (**mes ya cerrado**) — ingresos **reales registrados** menos gastos reales de
+    ese mes, en la moneda preferida. **Nunca es `null`**: sin filas vale `0.00`, aunque
+    `monthly_income` sea `null`, para que el histórico siempre tenga un número.
+  - En ambos casos los montos en otras monedas se ignoran, no se convierten — misma
+    limitación de "una moneda a la vez" documentada para `cashflow-series` y
+    `category-distribution`.
+- `monthly_flow_basis`: `"declared" | "actual"` — qué hay detrás de `monthly_flow_balance`. El
+  backend lo decide con su propio reloj; el cliente rotula con este campo en vez de comparar
+  fechas locales (que pueden no coincidir con el mes UTC del servidor).
+- `first_transaction_month` (Fase 29): mes UTC `"YYYY-MM"` de la transacción más antigua del
+  usuario, o `null` si no tiene ninguna. Va sobre **todas** las cuentas (no solo las
+  destacadas) porque gobierna la página entera del dashboard, y respeta el borrado lógico. Es
+  el límite inferior de la navegación por mes del frontend.
+- `expense_currencies` (Fase 29): monedas distintas con gasto (`type == "expense"`) en el mes
+  consultado, sobre **todas** las cuentas, con la preferida primero y el resto alfabético.
+  Es un universo deliberadamente distinto al de `monthly_expense_by_currency` (que solo suma
+  las cuentas destacadas): alimenta el selector de moneda del frontend, que filtra las barras
+  de `category-distribution`, y esas cuentan todas las cuentas. La preferida **no** se agrega
+  si no tiene gasto en el mes.
+
+Universo de cuentas: `balances`, `monthly_income_by_currency` y `monthly_expense_by_currency`
+solo incluyen cuentas marcadas como destacadas (`highlighted=true`); si no hay destacadas,
+incluyen todas. Es el único agregado del dashboard con ese filtro — las barras de
+`category-distribution` y el `spent` de `budgets-progress` cuentan **todas** las cuentas
+(inconsistencia conocida, registrada en `docs/TODO.md`; `first_transaction_month` y
+`expense_currencies` también van sobre todas).
 
 ### `GET /api/v1/dashboard/budgets-progress`
 
-Devuelve progreso de presupuestos del mes actual con:
+Devuelve el progreso de los presupuestos del mes consultado, por defecto el mes actual, con:
 
 - `budget_id`
 - `category_name`
+- `category_icon` (string | null, Fase 24 §24.4)
 - `amount_limit`
 - `spent`
 - `percentage`
@@ -751,13 +811,49 @@ Devuelve progreso de presupuestos del mes actual con:
 
 Parámetros:
 
+- `year` / `month` (opcionales, Fase 29): mismo contrato y mismos `422` que
+  `GET /api/v1/dashboard/summary` — ambos o ninguno, sin ninguno es el mes actual.
 - `currency` (opcional, Fase 17 §17.2.3): si se pasa, solo devuelve los presupuestos de esa
   moneda. **Solo filtra filas — no recalcula `spent`**: cada fila filtrada conserva el
   mismo `spent` (agregado de todas las cuentas del usuario en esa moneda) que sin el
   filtro (Decisión P4 del spec de Fase 17).
 
-Antes de calcular, genera las filas de presupuestos recurrentes pendientes del mes en
-curso — por eso los presupuestos "reaparecen" solos cada mes al entrar al dashboard.
+Filtra por `Budget.month`/`Budget.year` del período resuelto y calcula `spent` con ese mismo
+período, no con el mes en curso: en un mes cerrado el gasto es el de ese mes completo, sin el
+techo de "hoy" que sí aplica al mes actual. `spent` se calcula sobre **todas** las cuentas del
+usuario (no solo las destacadas) y con el mismo criterio que el motor de alertas
+(`app/core/budget_alerts.spent_por_categoria_y_moneda`) — "cuánto gasté" no puede divergir
+entre la vista y el aviso.
+
+Antes de calcular, genera las filas de presupuestos recurrentes pendientes del período —
+**solo si ese período es el mes actual** (Fase 29). Por eso los presupuestos del mes en curso
+"reaparecen" solos al entrar al dashboard, y mirar un mes pasado muestra los presupuestos que
+existían, sin filas retroactivas creadas por la plantilla recurrente. Ver "Generación de
+presupuestos recurrentes" abajo.
+
+Errores esperados:
+
+- Los mismos `422` de período de `GET /api/v1/dashboard/summary`.
+
+### Generación de presupuestos recurrentes
+
+La generación perezosa de filas a partir de la plantilla `is_recurring` (Fase 8 §3) tiene
+**tres** callers, no uno, y cada uno tiene su propio límite de período:
+
+- `GET /api/v1/dashboard/budgets-progress` — genera para el período pedido, pero **solo si es
+  el mes actual** (Fase 29). Es el camino normal: el dashboard es la página de aterrizaje.
+- El motor de alertas (`app/core/budget_alerts.evaluate_budget_thresholds_for_category`,
+  disparado por `POST`/`PUT /api/v1/transactions/` de tipo `expense` después de confirmar el
+  movimiento contable) — genera para el mes de la **fecha de la transacción**, pero **solo si
+  ese mes es el actual o posterior** (Fase 29). Conserva el caso de la Decisión 13.3.3
+  (registrar un gasto el día 1 de un mes nuevo antes de abrir el dashboard) y evita que un
+  gasto cargado con fecha atrasada clone la plantilla más reciente en un mes ya cerrado. Los
+  presupuestos que **sí** existían en ese mes siguen evaluándose: el guard envuelve solo la
+  generación, no el chequeo de umbrales.
+- `GET /api/v1/budgets/?month=&year=` — genera para el período pedido sin restricción de mes:
+  sigue creando filas recurrentes también en meses ya cerrados. Queda fuera del guard de la
+  Fase 29 a propósito (deuda registrada en `docs/TODO.md`); el frontend no lo llama con
+  período.
 
 ### `GET /api/v1/dashboard/cashflow-series`
 
@@ -811,11 +907,13 @@ Salida:
 
 ## Notificaciones (Fase 13 §13.5)
 
-Las notificaciones las escriben el motor de alertas de presupuestos (`GET /api/v1/budgets/` +
-transacciones de gasto que cruzan el 80 %/100 % del límite, ver §13.3) y el resumen semanal
-automático (Fase 14 §14.3, un `weekly_summary` por usuario y semana ISO cada lunes). Estos
-endpoints solo leen/escriben el estado de la bandeja. Auth: `Bearer`, sin rate limiting
-(mismo criterio que budgets/dashboard).
+Las notificaciones las escriben el motor de alertas de presupuestos (una transacción de gasto que
+cruza el 80 %/100 % del límite de un presupuesto, evaluado sobre el mes de la fecha de esa
+transacción, ver §13.3 — el mismo motor que genera los presupuestos recurrentes del mes actual o
+posterior, ver "Generación de presupuestos recurrentes") y el resumen semanal automático (Fase 14
+§14.3, un `weekly_summary` por usuario y semana ISO cada lunes). Estos endpoints solo
+leen/escriben el estado de la bandeja. Auth: `Bearer`, sin rate limiting (mismo criterio que
+budgets/dashboard).
 
 ### `GET /api/v1/notifications/`
 

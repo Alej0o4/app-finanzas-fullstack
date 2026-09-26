@@ -44,10 +44,10 @@ Las claves deben mantenerse consistentes entre páginas y componentes.
     `categories/page.tsx`), sin key nueva que invalidar.
 - `budgets`
 - `transactions`
-- `dashboardSummary`
-- `budgets-progress`
-- `recent-transactions`
-- `dashboard-category-breakdown` (Fase 11 §11.4)
+- `dashboardSummary` — con segmento opcional de mes (Fase 29 §F2, ver "Keys con mes" abajo).
+- `budgets-progress` — idem.
+- `dashboard-category-breakdown` (Fase 11 §11.4) — con segmentos opcionales de mes y moneda
+  (Fase 29 §F2).
 - `accounts-summary` (Fase 11 §11.5)
 - `notifications` (Fase 13 §13.5)
 - `notifications-unread-count` (Fase 13 §13.5)
@@ -75,14 +75,58 @@ Las claves deben mantenerse consistentes entre páginas y componentes.
   viaja explícito en la key (corrección del Bug real documentado en Fase 19,
   "Analítica sin selector de cuenta").
 
+### Keys con mes (Fase 29 §F2)
+
+El dashboard navega por mes (`?month=YYYY-MM`, Fase 29 §F5.1), así que tres factories de
+`lib/queryKeys.ts` ganaron argumentos opcionales. **Regla: un segmento opcional se omite del
+array cuando no se pasa, nunca queda como `undefined`**:
+
+| Factory                                          | Sin argumentos                     | Con argumentos                                                   |
+| ------------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------- |
+| `dashboard.summary(month?)`                      | `['dashboardSummary']`             | `['dashboardSummary', 'YYYY-MM']`                                |
+| `budgets.progress(month?)`                       | `['budgets-progress']`             | `['budgets-progress', 'YYYY-MM']`                                |
+| `dashboard.categoryBreakdown(month?, currency?)` | `['dashboard-category-breakdown']` | `['dashboard-category-breakdown', month \| undefined, currency]` |
+
+- **Por qué:** TanStack compara el prefijo elemento a elemento. Todas las invalidaciones
+  existentes llaman a estas factories **sin argumentos**
+  (`invalidateQueries({ queryKey: queryKeys.dashboard.summary() })`); con la key sin segmento
+  siguen matcheando todos los meses cacheados. Si la factory devolviera
+  `['dashboardSummary', undefined]`, dejarían de matchear y capturar una transacción no
+  refrescaría el resumen. Por eso ningún call site de invalidación cambió en Fase 29.
+- **El mes en curso se cachea con la key sin mes** — la misma de antes de Fase 29. El
+  dashboard pasa `month` solo si el mes visible no es el actual (y tampoco envía
+  `year`/`month` al backend en ese caso, para no depender del reloj del navegador en el
+  cambio de mes).
+- `dashboard.categoryBreakdown` es la excepción parcial: la moneda de los chips siempre se
+  pasa, así que en el mes en curso la key queda `['dashboard-category-breakdown', undefined,
+'COP']`. La invalidación sin argumentos la sigue cubriendo por prefijo.
+- El mes entra como `'YYYY-MM'` (segmento estable), nunca como un ISO de instante: un valor
+  que cambia en cada render generaría una key nueva por render.
+
+### Navegación de mes sin skeletons (`keepPreviousData`)
+
+Las queries que dependen del mes visible del dashboard usan
+`placeholderData: keepPreviousData` (Fase 29 §F5.1): al tocar `◀ ▶` se sigue mostrando el mes
+anterior hasta que llega el nuevo, en vez de volver a los skeletons. Aplica a:
+
+- `dashboardSummary` y `budgets-progress` (`app/(dashboard)/page.tsx`);
+- `dashboard-category-breakdown` (`components/charts/CategoryBreakdownSection.tsx`);
+- "Últimas 5 del mes" vía `useTransactions` (`components/transactions/RecentTransactionsSection.tsx`).
+
+Con `keepPreviousData`, `isLoading` solo es `true` en la carga inicial; si un componente
+necesita distinguir "dato del mes anterior en pantalla", leer `isPlaceholderData` (el dashboard
+lo usa para que el formulario inline de ingreso mensual, que solo existe en el mes en curso, no
+parpadee con el placeholder al navegar hacia un mes pasado, y para que la tarjeta principal
+cambie sus cifras por skeletons —con `aria-busy`— en vez de pintar el balance del mes anterior
+bajo el rótulo del mes nuevo).
+
 ## Invalidation patterns
 
 ### Crear transacción
 
 Cuando se crea una transacción, se invalidan como mínimo:
 
-- `transactions`
-- `recent-transactions`
+- `transactions` (cubre también "Últimas 5 del mes" del dashboard, Fase 29)
 - `accounts`
 - `dashboardSummary`
 - `budgets-progress`
@@ -95,7 +139,7 @@ Cuando se crea una transacción, se invalidan como mínimo:
 
 Después de editar:
 
-- `transactions`
+- `transactions` (cubre también "Últimas 5 del mes" del dashboard, Fase 29)
 - vista específica por cuenta o categoría si aplica
 - `accounts`
 - `dashboardSummary`
@@ -107,7 +151,7 @@ Después de editar:
 
 Después de borrar:
 
-- `transactions`
+- `transactions` (cubre también "Últimas 5 del mes" del dashboard, Fase 29)
 - `accounts`
 - `dashboardSummary`
 - `budgets-progress`
@@ -259,10 +303,16 @@ los call sites — no cambia ningún comportamiento de cacheo):
 - `useAccounts(options?)` — `GET /accounts/` → `Account[]`. Segundo parámetro opcional
   `{ enabled }` para queries condicionales (p. ej. `TransactionModal` con `enabled: isOpen`).
 - `useCategories(options?)` — `GET /categories/` → `Category[]` (incluye `is_hidden`, Fase 18).
-- `useTransactions(params)` — `GET /transactions/` → `PaginatedResponse<Transaction>`.
+- `useTransactions(params, options?)` — `GET /transactions/` → `PaginatedResponse<Transaction>`.
   `params` es el mismo objeto de filtros que armaba `transactions/page.tsx` (skip, limit,
   account_id, category_id, start_date, end_date); se pasa tal cual a
-  `queryKeys.transactions.filtered(params)`. Único consumidor: `transactions/page.tsx`.
+  `queryKeys.transactions.filtered(params)`. Como `params` entra en la key, el caller lo
+  memoiza (`useMemo`) para que no cambie de identidad en cada render.
+  - Fase 29 §F2: segundo argumento opcional con opciones de `useQuery` (todo salvo
+    `queryKey`/`queryFn`, que fija el hook) — lo usa el dashboard para
+    `placeholderData: keepPreviousData`. Los callers sin opciones quedan idénticos.
+  - Consumidores: `transactions/page.tsx` y `RecentTransactionsSection` del dashboard
+    (`{ limit: 5, start_date, end_date }` del mes visible).
 
 Solo cubren **lecturas**. Las mutaciones quedan en cada página con sus listas de
 invalidación heterogéneas (Decisión Q3 de la spec de Fase 25) — no forzarlas a un hook
@@ -324,8 +374,14 @@ Uso actual:
 - `transactions`: `start`, `end`, `category` (default `'all'`), `account` (default `'all'`),
   `preset` (default `'all'`). Un link con `?preset=month` sin `start`/`end` siembra las
   fechas del preset al montar.
-- `analytics`: `bar` (`'30d'`), `series` (`'both'`), `donut` (`'month'`), `type`
-  (`'expense'`), `neto` (`'false'`).
+- `dashboard` (Fase 29 §F5.1): `month` (`'YYYY-MM'`, default `''` = mes en curso; un mes
+  futuro o inválido cae al actual). El mes en curso nunca se escribe en la URL.
+- `analytics`: `period` (`'month'`), `ref` (`''` = período en curso; Fase 29 §F6), `start`/`end`
+  (solo con `period=custom`), `currency` (`''` = moneda preferida; Fase 29 §F6.2), `account`
+  (`'all'`), `series` (`'both'`), `type` (`'expense'`), `neto` (`'false'`), `reference`
+  (`'expense-total'`). Los cambios que tocan varios params a la vez (preset + `ref`, cuenta +
+  `currency`) van por `useQueryParamsBatch` en un solo `router.replace`: dos setters de
+  `useQueryParamState` seguidos en el mismo handler se pisan.
 
 ## Patrones recomendados
 
@@ -339,16 +395,37 @@ Uso actual:
 
 ### Dashboard
 
-- Resumen (incluye `monthly_flow_balance`, Fase 11 §11.3): `dashboardSummary`
-- Progreso de presupuestos: `budgets-progress`
-- Transacciones recientes: `recent-transactions`
-- Desglose por categoría del mes (Fase 11 §11.4): `dashboard-category-breakdown`
+Todas las queries siguen al mes visible (`?month=`) y usan `keepPreviousData` (ver "Keys con
+mes" arriba).
+
+- Resumen (incluye `monthly_flow_balance`, Fase 11 §11.3): `dashboardSummary` / `dashboardSummary, mes`
+- Progreso de presupuestos: `budgets-progress` / `budgets-progress, mes`
+- Últimas 5 del mes (Fase 29 §F5.5): `useTransactions({ limit: 5, start_date, end_date })` →
+  `transactions, params`. Reemplaza a la antigua key `recent-transactions`
+  (`queryKeys.dashboard.recentTransactions()`), que se retiró junto con sus 3 invalidaciones
+  (`TransactionModal`, `TransactionCaptureForm`, `OnboardingIncomeStep`). Esa key solo se
+  invalidaba al crear, así que editar o borrar dejaba la lista vieja; ahora la cubre la
+  invalidación de `transactions` que ya hacen todas las mutaciones.
+- Desglose por categoría del mes (Fase 11 §11.4): `dashboard-category-breakdown, mes?, moneda`
+  — la moneda la eligen los chips de `CategoryBreakdownSection` (Fase 29 §F5.4).
 
 ### Analytics
 
 - Cashflow: `analytics-cashflow` (con segmentos opcionales `accountId`/`currency`, ver
   "Vista específica" arriba)
 - Categorías: `analytics-categories` (con `neto` y los mismos segmentos opcionales de cuenta/moneda)
+- El rango de fechas de la key sale de `buildDateRange(period, ref, start, end, now)`
+  (`lib/dateRanges.ts`). El `end_date` del período en curso va dentro de la key, así que `now`
+  no puede cambiar en cada render: la página usa el inicio del día UTC, memoizado sobre
+  `utcDayKey(new Date())` — estable durante el día, pero avanza al cambiar de día (antes
+  quedaba congelado al montar). El período en curso termina al **fin del día UTC**
+  (`endOfUtcDay`, 23:59:59.999Z), no en "ahora": lo que se capture hoy con hora real
+  (`/capture`, atajos por API key) entra en el refetch que dispara su invalidación.
+- `enabled` (Fase 29 §F6.2): las dos queries esperan a que haya moneda efectiva **y**, si la URL
+  trae `?currency=` o `?account=<id>`, a que `/accounts/` resuelva (o falle). Sin eso, mientras
+  las cuentas cargan las opciones de moneda solo conocen la preferida (y la moneda de la cuenta
+  elegida es desconocida), la moneda efectiva caería a la preferida y se haría un fetch en una
+  moneda que no es la pedida, seguido de un segundo fetch correcto.
 
 ### Transacciones
 

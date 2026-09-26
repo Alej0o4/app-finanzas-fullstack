@@ -98,7 +98,8 @@ angosto para que el logout revocara server-side; deadlock en el interceptor de r
 frontend si el refresh mismo devolvía 401) — ver `docs/CHANGELOG.md` para el detalle completo.
 Spec: `docs/specs/fase_26_spec.md`.
 
-La siguiente fase planeada es la 29 — ver "Fase 29 — en definición" abajo.
+La Fase 29 (navegación por mes + selector de moneda) se completó el 2026-09-26 — ver "Fase 29 —
+completada" abajo.
 
 ---
 
@@ -125,12 +126,12 @@ próxima fase (29) retoma el backlog priorizado abajo.
 
 ---
 
-## Fase 29 — en definición (grilling 2026-09-26): navegación por mes y selector de moneda
+## Fase 29 — completada (2026-09-26): navegación por mes y selector de moneda
 
 Primera fila del backlog ("Filtros de fecha y categoría en dashboard"), redefinida en el
-`/grilling` del 2026-09-26. **Estado: grilling cerrado con entendimiento compartido; siguiente
-paso `/to-spec` → `docs/specs/fase_29_spec.md`.** Esta sección es la entrada de ese paso — las
-decisiones de abajo ya están tomadas por el dueño, no son propuestas.
+`/grilling` del 2026-09-26. **Estado: implementada y cerrada el 2026-09-26** — spec en `docs/specs/fase_29_spec.md`, resumen
+en `docs/CHANGELOG.md`. Esta sección queda como registro del grilling que la originó (decisiones
+Q1–Q16, tomadas por el dueño).
 
 **Cambio de alcance respecto al backlog original:** el **filtro por categoría queda fuera** (el
 dueño quiere pensarlo más a fondo, ver "Fuera de la Fase 29" abajo). En su lugar entra un
@@ -236,8 +237,8 @@ Ver también `docs/TODO.md` para deuda técnica y bugs confirmados no ligados a 
 ## Backlog priorizado — reordenado 2026-09-19 para uso personal
 
 Con las Fases 27–28 cerradas (arriba), este backlog retoma la numeración desde **Fase 29**: el
-primer candidato de la tabla de abajo (navegación por mes + selector de moneda) está en
-definición — ver "Fase 29 — en definición" arriba.
+primer candidato de la tabla de abajo (navegación por mes + selector de moneda) se completó como
+Fase 29 el 2026-09-26; la próxima fase sale del resto de la tabla.
 
 Criterio de prioridad: ¿esto hace que trackear y entender mis propios gastos sea más fácil o más
 claro? Ya no hay criterio de "adquisición", "retención de usuarios" ni "efecto wow" de
@@ -245,7 +246,6 @@ marketing — se reformulan abajo en términos de valor de uso personal directo.
 
 | Prioridad | Feature | Nota |
 |---|---|---|
-| Alta | **Navegación por mes en dashboard + selector de moneda** → **Fase 29, en definición** | Antes "Filtros de fecha y categoría en dashboard"; redefinida en el grilling 2026-09-26 (ver sección "Fase 29" arriba). El filtro por categoría se separó a su propia fila. |
 | Media | **Filtro por categoría** (dashboard/Analítica) | Separado de la Fase 29 el 2026-09-26 — el dueño quiere revisarlo más a fondo antes de decidir alcance (¿una o varias categorías? ¿qué gráficos filtra? interacción con "ocultar categoría" de la dona). `GET /transactions/` ya soporta `category_id`; `category-distribution`/`cashflow-series` todavía no. |
 | Alta | **Automatización de ingresos/gastos recurrentes** | El scheduler ya existe desde Fase 14. Reduce fricción de captura, que es tiempo que se puede invertir en mirar los datos en vez de cargarlos. |
 | Alta | **Sinking funds** (gastos distribuidos en cuotas mensuales virtuales) | Validado por YNAB para presupuesto personal serio. Encaja directo con "cuánto me queda" del dashboard de flujo. |

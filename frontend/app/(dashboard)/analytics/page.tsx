@@ -8,6 +8,14 @@ import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useAccounts } from '@/lib/hooks/useAccounts';
 import { useState, useMemo, Suspense } from 'react';
 import { useQueryParamState, useQueryParamsBatch } from '@/hooks/useQueryParamState';
+import {
+  type AnalyticsPeriod,
+  buildDateRange,
+  formatPeriodLabel,
+  normalizeRef,
+  shiftPeriodRef,
+  utcDayKey,
+} from '@/lib/dateRanges';
 import CashflowChart, { type AnalyticsSeries } from '@/components/CashflowChart';
 import CategoryDonutChart, {
   type CategoryType,
@@ -16,9 +24,9 @@ import CategoryDonutChart, {
 import AnalyticsSummary from '@/components/AnalyticsSummary';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
+import SegmentedControl from '@/components/ui/SegmentedControl';
+import PeriodNavigator from '@/components/PeriodNavigator';
 import Skeleton from '@/components/ui/Skeleton';
-
-export type AnalyticsPeriod = 'week' | 'month' | 'year' | 'custom';
 
 const PERIOD_OPTIONS: { value: AnalyticsPeriod; label: string }[] = [
   { value: 'week', label: 'Esta semana' },
@@ -26,64 +34,6 @@ const PERIOD_OPTIONS: { value: AnalyticsPeriod; label: string }[] = [
   { value: 'year', label: 'Este año' },
   { value: 'custom', label: 'Personalizado' },
 ];
-
-// Un solo rango de fechas alimenta la tarjeta de KPIs, el gráfico de barras y la dona — antes
-// cada uno tenía su propio selector de período independiente, y solo el de barras afectaba los
-// números de arriba, lo cual era confuso (Fase de discusión UX, 2026-09-06).
-//
-// .toISOString() manda el instante UTC real. Un string armado a mano con los getters locales
-// (getHours() etc.) sin sufijo de zona horaria se interpretaba como UTC en el backend (sesión
-// de Postgres en UTC) — con el servidor en America/Bogota (UTC-5), eso recortaba "ahora" 5 horas
-// antes del real y excluía del todo las transacciones recién creadas de estos rangos.
-const buildDateRange = (period: AnalyticsPeriod, customStart: string, customEnd: string) => {
-  const now = new Date();
-
-  if (period === 'week') {
-    const start = new Date(now);
-    start.setDate(now.getDate() - 6);
-    return {
-      start_date: start.toISOString(),
-      end_date: now.toISOString(),
-      granularity: 'day' as const,
-    };
-  }
-
-  if (period === 'year') {
-    // Date.UTC (no el constructor local `new Date(y, 0, 1)`): un límite de calendario como
-    // "inicio de año" debe anclarse en UTC porque el backend guarda y compara fechas en UTC
-    // (sesión de Postgres en UTC) — construirlo con getters locales lo desplaza por el offset
-    // de la zona horaria del navegador y excluye transacciones del borde del período (mismo
-    // bug ya corregido para el dashboard, ver comentario de buildDateRange más arriba).
-    return {
-      start_date: new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString(),
-      end_date: now.toISOString(),
-      granularity: 'month' as const,
-    };
-  }
-
-  if (period === 'custom' && customStart && customEnd) {
-    // 'Z' explícito: el input type=date entrega "YYYY-MM-DD" sin zona horaria — sin el
-    // sufijo, `new Date(...)` lo interpreta en hora local y desplaza el límite (mismo
-    // problema que el de 'year'/'month').
-    const start = new Date(`${customStart}T00:00:00Z`);
-    const end = new Date(`${customEnd}T23:59:59Z`);
-    const spanDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
-    // El backend de cashflow-series solo agrupa por 'day' o 'month' (sin 'week') — un rango
-    // personalizado largo usa 'month' para no devolver cientos de barras diarias.
-    return {
-      start_date: start.toISOString(),
-      end_date: end.toISOString(),
-      granularity: spanDays > 60 ? ('month' as const) : ('day' as const),
-    };
-  }
-
-  // 'month' (default) y fallback de 'custom' mientras el usuario no completa el rango.
-  return {
-    start_date: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
-    end_date: now.toISOString(),
-    granularity: 'day' as const,
-  };
-};
 
 // Fase 13 §13.6: validadores read-time de los query params de analytics. Un link inválido
 // (?period=abc) devolvía strings crudos que luego se casteaban a ciegas; ahora el hook devuelve
@@ -97,6 +47,17 @@ const validatePeriod = (raw: string): AnalyticsPeriod =>
 // Mismo patrón que transactions/page.tsx: whitelist de formato para start/end (rango
 // personalizado), sin reescribir la URL con el valor corregido.
 const validateDateParam = (raw: string) => (/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : '');
+
+// Fase 29 §F6.1 (Q36): `?ref=YYYY-MM-DD` es el inicio **absoluto** del período, no un offset
+// relativo, para que el enlace siga apuntando al mismo período mañana. Reusa el validador de
+// fecha: el formato es el mismo y la normalización al inicio del período la hace
+// `buildDateRange`/`normalizeRef` en lectura (la URL no se reescribe con el valor corregido, Fase
+// 13 §13.6).
+const validateRef = validateDateParam;
+
+// Fase 29 §F6.2 (Q14): ISO 4217 en mayúsculas. Lo que no matchea cae a `''`, que equivale a la
+// moneda preferida (ver `effectiveCurrency`), así que un link con `?currency=btl` no rompe la vista.
+const validateCurrency = (raw: string) => (/^[A-Z]{3}$/.test(raw) ? raw : '');
 
 const validateSeriesMode = (raw: string): AnalyticsSeries =>
   (['both', 'income', 'expense'] as const).includes(raw as AnalyticsSeries)
@@ -130,9 +91,15 @@ function AnalyticsPageContent() {
   // esperada de un link compartible). hiddenCategories sigue en useState (Decisión 12.1.3).
   // Fase 13 §13.6: cada valor sale validado del hook (whitelist tipada), sin casts locales.
   const [period] = useQueryParamState('period', 'month', validatePeriod);
+  const [ref] = useQueryParamState('ref', '', validateRef);
   const [customStart] = useQueryParamState('start', '', validateDateParam);
   const [customEnd] = useQueryParamState('end', '', validateDateParam);
   const setPeriodParams = useQueryParamsBatch();
+  // Segundo batch para cuenta + moneda: un solo `router.replace` para los dos params. Dos setters
+  // de `useQueryParamState` seguidos en el mismo handler se pisan (ambos parten del mismo snapshot
+  // de `searchParams` capturado por closure) — de ahí el hook.
+  const setAccountParams = useQueryParamsBatch();
+  const [currencyParam, setCurrencyParam] = useQueryParamState('currency', '', validateCurrency);
   const [seriesMode, setSeriesMode] = useQueryParamState('series', 'both', validateSeriesMode);
   const [categoryType, setCategoryType] = useQueryParamState(
     'type',
@@ -149,43 +116,120 @@ function AnalyticsPageContent() {
   // Fase de correcciones post-onboarding: antes analítica no tenía forma de elegir cuenta y
   // siempre agregaba todas — ahora es explícito y en la URL (link compartible, mismo criterio
   // de Decisión 12.1.2 que el resto de los filtros de esta página).
-  const [accountFilter, setAccountFilter] = useQueryParamState(
-    'account',
-    'all',
-    validateAccountParam
-  );
+  const [accountFilter] = useQueryParamState('account', 'all', validateAccountParam);
 
   const netMode = netoRaw === 'true';
   const accountId = accountFilter !== 'all' ? Number(accountFilter) : undefined;
 
-  const { data: accounts } = useAccounts();
+  const { data: accounts, isPending: accountsPending } = useAccounts();
 
   // `currency` y `account_id` son ortogonales en el backend (Fase 17 §17.1.3) — al
   // filtrar por una cuenta hay que pasar SU moneda explícita, si no la vista se queda
   // pidiendo la moneda preferida del usuario y una cuenta en otra moneda siempre da $0.
   const selectedAccount = accounts?.find((account) => account.id === accountId);
-  const effectiveCurrency = selectedAccount?.currency ?? user?.preferred_currency;
+  const preferredCurrency = user?.preferred_currency;
 
-  // "Todas las cuentas" no es literal: sigue agregando en una sola moneda (nunca se
-  // mezclan, Fase 11 §11.1) — cualquier cuenta en otra moneda que la preferida queda
-  // afuera en silencio. Se lo hacemos explícito al usuario en vez de dejarlo implícito.
-  const excludedCurrencyAccounts = useMemo(() => {
-    if (accountFilter !== 'all' || !accounts || !effectiveCurrency) return [];
-    return accounts.filter((account) => account.currency !== effectiveCurrency);
-  }, [accountFilter, accounts, effectiveCurrency]);
+  // Fase 29 §F6.2 (Q14, User Story 42): las monedas en las que el usuario tiene cuentas, más la
+  // preferida — sin sumar la preferida, alguien que solo tiene cuentas USD (con preferencia COP)
+  // no podría elegir la moneda que sí puede consultar. Va primera para que el chip arranque donde
+  // siempre (User Story 23); el resto en orden alfabético para que las opciones no bailen.
+  const currencyOptions = useMemo(() => {
+    const codes = new Set(accounts?.map((account) => account.currency));
+    if (preferredCurrency) codes.add(preferredCurrency);
+    return [...codes].sort((a, b) => {
+      if (a === preferredCurrency) return -1;
+      if (b === preferredCurrency) return 1;
+      return a.localeCompare(b);
+    });
+  }, [accounts, preferredCurrency]);
 
-  // Un solo rango de fechas para las 3 secciones (KPIs, barras, dona) — ver buildDateRange.
+  // Con una cuenta elegida manda la moneda de esa cuenta y los chips desaparecen (User Story 43).
+  // Un `?currency=` que no está entre las opciones —moneda ajena, o de una cuenta que ya no
+  // existe— cae a la preferida en vez de pedir una vista vacía.
+  const effectiveCurrency =
+    selectedAccount?.currency ??
+    (currencyOptions.includes(currencyParam) ? currencyParam : preferredCurrency);
+
+  // Fase 29 §F6.2: con `?currency=` en la URL y `/accounts/` todavía en vuelo, `currencyOptions`
+  // solo conoce la preferida, así que la moneda efectiva sería un chute — las queries dispararían
+  // un fetch en una moneda que no es la elegida y después habría que corregirlo con un segundo
+  // fetch. Lo mismo con `?account=<id>`: sin `/accounts/` no se conoce la moneda de la cuenta,
+  // `selectedAccount` es `undefined` y la moneda efectiva cae a la preferida (un fetch en $0 COP
+  // para una cuenta USD, y luego el correcto). En los dos casos se espera a que las cuentas
+  // resuelvan (o fallen: si fallan, se sigue con la preferida en vez de dejar la vista colgada).
+  //
+  // El primer término conserva el `enabled` que ya estaba: esperar a que `effectiveCurrency`
+  // estuviera resuelto (depende de /users/me y /accounts/, que llegan en paralelo) era el fix
+  // del bug de la vista en $0 al seleccionar una cuenta USD.
+  const waitingForAccounts = (!!currencyParam || accountFilter !== 'all') && accountsPending;
+  const queriesEnabled = !!effectiveCurrency && !waitingForAccounts;
+
+  // Un solo reloj para toda la vista: `buildDateRange` y `formatPeriodLabel` lo reciben
+  // inyectado (módulo puro, testeable) y, además, el `end_date` del período en curso va dentro de
+  // las query keys — si `now` cambiara en cada render, la key cambiaría también y TanStack
+  // vería una query nueva por render (refetch en loop).
+  //
+  // Por eso `now` es el inicio del día UTC y no el instante: se recalcula en cada render pero
+  // solo cambia de identidad cuando cambia el día (memo sobre `utcDayKey`). El período en curso
+  // termina al FIN de ese día (`endOfUtcDay`, dentro de `buildDateRange`), así que una
+  // transacción capturada por el FAB después de montar —el backend la guarda con `now()` real—
+  // entra en el refetch que dispara su invalidación. Antes `now` quedaba congelado al montar y
+  // el techo del período nunca avanzaba.
+  const todayKey = utcDayKey(new Date());
+  const now = useMemo(() => new Date(`${todayKey}T00:00:00Z`), [todayKey]);
+
+  // Un solo rango de fechas para las 3 secciones (KPIs, barras, dona) — ver `buildDateRange`.
   const dateRange = useMemo(
-    () => buildDateRange(period, customStart, customEnd),
-    [period, customStart, customEnd]
+    () => buildDateRange(period, ref, customStart, customEnd, now),
+    [period, ref, customStart, customEnd, now]
   );
 
-  const handlePeriodChange = (next: AnalyticsPeriod) => {
-    if (next === 'custom') {
-      setPeriodParams({ period: 'custom' });
-    } else {
-      setPeriodParams({ period: next === 'month' ? null : next, start: null, end: null });
-    }
+  // El rango personalizado no tiene período de calendario que navegar (User Story 39).
+  const navigablePeriod = period === 'custom' ? null : period;
+  const activeRef = navigablePeriod ? normalizeRef(navigablePeriod, ref, now) : '';
+  const isCurrentPeriod = !!navigablePeriod && activeRef === normalizeRef(navigablePeriod, '', now);
+  const periodLabel = useMemo(
+    () => formatPeriodLabel(period, ref, customStart, customEnd, now),
+    [period, ref, customStart, customEnd, now]
+  );
+
+  const handlePeriodChange = (next: string) => {
+    // `SegmentedControl` es genérico y devuelve `string`; el valor solo puede salir de
+    // `PERIOD_OPTIONS`, que es lo que hace segura la conversión.
+    const nextPeriod = next as AnalyticsPeriod;
+    // `ref: null` en las dos ramas: cambiar de preset vuelve al período actual (User Story 38), y
+    // un `ref` de otro período no debería sobrevivir en un link a un preset que no lo usa.
+    setPeriodParams(
+      nextPeriod === 'custom'
+        ? { period: 'custom', ref: null }
+        : { period: nextPeriod === 'month' ? null : nextPeriod, start: null, end: null, ref: null }
+    );
+  };
+
+  const handleShiftPeriod = (delta: -1 | 1) => {
+    if (!navigablePeriod) return;
+    const nextRef = shiftPeriodRef(navigablePeriod, activeRef, delta, now);
+    // El período actual va sin `ref` (default nunca escrito en la URL, Fase 13 §13.6): si `▶`
+    // aterriza en él se borra el param, igual que "Volver al período actual". Escribirlo dejaría
+    // el link fijado a este período después de que termine.
+    const landsOnCurrent = nextRef === normalizeRef(navigablePeriod, '', now);
+    setPeriodParams({ ref: landsOnCurrent ? null : nextRef });
+  };
+
+  const handleAccountChange = (next: string) => {
+    // La moneda se limpia en el mismo batch: con una cuenta elegida la moneda es la suya (Fase
+    // 17 §17.1.3), así que un `?currency=` anterior describiría un período que ya no se está
+    // mirando. Se borra también al volver a "Todas las cuentas", donde el param vuelve a ser
+    // opcional.
+    // "Todas las cuentas" es el default: se borra el param en vez de escribir `?account=all`.
+    setAccountParams({ account: next === 'all' ? null : next, currency: null });
+  };
+
+  const handleCurrencyChange = (next: string) => {
+    // Elegir la preferida borra el param en vez de escribirlo: equivale a "sin `currency`" (el
+    // default nunca se escribe en la URL, Fase 13 §13.6) y deja el link del caso por defecto
+    // limpio.
+    setCurrencyParam(next === preferredCurrency ? '' : next);
   };
 
   const {
@@ -200,11 +244,7 @@ function AnalyticsPageContent() {
       accountFilter,
       effectiveCurrency
     ),
-    // Espera a que `effectiveCurrency` esté resuelto (depende de /users/me y /accounts/,
-    // que llegan en paralelo) — si no, el primer fetch sale sin `currency` y el backend
-    // cae a COP por defecto aunque la cuenta elegida sea en otra moneda (bug detectado en
-    // verificación manual: seleccionar una cuenta USD mostraba $0 en todo).
-    enabled: !!effectiveCurrency,
+    enabled: queriesEnabled,
     queryFn: async () => {
       const res = await api.get('dashboard/cashflow-series', {
         params: {
@@ -233,7 +273,7 @@ function AnalyticsPageContent() {
       accountFilter,
       effectiveCurrency
     ),
-    enabled: !!effectiveCurrency,
+    enabled: queriesEnabled,
     queryFn: async () => {
       const res = await api.get('dashboard/category-distribution', {
         params: {
@@ -273,7 +313,11 @@ function AnalyticsPageContent() {
     return { totalIncome, totalExpense };
   }, [parsedTrendData]);
 
-  if (loadingTrends && loadingCategories) {
+  // Mientras la moneda del URL (o la de la cuenta elegida) no se puede resolver contra las
+  // cuentas, las queries están apagadas
+  // (`queriesEnabled`) y `isLoading` es false: sin este cierre la página pintaría un frame con los
+  // totales en 0 y los gráficos vacíos antes de llegar a los datos correctos.
+  if ((loadingTrends && loadingCategories) || waitingForAccounts) {
     return (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Skeleton className="h-96 rounded-2xl" />
@@ -295,22 +339,31 @@ function AnalyticsPageContent() {
           dona a la vez — antes cada gráfico tenía su propio selector y solo uno de ellos
           afectaba los números de arriba, lo cual generaba confusión. */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="border-border/70 bg-background/40 flex items-center gap-1 rounded-lg border p-0.5">
-          {PERIOD_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => handlePeriodChange(option.value)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                period === option.value
-                  ? 'bg-primary text-background'
-                  : 'text-text-muted hover:text-text'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          options={PERIOD_OPTIONS}
+          value={period}
+          onChange={handlePeriodChange}
+          ariaLabel="Período"
+        />
+
+        {/* Fase 29 §F6.1 (User Stories 33-40): `◀ ▶` sobre el preset elegido — semana, mes o año.
+            `▶` se corta en el período actual (User Story 35) y "Volver al período actual" solo
+            aparece fuera de él. No lleva cota inferior como el del dashboard: estos endpoints no
+            devuelven `first_transaction_month` (a diferencia de `/dashboard/summary`, B2), así que
+            un período sin datos se ve vacío en vez de bloquear la flecha. */}
+        {navigablePeriod && (
+          <PeriodNavigator
+            label={periodLabel}
+            onPrev={() => handleShiftPeriod(-1)}
+            onNext={() => handleShiftPeriod(1)}
+            prevDisabled={false}
+            nextDisabled={isCurrentPeriod}
+            prevLabel="Período anterior"
+            nextLabel="Período siguiente"
+            onReset={isCurrentPeriod ? undefined : () => setPeriodParams({ ref: null })}
+            resetLabel="Volver al período actual"
+          />
+        )}
 
         {period === 'custom' && (
           <div className="flex flex-wrap items-center gap-2">
@@ -338,35 +391,38 @@ function AnalyticsPageContent() {
 
         <Select
           value={accountFilter}
-          onChange={(event) => setAccountFilter(event.target.value)}
+          onChange={(event) => handleAccountChange(event.target.value)}
           className="bg-background"
           aria-label="Cuenta"
         >
-          <option value="all">
-            Todas las cuentas{user?.preferred_currency ? ` (${user.preferred_currency})` : ''}
-          </option>
+          <option value="all">Todas las cuentas</option>
           {accounts?.map((account) => (
             <option key={account.id} value={account.id}>
               {account.name} ({account.currency})
             </option>
           ))}
         </Select>
+
+        {/* Fase 29 §F6.2 (User Stories 41-43): chips de moneda solo con "Todas las cuentas" y
+            ocultos si hay una sola opción — mismo criterio que los chips de "Gastos por categoría"
+            del dashboard. Con una cuenta concreta la moneda es la suya y no hay nada que elegir.
+            El aviso de "cuentas en otra moneda no incluidas" que vivía acá desapareció: las cuentas
+            en otra moneda se ven eligiendo su moneda (User Story 45). */}
+        {accountFilter === 'all' && currencyOptions.length > 1 && (
+          <SegmentedControl
+            options={currencyOptions.map((code) => ({ value: code, label: code }))}
+            value={effectiveCurrency ?? ''}
+            onChange={handleCurrencyChange}
+            ariaLabel="Moneda"
+          />
+        )}
       </div>
 
-      {/* "Todas las cuentas" nunca mezcla monedas (Fase 11 §11.1) — si el usuario tiene
-          cuentas en otra moneda que la preferida, quedan afuera del agregado sin que se
-          note; se lo hacemos explícito acá en vez de dejarlo implícito. */}
-      {excludedCurrencyAccounts.length > 0 && (
-        <p className="text-text-muted -mt-4 text-xs">
-          Mostrando solo en {effectiveCurrency}: {excludedCurrencyAccounts.length}{' '}
-          {excludedCurrencyAccounts.length === 1 ? 'cuenta' : 'cuentas'} en otra moneda (
-          {[...new Set(excludedCurrencyAccounts.map((account) => account.currency))].join(', ')}) no{' '}
-          {excludedCurrencyAccounts.length === 1 ? 'está incluida' : 'están incluidas'} — elegila en
-          el selector para verla.
-        </p>
-      )}
-
-      <AnalyticsSummary totalIncome={totals.totalIncome} totalExpense={totals.totalExpense} />
+      <AnalyticsSummary
+        totalIncome={totals.totalIncome}
+        totalExpense={totals.totalExpense}
+        currency={effectiveCurrency}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <CashflowChart
@@ -376,6 +432,7 @@ function AnalyticsPageContent() {
           seriesMode={seriesMode}
           onSeriesModeChange={setSeriesMode}
           periodType={dateRange.granularity}
+          currency={effectiveCurrency}
         />
 
         <CategoryDonutChart
@@ -391,6 +448,7 @@ function AnalyticsPageContent() {
           referenceMode={referenceMode}
           onReferenceModeChange={setReferenceMode}
           totalIncomeForPeriod={totals.totalIncome}
+          currency={effectiveCurrency}
         />
       </div>
     </div>

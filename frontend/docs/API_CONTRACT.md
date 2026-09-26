@@ -171,14 +171,15 @@ ignoran.
 
 ### Dashboard
 
-- `GET /api/v1/dashboard/summary` — incluye `monthly_flow_balance: number | null` desde Fase 11 §11.3 (ver "Contratos de datos" abajo)
+- `GET /api/v1/dashboard/summary` — incluye `monthly_flow_balance: number | null` desde Fase 11 §11.3 (ver "Contratos de datos" abajo). Desde Fase 29 acepta los query params `year`/`month` y devuelve tres campos nuevos: `monthly_flow_basis`, `first_transaction_month` y `expense_currencies` (ver "Navegación por mes del dashboard" y "Contratos de datos > Dashboard").
 - `GET /api/v1/dashboard/budgets-progress` — cada fila incluye `currency` desde Fase 11 §11.1.
   Desde Fase 17 §17.2.3 acepta además un query param opcional `currency: string` (Decisión
   17.2.3): si se pasa, el backend filtra las filas a esa moneda **sin recalcular `spent`**
   (el gasto de cada presupuesto es la suma cruzada de todas las cuentas del usuario en esa
   moneda — filtrar cambia qué filas se muestran, nunca cuánto gastó cada una). El frontend
   lo usa en `accounts/[id]` (las queries propias por cuenta pasan la moneda de la cuenta,
-  no la preferida global). Si se omite, se devuelven todas las monedas.
+  no la preferida global). Si se omite, se devuelven todas las monedas. Desde Fase 29 acepta
+  los mismos `year`/`month` que `summary`, combinables con `currency`.
 - `GET /api/v1/dashboard/cashflow-series` — parámetro opcional `currency` (Fase 11 §11.1): filtra la serie a una sola moneda; si se omite, el backend usa `preferred_currency` del usuario. El frontend lo pasa explícito (Decisión 11.1.1 del spec de Fase 11). Desde la corrección UX
   post-Fase 19 acepta también `account_id: int`, mismo contrato que en `category-distribution`
   (ortogonal a `currency`, `404` si la cuenta es ajena).
@@ -195,6 +196,41 @@ ignoran.
   ícono real de la categoría (misma fuente que `BudgetProgress.category_icon`), `null` si la
   categoría no tiene uno asignado (el caso común de las creadas por el usuario vía
   `POST /categories/`).
+
+**Navegación por mes del dashboard (Fase 29):**
+
+- `summary` y `budgets-progress` aceptan `year` y `month` **ambos o ninguno**. Sin ninguno, el
+  backend responde por el **mes actual UTC** y los valores de los campos que ya existían son los
+  de siempre (solo se agregan los nuevos), así que el dashboard de siempre no se rompe.
+- El frontend **solo manda `year`/`month` en meses ya cerrados**. En el mes actual la petición
+  va sin params (y el mes no se escribe en la URL): el backend valida "no se puede consultar un
+  mes futuro" con **su** reloj, así que mandar el mes actual calculado con el reloj del
+  navegador daría un `422` espurio en el cambio de mes.
+- El período es **UTC** en el backend y en el front (`lib/dateRanges.ts` ancla los límites con
+  `Date.UTC`): un mes va del día 1 a las 00:00 UTC al último día a las 23:59:59 UTC. En el mes
+  en curso el techo es "ahora", de modo que una transacción con fecha futura del mismo mes no
+  cuenta como gasto del mes en `summary` (sí contaría en un rango mal armado en hora local). Los
+  rangos que arma el front para el mes/período en curso (`utcMonthRange`, `buildDateRange`)
+  terminan en cambio al fin del día UTC de hoy: así incluyen lo capturado hoy con hora real y
+  no cambian en cada render (van en query keys).
+- Un `?month=` inválido o futuro no debe romper la vista: el front lo valida antes de pedirlo
+  (`parseMonthParam`) y cae al mes actual. Si aun así llega un `422`, **hay dos formas** y no
+  son intercambiables: `detail` como **string** — "Se deben enviar `year` y `month`, o
+  ninguno.", "`month` debe ser un número entre 1 y 12.", "`year` debe ser un año entre 1 y
+  9999.", "No se puede consultar un mes futuro." — y `detail` como **lista** de errores por
+  campo, que es la validación de FastAPI (`?year=abc`).
+- `first_transaction_month` es el límite inferior de la navegación; con `null` (usuario sin
+  transacciones) no hay hacia dónde ir.
+- Cambio de contrato del frontend (Fase 29): la query key
+  `queryKeys.dashboard.recentTransactions` **ya no existe** (se eliminó la factory y sus tres
+  invalidaciones). "Últimas 5 del mes" ahora sale de `GET /api/v1/transactions/` con
+  `limit: 5` más `start_date`/`end_date` del mes pedido — mismo endpoint del feed, con lo que
+  la lista sigue el mes elegido y hereda la invalidación por `transactions.all()` que ya
+  cubría crear/editar/borrar (antes esa lista no se refrescaba al editar o borrar). El monto
+  de cada fila se formatea con `tx.currency`, no con la moneda preferida global.
+- `balances` no cambia con el mes y el dashboard ni lo consume (la vista de saldos vive en
+  `/accounts` vía `GET /accounts/summary`): sigue siendo el saldo **actual** de las cuentas,
+  idéntico al de cualquier mes consultado (ver "Contratos de datos > Dashboard").
 
 ### Notificaciones (Fase 13 §13.5)
 
@@ -392,18 +428,24 @@ El frontend asume:
 
 Reglas:
 
-- Con `is_recurring: true`, el backend genera automáticamente la fila del siguiente período la primera vez que ese período se consulta (`GET /api/v1/dashboard/budgets-progress` o `GET /api/v1/budgets/?month=&year=`); la llamada sin filtros devuelve el historial completo sin generar nada.
+- Con `is_recurring: true`, el backend genera automáticamente la fila del siguiente período la primera vez que ese período se consulta; desde Fase 29 el frontend solo llega a ese caso por `GET /api/v1/dashboard/budgets-progress` **con el mes actual** (sin params): un mes pasado devuelve los presupuestos que existían, sin crear filas nuevas a partir de la plantilla, así que la lista vacía de un mes sin presupuestos es real y se puede explicar en pantalla. `GET /api/v1/budgets/?month=&year=` sigue generando para cualquier período, incluidos los ya cerrados, pero el frontend **no** lo llama con período (y sin filtros devuelve el historial completo sin generar nada).
 - Editar el monto de una fila recurrente lo convierte en la plantilla de los meses futuros.
 
-En el dashboard, el progreso de presupuesto llega ya calculado desde el backend.
+En el dashboard, el progreso de presupuesto llega ya calculado desde el backend, para el período consultado.
 
 ### Dashboard
 
 El frontend asume:
 
-- `balances` (`BalanceByCurrency[]`) — saldos por moneda de las cuentas **destacadas** (o todas si no hay destacadas). Desde Fase 11 §11.3 el dashboard ya no renderiza este array como card "Balance Total": esa vista vive en `/accounts` vía `GET /accounts/summary`, que no filtra por destacadas.
-- `monthly_income_by_currency` / `monthly_expense_by_currency` (`BalanceByCurrency[]`)
-- `monthly_flow_balance` (`number | null`, Fase 11 §11.3) — ingreso mensual declarado por el usuario menos el gasto del mes **en su moneda preferida**, calculado por el backend. `null` significa que el usuario no fijó `monthly_income` todavía (el frontend lo distingue del estado de carga y muestra un formulario inline). Limitación conocida, aceptada a propósito: el gasto en monedas distintas a la preferida no resta (misma limitación de una-sola-moneda que cashflow-series/category-distribution).
+- `balances` (`BalanceByCurrency[]`) — saldos por moneda de las cuentas **destacadas** (o todas si no hay destacadas). Desde Fase 11 §11.3 el dashboard ya no renderiza este array como card "Balance Total": esa vista vive en `/accounts` vía `GET /accounts/summary`, que no filtra por destacadas. **No depende del mes consultado** (Fase 29): sigue siendo el saldo actual de las cuentas, no un saldo histórico del mes que se está mirando.
+- `monthly_income_by_currency` / `monthly_expense_by_currency` (`BalanceByCurrency[]`) — del mes consultado, también solo sobre cuentas destacadas.
+- `monthly_flow_balance` (`number | null`, Fase 11 §11.3; Fase 29) — en la moneda preferida, calculado por el backend. **Su significado lo dice `monthly_flow_basis`**, no el frontend:
+  - `"declared"` (mes en curso) — ingreso mensual declarado por el usuario menos el gasto del mes; `null` significa que el usuario no fijó `monthly_income` todavía (el frontend lo distingue del estado de carga y muestra un formulario inline).
+  - `"actual"` (mes ya cerrado) — ingresos reales registrados menos gastos reales del mes; **nunca `null`** (sin filas, `0.00`).
+    Limitación conocida, aceptada a propósito en ambos casos: el gasto en monedas distintas a la preferida no resta (misma limitación de una-sola-moneda que cashflow-series/category-distribution).
+- `monthly_flow_basis` (`'declared' | 'actual'`, Fase 29) — el rótulo de la tarjeta sale de acá ("Te quedan…" vs. "Balance de <mes>"), no de comparar fechas locales con el mes actual: el mes es UTC y el reloj del navegador puede no coincidir con el del servidor.
+- `first_transaction_month` (`string | null`, Fase 29) — mes UTC `"YYYY-MM"` de la transacción más antigua del usuario, sobre todas las cuentas. Es el límite inferior del `◀`; `null` = usuario sin transacciones, la navegación no tiene hacia dónde ir.
+- `expense_currencies` (`string[]`, Fase 29) — monedas con gasto en el mes consultado, sobre **todas** las cuentas (no solo las destacadas), con la preferida primero. Alimenta los chips de moneda de "Gastos por categoría": las barras que el chip filtra cuentan todas las cuentas, así que el universo tiene que ser ese. La moneda preferida solo aparece si tiene gasto en el mes, y el frontend la suma igual a las opciones para que el chip nunca quede sin nada que mostrar.
 
 Para el progreso de presupuestos, el backend devuelve valores listos para pintar:
 
@@ -413,6 +455,8 @@ Para el progreso de presupuestos, el backend devuelve valores listos para pintar
 - `spent`
 - `percentage`
 - `currency` (Fase 11 §11.1) — moneda real del presupuesto; `spent` y `amount_limit` viven en esta moneda. `BudgetRing` la usa para formatear en vez de la moneda preferida global.
+
+`spent` es el gasto del **período consultado** (Fase 29), no siempre el del mes actual, y suma transacciones de **todas** las cuentas del usuario en esa moneda (no solo las destacadas) — mismo criterio que el motor de alertas del backend, que no puede divergir del que muestra la vista.
 
 Los endpoints de series (`cashflow-series`, `category-distribution`) devuelven una sola serie filtrada a una moneda (`currency` explícito o `preferred_currency` por defecto) — nunca suman monedas distintas en un mismo punto.
 
@@ -446,6 +490,7 @@ Reglas:
 - `401`: token ausente o inválido.
 - `403`: acción no permitida (ej: editar/eliminar categoría base del sistema).
 - `404`: recurso inexistente o fuera de alcance del usuario.
+- `422`: validación de entrada — de esquema (`?year=abc` en `dashboard/summary` o `dashboard/budgets-progress`, con `detail` como **lista**) o de período del dashboard (con `detail` como **string**); ver "Navegación por mes del dashboard" para los mensajes.
 - `429`: rate limiting excedido (`/api/v1/auth/login`, `POST /api/v1/users/`, `/api/v1/auth/password-reset/request`, `/api/v1/auth/resend-verification`, `/api/v1/auth/google`, todos 5 req/min).
 
 ## Reglas de consumo

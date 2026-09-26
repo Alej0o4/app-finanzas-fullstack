@@ -72,7 +72,6 @@ export default function TransactionCaptureForm({
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.recentTransactions() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() }),

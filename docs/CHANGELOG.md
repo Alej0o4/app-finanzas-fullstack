@@ -9,6 +9,42 @@
 
 ---
 
+## Fase 29 — Navegación por mes en el dashboard y selector de moneda (2026-09-26)
+
+El dashboard deja de mostrar solo el mes en curso: `◀ Agosto 2026 ▶` en el encabezado, estado en
+`?month=YYYY-MM` (URL limpia en el mes actual), `◀` topado en el mes de la primera transacción.
+Todo el dashboard sigue al mes elegido: tarjeta de flujo, presupuestos (sin generar recurrentes
+retroactivos), "Gastos por categoría" y las últimas 5 transacciones del mes, con "Ver todas" hacia
+`/transactions` filtrado. En meses cerrados el balance es **ingresos reales − gastos reales**,
+calculado en el backend. Analítica gana `◀ ▶` sobre semana calendario lunes–domingo, mes y año
+(`?ref=YYYY-MM-DD`). Chips de moneda (`SegmentedControl`) en "Gastos por categoría" y en Analítica
+con "Todas las cuentas" reemplazan el aviso de "cuentas en otra moneda no incluidas".
+
+Backend: helper de período UTC `app/core/periods.py` (`resolver_mes`/`limites_mes_utc`, primer
+uso de `ValidationError` de dominio); `GET /dashboard/summary` y `/budgets-progress` aceptan
+`?year=&month=` opcionales (422 si viene uno solo, mes fuera de rango o futuro) y el summary suma
+`monthly_flow_basis` (`declared`/`actual`), `first_transaction_month` y `expense_currencies`.
+Sin parámetros responden igual que antes. El motor de alertas deja de clonar presupuestos
+recurrentes en meses cerrados (B5). Se corrigieron tres bugs de presentación: montos USD
+formateados como COP en "Transacciones recientes" y en los tres componentes de Analítica, y las
+transacciones del día 1 fuera de las barras por armar el inicio de mes en hora local.
+
+**Desviaciones de la spec:** la prop `currency` de `AnalyticsSummary`/`CashflowChart`/
+`CategoryDonutChart` quedó opcional con fallback a `config.currency` (Analítica siempre la pasa).
+`page.tsx` extrajo `CategoryBreakdownSection` y `RecentTransactionsSection` (mitigación del riesgo
+R2, tamaño de página). El `/code-review` encontró y se corrigieron antes de mergear: el rango del
+mes actual cortaba a las 00:00 UTC de hoy (lo capturado sin fecha no aparecía en barras/lista), `▶`
+al mes actual escribía `?month=`/`?ref=` explícito, `?account=all` en la URL, `now` congelado en
+Analítica, el placeholder de `keepPreviousData` rotulando datos del mes anterior y la moneda de
+los chips que no seguía a la preferida.
+
+307 tests backend en verde, ruff/eslint/prettier/tsc limpios, verificación con Playwright en
+desktop y 390×844 (navegación, límites, chips, invalidación al capturar desde un mes pasado).
+
+Spec: `docs/specs/fase_29_spec.md`.
+
+---
+
 ## Fase 28 — `DomainError` extendida a los 10 routers restantes (2026-09-19)
 
 Cierra la deuda de arquitectura que Fase 25 §25.3 dejó abierta a propósito: `app/core/exceptions.py`
