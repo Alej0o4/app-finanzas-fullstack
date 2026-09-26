@@ -46,7 +46,8 @@ const getPresetDates = (preset: Exclude<DatePreset, 'custom'>) => {
 // 'custom' está en la whitelist de preset porque la propia página lo escribe cuando el
 // usuario edita fechas a mano (setDatePreset('custom')) — sin él, el chip "Todo el
 // histórico" se encendería por error con un rango custom activo.
-// '7d' ya no está en la whitelist: un link viejo con ?preset=7d cae a 'all' (Q2).
+// '7d' ya no está en la whitelist: un link viejo con ?preset=7d cae a 'all' (Q2), o a
+// 'custom' si trae start/end (ver datePreset en el componente).
 const validatePreset = (raw: string): DatePreset =>
   (['all', 'week', 'month', 'year', 'custom'] as const).includes(raw as DatePreset)
     ? (raw as DatePreset)
@@ -70,7 +71,11 @@ function TransactionsPageContent() {
     validateIdOrAll
   );
   const [accountFilter, setAccountFilter] = useQueryParamState('account', 'all', validateIdOrAll);
-  const [datePreset] = useQueryParamState('preset', 'all', validatePreset);
+  const [rawDatePreset] = useQueryParamState('preset', 'all', validatePreset);
+  // Un link viejo (?preset=7d&start=…&end=…) normaliza el preset a 'all' pero conserva las
+  // fechas: con un rango activo el chip correcto es 'custom', no "Todo el histórico".
+  const datePreset: DatePreset =
+    rawDatePreset === 'all' && (startDate || endDate) ? 'custom' : rawDatePreset;
   const setFilterParams = useQueryParamsBatch();
 
   // Un link compartido puede traer solo `preset` explícito (ej. ?preset=month&category=3):
