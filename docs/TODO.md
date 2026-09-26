@@ -210,6 +210,27 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     muestra sumas de la vieja. Es un bug de invalidación, no de contrato — la Fase 29 lo
     mantuvo fuera de alcance y lo dejó anotado acá.
 
+- [ ] **El login redirige a `/dashboard`, que da 404 (encontrado en la verificación de la
+  Fase 29, preexistente).**
+  - `app/(auth)/login/page.tsx:84` y `components/auth/GoogleAuthButton.tsx:55` hacen
+    `router.push('/dashboard')` cuando el usuario ya tiene transacciones, pero el dashboard vive
+    en `/` (route group `(dashboard)`, sin segmento). No hay `middleware`/`redirects` que lo
+    rescate: tras loguearse con historial se cae en la página 404.
+  - Fix de flujo corto: cambiar ambos destinos a `'/'`. No se tocó en la Fase 29 para no mezclar
+    alcance.
+
+- [ ] **Hydration mismatch en el saludo del dashboard (preexistente, solo visible en dev).**
+  - `Buenas tardes, {user?.full_name?.split(' ')[0] || 'de nuevo'}` renderiza "de nuevo" en el
+    server y el nombre en el cliente (el usuario viene de cache), y React regenera el árbol.
+    Inofensivo en la práctica; se arregla difiriendo el nombre a después del montaje.
+
+- [ ] **Los KPIs de Analítica se suman en el navegador (encontrado en la Fase 29,
+  preexistente).**
+  - `app/(dashboard)/analytics/page.tsx` (`totals` en un `useMemo`) suma los buckets de
+    `cashflow-series` para obtener ingresos/gastos/balance del período. Contradice la regla de
+    `CLAUDE.md` de que el backend es la fuente de verdad de los agregados. Hoy da el mismo
+    número, pero conviene que `cashflow-series` devuelva los totales.
+
 ---
 
 ## 🟡 Integridad y escala

@@ -14,8 +14,9 @@
 > **No implementa nada.** Solo se agregó este archivo y el pointer en `docs/ROADMAP.md`.
 
 **Estado:** spec escrita el 2026-09-26. Los 2 marcadores `[NEEDS CLARIFICATION]` (B5, B7) se
-resolvieron con el dueño ese mismo día. Siguiente paso: `/analyze-spec 29`
-(`docs/WORKFLOW.md` paso 5).
+resolvieron con el dueño ese mismo día. **Implementada y cerrada el 2026-09-26**
+(`/analyze-spec 29 cierre` sin hallazgos CRÍTICO/ALTO pendientes). Desviaciones y fixes del
+`/code-review` registrados en la entrada de `docs/CHANGELOG.md`.
 
 ---
 
