@@ -17,7 +17,7 @@ Read the whole spec. Then run these checks:
 
 1. **Open questions.** Any `[NEEDS CLARIFICATION: …]` left → the spec is not ready. List each one with its section.
 
-2. **Project invariants.** Read the sources, don't work from memory: `CLAUDE.md` (Architecture + Cross-cutting conventions), `backend/docs/BUSINESS_RULES.md`, and `frontend/docs/STATE_AND_FETCHING.md` if the spec touches the frontend. Those files win over this list. At minimum check that the spec doesn't:
+2. **Project invariants.** Read the sources, don't work from memory: `AGENTS.md` (Arquitectura + Convenciones transversales), `backend/docs/BUSINESS_RULES.md`, and `frontend/docs/STATE_AND_FETCHING.md` if the spec touches the frontend. Those files win over this list. At minimum check that the spec doesn't:
    - use `float` for money (must be `Decimal` in schemas, `Numeric(14,2)` in models);
    - compute balances, budget progress, or dashboard aggregates in the frontend;
    - change `models.py` without an Alembic migration step (`/alembic-migration`);
@@ -25,7 +25,7 @@ Read the whole spec. Then run these checks:
    - raise `HTTPException` from routers for a business rule instead of a `DomainError` subclass;
    - make system categories (`user_id = NULL`) editable/deletable, or skip ownership checks;
    - add a mutation without the query invalidations it needs, or call `api` with an absolute `/api/...` path;
-   - propose new security/auth hardening that nobody asked for (out of priority since the 2026-09-19 pivot, see `CLAUDE.md`).
+   - propose new security/auth hardening that nobody asked for (out of priority since the 2026-09-19 pivot, see `AGENTS.md`).
 
 3. **Internal consistency.**
    - Every numbered decision appears in at least one `## Orden de ejecución` step, and every step names the decisions it implements.
@@ -44,7 +44,7 @@ Read the whole spec. Then run these checks:
 2. For each numbered decision: **implemented / partial / missing / deviated**, pointing at the file(s). A deviation isn't automatically wrong — Fase 28 added two exception classes mid-implementation for good reasons — but it must be recorded in the spec or the changelog entry.
 3. Files changed that no decision explains.
 4. Testing decisions without a corresponding test in the diff.
-5. Docs that should have moved and didn't: both API contract docs (if a contract changed), `backend/docs/BUSINESS_RULES.md` (if a rule changed), `docs/CHANGELOG.md` entry for the phase, `docs/ROADMAP.md` / `docs/TODO.md` items it closes, `CLAUDE.md` if an operational fact changed.
+5. Docs that should have moved and didn't: both API contract docs (if a contract changed), `backend/docs/BUSINESS_RULES.md` (if a rule changed), `docs/CHANGELOG.md` entry for the phase, `docs/ROADMAP.md` / `docs/TODO.md` items it closes, `AGENTS.md` if an operational fact changed.
 6. Suggest `/run-tests` if it hasn't been run on this branch — don't run it as part of this skill.
 
 ## Output

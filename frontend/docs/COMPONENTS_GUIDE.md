@@ -117,7 +117,7 @@ Props principales:
 - `spentAmount`
 - `percentage` — **Fase 31 F9 (Q12, QA-012)**: el porcentaje real que ya calcula el backend
   (`BudgetProgress.percentage`). El componente ya NO lo recalcula con `spent / limit` — regla
-  de `CLAUDE.md` de no recomputar agregados del backend en el cliente. Los dos consumidores
+  de `AGENTS.md` de no recomputar agregados del backend en el cliente. Los dos consumidores
   (`app/(dashboard)/page.tsx` y `app/(dashboard)/accounts/[id]/page.tsx`) lo pasan.
 
 Comportamiento:

@@ -11,7 +11,7 @@ Oikos has no remote issue tracker in active use (git remote points at GitHub, bu
 
 ## Oikos additions to the spec template
 
-`/to-spec` is a vendored upstream skill (`.agents/skills/to-spec`, pinned in `skills-lock.json`) — don't edit it; a skills update would overwrite the change. These two additions apply on top of its template whenever a skill writes or edits `docs/specs/fase_NN_spec.md`. Both ideas, plus `/analyze-spec`, are borrowed from GitHub spec-kit, which was evaluated 2026-09-25 and deliberately **not** adopted as a tool: for a single owner who is both PM and implementer, its spec/plan/tasks split, `specs/NNN-*` numbering, and `constitution.md` would duplicate `docs/specs/fase_NN_spec.md`, `.scratch/`, and `CLAUDE.md` without adding a reader. Don't reintroduce it piecemeal beyond these three pieces without asking.
+`/to-spec` is a vendored upstream skill (`.agents/skills/to-spec`, pinned in `skills-lock.json`) — don't edit it; a skills update would overwrite the change. These two additions apply on top of its template whenever a skill writes or edits `docs/specs/fase_NN_spec.md`. Both ideas, plus `/analyze-spec`, are borrowed from GitHub spec-kit, which was evaluated 2026-09-25 and deliberately **not** adopted as a tool: for a single owner who is both PM and implementer, its spec/plan/tasks split, `specs/NNN-*` numbering, and `constitution.md` would duplicate `docs/specs/fase_NN_spec.md`, `.scratch/`, and `AGENTS.md` without adding a reader. Don't reintroduce it piecemeal beyond these three pieces without asking.
 
 ### 1. `[NEEDS CLARIFICATION: …]` markers
 
@@ -41,9 +41,9 @@ Every spec large enough to have more than one implementation step includes an `#
 - **`Depende de:`** lists step numbers, or `—`. No cycles.
 - **`[P]`** means "can run at the same time as the other steps whose dependencies are also satisfied" — only if it **doesn't touch the same files** as those steps. Two steps editing `auth.py` are never `[P]`, even if they're logically independent.
 - Each step names the `Decisión` IDs it implements, so `/analyze-spec` can check that every decision has a step and every step has a decision.
-- `[docs]` steps are mandatory whenever a shared API contract changes (both `backend/docs/API_REFERENCE.md` and `frontend/docs/API_CONTRACT.md`, per `CLAUDE.md`).
+- `[docs]` steps are mandatory whenever a shared API contract changes (both `backend/docs/API_REFERENCE.md` and `frontend/docs/API_CONTRACT.md`, per `AGENTS.md`).
 
-Before implementing a spec, and again when closing the phase, run `/analyze-spec` (`.claude/skills/analyze-spec/SKILL.md`). Where each of these steps sits in the overall sequence is defined in `docs/WORKFLOW.md`.
+Before implementing a spec, and again when closing the phase, run `/analyze-spec` (`.agents/skills/analyze-spec/SKILL.md`). Where each of these steps sits in the overall sequence is defined in `docs/WORKFLOW.md`.
 
 ## When a skill says "publish to the issue tracker"
 

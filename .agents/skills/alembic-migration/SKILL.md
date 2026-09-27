@@ -5,7 +5,7 @@ description: Generate and apply an Alembic migration for a backend schema change
 
 # Alembic Migration
 
-Oikos manages schema exclusively through Alembic (`backend/alembic/`). There is no `create_all()` and no ad-hoc `_ensure_*_column()` helper anymore — every schema change goes through a reviewed migration. See CLAUDE.md and `docs/specs/fase_07_spec.md` for the history of why.
+Oikos manages schema exclusively through Alembic (`backend/alembic/`). There is no `create_all()` and no ad-hoc `_ensure_*_column()` helper anymore — every schema change goes through a reviewed migration. See `AGENTS.md` and `docs/specs/fase_07_spec.md` for the history of why.
 
 ## Steps
 
@@ -25,4 +25,4 @@ Oikos manages schema exclusively through Alembic (`backend/alembic/`). There is 
 ## Notes
 
 - Never suggest `Base.metadata.create_all()` as a shortcut — that's the pattern Phase 7 deliberately removed.
-- If the change affects a shared API contract, remember the CLAUDE.md rule: update both `backend/docs/API_REFERENCE.md` and `frontend/docs/API_CONTRACT.md` in the same change.
+- If the change affects a shared API contract, remember the `AGENTS.md` rule: update both `backend/docs/API_REFERENCE.md` and `frontend/docs/API_CONTRACT.md` in the same change.
