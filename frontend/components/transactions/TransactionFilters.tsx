@@ -29,6 +29,10 @@ interface TransactionFiltersProps {
   onAccountFilterChange: (value: string) => void;
   onCategoryFilterChange: (value: string) => void;
   onClearFilters: () => void;
+  /** Fase 31 F6 (Q7, QA-010): error de campo cuando el rango de fechas está invertido
+   *  (fecha final anterior a la inicial). Se muestra bajo "Fecha final"; la consulta no
+   *  se ejecuta mientras este error está presente (ver `enabled: false` en la página). */
+  endDateError?: string;
 }
 
 export default function TransactionFilters({
@@ -45,6 +49,7 @@ export default function TransactionFilters({
   onAccountFilterChange,
   onCategoryFilterChange,
   onClearFilters,
+  endDateError,
 }: TransactionFiltersProps) {
   return (
     <div className="bg-surface border-border/70 shadow-background/20 min-w-0 space-y-4 overflow-x-hidden rounded-2xl border p-4 shadow-sm sm:p-5">
@@ -81,6 +86,7 @@ export default function TransactionFilters({
             label="Fecha inicial"
             type="date"
             value={startDate}
+            max={endDate || undefined}
             onChange={(event) => onStartDateChange(event.target.value)}
             className="bg-background"
           />
@@ -89,7 +95,9 @@ export default function TransactionFilters({
             label="Fecha final"
             type="date"
             value={endDate}
+            min={startDate || undefined}
             onChange={(event) => onEndDateChange(event.target.value)}
+            error={endDateError}
             className="bg-background"
           />
 

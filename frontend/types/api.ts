@@ -67,22 +67,22 @@ export interface DashboardSummary {
   monthly_income_by_currency: BalanceByCurrency[];
   monthly_expense_by_currency: BalanceByCurrency[];
   /**
-   * Ingreso mensual declarado − gasto del mes (en la moneda preferida), calculado por el
-   * backend (Fase 11 §11.3). `null` = el usuario no ha fijado monthly_income todavía;
-   * distinguir de `undefined` (query en carga).
-   *
-   * Fase 29 (B2): en meses cerrados el mismo campo pasa a ser ingresos REALES registrados
-   * menos gastos reales, y nunca es `null` — por eso el rótulo de la tarjeta sale de
-   * `monthly_flow_basis` y no de comparar fechas locales.
+   * Ingresos reales del período menos gastos reales del período, en la moneda preferida
+   * (Fase 11 §11.3, redefinido Fase 31 B9/Q9). Calculado por el backend, igual en el mes en
+   * curso que en un mes cerrado; nunca `null` (sin transacciones vale `"0.00"`) y puede ser
+   * negativo (a principio de mes, antes de cobrar, es un dato normal, no un error).
+   * `monthly_income` (el ingreso declarado) ya NO participa de este cálculo — es solo una
+   * referencia visual ("· esperado <monto>", Fase 31 F8).
    */
-  monthly_flow_balance: number | null;
+  monthly_flow_balance: number;
   /**
-   * Qué hay detrás de `monthly_flow_balance` (Fase 29, Q12): `"declared"` = ingreso mensual
-   * declarado − gasto (solo en el mes en curso, y `null` sin `monthly_income`);
-   * `"actual"` = ingresos − gastos reales registrados (meses cerrados, nunca `null`).
-   * El backend lo decide con el reloj del servidor; el front rotula, no deduce.
+   * @deprecated Fase 31 (B9, Q9): siempre `"actual"` — el balance ya no tiene dos bases
+   * (la base "declared" que usaba `monthly_income` desapareció). Se conserva sin default
+   * por el mismo motivo que documentaba Fase 29 (B2/B6): no inventar un valor para un
+   * contrato que un cliente viejo podría no enviar. El frontend ya no lo lee para decidir
+   * el rótulo de la tarjeta (siempre "Balance de <mes>").
    */
-  monthly_flow_basis: 'declared' | 'actual';
+  monthly_flow_basis: 'actual';
   /**
    * Mes UTC `"YYYY-MM"` de la transacción más antigua del usuario, o `null` si no tiene
    * ninguna (Fase 29, Q9). Es el límite inferior del `◀` del dashboard. Va sobre todas las

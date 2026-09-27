@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
+import { getPostLoginDestination } from '@/lib/postLoginDestination';
 import type { UserResponse } from '@/types/api';
 
 declare global {
@@ -45,14 +46,14 @@ export default function GoogleAuthButton() {
         // de la respuesta de /auth/google deja la sesión lista, igual que en el login.
         await api.post('auth/google', { id_token: response.credential });
 
-        // Mismo criterio de destino que login/page.tsx:79-86 — funciona igual para un
-        // registro nuevo (has_transaction_history=false → /capture) y para una usuaria
-        // recurrente que eligió Google (→ `/`, el dashboard raíz).
+        // Fase 31 F5: mismo helper de destino que login/page.tsx — funciona igual para un
+        // registro nuevo (has_transaction_history=false → /capture?onboarding=1) y para una
+        // usuaria recurrente que eligió Google (→ `/`, el dashboard raíz).
         try {
           const meResponse = await api.get('users/me');
           const user = meResponse.data as UserResponse;
           queryClient.setQueryData(queryKeys.currentUser(), user);
-          router.push(user.has_transaction_history ? '/' : '/capture?onboarding=1');
+          router.push(getPostLoginDestination(user));
         } catch {
           router.push('/capture');
         }

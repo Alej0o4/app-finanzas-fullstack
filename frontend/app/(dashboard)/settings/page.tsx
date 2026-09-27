@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -20,6 +20,7 @@ import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@/lib/hooks/useApi
 import { useAccounts } from '@/lib/hooks/useAccounts';
 import { api } from '@/lib/api';
 import { getApiError } from '@/lib/utils';
+import { validateAmountText } from '@/lib/validateAmount';
 import type { components } from '@/types/generated/api';
 
 type ApiKey = components['schemas']['ApiKeyResponse'];
@@ -90,11 +91,20 @@ export default function SettingsPage() {
     }
   }
 
+  // Fase 31 F2 (Q6, QA-013): error de campo visible — antes un ingreso vacío o negativo
+  // hacía un `return` silencioso, igual que en el paso de onboarding.
+  const [incomeError, setIncomeError] = useState<string | null>(null);
+  const incomeRef = useRef<HTMLInputElement>(null);
+
   const handleIncomeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = Number(incomeValue);
-    if (!incomeValue.trim() || Number.isNaN(parsed) || parsed < 0) return;
-    setMonthlyIncome.mutate(parsed, {
+    const validationError = validateAmountText(incomeValue, { allowZero: true });
+    if (validationError) {
+      setIncomeError(validationError);
+      return incomeRef.current?.focus();
+    }
+    setIncomeError(null);
+    setMonthlyIncome.mutate(Number(incomeValue), {
       onSuccess: () => toast.success('Ingreso mensual actualizado.'),
       onError: (err) => toast.error(getApiError(err)),
     });
@@ -274,12 +284,15 @@ export default function SettingsPage() {
       <section className="bg-surface border-border/70 rounded-2xl border p-4 sm:p-5">
         <div className="mb-4">
           <h2 className="text-text font-sans text-base font-semibold">Ingreso mensual</h2>
+          {/* Fase 31 F8 (Q14): ya no promete "calcular cuánto te queda" — es una referencia
+              visual junto a los ingresos del mes en el dashboard. */}
           <p className="text-text-muted mt-0.5 text-xs sm:text-sm">
-            Se usa para calcular cuánto te queda cada mes en el dashboard.
+            Es solo una referencia que se muestra junto a los ingresos del mes en el dashboard.
           </p>
         </div>
-        <form onSubmit={handleIncomeSubmit} className="flex items-end gap-3">
+        <form onSubmit={handleIncomeSubmit} className="flex items-end gap-3" noValidate>
           <Input
+            ref={incomeRef}
             type="number"
             inputMode="decimal"
             min={0}
@@ -287,6 +300,7 @@ export default function SettingsPage() {
             label="Monto mensual aproximado"
             value={incomeValue}
             onChange={(e) => setIncomeValue(e.target.value)}
+            error={incomeError ?? undefined}
             className="bg-background"
           />
           <Button type="submit" variant="secondary" loading={setMonthlyIncome.isPending}>

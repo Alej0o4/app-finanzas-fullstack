@@ -56,7 +56,12 @@ Props principales:
 Comportamiento:
 
 - Carga cuentas y categorías solo cuando el modal está abierto.
-- Filtra categorías por tipo de transacción.
+- Filtra categorías por tipo de transacción, o por todas (toggle "+ Mostrar todas las
+  categorías", Fase 31 F3) vía `lib/categoryVisibility.ts` — ver la misma regla documentada
+  en `EditTransactionModal` arriba, compartida entre los dos modales.
+- `noValidate` con errores de campo por debajo de cada input (Fase 31 F2/H13) — antes
+  dependía de los globos nativos del navegador, a diferencia del resto de la app; el monto
+  se valida con `lib/validateAmount.ts`.
 - Invalida las queries afectadas al guardar.
 
 Reglas:
@@ -81,11 +86,23 @@ Comportamiento:
 - Owns el estado del formulario internamente; el padre lo monta con `key={editSessionKey}`
   (incrementado en cada apertura) para forzar un reset limpio en vez de un `useEffect`
   sincronizando props → estado.
-- Validación por campo con foco automático en el primer error (mismo patrón que `TransactionModal`).
+- Validación por campo con foco automático en el primer error (mismo patrón que `TransactionModal`),
+  con `lib/validateAmount.ts` para el monto (Fase 31 F2).
+- **Toggle de categorías "+ Mostrar todas las categorías / ← Solo del tipo"** (Fase 31 F3,
+  igual que `TransactionModal`): arranca **activado** si la categoría original de la
+  transacción es de la otra naturaleza que su tipo (un reembolso — un ingreso en una
+  categoría de gasto). La lista visible sale de `lib/categoryVisibility.ts`
+  (`getVisibleCategories`), compartida con `TransactionModal` — categorías ocultas
+  ("oculta para mí", Fase 18) no se listan salvo la categoría original de la transacción, que
+  siempre aparece (así el `<select>` nunca arranca en blanco). Si al cambiar el tipo o al
+  apagar el toggle la categoría elegida deja de estar entre las opciones visibles, se resetea
+  a "Selecciona…" y el error de campo pide elegir una — lo que se ve en el `<select>` es
+  siempre lo que se envía.
 
 Reglas:
 
 - No duplicar este formulario en otras pantallas.
+- No duplicar la regla de categorías visibles — usar `getVisibleCategories`.
 
 ### `components/charts/BudgetRing.tsx`
 
@@ -98,17 +115,27 @@ Props principales:
 - `categoryName`
 - `budgetAmount`
 - `spentAmount`
+- `percentage` — **Fase 31 F9 (Q12, QA-012)**: el porcentaje real que ya calcula el backend
+  (`BudgetProgress.percentage`). El componente ya NO lo recalcula con `spent / limit` — regla
+  de `CLAUDE.md` de no recomputar agregados del backend en el cliente. Los dos consumidores
+  (`app/(dashboard)/page.tsx` y `app/(dashboard)/accounts/[id]/page.tsx`) lo pasan.
 
 Comportamiento:
 
-- Calcula porcentaje consumido.
-- Limita el porcentaje entre 0 y 100.
+- El texto muestra `percentage` redondeado a entero, **sin tope** (106%, no 100%) — el mismo
+  número que la notificación de presupuesto excedido.
+- El anillo se dibuja en dos vueltas superpuestas (Fase 31 F9, Q16): la primera es
+  `min(percentage, 100)`, con los colores de siempre (primario, warning desde 80%, danger
+  desde 100%); la segunda, solo cuando `percentage > 100`, es `min(percentage − 100, 100)` —
+  el exceso, dibujado en el token `--color-danger-strong` (ver `UI_SYSTEM.md`). Tope visual en
+  200% (una segunda vuelta completa); el texto sigue mostrando el valor real sin tope.
 - Usa colores semánticos para estados normal, warning y danger.
 
 Reglas:
 
 - No pasarle cadenas sin convertir a número.
 - No depender de variables CSS dentro de SVG si el render es inestable; preferir colores compatibles con SVG/Recharts.
+- No recalcular `percentage` en el componente ni en los consumidores — viene del backend.
 
 ### `components/ui/Switch.tsx`
 
@@ -242,6 +269,13 @@ Reglas:
 - La lógica de colores para categorías debe mantenerse local a la vista mientras no exista un componente compartido.
 - Presets de período y chips de moneda con `SegmentedControl`; navegación del período con `PeriodNavigator` (salvo en `custom`, que no tiene período de calendario que navegar) — Fase 29 §F6.
 - `AnalyticsSummary`, `CashflowChart` y `CategoryDonutChart` reciben `currency?` (Fase 29 §F7): la moneda en que se formatean sus montos. Si se omite, caen a la preferida global (`config.currency`); la página siempre pasa la moneda efectiva de la vista, para que una cuenta USD no se formatee como COP.
+- **`CashflowChart` y la opción `integer` de `formatCurrency`** (Fase 31 F7, Q8, QA-007):
+  `lib/formatters.ts` muestra decimales por default (COP con mínimo 0/máximo 2; el resto con
+  2 siempre — antes todo se redondeaba a la unidad, incluido USD). `CashflowChart` es el único
+  consumidor de `formatCurrency(amount, currency, locale, { integer: true })`: lo usa el
+  `tickFormatter` del eje Y, el cálculo de `yAxisWidth` y el `formatter` de los `LabelList`
+  sobre las barras, para que ejes y etiquetas sigan compactos y sin decimales. El tooltip del
+  mismo gráfico (`formatAmount`, sin la opción) sí muestra decimales, como el resto de la app.
 
 ### Cuentas y categorías
 

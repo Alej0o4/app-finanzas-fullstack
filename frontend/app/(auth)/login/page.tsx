@@ -7,6 +7,7 @@ import { ArrowRight, Wallet } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
+import { getPostLoginDestination } from '@/lib/postLoginDestination';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import GoogleAuthButton from '@/components/auth/GoogleAuthButton';
@@ -77,12 +78,13 @@ function LoginForm() {
       // /capture") queda resuelta aquí — un usuario recurrente con 2+ transacciones va
       // directo al dashboard (raíz `/`). Fallback a /capture si el fetch falla (no bloquear
       // el login por una pieza no crítica, mismo criterio que el envío de email de
-      // verificación).
+      // verificación). Fase 31 F5: el criterio de destino vive en un helper compartido con
+      // GoogleAuthButton, así las dos formas de entrar se comportan igual (QA-005).
       try {
         const meResponse = await api.get('users/me');
         const user = meResponse.data as UserResponse;
         queryClient.setQueryData(queryKeys.currentUser(), user); // evita refetch en destino
-        router.push(user.has_transaction_history ? '/' : '/capture');
+        router.push(getPostLoginDestination(user));
       } catch {
         router.push('/capture');
       }

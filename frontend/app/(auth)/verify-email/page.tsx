@@ -6,12 +6,8 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, Loader2, MailWarning } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getApiError } from '@/lib/utils';
 import Button from '@/components/ui/Button';
-
-function extractErrorMessage(error: unknown, fallback: string): string {
-  const err = error as { response?: { data?: { detail?: string } } };
-  return err.response?.data?.detail || fallback;
-}
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
@@ -62,10 +58,7 @@ function VerifyEmailContent() {
           No pudimos verificar tu correo
         </h1>
         <p className="text-text-muted mt-2 text-center text-sm">
-          {extractErrorMessage(
-            verifyQuery.error,
-            'El enlace de verificación no es válido o ya expiró.'
-          )}
+          {getApiError(verifyQuery.error, 'El enlace de verificación no es válido o ya expiró.')}
         </p>
         <p className="text-text-muted mt-1 text-center text-sm">
           Necesitás un correo verificado para iniciar sesión — pedí un enlace nuevo desde la

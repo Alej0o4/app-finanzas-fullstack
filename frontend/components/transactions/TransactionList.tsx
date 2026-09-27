@@ -1,6 +1,14 @@
 'use client';
 
-import { ArrowRightLeft, ArrowDownRight, ArrowUpRight, Trash2, Pencil, Circle } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  ArrowDownRight,
+  ArrowUpRight,
+  Trash2,
+  Pencil,
+  Circle,
+  AlertCircle,
+} from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import EmptyState from '@/components/ui/EmptyState';
@@ -19,6 +27,11 @@ interface TransactionListProps {
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: number) => void;
   onLoadMore: () => void;
+  /** Fase 31 F6 (Q7, QA-010): la consulta inicial falló y no hay ítems cargados — se
+   *  muestra "No se pudieron cargar los movimientos." con "Reintentar" en vez del vacío de
+   *  "Aún no tienes movimientos", que mentiría (la app no sabe si hay movimientos o no). */
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
 export default function TransactionList({
@@ -31,12 +44,24 @@ export default function TransactionList({
   onEdit,
   onDelete,
   onLoadMore,
+  isError,
+  onRetry,
 }: TransactionListProps) {
   const { config } = useAppConfig();
 
   return (
     <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
-      {items.length === 0 ? (
+      {isError ? (
+        <EmptyState
+          icon={<AlertCircle size={48} className="opacity-20" />}
+          message="No se pudieron cargar los movimientos."
+          action={
+            <Button variant="secondary" size="sm" onClick={onRetry}>
+              Reintentar
+            </Button>
+          }
+        />
+      ) : items.length === 0 ? (
         <EmptyState
           icon={<ArrowRightLeft size={48} className="opacity-20" />}
           message="Aún no tienes movimientos registrados."

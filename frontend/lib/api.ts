@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { isAuthRoute } from './authSession';
 
 export const api = axios.create({
   baseURL: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1`,
@@ -68,7 +69,13 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError);
-        window.location.href = '/login';
+        // 🆕 Fase 31 F4 (Q5, QA-021): una cookie csrf_token huérfana en /login dispara un
+        // 401 de refresh en cuanto la app monta; sin este guard, la redirección de abajo
+        // recarga la misma pantalla de auth en bucle. En una pantalla de auth ya no hay
+        // nada que proteger, así que no hace falta redirigir.
+        if (typeof window !== 'undefined' && !isAuthRoute(window.location.pathname)) {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

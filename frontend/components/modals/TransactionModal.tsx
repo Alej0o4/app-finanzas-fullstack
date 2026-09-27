@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
@@ -8,6 +8,8 @@ import { queryKeys } from '@/lib/queryKeys';
 import { useAccounts } from '@/lib/hooks/useAccounts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { getApiError } from '@/lib/utils';
+import { validateAmountText } from '@/lib/validateAmount';
+import { getVisibleCategories } from '@/lib/categoryVisibility';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -40,16 +42,22 @@ export default function TransactionModal({
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [showAllCategories, setShowAllCategories] = useState(false);
+  // Fase 31 F2 (Q6, QA-013/H13): errores de campo — el modal pasa a `noValidate` (antes
+  // dependía de los globos nativos del navegador, a diferencia del resto de la app).
+  const [fieldErrors, setFieldErrors] = useState<{ amount?: string; category?: string }>({});
+  const amountRef = useRef<HTMLInputElement>(null);
+  const categoryRef = useRef<HTMLSelectElement>(null);
 
   const { data: accounts } = useAccounts({ enabled: isOpen });
 
   const { data: categories } = useCategories({ enabled: isOpen });
 
-  const displayedCategories = useMemo(() => {
-    const visibleCategories = categories?.filter((category) => !category.is_hidden) || [];
-    if (showAllCategories) return visibleCategories;
-    return visibleCategories.filter((category) => category.type === type);
-  }, [categories, type, showAllCategories]);
+  // Fase 31 F3 (Q10, QA-009, H13): lo que se ve en el <select> es lo que se envía — regla
+  // compartida con EditTransactionModal.
+  const displayedCategories = useMemo(
+    () => getVisibleCategories(categories, type, showAllCategories),
+    [categories, type, showAllCategories]
+  );
 
   const createMutation = useMutation({
     mutationFn: async (newTx: CreateTransactionPayload) => {
@@ -77,8 +85,39 @@ export default function TransactionModal({
     },
   });
 
+  // Fase 31 F3 (Q10, H13): si al cambiar el tipo o al apagar "ver todas" la categoría
+  // elegida deja de estar entre las opciones visibles, se resetea a "Selecciona…" — antes
+  // el <select> quedaba con un valor fuera de sus <option> y el navegador mostraba la
+  // primera en silencio (se enviaba una categoría distinta a la que se veía).
+  const resetCategoryIfNotVisible = (nextType: 'income' | 'expense', nextShowAll: boolean) => {
+    const nextVisible = getVisibleCategories(categories, nextType, nextShowAll);
+    if (categoryId && !nextVisible.some((c) => String(c.id) === categoryId)) {
+      setCategoryId('');
+    }
+  };
+
+  const handleTypeChange = (newType: 'income' | 'expense') => {
+    setType(newType);
+    resetCategoryIfNotVisible(newType, showAllCategories);
+  };
+
+  const handleToggleShowAll = () => {
+    const nextShowAll = !showAllCategories;
+    setShowAllCategories(nextShowAll);
+    resetCategoryIfNotVisible(type, nextShowAll);
+  };
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+
+    const errors: typeof fieldErrors = {};
+    const amountError = validateAmountText(amount);
+    if (amountError) errors.amount = amountError;
+    if (!categoryId) errors.category = 'Elige una categoría.';
+    setFieldErrors(errors);
+
+    if (errors.amount) return amountRef.current?.focus();
+    if (errors.category) return categoryRef.current?.focus();
 
     createMutation.mutate({
       description,
@@ -92,11 +131,11 @@ export default function TransactionModal({
 
   return (
     <ModalShell isOpen={isOpen} onClose={onClose} title={title}>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div className="flex gap-4">
           <button
             type="button"
-            onClick={() => setType('expense')}
+            onClick={() => handleTypeChange('expense')}
             className={`flex-1 cursor-pointer rounded-xl border py-2 text-sm font-medium transition-colors ${
               type === 'expense'
                 ? 'bg-background border-border text-text'
@@ -107,7 +146,7 @@ export default function TransactionModal({
           </button>
           <button
             type="button"
-            onClick={() => setType('income')}
+            onClick={() => handleTypeChange('income')}
             className={`flex-1 cursor-pointer rounded-xl border py-2 text-sm font-medium transition-colors ${
               type === 'income'
                 ? 'bg-primary/10 border-primary/20 text-primary'
@@ -119,11 +158,12 @@ export default function TransactionModal({
         </div>
 
         <Input
+          ref={amountRef}
           label="Valor"
           type="number"
-          required
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
+          error={fieldErrors.amount}
           className="bg-background"
           placeholder="0"
         />
@@ -156,10 +196,11 @@ export default function TransactionModal({
           </Select>
           <div>
             <Select
+              ref={categoryRef}
               label="Categoría"
-              required
               value={categoryId}
               onChange={(event) => setCategoryId(event.target.value)}
+              error={fieldErrors.category}
               className="bg-background"
             >
               <option value="" disabled>
@@ -176,7 +217,7 @@ export default function TransactionModal({
             </Select>
             <button
               type="button"
-              onClick={() => setShowAllCategories(!showAllCategories)}
+              onClick={handleToggleShowAll}
               className="text-primary/70 hover:text-primary mt-1 text-xs transition-colors"
             >
               {showAllCategories ? '← Solo del tipo' : '+ Mostrar todas las categorías'}

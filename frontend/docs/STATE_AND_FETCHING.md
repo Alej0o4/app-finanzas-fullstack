@@ -62,6 +62,13 @@ Las claves deben mantenerse consistentes entre páginas y componentes.
 - `transactions`, `category`, `id`
 - `account-monthly-summary` (Fase 17 §17.1) — balance del mes de una cuenta puntual
   (`GET /accounts/{id}/monthly-summary`). Clave por cuenta, no reutiliza `dashboardSummary`.
+  - Nota (Fase 31 F10, Q11): el detalle de cuenta y de categoría (`accounts/[id]/page.tsx`,
+    `categories/[id]/page.tsx`) piden `GET /transactions/` con `limit: 20` — antes sin
+    límite, mostrando el histórico completo sin paginar. Las keys
+    (`transactions.byAccount(id)`, `transactions.byCategory(id)`) NO cambian (no llevan el
+    `limit` como segmento) y las invalidaciones existentes siguen valiendo. Debajo de la
+    lista, un link "Ver todos los movimientos (N)" (`N = total` de la respuesta, sin aplicar
+    el límite) a `/transactions?account=<id>` o `?category=<id>`, que sí filtra y pagina.
 - `account-category-breakdown` (Fase 17 §17.1) — desglose de gastos del mes por categoría,
   restringido a una cuenta.
 - `account-budgets-progress` (Fase 17 §17.1, Decisión 17.1.3/P4) — progreso de presupuestos
@@ -440,6 +447,15 @@ mes" arriba).
 - Feed global: `transactions`
 - Feed por cuenta o categoría: queries derivadas con el mismo prefijo
 - Filtros: fecha, cuenta y categoría
+- **Rango de fechas invertido** (Fase 31 F6, Q7, QA-010): `transactions/page.tsx` calcula
+  `dateRangeInverted` (fecha final anterior a la inicial) y lo pasa como
+  `enabled: !dateRangeInverted` al segundo argumento de `useTransactions` — la consulta no se
+  dispara mientras el rango es inválido, en vez de pedirle al backend un rango que no tiene
+  sentido. Un `useEffect` limpia `allItems`/`total` cuando el rango se invierte (mismo efecto
+  que `resetPagination`), así el área de la lista no muestra resultados de un filtro
+  anterior. Los filtros (`TransactionFilters`) se renderizan siempre — el error de campo
+  ("La fecha final es anterior a la inicial") vive bajo "Fecha final"; el skeleton de carga y
+  el estado de error con "Reintentar" ocupan solo el área de la lista, no la página entera.
 
 ## Validación
 
