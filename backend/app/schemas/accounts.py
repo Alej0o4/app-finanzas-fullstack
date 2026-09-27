@@ -55,8 +55,8 @@ class AccountMonthlySummary(BaseModel):
 
     Igual que `DashboardSummary.monthly_flow_balance` desde Fase 31 (Decisión B9): se
     deriva íntegramente de transacciones reales de la cuenta en el mes en curso, sin
-    ningún dato declarado de por medio — `monthly_flow_balance` nunca es `None`, mínimo
-    0.00. Antes de esa fase la comparación era con un `monthly_flow_balance` que sí
+    ningún dato declarado de por medio — `monthly_flow_balance` nunca es `None` (vale
+    0.00 sin movimientos y puede ser negativo). Antes de esa fase la comparación era con un `monthly_flow_balance` que sí
     podía ser `null`; ya no es el caso.
     """
 

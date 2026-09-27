@@ -28,11 +28,13 @@ Needs a root `.env` (copy from `.env.example`) with `POSTGRES_PASSWORD` and `SEC
 
 ```sh
 docker compose up -d --build                                          # production
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up      # dev, hot-reload
-docker compose logs -f backend                                        # logs
-docker compose exec backend python -c "from app.core.seed import run_seed; run_seed()"  # seed data
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up      # dev, hot-reload — separate project `oikos-dev`
+docker compose logs -f backend                                        # logs (production)
+docker compose -p oikos-dev exec backend python -c "from app.core.seed import run_seed; run_seed()"  # seed data — DEV ONLY
 docker compose exec backend python -c "from app.core.database import SessionLocal; from app.core.user_deletion import delete_user_by_email; db = SessionLocal(); print(delete_user_by_email(db, 'email@ejemplo.com')); db.close()"  # delete user by email (Fase 21, Decisión 21.2.5)
 ```
+
+**The default compose project on the deployment machine IS production** (Tailscale Funnel proxies to its `:3000`/`:8000`). The dev override (Fase 31, I1) is isolated: project name `oikos-dev`, its own DB volume (`oikos-dev_pgdata`), ports **`:3001` (frontend) / `:8001` (backend)**, `EMAIL_PROVIDER=console`, `FRONTEND_URL`/`ALLOWED_ORIGINS` on `localhost:3001`, `restart: "no"`, and no `backup` service (it sits behind `profiles: ["backup"]`). Any `exec`/`logs`/`down` against dev needs `-p oikos-dev` (or both `-f` files) — **without it the command hits production**, which is how the seed user once landed in the real DB (QA-002). Cookies don't distinguish ports, so dev and production opened in the same browser both on `localhost` overwrite each other's session; production is used via the Funnel domain, so in practice this doesn't collide. `pnpm gen:types` reads from the dev backend (`:8001`, override with `GEN_TYPES_API_URL`), never from production.
 
 ### Run (without Docker)
 
@@ -58,9 +60,18 @@ cd backend && pytest -v       # verbose
 cd backend && pytest --cov    # with coverage (pytest-cov)
 ```
 
+Postgres (Fase 31, T1): with `TEST_DATABASE_URL` set, the suite runs against Postgres instead (`drop_all`/`create_all` per session) and also runs the `@pytest.mark.postgres` tests (real concurrency, `Numeric` overflow, session timezone — auto-skipped on SQLite). The suite **aborts** if the DB name doesn't contain `test`. Use a throwaway container, never the compose Postgres:
+
+```sh
+docker run -d --rm --name oikos-test-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=oikos_test \
+  -p 127.0.0.1:5433:5432 --tmpfs /var/lib/postgresql/data postgres:16-alpine
+cd backend && TEST_DATABASE_URL=postgresql://postgres:test@127.0.0.1:5433/oikos_test pytest
+docker stop oikos-test-pg
+```
+
 ### Seed data
 
-`python -c "from app.core.seed import run_seed; run_seed()"` from `backend/` (venv active) — creates 3 accounts, 45 transactions, 6 budgets under `test@test.com` / `testpass123`.
+Only against dev or a throwaway DB — never production. `python -c "from app.core.seed import run_seed; run_seed()"` from `backend/` (venv active, `DATABASE_URL` pointing at a non-production DB), or the `-p oikos-dev` command above — creates 3 accounts, 45 transactions, 6 budgets under `test@test.com` / `testpass123`.
 
 ## Architecture
 
