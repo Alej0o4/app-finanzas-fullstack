@@ -180,6 +180,43 @@ class TestSoftDeletedEntitiesDisappear:
         )
         assert Decimal(str(progreso["spent"])) == Decimal("0.00")
 
+    def test_list_total_excludes_soft_deleted_and_pagination_ends(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """Fase 31 (Decisión B5, T4, QA-006): `total` de `GET /transactions` no cuenta las
+        borradas — `with_entities(func.count())` no tiene entidad mapeada y el filtro
+        global no lo alcanzaba. Falla antes del fix también en SQLite (`total` 3 vs 2
+        items) y con `limit=1` el "Cargar más" nunca terminaba."""
+        cuenta = make_account(auth_headers, balance="5000.00")
+        categoria = make_category(auth_headers, name="Comida total", type="expense")
+        ids = [
+            client.post(
+                "/api/v1/transactions/",
+                json={
+                    "amount": "10.00",
+                    "type": "expense",
+                    "account_id": cuenta["id"],
+                    "category_id": categoria["id"],
+                },
+                headers=auth_headers,
+            ).json()["id"]
+            for _ in range(3)
+        ]
+        assert client.delete(f"/api/v1/transactions/{ids[0]}", headers=auth_headers).status_code == 200
+
+        listado = client.get("/api/v1/transactions/", headers=auth_headers).json()
+        assert listado["total"] == 2 == len(listado["items"])
+
+        vistos, skip = [], 0
+        while True:
+            pagina = client.get(f"/api/v1/transactions/?skip={skip}&limit=1", headers=auth_headers).json()
+            vistos.extend(t["id"] for t in pagina["items"])
+            skip += 1
+            if skip >= pagina["total"]:
+                break
+            assert skip < 10, "la paginación no termina"
+        assert sorted(vistos) == sorted(ids[1:])
+
     def test_delete_transaction_still_reverts_balance_and_row_persists(
         self, db_session, client, auth_headers, make_account, make_category
     ):

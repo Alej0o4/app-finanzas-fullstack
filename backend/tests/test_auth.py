@@ -761,6 +761,60 @@ class TestCookiesDeSesion:
         assert client.cookies.get("refresh_token") is None
         assert client.cookies.get("csrf_token") is None
 
+    def _assert_todas_las_cookies_borradas(self, set_cookies: list[str]) -> None:
+        """T9 — Fase 31 (Decisión B10): los tres `Set-Cookie` con `Max-Age=0`, en sus
+        propios paths (mismo criterio que `limpiar_cookies_de_sesion`, que
+        `test_logout_clears_all_three_cookies` ya verifica para `/logout`)."""
+        por_nombre = {linea.split("=", 1)[0]: linea for linea in set_cookies}
+        assert set(por_nombre) == {"access_token", "refresh_token", "csrf_token"}
+        for nombre, linea in por_nombre.items():
+            assert "Max-Age=0" in linea, f"{nombre} no trae Max-Age=0: {linea!r}"
+        assert "Path=/" in por_nombre["access_token"]
+        assert "Path=/api/v1/auth" in por_nombre["refresh_token"]
+        assert "Path=/" in por_nombre["csrf_token"]
+
+    def test_refresh_without_cookie_nor_body_clears_the_three_session_cookies(self, client):
+        """T9 — Fase 31 (Decisión B10, H1, QA-021): sin cookie de sesión (cliente nuevo,
+        sin `client.cookies`) ni body, `POST /auth/refresh` responde 401 con el mismo
+        `detail` de siempre Y borra las tres cookies de sesión — antes de este fix el
+        401 se lanzaba como `UnauthorizedError`, que el handler global de `DomainError`
+        traduce a un `JSONResponse` nuevo que pierde cualquier `Set-Cookie` agregado al
+        `response` inyectado: no se borraba nada, y una cookie `csrf_token` huérfana
+        dejaba `/login` recargándose en bucle (QA-021)."""
+        response = client.post("/api/v1/auth/refresh")
+        assert response.status_code == 401, response.text
+        assert response.json()["detail"] == "Refresh token inválido o expirado"
+
+        self._assert_todas_las_cookies_borradas(response.headers.get_list("set-cookie"))
+
+    def test_refresh_with_invalid_token_clears_the_three_session_cookies(self, client):
+        """T9 — Fase 31 (Decisión B10): la otra rama de 401 (token desconocido/expirado,
+        no solo "sin cookie ni body") también borra las tres cookies."""
+        response = client.post("/api/v1/auth/refresh", json={"refresh_token": "token-que-no-existe"})
+        assert response.status_code == 401, response.text
+        assert response.json()["detail"] == "Refresh token inválido o expirado"
+
+        self._assert_todas_las_cookies_borradas(response.headers.get_list("set-cookie"))
+
+    def test_refresh_with_just_revoked_token_clears_cookies_even_without_grace_threshold(
+        self, client, register_and_login
+    ):
+        """T9 — Fase 31 (Decisión B10, H2, opción (a) resuelta con el dueño 2026-09-27):
+        un refresh token recién revocado por una rotación legítima (otra pestaña, o
+        acá mismo una llamada previa a /refresh) también limpia las cookies — sin
+        excepción por umbral de revocación reciente."""
+        user = register_and_login(email="cookies-refresh-ya-rotado@example.com")
+        original_refresh = user["refresh_token"]
+
+        primero = client.post("/api/v1/auth/refresh", json={"refresh_token": original_refresh})
+        assert primero.status_code == 200, primero.text
+
+        # Reusar el MISMO token ya rotado — como si otra pestaña ganara la carrera.
+        segundo = client.post("/api/v1/auth/refresh", json={"refresh_token": original_refresh})
+        assert segundo.status_code == 401, segundo.text
+
+        self._assert_todas_las_cookies_borradas(segundo.headers.get_list("set-cookie"))
+
     def test_logout_via_cookie_only_revokes_refresh_token_server_side(self, client, register_and_login):
         """Regresión: con el Path angosto original (/api/v1/auth/refresh) el cookie
         refresh_token nunca llegaba a /auth/logout (ruta hermana, no subruta) y el logout

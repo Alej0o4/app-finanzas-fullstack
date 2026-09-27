@@ -9,7 +9,7 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "gen:types": "openapi-typescript http://localhost:8000/openapi.json -o types/generated/api.ts"
+    "gen:types": "openapi-typescript ${GEN_TYPES_API_URL:-http://localhost:8001}/openapi.json -o types/generated/api.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.0",

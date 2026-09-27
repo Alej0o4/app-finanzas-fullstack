@@ -63,11 +63,22 @@ def aplicar_edicion(
     impacto viejo en la cuenta origen y aplica el nuevo en la cuenta destino — mismo
     comportamiento ya verificado por
     test_update_moving_to_different_currency_account_updates_currency
-    (backend/tests/test_transactions.py:401-433, Fase 11 §11.2)."""
+    (backend/tests/test_transactions.py:401-433, Fase 11 §11.2).
+
+    Fase 31 (Decisión B2, H12): los dos UPDATE se ejecutan en orden de `account_id`
+    ascendente, no en el orden "vieja, nueva" del caller — los deltas conmutan, así
+    que el resultado final es idéntico. Sin este orden fijo, dos PUT concurrentes que
+    mueven transacciones distintas en sentidos opuestos entre las mismas dos cuentas
+    (A→B y B→A) toman los locks de fila de `accounts` en orden inverso uno del otro, y
+    Postgres aborta uno de los dos con `DeadlockDetected` (el saldo queda bien por el
+    rollback, pero el usuario ve un 500 evitable)."""
     old_delta = delta_para(tipo_viejo, monto_viejo)
     new_delta = delta_para(tipo_nuevo, monto_nuevo)
     if cuenta_vieja_id == cuenta_nueva_id:
         aplicar_delta(db, cuenta_vieja_id, new_delta - old_delta)
-    else:
+    elif cuenta_vieja_id < cuenta_nueva_id:
         aplicar_delta(db, cuenta_vieja_id, -old_delta)
         aplicar_delta(db, cuenta_nueva_id, new_delta)
+    else:
+        aplicar_delta(db, cuenta_nueva_id, new_delta)
+        aplicar_delta(db, cuenta_vieja_id, -old_delta)

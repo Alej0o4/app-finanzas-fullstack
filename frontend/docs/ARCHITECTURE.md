@@ -172,16 +172,28 @@ Las páginas del dashboard deben limitarse a composición, fetching y UX local.
 - `app/capture/page.tsx`: pantalla de captura rápida (punto de entrada post-login). Solo
   compone `TransactionCaptureForm`; al guardar navega a `/`.
 
-## Onboarding de 3 minutos (Fase 15)
+## Onboarding de 3 minutos (Fase 15, criterio unificado en Fase 31 F5)
 
-- El registro con auto-login (§15.1) aterriza en `/capture?onboarding=1` con un JWT recién
-  emitido, sin pasar por `/login`. Esa URL activa un wizard de dos pasos del lado del cliente
-  (Decisión 15.0.2): primero el paso de ingreso mensual `OnboardingIncomeStep` (si
-  `monthly_income` sigue null) y después `TransactionCaptureForm` con copy guiado. Un login
-  genérico (Decisión 10.1.4) nunca lleva el parámetro y sigue viendo `/capture` normal.
-- La señal de "primera vez" del aha moment en el dashboard deriva de `total === 1` de
-  `GET /transactions/` (Decisión 15.0.1) — no hay estado persistido ni columna alguna; el banner
-  se apaga solo con la segunda transacción.
+- **Un solo criterio de destino post-login** (`lib/postLoginDestination.ts`, Fase 31 F5, Q4):
+  `has_transaction_history` → `/`; si no → `/capture?onboarding=1`. Lo usan `login/page.tsx`
+  y `GoogleAuthButton` por igual — antes cada uno decidía por su cuenta y solo Google mandaba
+  el flag (H6 de la spec de Fase 31). El registro con auto-login (§15.1) sigue aterrizando ahí
+  directo, sin pasar por `/login`; si `GET /users/me` falla, el fallback es `/capture` sin flag
+  (no bloquear el login por una pieza no crítica).
+- `?onboarding=1` activa un wizard de hasta dos pasos en `app/capture/page.tsx` (Decisión
+  15.0.2, criterio de cada paso ajustado en Fase 31 F5/Q4): primero `OnboardingCurrencyStep`,
+  después `OnboardingIncomeStep` — cada uno se muestra **solo si `user.monthly_income == null`**,
+  el mismo criterio para los dos pasos. Quien ya fijó su ingreso esperado (por cualquier vía)
+  salta directo a `TransactionCaptureForm` con copy guiado ("Ya casi…"), sin volver a preguntar
+  moneda ni ingreso — así el criterio es el mismo entrando por contraseña o por Google.
+- **Sin parpadeo mientras el usuario carga (H6):** mientras `useCurrentUser()` está en su
+  fetch inicial, el wizard no decide ningún paso — muestra un placeholder del tamaño de la
+  tarjeta en vez de mostrar el paso de moneda/ingreso un instante a alguien que ya los tiene
+  fijados (`user` llega `undefined` antes de resolver, y `undefined == null` es `true`).
+- La señal de "primera vez" del aha moment en el dashboard es el propio flag `?onboarding=1`
+  con el que `TransactionCaptureForm` redirige al dashboard (Decisión 15.0.1, revisada) — no
+  `total === 1` de `GET /transactions/`, que se rompe con la transacción semilla del ingreso
+  declarado (el onboarding completo ya deja 2 transacciones antes de la primera captura).
 
 ## Reglas de arquitectura
 

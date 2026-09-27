@@ -1,10 +1,12 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
+import { validateAmountText } from '@/lib/validateAmount';
+import { getVisibleCategories } from '@/lib/categoryVisibility';
 import type { Account, Category, Transaction, UpdateTransactionPayload } from '@/types/api';
 
 interface EditTransactionModalProps {
@@ -34,6 +36,14 @@ export default function EditTransactionModal({
   );
   const [editAccountId, setEditAccountId] = useState(String(transaction.account_id));
   const [editCategoryId, setEditCategoryId] = useState(String(transaction.category_id));
+  // Fase 31 F3 (Q10, QA-009, H13): el toggle arranca activado si la categoría original de
+  // la transacción es de la otra naturaleza que su tipo (un reembolso) — así el selector no
+  // arranca en "Selecciona…" perdiendo la categoría real. `categories` puede llegar
+  // `undefined` en el primer render; el toggle arranca apagado en ese caso, igual que hoy.
+  const [showAllCategories, setShowAllCategories] = useState(() => {
+    const originalCategory = categories?.find((c) => c.id === transaction.category_id);
+    return originalCategory !== undefined && originalCategory.type !== transaction.type;
+  });
   // Fase 12 §12.8.3: errores por campo (no globo nativo del navegador) + foco en el primero.
   const [editErrors, setEditErrors] = useState<{
     amount?: string;
@@ -48,14 +58,46 @@ export default function EditTransactionModal({
   const editCategoryRef = useRef<HTMLSelectElement>(null);
   const editDateRef = useRef<HTMLInputElement>(null);
 
+  // Fase 31 F3: lo que se ve en el <select> es lo que se envía — regla compartida con
+  // TransactionModal. La categoría original de la transacción (`transaction.category_id`)
+  // siempre aparece aunque esté oculta, para no arrancar el selector en blanco.
+  const displayedCategories = useMemo(
+    () => getVisibleCategories(categories, editType, showAllCategories, transaction.category_id),
+    [categories, editType, showAllCategories, transaction.category_id]
+  );
+
+  // Fase 31 F3 (H13): si al cambiar el tipo o al apagar el toggle la categoría elegida deja
+  // de estar entre las opciones visibles, se resetea a "Selecciona…" — mismo mecanismo que
+  // TransactionModal, para que el <select> nunca quede con un valor fuera de sus <option>.
+  const resetCategoryIfNotVisible = (nextType: 'income' | 'expense', nextShowAll: boolean) => {
+    const nextVisible = getVisibleCategories(
+      categories,
+      nextType,
+      nextShowAll,
+      transaction.category_id
+    );
+    setEditCategoryId((current) =>
+      current && !nextVisible.some((c) => String(c.id) === current) ? '' : current
+    );
+  };
+
+  const handleTypeChange = (newType: 'income' | 'expense') => {
+    setEditType(newType);
+    resetCategoryIfNotVisible(newType, showAllCategories);
+  };
+
+  const handleToggleShowAll = () => {
+    const nextShowAll = !showAllCategories;
+    setShowAllCategories(nextShowAll);
+    resetCategoryIfNotVisible(editType, nextShowAll);
+  };
+
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
 
     const errors: typeof editErrors = {};
-    const parsedAmount = Number(editAmount);
-    if (!editAmount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-      errors.amount = 'Ingresa un monto mayor a cero.';
-    }
+    const amountError = validateAmountText(editAmount);
+    if (amountError) errors.amount = amountError;
     if (!editDescription.trim()) errors.description = 'Ingresa una descripción.';
     if (!editAccountId) errors.accountId = 'Elige una cuenta.';
     if (!editCategoryId) errors.categoryId = 'Elige una categoría.';
@@ -71,7 +113,7 @@ export default function EditTransactionModal({
     onSave({
       id: transaction.id,
       description: editDescription,
-      amount: parsedAmount,
+      amount: Number(editAmount),
       type: editType as 'income' | 'expense',
       date: editDate,
       account_id: Number(editAccountId),
@@ -85,14 +127,14 @@ export default function EditTransactionModal({
         <div className="flex gap-4">
           <button
             type="button"
-            onClick={() => setEditType('expense')}
+            onClick={() => handleTypeChange('expense')}
             className={`flex-1 cursor-pointer rounded-xl border py-2 text-sm font-medium transition-colors ${editType === 'expense' ? 'bg-background border-border text-text' : 'text-text-muted hover:text-text border-transparent'}`}
           >
             Gasto
           </button>
           <button
             type="button"
-            onClick={() => setEditType('income')}
+            onClick={() => handleTypeChange('income')}
             className={`flex-1 cursor-pointer rounded-xl border py-2 text-sm font-medium transition-colors ${editType === 'income' ? 'bg-primary/10 border-primary/20 text-primary' : 'text-text-muted hover:text-text border-transparent'}`}
           >
             Ingreso
@@ -140,26 +182,34 @@ export default function EditTransactionModal({
               </option>
             ))}
           </Select>
-          <Select
-            ref={editCategoryRef}
-            label="Categoría"
-            required
-            value={editCategoryId}
-            onChange={(e) => setEditCategoryId(e.target.value)}
-            error={editErrors.categoryId}
-            className="bg-background appearance-none"
-          >
-            <option value="" disabled>
-              Selecciona...
-            </option>
-            {categories
-              ?.filter((c) => c.type === editType)
-              .map((c) => (
+          <div>
+            <Select
+              ref={editCategoryRef}
+              label="Categoría"
+              required
+              value={editCategoryId}
+              onChange={(e) => setEditCategoryId(e.target.value)}
+              error={editErrors.categoryId}
+              className="bg-background appearance-none"
+            >
+              <option value="" disabled>
+                Selecciona...
+              </option>
+              {displayedCategories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                  {showAllCategories ? ` (${c.type === 'income' ? 'Ingreso' : 'Gasto'})` : ''}
                 </option>
               ))}
-          </Select>
+            </Select>
+            <button
+              type="button"
+              onClick={handleToggleShowAll}
+              className="text-primary/70 hover:text-primary mt-1 text-xs transition-colors"
+            >
+              {showAllCategories ? '← Solo del tipo' : '+ Mostrar todas las categorías'}
+            </button>
+          </div>
         </div>
 
         <Input

@@ -101,6 +101,9 @@ Spec: `docs/specs/fase_26_spec.md`.
 La Fase 29 (navegación por mes + selector de moneda) se completó el 2026-09-26 — ver "Fase 29 —
 completada" abajo. La Fase 30 (chip "Esta semana" en Transacciones, KPIs de Analítica desde el
 backend y la deuda chica que dejó la Fase 29) también, el mismo día — ver "Fase 30 — completada".
+La Fase 31 (corrección de los hallazgos de la QA 2026-09-26) se completó el 2026-09-27 — ver
+"Fase 31 — completada". La Fase 32 (suite de tests sobre Postgres) sale de ese grilling y está
+pendiente del suyo.
 
 ---
 
@@ -274,6 +277,155 @@ dueño). Flujo completo de `docs/WORKFLOW.md` (spec corta), porque Q6 cambia un 
 
 ---
 
+## Fase 31 — completada (2026-09-27): corrección de los hallazgos de la QA 2026-09-26
+
+Sale de la primera pasada de QA (agente `qa-engineer` + Playwright, 2026-09-26, sobre `bc9dcb9`,
+re-verificada contra Postgres 16). Reporte completo:
+`.scratch/qa-2026-09-26/REPORTE_QA.md` (no versionado); ítems con causa y fix probable en
+`docs/TODO.md` (`QA-001` a `QA-022`). Desde `bc9dcb9` solo entraron commits de docs, así que las
+referencias de archivo y línea del reporte siguen vigentes.
+
+**Estado: completada el 2026-09-27** (ver `docs/CHANGELOG.md` y la spec): 17 de los 22 ítems
+de la QA resueltos; QA-014, QA-016, QA-017 y QA-018 quedan para flujo corto (Q1) y QA-002 ya
+estaba resuelto. Historia previa: `/grilling` hecho el 2026-09-27 (decisiones Q1–Q16, tomadas por el dueño) y `/to-spec`
+escrito el mismo día: `docs/specs/fase_31_spec.md`, sin marcadores abiertos (B10 resuelto: opción a) y
+revisado con `/analyze-spec 31` el mismo día (sin CRÍTICO/ALTO, ajustes aplicados): listo para implementar.** **Flujo completo** de `docs/WORKFLOW.md`: la fase toca backend y frontend a la vez,
+cambia reglas de `backend/docs/BUSINESS_RULES.md` (Q9, Q10) y contratos de API (Q9, QA-015).
+
+Es una fase de bugs, no de features. Entra porque varios hallazgos rompen las dos garantías
+centrales del proyecto: *el backend es la fuente de verdad de los saldos* (QA-003) y *el dueño
+puede entrar a su app* (QA-021, QA-004). QA-021 toca auth, pero no es hardening nuevo: es un bug
+que impide iniciar sesión (criterio "algo está roto de verdad" del pivote 2026-09-19).
+
+### Alcance (Q1)
+
+Bloques A a D más QA-001. Los ítems de entorno, seed, accesibilidad y detalles cosméticos (QA-016,
+QA-014, QA-017, QA-018) quedan fuera y se hacen por flujo corto después de la fase.
+
+| Bloque | Ítems |
+|---|---|
+| **A. Integridad contable (backend)** | QA-003 🔴 carrera en `DELETE`/`PUT /transactions/{id}` que descuadra el saldo · QA-015 🟠 `500` por overflow de `Numeric(14,2)` · QA-006 🟡 `total` cuenta las borradas · QA-019 🟢 techo del mes sin fracción de segundo · QA-020 🟢 misma `Idempotency-Key` con payload distinto en carrera → `200` en vez de `409` · QA-022 🟢 sesión Postgres asumida en UTC |
+| **B. Frontend que se rompe o bloquea** | QA-021 🟠 bucle de recargas en `/login` · QA-004 🟠 un `422` con `detail` en lista tumba la página · QA-005 🟠 el onboarding no aparece tras registrarse con contraseña · QA-010 🟡 error de API mostrado como lista vacía en `/transactions` · QA-013 🟡 paso de ingreso del onboarding sin mensaje de error |
+| **C. Montos que se muestran mal** | QA-007 🟡 todo redondeado a la unidad · QA-008 🟡 "Te quedan" no cuadra con "Ingresos del Mes" · QA-012 🟡 `BudgetRing` topa en 100% · QA-011 🟡 detalle de cuenta/categoría truncado a 100 |
+| **D. Reglas de dominio** | QA-009 🟡 el modal de edición muestra una categoría y envía otra |
+| **Entorno** | QA-001 🟠 el entorno dev de Docker comparte base, puertos y proyecto con producción |
+
+### Estado del código relevado (2026-09-27)
+
+- `components/auth/GoogleAuthButton.tsx:55` ya manda a `/capture?onboarding=1` si
+  `!has_transaction_history`; `app/(auth)/login/page.tsx:85` usa la misma condición pero manda a
+  `/capture` sin el flag. `has_transaction_history` es `true` con **2 o más** transacciones
+  (`api/users.py:113`). En `/capture`, el paso de moneda del wizard depende solo del flag de la URL;
+  el de ingreso, de `monthly_income == null`.
+- `backend/tests/conftest.py` crea siempre un engine SQLite en memoria. En SQLite,
+  `with_for_update()` no hace nada y `Numeric(14,2)` no se aplica: por eso QA-003 y QA-015 no los
+  detectó la suite.
+- `lib/formatters.ts` (`formatCurrency`) fija `minimumFractionDigits: 0, maximumFractionDigits: 0`
+  para todas las monedas.
+- `components/charts/BudgetRing.tsx:30` hace `Math.min(Math.max(raw, 0), 100)` antes de mostrar el
+  porcentaje.
+- `GET /transactions` ya filtra por `account_id` y `category_id` (`limit` 100 por defecto), y
+  `/transactions` en el front ya lee `?account=` y `?category=` de la URL.
+- `User.monthly_income` solo se usa en un cálculo: `monthly_flow_balance` del mes en curso
+  (`api/dashboard.py:186`). En la UI aparece en el paso de ingreso del onboarding, en `/settings` y
+  en el formulario inline del dashboard.
+- **Categorías con transacciones de ambos tipos (reembolsos) — diseño deliberado.** El modal de
+  creación (`TransactionModal.tsx:48-52`) tiene un toggle "ver todas las categorías" para registrar,
+  por ejemplo, un ingreso en "Restaurante" cuando los amigos devuelven su parte, y
+  `GET /dashboard/category-distribution?neto=true` (`api/dashboard.py:386`) netea `gasto − ingreso`
+  por categoría (Analítica, `?neto=true`). El bug real de QA-009 está en
+  `EditTransactionModal.tsx:156`: filtra estrictamente por tipo, sin toggle, y al cambiar el tipo el
+  `<select>` muestra la primera opción visible mientras el estado conserva el `category_id` anterior.
+  Fuera de la dona, el reembolso cuenta como ingreso en la tarjeta del dashboard y en los KPIs de
+  Analítica, y los presupuestos solo suman gastos (`core/budget_alerts.py:29`).
+- `docker-compose.dev.yml` no define `name:` ni puertos y no toca el volumen `pgdata`. El servicio
+  `backup` de `docker-compose.yml` sube a Google Drive con retención de 30 días, y hoy también se
+  levanta con el override dev.
+
+### Decisiones tomadas con el dueño
+
+| # | Decisión | Resolución |
+|---|---|---|
+| Q1 | ¿Qué entra en la fase? | Bloques A–D + QA-001. QA-016, QA-014, QA-017 y QA-018 van por flujo corto después de la fase. |
+| Q2 | QA-003: cómo se serializan `PUT`/`DELETE` | `SELECT … FOR UPDATE` sobre la fila de la transacción al empezar `PUT` y `DELETE`, más borrado condicional como segunda defensa (`UPDATE … WHERE deleted_at IS NULL`; sin filas afectadas → `404` sin tocar el saldo). **No** se bloquean las cuentas: el `UPDATE balance = balance + x` ya es atómico. |
+| Q3 | QA-003: test de regresión, y SQLite vs Postgres | `conftest.py` acepta `TEST_DATABASE_URL` para **toda la suite** (default SQLite). Test concurrente marcado `postgres`, saltado sin `TEST_DATABASE_URL`. Tests secuenciales en SQLite (segundo `DELETE` → `404` con saldo intacto; `PUT` sobre una transacción borrada → `404`). Receta del Postgres desechable en tmpfs documentada. Antes de cerrar, la suite completa se corre contra Postgres. **Mover la suite a Postgres por defecto es la Fase 32** (abajo): el dueño coincide en que es lo correcto, pero no se mezcla con una fase de bugs sin saber cuántos tests fallan. |
+| Q4 | QA-005: cuándo aparece el onboarding | Un helper compartido por el login con contraseña y `GoogleAuthButton`: `!has_transaction_history` → `/capture?onboarding=1`. El paso de moneda solo se muestra si `monthly_income == null` (onboarding ya hecho = ingreso fijado). Sin migración. |
+| Q5 | QA-021: bucle en `/login` | Frontend: el interceptor de `lib/api.ts` no redirige si ya está en una ruta de `(auth)`. Backend: el `401` de `POST /auth/refresh` llama a `limpiar_cookies_de_sesion`. Sin cambiar `haySesionActiva()`. Pasa por `security-reviewer` en el paso 9 del flujo, para no romper la base de la Fase 26. |
+| Q6 | QA-004: `getApiError` y validación | `getApiError` aplana `detail` (lista u objeto) a texto legible. Además, `/capture` y los modales validan antes de enviar máximo 2 decimales y 12 dígitos enteros, con error de campo visible; el formulario no se pierde. |
+| Q7 | QA-010: `/transactions` | Rango invertido → error de campo ("La fecha final es anterior a la inicial") y no se consulta; `min`/`max` en los inputs como ayuda. Un error de la API se muestra como error con "Reintentar" (patrón Fase 24), no como "Aún no tienes movimientos". Los filtros siguen visibles durante los reintentos. |
+| Q8 | QA-007: decimales | Mínimo según la moneda (COP 0; USD, EUR y el resto 2) y máximo 2 siempre: un monto en COP con centavos los muestra, en USD siempre se ven. Ejes y etiquetas compactas de los gráficos no cambian. |
+| Q9 | QA-008: "Te quedan" | **El balance del mes en curso pasa a ser ingreso real − gasto real**, igual que los meses cerrados. Revierte la base "ingreso declarado" de la Fase 11: tras semanas de uso, "Te quedan" sobre lo declarado confunde y no representa lo que realmente queda. `monthly_flow_basis` se conserva en el contrato, siempre `"actual"`, documentado como obsoleto. Rótulo "Balance de <mes>". Antes de cobrar, el balance del mes puede ser negativo, y eso es correcto. |
+| Q14 | Ingreso declarado (`monthly_income`) tras Q9 | Queda como **referencia visual sin cálculo** en la tarjeta (p. ej. "Ingresos del mes $3.200 · esperado $3.000"), para dar contexto a un balance negativo a principio de mes. El paso del onboarding, `/settings` y el formulario inline se quedan, con copy ajustado para no prometer que alimenta un cálculo. |
+| Q10 | QA-009: categoría vs tipo de transacción | **Se mantiene que una categoría acepte transacciones de ambos tipos** (reembolsos, neto de Analítica). El modal de edición gana el mismo toggle "ver todas" que el de creación: arranca activado si la categoría actual es de la otra naturaleza, y si al cambiar el tipo la categoría deja de estar visible se resetea. Así lo visible siempre coincide con lo enviado. Sin `422` en el backend y sin bloquear el cambio de naturaleza de una categoría con movimientos. La regla queda escrita en `BUSINESS_RULES.md` ("un ingreso en una categoría de gasto se interpreta como reembolso"), con su limitación actual: solo la dona netea. |
+| Q15 | ¿Netear los reembolsos en toda la app? | **Fuera de la Fase 31.** Es un cambio de modelo (tarjeta, KPIs, presupuestos, alertas, resumen semanal) → fila nueva en el backlog, con su propio `/grilling`. |
+| Q11 | QA-011: detalle truncado a 100 | `/accounts/[id]` y `/categories/[id]` muestran los últimos 20 movimientos más un link "Ver todos los movimientos" a `/transactions?account=<id>` / `?category=<id>`, que ya filtra y pagina. |
+| Q12 | QA-012: `BudgetRing` por encima del 100% | El texto muestra el porcentaje real (106%) **y** el anillo representa el exceso (ver Q16). |
+| Q16 | Cómo se dibuja el exceso | Segunda vuelta superpuesta en un rojo más intenso (estilo anillos de Apple Watch): 106% = anillo lleno + arco del 6%. Topada visualmente en 200%; el texto sigue mostrando el valor real. |
+| Q13 | QA-001: aislar el entorno dev | `docker-compose.dev.yml` con `name: oikos-dev` (el volumen pasa a `oikos-dev_pgdata` y los contenedores son otros) y puertos reemplazados con `!override` (3001/8001, porque Compose suma las listas de puertos). **El servicio `backup` queda excluido en dev**: si no, subiría la base de dev al mismo remoto y la rotación de 30 días podría ir desplazando backups reales. Se corrige el comando dev de `CLAUDE.md`. |
+
+Ítems sin decisión de producto, con el fix probable de `docs/TODO.md`: QA-015 (`max_digits=14,
+decimal_places=2` en los schemas + overflow del saldo traducido a `ValidationError`), QA-006
+(`count` con el filtro de soft-delete), QA-019 (techo exclusivo `< primer día del mes siguiente` en
+`core/periods.py`), QA-020 (comparar `request_hash` en la rama `except IntegrityError`), QA-022
+(`-c timezone=UTC` en `database.py`) y QA-013 (error de campo visible, patrón Fase 24 §24.2).
+
+### Supuestos aceptados (sin pregunta dedicada)
+
+1. Cada fix de backend lleva su test de regresión en pytest. El frontend se verifica con Playwright
+   en desktop y 390×844 en el entorno aislado de la QA, **nunca** contra el stack de Docker local,
+   que es producción.
+2. Al cerrar, una segunda pasada corta del `qa-engineer` sobre los ítems resueltos, y se marcan `[x]`
+   con fecha en `docs/TODO.md`.
+3. Cambian contratos (validación de QA-015, `monthly_flow_basis` obsoleto y nuevo cálculo del
+   balance en Q9) → actualizar **ambos** `backend/docs/API_REFERENCE.md` y
+   `frontend/docs/API_CONTRACT.md`, y `BUSINESS_RULES.md` (Q9, Q10).
+
+### Fuera de la Fase 31
+
+- **Por flujo corto, después de la fase:** QA-016 (seed descuadrado y conteo de `CLAUDE.md`),
+  QA-014 (accesibilidad de `ModalShell` y botones de categoría), QA-017 (hydration en `/settings`),
+  QA-018 (detalles cosméticos).
+- **Suite de tests en Postgres por defecto** → Fase 32 (Q3).
+- **Reembolsos como gasto negativo en toda la app** → backlog (Q15).
+- **Deuda ya aceptada que la QA confirmó vigente:** filtro de cuentas destacadas inconsistente
+  (decisión de producto aparte), mes/semana en UTC frente a hora Bogotá (incluye la fecha por
+  defecto del modal, que propone el día siguiente después de las 19:00), y
+  `GET /budgets/?month=&year=` en meses cerrados.
+- **Observaciones de la QA que no son bugs:** aviso en Ajustes de que el ingreso declarado se
+  reinterpreta al cambiar la moneda principal, transferencias como tipo propio, cobertura baja
+  de `email.py`/`user_deletion.py`/`weekly_summary.py`, warnings de pytest (`SAWarning`,
+  `DeprecationWarning`, `passlib`/`crypt`) y `pnpm.onlyBuiltDependencies`. Candidatas a flujo
+  corto aparte.
+- Login con Google caído (externo), tests de frontend y CI (fuera de scope).
+- QA-002 ya está resuelto (usuario semilla borrado de producción el 2026-09-26).
+
+---
+
+## Fase 32 — planeada (2026-09-27): suite de tests sobre Postgres por defecto
+
+Sale de la Q3 del `/grilling` de la Fase 31. Hoy `backend/tests/conftest.py` corre siempre contra
+SQLite en memoria, mientras producción corre en Postgres 16, y esa diferencia dejó fuera de los 313
+tests a QA-003 (SQLite serializa las escrituras y no aplica `FOR UPDATE`) y QA-015 (SQLite no
+aplica `Numeric(14,2)`). Probar contra el mismo motor que producción es la práctica recomendada.
+
+**Estado: planeada, pendiente de `/grilling`.** Parte de lo que deje la Fase 31: `conftest.py` ya
+acepta `TEST_DATABASE_URL` y la suite completa ya se habrá corrido una vez contra Postgres, así que
+el inventario de tests que fallan por diferencias de motor va a existir antes de empezar. **Ya
+existe (2026-09-27):** 348 pasan y 1 falla solo en Postgres (`TestUpdatedAt`, ver `docs/TODO.md`
+§"Deuda nueva consciente de la Fase 31").
+
+Alcance tentativo, a decidir en el `/grilling`:
+
+- Postgres como default de `pytest` (probablemente con `testcontainers-python`, que levanta y
+  destruye el contenedor solo) y qué hacer con SQLite (fallback o eliminarlo).
+- Arreglar los tests que fallen por diferencias de motor (`test_seed.py` referencia SQLite
+  explícitamente).
+- ¿Crear el schema con `alembic upgrade head` en vez de `Base.metadata.create_all`, para que la
+  suite pruebe también las migraciones?
+- Actualizar `CLAUDE.md` ("no Docker/Postgres needed") y el skill `/run-tests`.
+
+---
+
 ## Pendientes abiertos
 
 - [ ] **Login con Google caído en producción** (`disabled_client`) — sigue siendo prioritario
@@ -304,7 +456,8 @@ Ver también `docs/TODO.md` para deuda técnica y bugs confirmados no ligados a 
 Con las Fases 27–28 cerradas (arriba), este backlog retoma la numeración desde **Fase 29**: el
 primer candidato de la tabla de abajo (navegación por mes + selector de moneda) se completó como
 Fase 29 el 2026-09-26. La Fase 30 (arriba) es de ajustes chicos post-Fase 29, no sale de esta
-tabla; la siguiente fase de features sale del resto de la tabla.
+tabla. Las Fases 31 y 32 (arriba) tampoco: corrigen los hallazgos de la QA 2026-09-26 y pasan la
+suite de tests a Postgres. La siguiente fase de features sale del resto de la tabla.
 
 Criterio de prioridad: ¿esto hace que trackear y entender mis propios gastos sea más fácil o más
 claro? Ya no hay criterio de "adquisición", "retención de usuarios" ni "efecto wow" de
@@ -315,6 +468,7 @@ marketing — se reformulan abajo en términos de valor de uso personal directo.
 | Media | **Filtro por categoría** (dashboard/Analítica) | Separado de la Fase 29 el 2026-09-26 — el dueño quiere revisarlo más a fondo antes de decidir alcance (¿una o varias categorías? ¿qué gráficos filtra? interacción con "ocultar categoría" de la dona). `GET /transactions/` ya soporta `category_id`; `category-distribution`/`cashflow-series` todavía no. |
 | Alta | **Automatización de ingresos/gastos recurrentes** | El scheduler ya existe desde Fase 14. Reduce fricción de captura, que es tiempo que se puede invertir en mirar los datos en vez de cargarlos. |
 | Alta | **Sinking funds** (gastos distribuidos en cuotas mensuales virtuales) | Validado por YNAB para presupuesto personal serio. Encaja directo con "cuánto me queda" del dashboard de flujo. |
+| Media | **Reembolsos como gasto negativo en toda la app** | Sale de la Q15 del grilling de la Fase 31 (2026-09-27). Hoy un ingreso en una categoría de gasto (p. ej. los amigos devuelven su parte del restaurante) solo se netea en la dona de Analítica (`?neto=true`): la tarjeta del dashboard y los KPIs lo cuentan como ingreso, y los presupuestos y sus alertas cuentan el gasto completo. Tratarlo como gasto negativo toca 5–6 cálculos del backend y varios contratos — a definir en su propio `/grilling`. |
 | Media | **Vistas de tendencia / comparación entre meses** (nueva candidata) | No estaba en el backlog anterior porque el enfoque previo priorizaba features de producto sobre profundidad analítica. Encaja con el objetivo explícito de "que me facilite el análisis de mi dinero" — a definir alcance en una próxima sesión de spec. |
 | Media | **Registro por nota de voz con IA** | Reencuadrada como conveniencia de captura personal, no "efecto wow" de marketing. Depende de la captura por nombre (Fase 16, ya lista). |
 | Baja | **`◀ ▶` en los chips de `/transactions`** | Separado de la Fase 30 (Q3) el 2026-09-26. Mismo patrón que Analítica (`?ref=`, título dinámico); falta decidir cómo convive con las fechas editadas a mano. |

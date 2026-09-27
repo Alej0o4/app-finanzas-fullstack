@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Tag, ArrowDownRight, ArrowUpRight, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
@@ -45,11 +46,14 @@ export default function CategoryDetailPage() {
     queryFn: async () => (await api.get(`categories/${id}`)).data,
   });
 
+  // Fase 31 F10 (Q11, QA-011): últimos 20 movimientos, no todo el histórico sin límite — el
+  // endpoint ya ordena por fecha descendente. `transactionsData.total` (sin el `limit`
+  // aplicado por el backend) alimenta el link "Ver todos los movimientos (N)" de abajo.
   const { data: transactionsData, isLoading: loadingTx } = useQuery<PaginatedResponse<Transaction>>(
     {
       queryKey: queryKeys.transactions.byCategory(id as string),
       queryFn: async () =>
-        (await api.get(`transactions/`, { params: { category_id: Number(id) } })).data,
+        (await api.get(`transactions/`, { params: { category_id: Number(id), limit: 20 } })).data,
     }
   );
 
@@ -240,6 +244,16 @@ export default function CategoryDetailPage() {
             </div>
           )}
         </div>
+        {/* Fase 31 F10 (Q11, QA-011): la lista de arriba corta en 20 — este link lleva a
+            /transactions ya filtrado y paginado, sin nada cortado en silencio. */}
+        {transactions && transactions.length > 0 && (
+          <Link
+            href={`/transactions?category=${id}`}
+            className="text-primary hover:text-primary-dark block text-center text-sm font-medium transition-colors"
+          >
+            Ver todos los movimientos ({transactionsData?.total ?? transactions.length})
+          </Link>
+        )}
       </div>
 
       <ModalShell

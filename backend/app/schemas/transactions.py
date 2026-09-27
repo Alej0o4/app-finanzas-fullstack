@@ -6,6 +6,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.schemas.common import MAX_DIGITS_MONEY
+
 
 # --- TRANSACCIONES ---
 class TransactionType(str, Enum):
@@ -20,7 +22,9 @@ class PaymentMethod(str, Enum):
 
 
 class TransactionBase(BaseModel):
-    amount: Decimal = Field(..., gt=0, decimal_places=2, description="El monto debe ser mayor a cero")
+    amount: Decimal = Field(
+        ..., gt=0, decimal_places=2, max_digits=MAX_DIGITS_MONEY, description="El monto debe ser mayor a cero"
+    )
     currency: str = "COP"
     type: TransactionType
     description: str | None = Field(None, max_length=500)

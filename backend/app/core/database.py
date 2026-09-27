@@ -9,13 +9,27 @@ from sqlalchemy.types import DateTime
 # DATABASE_URL puede ser SQLite (local) o PostgreSQL (Docker/producción).
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./finanzas.db")
 
-# 2. Creamos el "Motor" (Engine)
-# connect_args solo es necesario para SQLite.
-_engine_kwargs = {}
-if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
-    _engine_kwargs["connect_args"] = {"check_same_thread": False}
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL, **_engine_kwargs)
+def engine_kwargs_for_url(url: str) -> dict:
+    """Arma los `kwargs` de `create_engine` según el dialecto (Fase 31, Decisión B8).
+
+    SQLite: `check_same_thread=False`, como siempre. Postgres: fija la sesión en UTC
+    vía `-c timezone=UTC` — la app ya trabaja en datetimes naive UTC en todos lados
+    (`core/periods.py`), y sin esto los agregados de fecha (cashflow-series,
+    dashboard, monthly-summary) quedarían a merced del timezone configurado en el
+    servidor Postgres, no del de la app (QA-022). `tests/conftest.py` (T1) usa esta
+    misma función para el engine de `TEST_DATABASE_URL`, así la suite contra Postgres
+    corre con la misma sesión que producción.
+    """
+    if url.startswith("sqlite"):
+        return {"connect_args": {"check_same_thread": False}}
+    if url.startswith("postgresql"):
+        return {"connect_args": {"options": "-c timezone=UTC"}}
+    return {}
+
+
+# 2. Creamos el "Motor" (Engine)
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs_for_url(SQLALCHEMY_DATABASE_URL))
 
 # 3. Creamos la Fábrica de Sesiones
 # Una "sesión" es una transacción temporal. Aquí abrimos la conexión, hacemos los cambios y luego cerramos.

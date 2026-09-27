@@ -8,17 +8,16 @@ Dos funciones puras con `ahora` inyectado, deliberadamente separadas:
 
 - `resolver_mes` valida lo que llega por query param (frontera de confianza) y devuelve
   además si el período es el mes en curso.
-- `limites_mes_utc` NO valida y jamás lanza por un mes futuro; solo acota el rango.
+- `rango_mes_utc` NO valida y jamás lanza por un mes futuro; solo acota el rango.
 
 Que la validación viva en una y no en la otra no es una asimetría estética: ver el
-docstring de `limites_mes_utc`.
+docstring de `rango_mes_utc`.
 
 La semántica de mes es UTC, no la hora local del dueño (supuesto 1 de la fase). El
 desfase resultante en el borde de mes (desde las 19:00 hora Bogotá del último día el
 "mes actual" UTC ya es el siguiente) se acepta y está registrado en `docs/TODO.md` (H11).
 """
 
-from calendar import monthrange
 from datetime import datetime
 
 # Se importa con alias porque `ValidationError` también es el nombre de la excepción de
@@ -53,11 +52,24 @@ def resolver_mes(year: int | None, month: int | None, ahora: datetime) -> tuple[
     return year, month, (year, month) == (ahora.year, ahora.month)
 
 
-def limites_mes_utc(year: int, month: int, ahora: datetime) -> tuple[datetime, datetime]:
-    """Acota un mes calendario a `(inicio, limite)` en datetimes **naive** UTC.
+def rango_mes_utc(year: int, month: int, ahora: datetime) -> tuple[datetime, datetime]:
+    """Acota un mes calendario a `[inicio, fin)` **semiabierto**, en datetimes
+    **naive** UTC — `fin` es EXCLUSIVO (Fase 31, Decisión B6, QA-019).
 
-    El techo es `ahora` cuando el período es el mes en curso y el último día a las
-    23:59:59 cuando no lo es. Es la semántica exacta que tenía el cálculo inline de
+    El techo es `ahora` cuando el período es el mes en curso (igual que siempre) y el
+    primer día del mes siguiente a las 00:00 cuando no lo es (diciembre → 1 de enero
+    del año siguiente) — antes era el último día del mes a las 23:59:59, y una
+    comparación `<=` contra ese valor perdía cualquier instante con fracción de
+    segundo después de esa marca (`23:59:59.500000`, por ejemplo): un movimiento del
+    último segundo del mes desaparecía tanto del summary como de budgets-progress.
+
+    Todos los consumidores deben comparar con `< fin`, NUNCA `<= fin` — un `<=` contra
+    "el primer día del mes siguiente" contaría la medianoche del mes siguiente, en
+    silencio. Por eso esta función se renombró desde `limites_mes_utc`: un consumidor
+    que alguien olvide actualizar es un `ImportError` inmediato, no una medianoche
+    contada dos veces.
+
+    Es la semántica exacta que tenía el cálculo inline de
     `budget_alerts.spent_por_categoria_y_moneda` y que comparten ahora el summary y los
     presupuestos del dashboard (H9: la lógica estaba copiada en tres sitios).
 
@@ -77,8 +89,8 @@ def limites_mes_utc(year: int, month: int, ahora: datetime) -> tuple[datetime, d
     una condición de negocio.
     """
     inicio = datetime(year, month, 1)
-    ultimo_dia = datetime(year, month, monthrange(year, month)[1], 23, 59, 59)
+    fin_mes_cerrado = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
     if (year, month) == (ahora.year, ahora.month):
         # `replace(tzinfo=None)` quita la zona; en un `ahora` ya naive es un no-op.
         return inicio, ahora.replace(tzinfo=None)
-    return inicio, ultimo_dia
+    return inicio, fin_mes_cerrado

@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
-from app.schemas.common import _validate_password_strength
+from app.schemas.common import MAX_DIGITS_MONEY, _validate_password_strength
 
 
 # --- USUARIOS ---
@@ -68,7 +68,7 @@ class UserProfileUpdate(BaseModel):
     así que un valor ya seteado no se puede volver a None desde la API.
     """
 
-    monthly_income: Decimal | None = Field(None, ge=0, decimal_places=2)
+    monthly_income: Decimal | None = Field(None, ge=0, decimal_places=2, max_digits=MAX_DIGITS_MONEY)
 
 
 class UserDeleteRequest(BaseModel):

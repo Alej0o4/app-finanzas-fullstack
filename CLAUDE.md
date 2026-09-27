@@ -10,7 +10,7 @@ Oikos — a multi-currency personal-finance web app. FastAPI backend, Next.js Ap
 
 The central conceptual shift from the first pivot still stands: the current app is **stock**-based (accounts hold balances; the dashboard answers *"how much do I have?"*). The MVP built in Phases 8-15 is **flow**-based (the dashboard answers *"how much did I spend this month and what's left?"*). Both coexist — account balances stay visible in a secondary view — but the dashboard's headline figure is monthly flow (`monthly_income − monthly expenses`).
 
-**Phases 0–30 are complete** (2026-07-06 through 2026-09-26) — see `docs/CHANGELOG.md` for the full phase-by-phase history and `docs/specs/fase_NN_spec.md` for per-phase implementation detail. Live, not just planned: the flow-based dashboard, budget alerts + push notifications, the weekly summary, the 3-minute onboarding, API-key-based mobile shortcuts, per-account analytics, a customizable category system, branded transactional email, Google OAuth login, self-service account settings (currency + deletion), a services/schemas/domain-exceptions architecture layer (`app/services/ledger.py`, `app/schemas/*`, `app/core/exceptions.py` — the exceptions layer now covers every router, not just a pilot, since Phase 28), and session auth on `httpOnly` cookies with CSRF protection (Phase 26). Phases 27–28 (2026-09-19) closed out the last open modularity debt — `transactions/page.tsx` decomposed into subcomponents, `DomainError` rolled out repo-wide — deliberately, before resuming the feature backlog (see `docs/ROADMAP.md`). Phase 29 (2026-09-26) resumed it: the dashboard is navigable by month (`?month=YYYY-MM`, backed by optional `?year=&month=` on `GET /dashboard/summary` and `/budgets-progress`), Analytics by week/month/year (`?ref=`), and both get a currency selector. Phase 30 (2026-09-26) aligned `/transactions` on the same calendar week ("Esta semana" chip, UTC) and moved Analytics' KPI totals server-side: `GET /dashboard/cashflow-series` now returns an object `{ buckets, total_income, total_expense, net }`, not a bare list.
+**Phases 0–31 are complete** (2026-07-06 through 2026-09-27) — see `docs/CHANGELOG.md` for the full phase-by-phase history and `docs/specs/fase_NN_spec.md` for per-phase implementation detail. Live, not just planned: the flow-based dashboard, budget alerts + push notifications, the weekly summary, the 3-minute onboarding, API-key-based mobile shortcuts, per-account analytics, a customizable category system, branded transactional email, Google OAuth login, self-service account settings (currency + deletion), a services/schemas/domain-exceptions architecture layer (`app/services/ledger.py`, `app/schemas/*`, `app/core/exceptions.py` — the exceptions layer now covers every router, not just a pilot, since Phase 28), and session auth on `httpOnly` cookies with CSRF protection (Phase 26). Phases 27–28 (2026-09-19) closed out the last open modularity debt — `transactions/page.tsx` decomposed into subcomponents, `DomainError` rolled out repo-wide — deliberately, before resuming the feature backlog (see `docs/ROADMAP.md`). Phase 29 (2026-09-26) resumed it: the dashboard is navigable by month (`?month=YYYY-MM`, backed by optional `?year=&month=` on `GET /dashboard/summary` and `/budgets-progress`), Analytics by week/month/year (`?ref=`), and both get a currency selector. Phase 30 (2026-09-26) aligned `/transactions` on the same calendar week ("Esta semana" chip, UTC) and moved Analytics' KPI totals server-side: `GET /dashboard/cashflow-series` now returns an object `{ buckets, total_income, total_expense, net }`, not a bare list. Phase 31 (2026-09-27) fixed the first QA pass's findings: row-locked `PUT`/`DELETE /transactions`, money-range `422`s, half-open month ranges, the dashboard flow balance is now always real income − real expense (`monthly_income` is only a visual reference), and the Docker dev override is isolated from production.
 
 A few operational facts from that history remain true today, not just historical record:
 - **Google login is currently down in production** — Google Cloud disabled the OAuth client (`disabled_client`, 2026-09-19), likely an automated antifraud false-positive on a new personal project; an appeal is pending. This is a real, personal-use-affecting bug (the owner's own daily login), not a hardening item — see `docs/TODO.md` 🟠 for the workaround in use and the fix if the appeal fails. Separately, `GOOGLE_CLIENT_ID`/`NEXT_PUBLIC_GOOGLE_CLIENT_ID` still need to be set per-environment or `GoogleAuthButton` silently renders nothing and `/auth/google` returns `503`.
@@ -28,11 +28,13 @@ Needs a root `.env` (copy from `.env.example`) with `POSTGRES_PASSWORD` and `SEC
 
 ```sh
 docker compose up -d --build                                          # production
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up      # dev, hot-reload
-docker compose logs -f backend                                        # logs
-docker compose exec backend python -c "from app.core.seed import run_seed; run_seed()"  # seed data
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up      # dev, hot-reload — separate project `oikos-dev`
+docker compose logs -f backend                                        # logs (production)
+docker compose -p oikos-dev exec backend python -c "from app.core.seed import run_seed; run_seed()"  # seed data — DEV ONLY
 docker compose exec backend python -c "from app.core.database import SessionLocal; from app.core.user_deletion import delete_user_by_email; db = SessionLocal(); print(delete_user_by_email(db, 'email@ejemplo.com')); db.close()"  # delete user by email (Fase 21, Decisión 21.2.5)
 ```
+
+**The default compose project on the deployment machine IS production** (Tailscale Funnel proxies to its `:3000`/`:8000`). The dev override (Fase 31, I1) is isolated: project name `oikos-dev`, its own DB volume (`oikos-dev_pgdata`), ports **`:3001` (frontend) / `:8001` (backend)**, `EMAIL_PROVIDER=console`, `FRONTEND_URL`/`ALLOWED_ORIGINS` on `localhost:3001`, `restart: "no"`, and no `backup` service (it sits behind `profiles: ["backup"]`). Any `exec`/`logs`/`down` against dev needs `-p oikos-dev` (or both `-f` files) — **without it the command hits production**, which is how the seed user once landed in the real DB (QA-002). Cookies don't distinguish ports, so dev and production opened in the same browser both on `localhost` overwrite each other's session; production is used via the Funnel domain, so in practice this doesn't collide. `pnpm gen:types` reads from the dev backend (`:8001`, override with `GEN_TYPES_API_URL`), never from production.
 
 ### Run (without Docker)
 
@@ -58,9 +60,18 @@ cd backend && pytest -v       # verbose
 cd backend && pytest --cov    # with coverage (pytest-cov)
 ```
 
+Postgres (Fase 31, T1): with `TEST_DATABASE_URL` set, the suite runs against Postgres instead (`drop_all`/`create_all` per session) and also runs the `@pytest.mark.postgres` tests (real concurrency, `Numeric` overflow, session timezone — auto-skipped on SQLite). The suite **aborts** if the DB name doesn't contain `test`. Use a throwaway container, never the compose Postgres:
+
+```sh
+docker run -d --rm --name oikos-test-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=oikos_test \
+  -p 127.0.0.1:5433:5432 --tmpfs /var/lib/postgresql/data postgres:16-alpine
+cd backend && TEST_DATABASE_URL=postgresql://postgres:test@127.0.0.1:5433/oikos_test pytest
+docker stop oikos-test-pg
+```
+
 ### Seed data
 
-`python -c "from app.core.seed import run_seed; run_seed()"` from `backend/` (venv active) — creates 3 accounts, 45 transactions, 6 budgets under `test@test.com` / `testpass123`.
+Only against dev or a throwaway DB — never production. `python -c "from app.core.seed import run_seed; run_seed()"` from `backend/` (venv active, `DATABASE_URL` pointing at a non-production DB), or the `-p oikos-dev` command above — creates 3 accounts, 45 transactions, 6 budgets under `test@test.com` / `testpass123`.
 
 ## Architecture
 

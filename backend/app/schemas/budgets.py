@@ -4,10 +4,14 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.common import MAX_DIGITS_MONEY
+
 
 # --- PRESUPUESTOS ---
 class BudgetBase(BaseModel):
-    amount_limit: Decimal = Field(..., gt=0, decimal_places=2, description="El presupuesto debe ser mayor a cero")
+    amount_limit: Decimal = Field(
+        ..., gt=0, decimal_places=2, max_digits=MAX_DIGITS_MONEY, description="El presupuesto debe ser mayor a cero"
+    )
     currency: str = "COP"
     month: int = Field(..., ge=1, le=12, description="Mes válido entre 1 y 12")
     year: int = Field(..., ge=2020, le=2100)

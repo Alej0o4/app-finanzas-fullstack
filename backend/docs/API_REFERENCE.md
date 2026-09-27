@@ -20,6 +20,10 @@
 - Borrado lógico (Fase 8): los endpoints `DELETE` de cuentas/categorías/transacciones/presupuestos marcan
   `deleted_at` en lugar de borrar la fila. Los recursos "eliminados" dejan de aparecer en cualquier `GET`
   y no pueden verse ni editarse — el mecanismo es invisible para el cliente.
+- Un `422` puede traer `detail` en dos formas distintas — el cliente debe distinguirlas
+  (Fase 31, D1): **lista** de errores por campo (validación de esquema de Pydantic, p. ej.
+  un monto con más de 12 dígitos enteros) o **string** (error de dominio, p. ej. un mes
+  futuro o un saldo que desbordaría `Numeric(14,2)`).
 
 ## Autenticación
 
@@ -141,7 +145,12 @@ misma respuesta).
 
 Errores esperados:
 
-- `401` si el refresh token es inválido o expiró (o no vino ni en body ni en cookie).
+- `401` si el refresh token es inválido o expiró (o no vino ni en body ni en cookie). **Fase
+  31 (Decisión B10, QA-021): este `401` también limpia los tres cookies de sesión** (mismo
+  `Max-Age=0` que `logout`), siempre — incluso cuando el token presentado se acaba de revocar
+  por una rotación legítima de otra pestaña (carrera rara y aceptada: las dos pestañas
+  pierden la sesión y hay que volver a iniciar sesión). Antes de esta fase el `401` no
+  limpiaba nada; una cookie `csrf_token` huérfana dejaba `/login` recargándose en bucle.
 
 ### `POST /api/v1/auth/logout`
 
@@ -367,7 +376,11 @@ no una preferencia cosmética (Fase 8 §1, Decisión 1.1).
 
 Entrada (campos opcionales):
 
-- `monthly_income`: número ≥ 0 con hasta 2 decimales.
+- `monthly_income`: número ≥ 0 con hasta 2 decimales y como máximo 12 dígitos enteros (Fase
+  31, Decisión B3); fuera de rango → `422` de Pydantic, `detail` en lista. **Referencia
+  visual, no un cálculo** (Fase 31, Decisión B9, Q14): no alimenta `monthly_flow_balance` de
+  `GET /dashboard/summary` ni ningún otro agregado del backend — el frontend lo muestra junto
+  a los ingresos reales del mes, sin restarlo de nada.
 
 Limitación conocida: el endpoint ignora campos `null` (`exclude_none`), así que un
 `monthly_income` ya definido no se puede volver `null` desde la API.
@@ -440,6 +453,8 @@ Entrada:
 - `type`: `cash | debit | credit`
 - `balance`: saldo inicial permitido solo en creación (Fase 16 §16.4: alimenta las dos
   columnas `balance` y `opening_balance` al mismo valor — `opening_balance` queda inmutable).
+  Como máximo 12 dígitos enteros + 2 decimales (Fase 31, Decisión B3); fuera de rango →
+  `422` de Pydantic, `detail` en lista.
 - `currency`: código de moneda (default `"COP"`). Ej: `"COP"`, `"USD"`, `"EUR"`.
 - `highlighted`: si la cuenta es destacada (default `false`).
 
@@ -519,12 +534,14 @@ Errores esperados:
 
 Balance del mes en curso de una sola cuenta (Decisión 17.1.4): `ingreso_del_mes −
 gasto_del_mes` calculado con las transacciones reales de **esa cuenta** en el mes actual
-(no eliminadas). **Actualizado Fase 30 B2**: usa `core.periods.limites_mes_utc` para que el
-techo del mes en curso sea "ahora" (igual que `dashboard/summary`), en vez del fin de mes
-calendario. Vive en `accounts.py` porque usa la misma verificación de pertenencia que
-`reconciliar_cuenta`. A diferencia de `GET /api/v1/dashboard/summary`, NO usa
-`User.monthly_income` (un valor declarado, global) — el resultado se deriva íntegramente de
-transacciones, así que **nunca es `null`** (mínimo `0.00`).
+(no eliminadas). **Actualizado Fase 30 B2**: usa `core.periods.rango_mes_utc` (Fase 31: el
+límite superior de un mes cerrado es exclusivo, aunque este endpoint solo consulta el mes en
+curso y no le afecta) para que el techo del mes en curso sea "ahora" (igual que
+`dashboard/summary`), en vez del fin de mes calendario. Vive en `accounts.py` porque usa la
+misma verificación de pertenencia que `reconciliar_cuenta`. Igual que `GET
+/api/v1/dashboard/summary` desde Fase 31 (Decisión B9): NO usa `User.monthly_income` (un
+valor declarado, global) — el resultado se deriva íntegramente de transacciones, así que
+**nunca es `null`** (mínimo `0.00`).
 
 Salida (`AccountMonthlySummary`):
 
@@ -611,7 +628,10 @@ Registra un ingreso o gasto y actualiza el saldo de la cuenta asociada. Rate lim
 
 Entrada:
 
-- `amount`: mayor a cero.
+- `amount`: mayor a cero, y como máximo 12 dígitos enteros + 2 decimales (Fase 31, Decisión
+  B3 — el rango real de `Numeric(14,2)`). Fuera de rango → `422` de Pydantic, `detail` en
+  lista. Mismo límite en `POST /accounts` (`balance`), `PATCH /users/me`
+  (`monthly_income`) y `POST`/`PUT /budgets` (`amount_limit`).
 - `type`: `income | expense`
 - `description`: opcional.
 - `date`: fecha de la transación (formato ISO, default: ahora).
@@ -635,11 +655,21 @@ Header opcional:
     a mover el saldo (replay);
   - con un payload distinto → `409 Conflict` ("Esta Idempotency-Key ya se usó con datos
     distintos"); si la transacción original fue eliminada, también `409`.
+  Fase 31 (Decisión B7, QA-020): las mismas dos reglas aplican también cuando la petición
+  **pierde una carrera** contra otra con la misma clave (dos reintentos casi simultáneos) —
+  antes, esa rama devolvía la transacción ganadora sin comparar el payload, y si esa
+  transacción ya estaba borrada, un `500` de validación de respuesta en vez de un `409`.
   El cliente debe generar una clave nueva por captura lógica (p. ej. `crypto.randomUUID()`)
   y reusarla solo en reintentos del mismo envío. Este header **solo aplica a este endpoint**;
   `GET`/`PUT`/`DELETE` lo ignoran.
 
 Nota: `currency` se hereda automáticamente de la cuenta asociada.
+
+Errores esperados (Fase 31, Decisión B4, QA-015): si el impacto contable dejaría el saldo de
+la cuenta fuera del rango de `Numeric(14,2)` (desborde real, solo posible en Postgres —
+`NumericValueOutOfRange`), `422` de dominio con `detail` string ("La operación dejaría el
+saldo de la cuenta fuera del rango permitido."), sin tocar el saldo. Con el rango de `amount`
+ya validado por el schema (arriba), este es el único `DataError` posible en este endpoint.
 
 ### `GET /api/v1/transactions/`
 
@@ -657,7 +687,9 @@ Filtros opcionales:
 Salida paginada:
 
 - `items`: `Transaction[]` — transacciones de la página solicitada
-- `total`: `int` — total de transacciones que coinciden con los filtros
+- `total`: `int` — total de transacciones que coinciden con los filtros (Fase 31, Decisión B5,
+  QA-006: excluye las borradas lógicamente — antes el conteo sí las incluía aunque `items` ya
+  las excluyera, y "Cargar más" del frontend quedaba disponible para siempre)
 - `page`: `int` — página actual (calculada como `skip/limit + 1`)
 - `page_size`: `int` — número de items por página (`limit`)
 
@@ -666,9 +698,26 @@ Salida paginada:
 Actualiza una transacción y recalcula saldos de forma inversa y luego aplicada. Si
 `payment_method` no se reenvía, conserva su valor actual.
 
+`amount` respeta el mismo rango de `POST` (arriba), y el mismo `422` de dominio si el
+recálculo desborda el saldo de alguna cuenta involucrada (la única, o la vieja/nueva si la
+transacción se mueve de cuenta).
+
+Concurrencia (Fase 31, Decisión B1, QA-003): la fila se bloquea (`SELECT ... FOR UPDATE`,
+efectivo en Postgres) antes de leer sus valores — dos `PUT` concurrentes sobre la misma
+transacción se aplican uno después del otro, cada uno sobre el monto que dejó el anterior.
+`PUT` sobre una transacción ya borrada (por esta misma petición perdiendo una carrera, o por
+un `DELETE` previo) responde `404`.
+
 ### `DELETE /api/v1/transactions/{transaction_id}`
 
 Elimina (lógicamente) una transacción y revierte el impacto sobre el saldo de la cuenta.
+
+Concurrencia (Fase 31, Decisión B1, QA-003): misma fila bloqueada que `PUT`, más un borrado
+condicional (`UPDATE ... WHERE deleted_at IS NULL`) como segunda defensa. Una segunda
+petición sobre la misma transacción — también si llega en simultáneo desde otra pestaña, un
+reintento de red, o un atajo por API key — recibe `404` y **no** vuelve a revertir el saldo.
+Mismo `422` de dominio que `POST`/`PUT` si revertir el impacto desbordaría el saldo de la
+cuenta (Decisión B4).
 
 ## Presupuestos
 
@@ -678,7 +727,9 @@ Crea un presupuesto por categoría, mes, año y moneda.
 
 Entrada:
 
-- `amount_limit`: mayor a cero.
+- `amount_limit`: mayor a cero, y como máximo 12 dígitos enteros + 2 decimales (Fase 31,
+  Decisión B3); fuera de rango → `422` de Pydantic, `detail` en lista. Mismo límite en `PUT
+  /api/v1/budgets/{budget_id}`.
 - `currency`: código de moneda (default `"COP"`).
 - `month`: entre 1 y 12.
 - `year`
@@ -739,11 +790,13 @@ Parámetros (Fase 29, ambos o ninguno):
 Sin ninguno de los dos el período es el mes actual y los valores de los campos preexistentes
 son los mismos que antes de la Fase 29 (lo único nuevo son los tres campos agregados más
 abajo). La resolución del período y el acotado del rango viven en `app/core/periods.py`
-(`resolver_mes` y `limites_mes_utc`) y son **UTC**, no la hora local del usuario: el límite
-superior es "ahora" en el mes en curso y el último día a las 23:59:59 en uno ya cerrado. El
-techo en "ahora" evita que una transacción con fecha futura del mismo mes cuente como gasto
-del mes en este endpoint pero no en `category-distribution` / `cashflow-series`, que sí acotan
-a `hoy` (Fase 11 §11.4, Fase 17 §17.1.3).
+(`resolver_mes` y `rango_mes_utc`) y son **UTC**, no la hora local del usuario: el rango es
+semiabierto `[inicio, fin)` — el límite superior es "ahora" en el mes en curso y el primer
+instante del mes siguiente, **exclusivo**, en uno ya cerrado (Fase 31, Decisión B6 — antes era
+"hasta el último día a las 23:59:59", y un movimiento del último segundo del mes, con fracción,
+quedaba afuera). El techo en "ahora" evita que una transacción con fecha futura del mismo mes
+cuente como gasto del mes en este endpoint pero no en `category-distribution` /
+`cashflow-series`, que sí acotan a `hoy` (Fase 11 §11.4, Fase 17 §17.1.3).
 
 Errores esperados:
 
@@ -766,20 +819,20 @@ Devuelve (`DashboardSummary`):
   moneda. No depende del mes consultado: no es un saldo histórico ni una foto del mes pedido.
 - `monthly_income_by_currency`: array de `{currency, total}` — ingresos del mes por moneda.
 - `monthly_expense_by_currency`: array de `{currency, total}` — gastos del mes por moneda.
-- `monthly_flow_balance` (Fase 11 §11.3, Fase 29): el significado lo determina
-  `monthly_flow_basis`:
-  - `"declared"` (**mes en curso**) — `User.monthly_income` menos el gasto del mes en la
-    moneda preferida; `null` si el usuario todavía no ha fijado `monthly_income` (el frontend
-    distingue "0" de "sin definir").
-  - `"actual"` (**mes ya cerrado**) — ingresos **reales registrados** menos gastos reales de
-    ese mes, en la moneda preferida. **Nunca es `null`**: sin filas vale `0.00`, aunque
-    `monthly_income` sea `null`, para que el histórico siempre tenga un número.
-  - En ambos casos los montos en otras monedas se ignoran, no se convierten — misma
-    limitación de "una moneda a la vez" documentada para `cashflow-series` y
-    `category-distribution`.
-- `monthly_flow_basis`: `"declared" | "actual"` — qué hay detrás de `monthly_flow_balance`. El
-  backend lo decide con su propio reloj; el cliente rotula con este campo en vez de comparar
-  fechas locales (que pueden no coincidir con el mes UTC del servidor).
+- `monthly_flow_balance` (Fase 11 §11.3, Fase 29, reescrito en Fase 31 — Decisión B9, Q9):
+  **siempre** ingresos reales registrados menos gastos reales, en la moneda preferida, del
+  período consultado — igual en el mes en curso que en un mes ya cerrado. **Nunca es `null`**:
+  sin filas vale `0.00`, y puede ser negativo (a principio de mes, antes de cobrar — es un dato,
+  no un error). `User.monthly_income` (el ingreso declarado) **no participa de este cálculo**:
+  es una referencia visual que el frontend muestra junto a `monthly_income_by_currency`, sin
+  ningún cómputo detrás. Los montos en otras monedas se ignoran, no se convierten — misma
+  limitación de "una moneda a la vez" documentada para `cashflow-series` y
+  `category-distribution`.
+- `monthly_flow_basis`: **obsoleto** (`deprecated: true` en OpenAPI) desde Fase 31 — siempre
+  vale `"actual"`. Antes de esa fase tenía dos bases (`"declared"` en el mes en curso,
+  `"actual"` en uno cerrado) y el cliente lo usaba para rotular de cuál se trataba; ya no hace
+  falta, pero el campo se conserva sin default (un cliente que lo siga leyendo ve siempre
+  `"actual"`, nunca un campo ausente).
 - `first_transaction_month` (Fase 29): mes UTC `"YYYY-MM"` de la transacción más antigua del
   usuario, o `null` si no tiene ninguna. Va sobre **todas** las cuentas (no solo las
   destacadas) porque gobierna la página entera del dashboard, y respeta el borrado lógico. Es

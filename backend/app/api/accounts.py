@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.exceptions import BadRequestError, NotFoundError
-from app.core.periods import limites_mes_utc
+from app.core.periods import rango_mes_utc
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
@@ -124,14 +124,14 @@ def obtener_resumen_mensual_cuenta(
     current_user: models.User = Depends(get_current_user),
 ):
     """Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
-    Actualizado Fase 30 B2: usa `core.periods.limites_mes_utc` para el techo del mes
-    en curso = "ahora", igual que `dashboard/summary`.
+    Actualizado Fase 30 B2: usa `core.periods.rango_mes_utc` para el techo del mes en
+    curso = "ahora", igual que `dashboard/summary`. Fase 31 (B9): mismo criterio que
+    `DashboardSummary.monthly_flow_balance` desde esta fase — tampoco depende de
+    ningún valor declarado por el usuario, y el balance nunca es `null`.
 
     `ingreso_del_mes - gasto_del_mes` calculado SOLO con transacciones reales de esa
-    cuenta en el mes en curso (no eliminadas) — a diferencia de
-    `DashboardSummary.monthly_flow_balance`, no depende de ningún valor declarado
-    por el usuario, así que el balance nunca es `null`. Misma verificación de
-    pertenencia que `reconciliar_cuenta` (404 si no existe o no es del usuario).
+    cuenta en el mes en curso (no eliminadas). Misma verificación de pertenencia que
+    `reconciliar_cuenta` (404 si no existe o no es del usuario).
     """
     cuenta = (
         db.query(models.Account)
@@ -142,7 +142,7 @@ def obtener_resumen_mensual_cuenta(
         raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
     hoy = datetime.now(UTC)
-    primer_dia, limite = limites_mes_utc(hoy.year, hoy.month, hoy)
+    primer_dia, limite = rango_mes_utc(hoy.year, hoy.month, hoy)
 
     def _total(tipo: str) -> Decimal:
         """Suma del mes de las transacciones de un tipo, ignorando borradas (mismo
@@ -153,7 +153,7 @@ def obtener_resumen_mensual_cuenta(
                 models.Transaction.account_id == account_id,
                 models.Transaction.type == tipo,
                 models.Transaction.date >= primer_dia,
-                models.Transaction.date <= limite,
+                models.Transaction.date < limite,
                 models.Transaction.deleted_at.is_(None),
             )
             .scalar()

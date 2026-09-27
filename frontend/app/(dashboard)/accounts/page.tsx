@@ -6,6 +6,7 @@ import { Plus, Wallet, Edit2, Trash2, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, getApiError } from '@/lib/utils';
+import { validateAmountText } from '@/lib/validateAmount';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useAccounts } from '@/lib/hooks/useAccounts';
@@ -127,10 +128,10 @@ export default function AccountsPage() {
 
     const errors: typeof createErrors = {};
     if (!newAccountName.trim()) errors.name = 'Ingresa un nombre para la cuenta.';
-    const parsedBalance = Number(initialBalance);
-    if (initialBalance && (Number.isNaN(parsedBalance) || parsedBalance < 0)) {
-      errors.balance = 'El saldo inicial no puede ser negativo.';
-    }
+    // Fase 31 F2 (Q6, QA-013): el saldo inicial sigue siendo opcional (vacío = 0, como
+    // hoy) — `allowEmpty` conserva ese comportamiento; `allowZero` acepta 0 explícito.
+    const balanceError = validateAmountText(initialBalance, { allowZero: true, allowEmpty: true });
+    if (balanceError) errors.balance = balanceError;
     setCreateErrors(errors);
 
     if (errors.name) return createNameRef.current?.focus();
@@ -139,7 +140,7 @@ export default function AccountsPage() {
     createAccountMutation.mutate({
       name: newAccountName,
       type: newAccountType as 'cash' | 'debit' | 'credit',
-      balance: parsedBalance || 0,
+      balance: initialBalance ? Number(initialBalance) : 0,
       currency: newAccountCurrency,
     });
   };

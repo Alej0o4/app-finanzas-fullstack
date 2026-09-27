@@ -16,6 +16,16 @@ class PaginatedResponse[T](BaseModel):
     page_size: int
 
 
+# --- RANGO DE LOS CAMPOS DE DINERO (Fase 31, Decisión B3) ---
+# Ligado a `Numeric(14, 2)` de `models.py`: 14 dígitos totales, 2 de ellos decimales,
+# así que 12 dígitos enteros como máximo. Los cuatro campos de entrada con dinero
+# (`TransactionBase.amount`, `AccountCreate.balance`, `UserProfileUpdate.monthly_income`,
+# `BudgetBase.amount_limit`) usan esta constante en vez de repetir el número — un valor
+# que desbordara la columna sin este límite llegaba hasta el `commit()` y volvía como un
+# 500 en texto plano (`DataError` sin capturar), no como un 422 de validación (QA-015).
+MAX_DIGITS_MONEY = 14
+
+
 # --- POLÍTICA DE CONTRASEÑAS (Fase 7, §2.3) ---
 # NIST 800-63B recomienda priorizar longitud sobre complejidad artificial — por eso
 # min_length=10 en vez de reglas de "1 mayúscula + 1 símbolo", y una lista corta de

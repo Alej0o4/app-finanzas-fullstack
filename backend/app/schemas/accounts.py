@@ -5,6 +5,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from app.schemas.common import MAX_DIGITS_MONEY
+
 
 # --- CUENTAS ---
 class AccountType(str, Enum):
@@ -21,7 +23,7 @@ class AccountBase(BaseModel):
 
 
 class AccountCreate(AccountBase):
-    balance: Decimal = Field(0, ge=0, decimal_places=2, description="Saldo inicial")
+    balance: Decimal = Field(0, ge=0, decimal_places=2, max_digits=MAX_DIGITS_MONEY, description="Saldo inicial")
 
 
 class AccountUpdate(AccountBase):
@@ -51,10 +53,11 @@ class AccountReconcileResponse(BaseModel):
 class AccountMonthlySummary(BaseModel):
     """Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
 
-    A diferencia de `DashboardSummary.monthly_flow_balance` (que puede ser `null` si el
-    usuario no fijó `monthly_income`), este balance SIEMPRE se calcula: se deriva
-    íntegramente de transacciones reales de la cuenta en el mes en curso, sin ningún
-    dato declarado de por medio — `monthly_flow_balance` nunca es `None`, mínimo 0.00.
+    Igual que `DashboardSummary.monthly_flow_balance` desde Fase 31 (Decisión B9): se
+    deriva íntegramente de transacciones reales de la cuenta en el mes en curso, sin
+    ningún dato declarado de por medio — `monthly_flow_balance` nunca es `None` (vale
+    0.00 sin movimientos y puede ser negativo). Antes de esa fase la comparación era con un `monthly_flow_balance` que sí
+    podía ser `null`; ya no es el caso.
     """
 
     currency: str

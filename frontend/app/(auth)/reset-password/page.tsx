@@ -6,24 +6,9 @@ import Link from 'next/link';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowRight, KeyRound, ShieldAlert, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getApiError } from '@/lib/utils';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
-
-interface PydanticErrorDetail {
-  msg: string;
-}
-
-function extractErrorMessage(error: unknown, fallback: string): string {
-  const err = error as {
-    response?: { status?: number; data?: { detail?: string | PydanticErrorDetail[] } };
-  };
-  const detail = err.response?.data?.detail;
-  if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail) && detail.length > 0) {
-    return detail.map((d) => d.msg).join(' ');
-  }
-  return fallback;
-}
 
 function InvalidLinkPanel() {
   return (
@@ -95,7 +80,7 @@ function ResetPasswordForm() {
   }
 
   const submissionError = resetMutation.isError
-    ? extractErrorMessage(resetMutation.error, 'Error de conexión. Inténtalo más tarde.')
+    ? getApiError(resetMutation.error, 'Error de conexión. Inténtalo más tarde.')
     : null;
 
   const handleSubmit = (e: React.FormEvent) => {

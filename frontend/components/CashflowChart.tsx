@@ -62,15 +62,22 @@ export default function CashflowChart({
   const { config } = useAppConfig();
   const activeCurrency = currency ?? config.currency;
   const formatAmount = (amount: number) => formatCurrency(amount, activeCurrency);
+  // Fase 31 F7 (Q8, QA-007): el eje Y, su cálculo de ancho y las etiquetas sobre las
+  // barras siguen compactos (sin decimales) aunque `formatCurrency` ya no redondee todo a
+  // la unidad por defecto — el tooltip (`formatAmount`) sigue mostrando decimales.
+  const formatAmountInteger = (amount: number) =>
+    formatCurrency(amount, activeCurrency, undefined, { integer: true });
   const yAxisWidth = useMemo(() => {
     if (data.length === 0) return 84;
     const maxValue = Math.max(
       ...data.flatMap((item) => [Number(item.income), Number(item.expense)]),
       0
     );
-    // Se formatea acá y no con `formatAmount` a propósito: la función se recrea en cada render,
-    // entonces meterla en las deps del useMemo lo dejaría sin memoizar.
-    const labelLength = formatCurrency(maxValue, activeCurrency).length;
+    // Se formatea acá y no con `formatAmountInteger` a propósito: la función se recrea en
+    // cada render, entonces meterla en las deps del useMemo lo dejaría sin memoizar.
+    const labelLength = formatCurrency(maxValue, activeCurrency, undefined, {
+      integer: true,
+    }).length;
     return Math.min(Math.max(labelLength * 8 + 30, 84), 160);
   }, [data, activeCurrency]);
 
@@ -130,7 +137,7 @@ export default function CashflowChart({
                 axisLine={false}
                 width={yAxisWidth}
                 tickMargin={10}
-                tickFormatter={(value) => formatAmount(Number(value))}
+                tickFormatter={(value) => formatAmountInteger(Number(value))}
               />
               <Tooltip
                 cursor={{ fill: 'var(--color-border)', opacity: 0.35 }}
@@ -155,7 +162,7 @@ export default function CashflowChart({
                     <LabelList
                       dataKey="income"
                       position="top"
-                      formatter={(v) => formatAmount(Number(v))}
+                      formatter={(v) => formatAmountInteger(Number(v))}
                       style={{ fill: 'var(--color-text-muted)', fontSize: 11 }}
                     />
                   )}
@@ -173,7 +180,7 @@ export default function CashflowChart({
                     <LabelList
                       dataKey="expense"
                       position="top"
-                      formatter={(v) => formatAmount(Number(v))}
+                      formatter={(v) => formatAmountInteger(Number(v))}
                       style={{ fill: 'var(--color-text-muted)', fontSize: 11 }}
                     />
                   )}

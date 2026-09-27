@@ -6,6 +6,7 @@ import { Plus, PieChart, Edit2, Trash2, CalendarDays, Repeat } from 'lucide-reac
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, getApiError } from '@/lib/utils';
+import { validateAmountText } from '@/lib/validateAmount';
 import { queryKeys } from '@/lib/queryKeys';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAccounts } from '@/lib/hooks/useAccounts';
@@ -111,10 +112,10 @@ export default function BudgetsPage() {
 
     const errors: typeof fieldErrors = {};
     if (!categoryId) errors.categoryId = 'Elige una categoría.';
-    const parsedAmount = Number(amount);
-    if (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-      errors.amount = 'Ingresa un monto mayor a cero.';
-    }
+    // Fase 31 F2 (Q6, QA-013): mismo validador de montos que el resto de la app (decimales
+    // y dígitos exactos, no solo `Number(amount) <= 0`).
+    const amountError = validateAmountText(amount);
+    if (amountError) errors.amount = amountError;
     // Required nativo neutralizado por noValidate: el mes/año se reimplementa igual que el resto.
     if (!monthYear) errors.monthYear = 'Elige un mes y año.';
     setFieldErrors(errors);
@@ -125,7 +126,7 @@ export default function BudgetsPage() {
 
     saveMutation.mutate({
       category_id: Number(categoryId),
-      amount_limit: parsedAmount,
+      amount_limit: Number(amount),
       // Fase 17 §17.2.4: BudgetPayload.currency ya existía en types/api.ts; el formulario
       // ahora lo envía siempre (Decisión 17.2.4 — el backend no valida contra las cuentas).
       currency,

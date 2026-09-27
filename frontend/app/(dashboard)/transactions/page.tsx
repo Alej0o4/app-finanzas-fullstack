@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
@@ -119,6 +119,11 @@ function TransactionsPageContent() {
   const startDateParam = formatDateBoundaryForBackend(startDate, 'start');
   const endDateParam = formatDateBoundaryForBackend(endDate, 'end');
 
+  // Fase 31 F6 (Q7, QA-010): rango invertido — comparación lexicográfica alcanza porque
+  // las dos fechas son 'YYYY-MM-DD'. Con el rango invertido la consulta no se ejecuta
+  // (`enabled: false` abajo) y no se ofrece ningún resultado de una consulta anterior.
+  const dateRangeInverted = Boolean(startDate && endDate && startDate > endDate);
+
   const params = useMemo(() => {
     const p: Record<string, string | number> = { skip, limit: PAGE_SIZE };
 
@@ -130,7 +135,9 @@ function TransactionsPageContent() {
     return p;
   }, [skip, startDateParam, endDateParam, categoryFilter, accountFilter]);
 
-  const { data, isFetching } = useTransactions(params);
+  const { data, isFetching, isError, error, refetch } = useTransactions(params, {
+    enabled: !dateRangeInverted,
+  });
 
   const { data: accounts } = useAccounts();
 
@@ -141,14 +148,47 @@ function TransactionsPageContent() {
   useEffect(() => {
     if (!data) return;
     setTotal(data.total);
-    setAllItems((prev) => (skip === 0 ? data.items : [...prev, ...data.items]));
+    // Sin repetir ids: la misma página puede llegar dos veces (reintento automático de
+    // React Query + "Cargar más" reintentando esa página tras un error, QA Fase 31).
+    setAllItems((prev) => {
+      if (skip === 0) return data.items;
+      const cargados = new Set(prev.map((t) => t.id));
+      return [...prev, ...data.items.filter((t) => !cargados.has(t.id))];
+    });
   }, [data]);
+
+  // Fase 31 F6: un rango invertido limpia lo que hubiera cargado antes (como
+  // resetPagination) — el área de la lista no debe mostrar ítems de un filtro previo ni
+  // el mensaje de "Aún no tienes movimientos", solo el error de campo bajo "Fecha final".
+  useEffect(() => {
+    if (dateRangeInverted) {
+      setSkip(0);
+      setAllItems([]);
+      setTotal(0);
+    }
+  }, [dateRangeInverted]);
+
+  // Fase 31 F6 (QA-010): un error al pedir otra página ("Cargar más") no debe borrar lo
+  // ya cargado ni tapar los filtros — se avisa con un toast y el botón vuelve a quedar
+  // disponible para reintentar. Se dedupe con un ref para no repetir el toast mientras
+  // React Query siga reportando el mismo error entre renders.
+  const lastLoadMoreErrorRef = useRef<unknown>(null);
+  useEffect(() => {
+    if (isError && skip > 0 && error !== lastLoadMoreErrorRef.current) {
+      lastLoadMoreErrorRef.current = error;
+      toast.error(getApiError(error));
+    }
+    if (!isError) {
+      lastLoadMoreErrorRef.current = null;
+    }
+  }, [isError, error, skip]);
 
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   const hasMore = total > allItems.length;
-  const loadingInitial = allItems.length === 0 && isFetching;
+  const loadingInitial = allItems.length === 0 && isFetching && !dateRangeInverted;
   const loadingMore = isFetching && allItems.length > 0;
+  const initialLoadFailed = isError && allItems.length === 0 && !dateRangeInverted;
 
   const applyPreset = (preset: Exclude<DatePreset, 'custom'>) => {
     const nextDates = getPresetDates(preset);
@@ -215,19 +255,18 @@ function TransactionsPageContent() {
   };
 
   const handleLoadMore = () => {
+    // Si falló la página pedida, reintentar esa misma en vez de avanzar `skip`: avanzar
+    // saltaría una página entera de movimientos (review de Fase 31, F6).
+    if (isError) {
+      refetch();
+      return;
+    }
     setSkip((prev) => prev + PAGE_SIZE);
   };
 
-  if (loadingInitial) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-10 w-64 rounded-xl" />
-        <Skeleton className="h-40 rounded-2xl" />
-        <Skeleton className="h-96 rounded-3xl" />
-      </div>
-    );
-  }
-
+  // Fase 31 F6 (Q7, QA-010): los filtros se renderizan siempre — solo el área de la lista
+  // cambia entre skeleton, error con "Reintentar" y la lista, para que los filtros sigan
+  // visibles y usables mientras la app reintenta o mientras el rango está invertido.
   return (
     <div className="relative min-w-0 space-y-6">
       <div className="flex items-center justify-between gap-3">
@@ -265,19 +304,26 @@ function TransactionsPageContent() {
           setCategoryFilter(value);
         }}
         onClearFilters={clearFilters}
+        endDateError={dateRangeInverted ? 'La fecha final es anterior a la inicial' : undefined}
       />
 
-      <TransactionList
-        items={allItems}
-        accounts={accounts}
-        categories={categories}
-        total={total}
-        hasMore={hasMore}
-        loadingMore={loadingMore}
-        onEdit={openEditModal}
-        onDelete={(id) => deleteMutation.mutate(id)}
-        onLoadMore={handleLoadMore}
-      />
+      {dateRangeInverted ? null : loadingInitial ? (
+        <Skeleton className="h-96 rounded-3xl" />
+      ) : (
+        <TransactionList
+          items={allItems}
+          accounts={accounts}
+          categories={categories}
+          total={total}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onEdit={openEditModal}
+          onDelete={(id) => deleteMutation.mutate(id)}
+          onLoadMore={handleLoadMore}
+          isError={initialLoadFailed}
+          onRetry={() => refetch()}
+        />
+      )}
 
       {editingTransaction && (
         <EditTransactionModal

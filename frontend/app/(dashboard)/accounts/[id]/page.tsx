@@ -14,6 +14,7 @@ import {
   Tags,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { currentUtcMonth, utcMonthRange } from '@/lib/dateRanges';
 import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
@@ -75,11 +76,14 @@ export default function AccountDetailPage() {
     queryFn: async () => (await api.get(`accounts/${id}`)).data,
   });
 
+  // Fase 31 F10 (Q11, QA-011): últimos 20 movimientos, no todo el histórico sin límite — el
+  // endpoint ya ordena por fecha descendente. `transactionsData.total` (sin el `limit`
+  // aplicado por el backend) alimenta el link "Ver todos los movimientos (N)" de abajo.
   const { data: transactionsData, isLoading: loadingTx } = useQuery<PaginatedResponse<Transaction>>(
     {
       queryKey: queryKeys.transactions.byAccount(id as string),
       queryFn: async () =>
-        (await api.get(`transactions/`, { params: { account_id: Number(id) } })).data,
+        (await api.get(`transactions/`, { params: { account_id: Number(id), limit: 20 } })).data,
     }
   );
 
@@ -367,6 +371,7 @@ export default function AccountDetailPage() {
                 categoryIcon={budget.category_icon}
                 budgetAmount={Number(budget.amount_limit)}
                 spentAmount={Number(budget.spent)}
+                percentage={Number(budget.percentage)}
                 currency={budget.currency}
               />
             ))}
@@ -469,6 +474,16 @@ export default function AccountDetailPage() {
             </div>
           )}
         </div>
+        {/* Fase 31 F10 (Q11, QA-011): la lista de arriba corta en 20 — este link lleva a
+            /transactions ya filtrado y paginado, sin nada cortado en silencio. */}
+        {transactions && transactions.length > 0 && (
+          <Link
+            href={`/transactions?account=${id}`}
+            className="text-primary hover:text-primary-dark block text-center text-sm font-medium transition-colors"
+          >
+            Ver todos los movimientos ({transactionsData?.total ?? transactions.length})
+          </Link>
+        )}
       </div>
 
       <ModalShell

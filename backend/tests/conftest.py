@@ -18,23 +18,66 @@ from collections.abc import Generator
 os.environ.setdefault("EMAIL_PROVIDER", "console")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-solo-para-pytest-no-usar-en-real")
 
+from urllib.parse import urlparse
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.core.database import Base, get_db
+from app.core.database import Base, engine_kwargs_for_url, get_db
 from app.core.rate_limit import limiter
 from app.main import app
 from app.models import models
 
 STRONG_PASSWORD = "Contrasena10"  # cumple la política de §2.3: no solo dígitos/letras, no común
 
+# 🆕 Fase 31 (T1, B8): con TEST_DATABASE_URL la suite corre contra un Postgres
+# desechable en vez de SQLite en memoria — necesario para los tests `postgres`
+# (concurrencia real, límites de Numeric, timezone de sesión). Sin la variable, todo
+# sigue igual que siempre.
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+
+if TEST_DATABASE_URL:
+    # Guarda de seguridad (QA-001): el fixture de abajo hace `drop_all` sobre esta
+    # base — la lección de la fase es no confiar en que nadie apunte a producción
+    # por error. Se exige "test" en el nombre de la base, no en la URL completa (un
+    # host o usuario que contenga "test" no cuenta).
+    _nombre_base = urlparse(TEST_DATABASE_URL).path.lstrip("/")
+    if "test" not in _nombre_base.lower():
+        raise RuntimeError(
+            f"TEST_DATABASE_URL apunta a una base sin 'test' en el nombre ({_nombre_base!r}) "
+            "— abortado por seguridad antes de conectarse (QA-001). Usá una base como "
+            "'oikos_test', nunca la de producción."
+        )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Salta automáticamente los tests marcados `postgres` cuando no hay
+    TEST_DATABASE_URL (T1) — corren solo contra el Postgres desechable de la receta
+    de `CLAUDE.md`, nunca contra SQLite."""
+    if TEST_DATABASE_URL:
+        return
+    skip_pg = pytest.mark.skip(reason="requiere TEST_DATABASE_URL (Postgres desechable)")
+    for item in items:
+        if "postgres" in item.keywords:
+            item.add_marker(skip_pg)
+
 
 @pytest.fixture(scope="session")
 def engine():
-    """Un único engine SQLite en memoria para toda la sesión de tests."""
+    """Motor de la suite: SQLite en memoria por defecto, o el Postgres desechable de
+    `TEST_DATABASE_URL` (T1) — mismos `kwargs` que arma la app real (B8)."""
+    if TEST_DATABASE_URL:
+        test_engine = create_engine(TEST_DATABASE_URL, **engine_kwargs_for_url(TEST_DATABASE_URL))
+        Base.metadata.drop_all(bind=test_engine)
+        Base.metadata.create_all(bind=test_engine)
+        yield test_engine
+        Base.metadata.drop_all(bind=test_engine)
+        test_engine.dispose()
+        return
+
     test_engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -223,3 +266,140 @@ def captured_emails(monkeypatch):
     monkeypatch.setattr("app.api.auth.send_email", _fake_send_email)
     monkeypatch.setattr("app.api.users.send_email", _fake_send_email)
     return emails
+
+
+# --- Seam de concurrencia real contra Postgres (Fase 31, T2) ---------------------
+#
+# Estos fixtures solo tienen sentido con TEST_DATABASE_URL: `engine` en SQLite es una
+# única conexión en memoria (StaticPool), que no simula concurrencia real entre
+# hilos. Los tests que los usan van todos marcados `postgres` (autoskip sin la env
+# var, ver pytest_collection_modifyitems arriba), así que estos fixtures nunca se
+# invocan contra SQLite.
+
+
+@pytest.fixture
+def pg_client(engine) -> Generator[TestClient, None, None]:
+    """Cliente con sesión REAL por request — a diferencia de `client` (una única
+    `db_session` compartida con savepoints, pensada para aislar cada test con un
+    rollback), acá cada request abre y cierra su PROPIA sesión desde una
+    `sessionmaker` bound al `engine` de la suite, con commits reales. Imprescindible
+    para que los locks de fila (`FOR UPDATE`) y los commits de una petición sean
+    visibles para otra que corre en paralelo desde otro hilo — la única forma de
+    probar concurrencia real (B1/B2).
+
+    Sin transacción externa que lo limpie con un rollback (cada commit fue real):
+    al terminar, trunca sus propias filas."""
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    def _override_get_db():
+        db = session_factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    test_client = TestClient(app)
+    yield test_client
+    app.dependency_overrides.clear()
+
+    with engine.connect() as conn:
+        conn.execute(
+            text(
+                "TRUNCATE TABLE transactions, idempotency_keys, refresh_tokens, "
+                "accounts, categories, users RESTART IDENTITY CASCADE"
+            )
+        )
+        conn.commit()
+
+
+@pytest.fixture
+def pg_register_and_login(pg_client: TestClient, engine):
+    """Factory análoga a `register_and_login`, pero contra `pg_client`: marca
+    `email_verified` con una conexión de una sola vez, con su propio commit real —
+    `db_session` no sirve acá, es una transacción distinta (sin commits reales) que
+    las conexiones de `pg_client` nunca verían."""
+    counter = {"n": 0}
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    def _factory(
+        email: str | None = None,
+        password: str = STRONG_PASSWORD,
+        full_name: str = "Usuario Concurrencia",
+    ) -> dict:
+        counter["n"] += 1
+        email = email or f"pguser{counter['n']}@example.com"
+
+        register_response = pg_client.post(
+            "/api/v1/users/",
+            json={"email": email, "full_name": full_name, "password": password},
+        )
+        assert register_response.status_code == 200, register_response.text
+        user_id = register_response.json()["id"]
+
+        db = session_factory()
+        try:
+            db.query(models.User).filter(models.User.id == user_id).update({"email_verified": True})
+            db.commit()
+        finally:
+            db.close()
+
+        login_response = pg_client.post(
+            "/api/v1/auth/login",
+            data={"username": email, "password": password},
+        )
+        assert login_response.status_code == 200, login_response.text
+        tokens = login_response.json()
+
+        return {
+            "id": user_id,
+            "email": email,
+            "headers": {"Authorization": f"Bearer {tokens['access_token']}"},
+        }
+
+    return _factory
+
+
+@pytest.fixture
+def pg_make_account(pg_client: TestClient):
+    """Factory de cuentas vía el endpoint real, sobre `pg_client`."""
+
+    def _factory(
+        headers: dict,
+        name: str = "Cuenta concurrencia",
+        type: str = "cash",
+        currency: str = "COP",
+        balance: str = "1000.00",
+        highlighted: bool = False,
+    ) -> dict:
+        response = pg_client.post(
+            "/api/v1/accounts/",
+            json={
+                "name": name,
+                "type": type,
+                "currency": currency,
+                "balance": balance,
+                "highlighted": highlighted,
+            },
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    return _factory
+
+
+@pytest.fixture
+def pg_make_category(pg_client: TestClient):
+    """Factory de categorías vía el endpoint real, sobre `pg_client`."""
+
+    def _factory(headers: dict, name: str = "Categoría concurrencia", type: str = "expense") -> dict:
+        response = pg_client.post(
+            "/api/v1/categories/",
+            json={"name": name, "type": type},
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    return _factory

@@ -9,6 +9,13 @@ interface BudgetRingProps {
   categoryName: string;
   budgetAmount: number;
   spentAmount: number;
+  /**
+   * Fase 31 F9 (Q12, QA-012): porcentaje real, calculado por el backend
+   * (`BudgetProgress.percentage`) — el componente ya no lo recalcula con `spent / limit`
+   * (regla de `CLAUDE.md`: no recomputar agregados del backend en el cliente). El texto
+   * muestra este valor redondeado, sin tope (106%, no 100%).
+   */
+  percentage: number;
   categoryIcon?: string | null;
   /** Moneda real del presupuesto (Fase 11 §11.1). Si se omite, cae a la preferida global. */
   currency?: string;
@@ -18,6 +25,7 @@ export default function BudgetRing({
   categoryName,
   budgetAmount,
   spentAmount,
+  percentage,
   categoryIcon,
   currency,
 }: BudgetRingProps) {
@@ -25,26 +33,31 @@ export default function BudgetRing({
   // PROGRAMACIÓN DEFENSIVA: Si el valor es undefined, usamos 0.
   const safeSpent = Number(spentAmount) || 0;
   const safeBudget = Number(budgetAmount) > 0 ? Number(budgetAmount) : 1;
-
-  const rawPercentage = (safeSpent / safeBudget) * 100;
-  const percentage = Math.min(Math.max(rawPercentage, 0), 100);
+  const safePercentage = Number(percentage) || 0;
 
   // Matemáticas orgánicas del SVG
   const radius = 45;
   const circumference = 2 * Math.PI * radius;
 
-  // Ahora estamos 100% seguros de que percentage es un número válido
-  const strokeDashoffset = circumference - (percentage / 100) * circumference;
+  // Fase 31 F9 (Q16): primera vuelta topada en 100%, segunda vuelta superpuesta con el
+  // exceso (percentage − 100), topada en 100% adicional (200% visual máximo) — el texto
+  // sigue mostrando el valor real sin tope.
+  const firstLapPercentage = Math.min(Math.max(safePercentage, 0), 100);
+  const secondLapPercentage = Math.min(Math.max(safePercentage - 100, 0), 100);
+  const isOverBudget = safePercentage > 100;
+
+  const firstLapOffset = circumference - (firstLapPercentage / 100) * circumference;
+  const secondLapOffset = circumference - (secondLapPercentage / 100) * circumference;
 
   // Alineado con el motor de alertas (§13.3/Decisión 13.4.1): 80% = warning, 100% = danger.
-  const isDanger = percentage >= 100;
-  const isWarning = percentage >= 80 && percentage < 100;
+  const isDanger = safePercentage >= 100;
+  const isWarning = safePercentage >= 80 && safePercentage < 100;
 
   const ringColorClass = isDanger ? 'text-danger' : isWarning ? 'text-warning' : 'text-primary';
 
   return (
     <div className="bg-surface border-border/70 group hover:border-text-muted/30 relative flex flex-col items-center justify-center rounded-2xl border p-4 transition-colors sm:p-6">
-      {rawPercentage > 100 && (
+      {isOverBudget && (
         <div
           className="text-danger absolute top-3 right-3 animate-pulse sm:top-4 sm:right-4"
           title="Presupuesto excedido"
@@ -56,7 +69,7 @@ export default function BudgetRing({
       <div className="relative flex h-24 w-24 items-center justify-center sm:h-32 sm:w-32">
         <div className="absolute flex flex-col items-center justify-center text-center">
           <span className={`font-sans text-lg font-bold tabular-nums sm:text-xl ${ringColorClass}`}>
-            {percentage.toFixed(0)}%
+            {safePercentage.toFixed(0)}%
           </span>
           <span className="text-text-muted text-[9px] tracking-wider uppercase sm:text-[10px]">
             Gastado
@@ -80,11 +93,28 @@ export default function BudgetRing({
             className={`${ringColorClass} transition-[stroke-dashoffset] duration-1000 ease-out`}
             strokeWidth="6"
             strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
+            strokeDashoffset={firstLapOffset}
             strokeLinecap="round"
             stroke="currentColor"
             fill="transparent"
           />
+          {/* Fase 31 F9 (Q16): segunda vuelta superpuesta, en --color-danger-strong, solo
+              cuando el gasto pasa de 100% — el exceso dibujado encima de la primera vuelta
+              ya completa. */}
+          {isOverBudget && (
+            <circle
+              cx="50"
+              cy="50"
+              r={radius}
+              className="text-danger-strong transition-[stroke-dashoffset] duration-1000 ease-out"
+              strokeWidth="6"
+              strokeDasharray={circumference}
+              strokeDashoffset={secondLapOffset}
+              strokeLinecap="round"
+              stroke="currentColor"
+              fill="transparent"
+            />
+          )}
         </svg>
       </div>
 

@@ -13,6 +13,10 @@
   --color-success: #34d399;
   --color-warning: #f59e0b;
   --color-danger: #fb7185;
+  /* Fase 31 F9 (Q16, QA-012): rojo más intenso que --color-danger, para la segunda vuelta
+     del anillo de presupuesto cuando el gasto pasa de 100% — necesita distinguirse del
+     primer anillo (que ya usa --color-danger desde el 100%). */
+  --color-danger-strong: #f43f5e;
   --color-info: #60a5fa;
 
   --color-text: #eef4ff;
@@ -67,6 +71,8 @@
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-danger: #dc2626;
+  /* Fase 31 F9 (Q16, QA-012): ver comentario en el tema oscuro. */
+  --color-danger-strong: #b91c1c;
   --color-info: #2563eb;
 
   --color-text: #0f172a;

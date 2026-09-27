@@ -27,6 +27,10 @@ Los tokens principales viven en `app/globals.css`.
 - `success`: resultados positivos.
 - `warning`: alertas de presupuesto.
 - `danger`: estados críticos y errores.
+- `danger-strong` (Fase 31 F9, Q16): rojo más intenso que `danger`, en los dos temas — hoy
+  solo lo usa la segunda vuelta de `BudgetRing` (el exceso sobre el 100% de un presupuesto),
+  superpuesta a la primera vuelta que ya usa `danger` desde el 100%. Necesita distinguirse
+  visualmente de ella.
 - `info`: soporte visual secundario.
 - `text`: texto principal.
 - `text-muted`: texto secundario.

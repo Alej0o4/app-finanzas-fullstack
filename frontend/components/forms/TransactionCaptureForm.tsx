@@ -9,6 +9,7 @@ import { queryKeys } from '@/lib/queryKeys';
 import { useAccounts } from '@/lib/hooks/useAccounts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { getApiError } from '@/lib/utils';
+import { validateAmountText } from '@/lib/validateAmount';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
@@ -98,10 +99,11 @@ export default function TransactionCaptureForm({
     event.preventDefault();
 
     const errors: typeof fieldErrors = {};
-    const parsedAmount = Number(amount);
-    if (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-      errors.amount = 'Ingresa un monto mayor a cero.';
-    }
+    // Fase 31 F2 (Q6, QA-013): valida el texto (decimales/dígitos exactos), no solo
+    // `Number(amount) <= 0` — antes un monto con 13 dígitos enteros o 3+ decimales pasaba
+    // el chequeo del cliente y volvía como un 422 sin campo señalado.
+    const amountValidationError = validateAmountText(amount);
+    if (amountValidationError) errors.amount = amountValidationError;
     if (!categoryId) errors.category = 'Elige una categoría.';
     setFieldErrors(errors);
 
@@ -121,7 +123,7 @@ export default function TransactionCaptureForm({
 
     createMutation.mutate({
       description,
-      amount: parsedAmount,
+      amount: Number(amount),
       type,
       account_id: Number(effectiveAccountId),
       category_id: Number(categoryId),

@@ -9,6 +9,20 @@
 
 ---
 
+## Fase 31 — Corrección de los hallazgos de la QA 2026-09-26 (2026-09-27)
+
+Fase de bugs (`docs/specs/fase_31_spec.md`, decisiones del `/grilling` Q1–Q16): resuelve 17 de los 22 ítems de la QA (QA-001, 003–013, 015, 019–022); QA-014/016/017/018 quedan para flujo corto.
+
+**Backend (B1–B10):** `PUT`/`DELETE /transactions/{id}` con `SELECT … FOR UPDATE` + borrado condicional (segundo `DELETE` → `404` sin mover el saldo) y `aplicar_edicion` en orden de `account_id`; `max_digits=14` en los 4 campos de dinero y desborde de saldo → `422`; `total` del listado sin borradas; meses semiabiertos (`rango_mes_utc`, `<` primer día del mes siguiente); `Idempotency-Key` en carrera con otro payload → `409`; sesión Postgres fijada en UTC; `monthly_flow_balance` siempre ingreso real − gasto real (nunca `null`; `monthly_flow_basis` obsoleto, siempre `"actual"`); el `401` de `/auth/refresh` borra las cookies de sesión.
+
+**Frontend (F1–F10):** `getApiError` aplana cualquier `detail`; validación de montos con error de campo en todos los formularios (`lib/validateAmount.ts`); categoría visible = enviada en los dos modales (`lib/categoryVisibility.ts`, toggle "ver todas" en edición); el interceptor no redirige desde pantallas de auth; criterio único de onboarding tras el login (`lib/postLoginDestination.ts`); `/transactions` con error + "Reintentar", filtros siempre visibles y rango invertido sin consulta; decimales según moneda (COP sin centavos salvo que los haya); tarjeta "Balance de <mes>" con "esperado" como referencia; `BudgetRing` con porcentaje real y segunda vuelta (`--color-danger-strong`); detalle de cuenta/categoría con últimos 20 + "Ver todos".
+
+**Infra/tests:** `docker-compose.dev.yml` aislado (`oikos-dev`, `:3001`/`:8001`, sin backup, email por consola); `gen:types` contra `:8001`; `TEST_DATABASE_URL` + marker `postgres` (tests de concurrencia reales en `tests/test_concurrency_pg.py`). Suite: 341 pasan en SQLite; en Postgres 349 pasan y 1 falla, previa a la fase (inventariada para la Fase 32). Revisado por `/code-review`, `security-reviewer` (B10/F4 sin hallazgos) y una segunda pasada del `qa-engineer` con Playwright (desktop y 390×844, todo PASS).
+
+**Desviaciones registradas:** los casos Postgres de T3 viven en `test_money_limits.py` (como dice el orden de ejecución). `lib/validateAmount.ts` rechaza ceros finales de más (`12.340`), más estricto que Pydantic. `TransactionList` ganó `isError`/`onRetry`. Correcciones posteriores a la review: "Cargar más" tras un error reintenta la misma página, COP con centavos se ve con dos decimales y `/transactions` no duplica filas si una página llega dos veces. Los modales de edición propios de los detalles de cuenta/categoría no se tocaron (fuera de la spec, anotados en `docs/TODO.md`).
+
+---
+
 ## Fase 30 — Semana calendario en Transacciones, KPIs de Analítica desde backend, y deuda chica post-Fase 29 (2026-09-26)
 
 Sintetiza el `/grilling` del 2026-09-26 (`docs/specs/fase_30_spec.md`):

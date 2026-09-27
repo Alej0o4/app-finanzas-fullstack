@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatCurrency, getApiError } from '@/lib/utils';
+import { validateAmountText } from '@/lib/validateAmount';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useSetMonthlyIncome } from '@/lib/hooks/useSetMonthlyIncome';
 import { useAppConfig } from '@/providers/AppConfigProvider';
@@ -163,42 +164,44 @@ function DashboardScreen() {
   const isLoading = loadingSummary || loadingBudgets;
 
   // Balance del mes calculado POR EL BACKEND (summary.monthly_flow_balance). Nunca se resta
-  // en el cliente. Tres estados distinguidos: undefined = query en carga/error, null = el
-  // usuario no ha fijado monthly_income, number = valor listo para pintar.
+  // en el cliente.
+  // Fase 31 B9/F8 (Q9, Q14): el balance ya no es `null` en ningún mes — ingresos reales
+  // menos gastos reales, en cualquier mes, puede ser negativo (a principio de mes, antes
+  // de cobrar, es un dato normal). `monthly_income` ya no participa de este número; es una
+  // referencia visual aparte ("· esperado <monto>", más abajo). `undefined` sigue
+  // significando "la query está en carga o en error" (esos casos ya salen antes de leer
+  // este valor, ver el render).
   // Fase 15 §15.6: normaliza Decimal→string que el backend serializa en JSON (Decisión 15.6).
-  // Destraba la card "Balance del mes" cuando el onboarding fija ingresos.
-  const flowBalance = summary?.monthly_flow_balance;
-  const flowBalanceValue = flowBalance == null ? null : Number(flowBalance);
+  const flowBalanceValue = summary ? Number(summary.monthly_flow_balance) : undefined;
   const flowIsPositive = (flowBalanceValue ?? 0) >= 0;
   const flowTrend =
-    flowBalanceValue === null || summaryIsStale
+    flowBalanceValue === undefined || summaryIsStale
       ? undefined
       : flowIsPositive
         ? ('up' as const)
         : ('down' as const);
   const flowColor =
-    flowBalanceValue === null || summaryIsStale
+    flowBalanceValue === undefined || summaryIsStale
       ? undefined
       : flowIsPositive
         ? 'var(--color-success)'
         : 'var(--color-danger)';
 
-  // Fase 29 §F5.3 (Q8, Q12): el rótulo sale de `monthly_flow_basis`, no de comparar fechas
-  // locales — el backend decide con su reloj y en meses cerrados el balance es ingresos −
-  // gastos reales, nunca `null` (User Story 12). Un balance negativo real (riesgo R1: el
-  // sueldo no se registra como transacción) es un número, no un error.
-  //
-  // Con `keepPreviousData`, mientras el summary del mes nuevo está en vuelo `summary` es el del
-  // mes ANTERIOR (`summaryIsStale`): su `monthly_flow_basis` y sus cifras describen otro mes, y
-  // pintarlas bajo el rótulo del mes nuevo mentiría ("Balance de julio" con el balance de
-  // agosto). Mientras dure el placeholder la tarjeta conserva su marco pero cambia las cifras
-  // por skeletons (ver el render) y el rótulo es el genérico del mes destino, que no afirma
-  // ninguna base — la base real solo se conoce cuando llega su propio summary.
-  const flowLabel = summaryIsStale
-    ? `Balance de ${monthNameLower}`
-    : summary?.monthly_flow_basis === 'actual'
-      ? `Balance de ${monthNameLower}`
-      : 'Te quedan…';
+  // Fase 31 F8 (Q9, Q14): el rótulo es siempre "Balance de <mes>", también en el mes en
+  // curso — ya no hay dos bases que distinguir (B9 retira `monthly_flow_basis` del cálculo;
+  // el campo sigue en el contrato mismo pero deprecado, ver types/api.ts).
+  const flowLabel = `Balance de ${monthNameLower}`;
+
+  // Fase 31 F8 (Q14): "esperado <monto>" solo tiene sentido en el mes en curso — el ingreso
+  // declarado no tiene historial (Fase 29 User Story 14), así que mostrarlo junto a un mes
+  // cerrado sugeriría que aplicó a ESE mes.
+  const showExpectedIncomeReference = isCurrentMonth && user?.monthly_income != null;
+  // Fase 31 F8 (H3): el formulario inline vivía en la rama `null` de un balance que ya no
+  // existe (B9) — se reubica acá, debajo de las cifras secundarias, solo en el mes en curso
+  // y solo mientras el usuario no fijó su ingreso esperado. `!summaryIsStale` evita que el
+  // placeholder de `keepPreviousData` lo haga parpadear al navegar hacia un mes pasado.
+  const showInlineIncomeForm =
+    isCurrentMonth && !!summary && !summaryIsStale && user?.monthly_income == null;
 
   // Fase 15 §15.5, Decisión 15.0.1 (revisada): originalmente `total === 1`, pero eso se
   // rompió al agregar la transacción semilla del ingreso declarado (§15.3.3) — con ella, la
@@ -235,45 +238,115 @@ function DashboardScreen() {
   };
 
   // Fase 19 §19.2.1/19.2.2: fila secundaria compacta dentro de la card principal — reemplaza
-  // el grid de 2 columnas (Ingresos/Gastos). Se muestra siempre, aún con monthly_flow_balance
-  // null (son sumas de transacciones del mes, no el ingreso declarado). En meses cerrados el
-  // rótulo nombra el mes (User Story 13).
+  // el grid de 2 columnas (Ingresos/Gastos). Son sumas de transacciones del mes (no el
+  // ingreso declarado), se muestran siempre. En meses cerrados el rótulo nombra el mes
+  // (User Story 13).
   const incomeStatLabel = isCurrentMonth ? 'Ingresos del Mes' : `Ingresos de ${monthNameLower}`;
   const expenseStatLabel = isCurrentMonth ? 'Gastos del Mes' : `Gastos de ${monthNameLower}`;
 
+  // Fase 31 F8 (Q14): "· esperado <monto>" junto a "Ingresos del mes", en la línea de la
+  // moneda preferida — sin cálculo, no se resta ni se compara contra lo real.
+  const expectedIncomeLabel =
+    showExpectedIncomeReference && user?.monthly_income != null
+      ? `· esperado ${formatCurrency(Number(user.monthly_income), preferredCurrency)}`
+      : null;
+
   // Placeholder del mes anterior en vuelo: los rótulos ya nombran el mes destino, así que las
   // cifras (del mes anterior) se reemplazan por skeletons en vez de quedar bajo un rótulo ajeno.
+  // Fase 31 F8 (H3): el formulario inline de ingreso (cuando no está fijado) vive acá abajo,
+  // debajo de la fila de Ingresos/Gastos, en vez de reemplazar la cifra principal — la tarjeta
+  // ya no tiene una rama "sin balance" que ocupar (B9: el balance nunca es `null`).
   const secondaryStats = (
-    <>
-      <div className="flex-1">
-        <p className="text-text-muted text-xs font-medium">{incomeStatLabel}</p>
-        <div className="text-success mt-0.5 font-semibold tabular-nums">
-          {summaryIsStale ? (
-            <Skeleton className="mt-1 h-5 w-28" />
-          ) : summary?.monthly_income_by_currency.length ? (
-            summary.monthly_income_by_currency.map((b) => (
-              <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
-            ))
-          ) : (
-            <p>{formatCurrency(0, preferredCurrency)}</p>
-          )}
+    <div className="w-full space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:gap-6">
+        <div className="flex-1">
+          <p className="text-text-muted text-xs font-medium">{incomeStatLabel}</p>
+          <div className="text-success mt-0.5 font-semibold tabular-nums">
+            {summaryIsStale ? (
+              <Skeleton className="mt-1 h-5 w-28" />
+            ) : summary?.monthly_income_by_currency.length ? (
+              summary.monthly_income_by_currency.map((b) => (
+                <p key={b.currency}>
+                  {formatCurrency(b.total, b.currency)}
+                  {b.currency === preferredCurrency && expectedIncomeLabel && (
+                    <span className="text-text-muted ml-1.5 text-xs font-normal">
+                      {expectedIncomeLabel}
+                    </span>
+                  )}
+                </p>
+              ))
+            ) : (
+              <p>
+                {formatCurrency(0, preferredCurrency)}
+                {expectedIncomeLabel && (
+                  <span className="text-text-muted ml-1.5 text-xs font-normal">
+                    {expectedIncomeLabel}
+                  </span>
+                )}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex-1">
+          <p className="text-text-muted text-xs font-medium">{expenseStatLabel}</p>
+          <div className="text-danger mt-0.5 font-semibold tabular-nums">
+            {summaryIsStale ? (
+              <Skeleton className="mt-1 h-5 w-28" />
+            ) : summary?.monthly_expense_by_currency.length ? (
+              summary.monthly_expense_by_currency.map((b) => (
+                <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
+              ))
+            ) : (
+              <p>{formatCurrency(0, preferredCurrency)}</p>
+            )}
+          </div>
         </div>
       </div>
-      <div className="flex-1">
-        <p className="text-text-muted text-xs font-medium">{expenseStatLabel}</p>
-        <div className="text-danger mt-0.5 font-semibold tabular-nums">
-          {summaryIsStale ? (
-            <Skeleton className="mt-1 h-5 w-28" />
-          ) : summary?.monthly_expense_by_currency.length ? (
-            summary.monthly_expense_by_currency.map((b) => (
-              <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
-            ))
-          ) : (
-            <p>{formatCurrency(0, preferredCurrency)}</p>
-          )}
-        </div>
-      </div>
-    </>
+
+      {showInlineIncomeForm && (
+        <form
+          className="border-border/40 space-y-2 border-t pt-4"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            const validationError = validateAmountText(monthlyIncomeInput, { allowZero: true });
+            if (validationError) {
+              setMonthlyIncomeError(validationError);
+              return monthlyIncomeRef.current?.focus();
+            }
+            setMonthlyIncomeError(null);
+            setMonthlyIncomeMutation.mutate(Number(monthlyIncomeInput), {
+              onSuccess: () => toast.success('Ingreso mensual guardado'),
+              onError: (error) => toast.error(getApiError(error)),
+            });
+          }}
+        >
+          {/* Fase 31 F8 (Q14): ya no promete "calcular tu balance" — el ingreso esperado es
+              solo una referencia visual junto a "Ingresos del mes". */}
+          <p className="text-text-muted text-sm font-normal">
+            ¿Cuánto esperas ganar al mes? Es solo una referencia.
+          </p>
+          <div className="flex items-center gap-2">
+            <Input
+              ref={monthlyIncomeRef}
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
+              aria-label="Ingreso mensual"
+              placeholder={`Ej. 3000000 (${preferredCurrency})`}
+              value={monthlyIncomeInput}
+              onChange={(e) => setMonthlyIncomeInput(e.target.value)}
+              error={monthlyIncomeError ?? undefined}
+              className="bg-background"
+            />
+            <Button type="submit" loading={setMonthlyIncomeMutation.isPending}>
+              Guardar
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
   );
 
   return (
@@ -295,7 +368,9 @@ function DashboardScreen() {
               {formatCurrency(Number(user.monthly_income), preferredCurrency)} de ingreso mensual.
             </>
           ) : (
-            '¡Registraste tu primer movimiento! Define tu ingreso mensual abajo para ver cuánto te queda cada mes.'
+            // Fase 31 F8 (Q14): ya no promete "para ver cuánto te queda cada mes" — el
+            // ingreso declarado es una referencia visual, no alimenta ningún cálculo.
+            '¡Registraste tu primer movimiento! Define tu ingreso mensual abajo.'
           )}
         </div>
       )}
@@ -353,66 +428,12 @@ function DashboardScreen() {
             color={flowColor}
             secondaryStats={secondaryStats}
           >
-            {summaryIsStale ? (
+            {summaryIsStale || flowBalanceValue === undefined ? (
               <Skeleton className="h-9 w-48 sm:h-10" />
-            ) : flowBalanceValue !== null ? (
+            ) : (
               <span className={flowIsPositive ? '' : 'text-danger'}>
                 {formatCurrency(flowBalanceValue, preferredCurrency)}
               </span>
-            ) : isCurrentMonth && summary && !summaryIsStale ? (
-              // Fase 29 §F5.3 (User Story 14): el ingreso declarado es un valor único sin
-              // historial, así que editarlo mirando un mes pasado no significa nada — el
-              // formulario solo existe en el mes en curso. `!summaryIsStale` evita además que
-              // el placeholder del `keepPreviousData` lo haga parpadear durante la
-              // navegación hacia un mes pasado.
-              <form
-                className="mt-2 w-full space-y-2"
-                noValidate
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const parsed = Number(monthlyIncomeInput);
-                  if (monthlyIncomeInput.trim() === '' || Number.isNaN(parsed) || parsed < 0) {
-                    setMonthlyIncomeError('Ingresa un monto válido (0 o mayor).');
-                    return monthlyIncomeRef.current?.focus();
-                  }
-                  setMonthlyIncomeError(null);
-                  setMonthlyIncomeMutation.mutate(parsed, {
-                    onSuccess: () => toast.success('Ingreso mensual guardado'),
-                    onError: (error) => toast.error(getApiError(error)),
-                  });
-                }}
-              >
-                <p className="text-text-muted text-sm font-normal">
-                  Define tu ingreso mensual para calcular tu balance.
-                </p>
-                <div className="flex items-center gap-2">
-                  <Input
-                    ref={monthlyIncomeRef}
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step="0.01"
-                    aria-label="Ingreso mensual"
-                    placeholder={`Ej. 3000000 (${preferredCurrency})`}
-                    value={monthlyIncomeInput}
-                    onChange={(e) => setMonthlyIncomeInput(e.target.value)}
-                    error={monthlyIncomeError ?? undefined}
-                    className="bg-background"
-                  />
-                  <Button type="submit" loading={setMonthlyIncomeMutation.isPending}>
-                    Guardar
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              // `basis: "actual"` nunca devuelve `null` (User Story 12): esta rama solo
-              // alcanza si el balance llega vacío sin ser el mes en curso. Se muestra un guion
-              // y no `formatCurrency(0)`: un 0 inventado se leería como "balance en cero", que
-              // es un dato que el backend no mandó.
-              <p>
-                <span aria-hidden="true">—</span>
-                <span className="sr-only">Sin balance para {monthNameLower}</span>
-              </p>
             )}
           </SummaryCard>
         )}
@@ -472,6 +493,7 @@ function DashboardScreen() {
                 categoryIcon={budget.category_icon}
                 budgetAmount={Number(budget.amount_limit)}
                 spentAmount={Number(budget.spent)}
+                percentage={Number(budget.percentage)}
                 currency={budget.currency}
               />
             ))}

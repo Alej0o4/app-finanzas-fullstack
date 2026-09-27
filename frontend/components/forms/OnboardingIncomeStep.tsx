@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import Input from '@/components/ui/Input';
@@ -11,6 +11,7 @@ import { useCategories } from '@/lib/hooks/useCategories';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { getApiError } from '@/lib/utils';
+import { validateAmountText } from '@/lib/validateAmount';
 
 /** Categoría de sistema que siembra el ingreso declarado (ver seed_default_categories en
  * backend/app/main.py) — nunca la crea ni la borra el usuario. */
@@ -36,6 +37,10 @@ export default function OnboardingIncomeStep({
   onDone: () => void;
 }) {
   const [value, setValue] = useState('');
+  // Fase 31 F2 (Q6, QA-013): error de campo visible — antes un ingreso vacío o negativo
+  // hacía un `return` silencioso y "Continuar" parecía roto.
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const setIncomeMutation = useSetMonthlyIncome();
 
@@ -85,15 +90,32 @@ export default function OnboardingIncomeStep({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const parsed = Number(value);
-    if (!value.trim() || Number.isNaN(parsed) || parsed < 0) return;
 
-    await setIncomeMutation.mutateAsync(parsed);
+    const error = validateAmountText(value, { allowZero: true });
+    setAmountError(error);
+    if (error) {
+      amountRef.current?.focus();
+      return;
+    }
+
+    const parsed = Number(value);
+
+    // Fase 31 F2 (QA-013): el `mutateAsync` se envuelve — si el servidor rechaza el
+    // ingreso (ej. un 422 de B3, fuera del rango de `Numeric(14,2)`), se muestra y el paso
+    // NO avanza. Antes el error quedaba como una promesa rechazada sin capturar: ni toast
+    // ni bloqueo del `onDone()` siguiente.
+    try {
+      await setIncomeMutation.mutateAsync(parsed);
+    } catch (mutationError) {
+      toast.error(getApiError(mutationError));
+      return;
+    }
+
     if (parsed > 0) {
       try {
         await seedIncomeMutation.mutateAsync(parsed);
-      } catch (error) {
-        toast.error(getApiError(error));
+      } catch (mutationError) {
+        toast.error(getApiError(mutationError));
       }
     }
     onDone();
@@ -106,10 +128,15 @@ export default function OnboardingIncomeStep({
       <h1 className="text-text font-sans text-xl font-bold tracking-tight">
         ¿Cuál es tu ingreso mensual aproximado?
       </h1>
+      {/* Fase 31 F8 (Q14, H3): ya no promete un cálculo ("cuánto te queda") — el ingreso
+          declarado es una referencia visual junto a los ingresos reales del mes, nunca se
+          resta ni se compara. */}
       <p className="text-text-muted text-sm">
-        Lo usamos para mostrarte cuánto te queda cada mes. Puedes cambiarlo después.
+        Es solo una referencia que se muestra junto a los ingresos del mes. Puedes cambiarlo
+        después.
       </p>
       <Input
+        ref={amountRef}
         type="number"
         inputMode="decimal"
         autoFocus
@@ -118,6 +145,7 @@ export default function OnboardingIncomeStep({
         aria-label="Ingreso mensual aproximado"
         value={value}
         onChange={(event) => setValue(event.target.value)}
+        error={amountError ?? undefined}
         className="bg-background"
         placeholder={PLACEHOLDER_BY_CURRENCY[currency] ?? 'Ej. 3000000'}
       />

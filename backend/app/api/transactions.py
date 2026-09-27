@@ -5,8 +5,8 @@ import unicodedata
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, Request
-from sqlalchemy import desc, func, or_
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import desc, func, or_, update
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.budget_alerts import evaluate_budget_thresholds_safely
@@ -18,6 +18,7 @@ from app.core.exceptions import (
     ConflictError,
     InternalServerError,
     NotFoundError,
+    ValidationError,
 )
 from app.core.rate_limit import key_func_por_usuario_o_ip, limiter
 
@@ -94,6 +95,30 @@ def _resolver_cuenta(db: Session, user_id: int, account_id: int | None) -> model
     return cuentas_usuario[0]
 
 
+def _resolver_transaccion_idempotente(
+    db: Session, existente: models.IdempotencyKey, request_hash: str
+) -> models.Transaction:
+    """Resuelve una `Idempotency-Key` ya usada (Fase 31, Decisión B7, QA-020): compara el
+    hash del payload y devuelve la transacción original, o levanta `409` si el payload
+    cambió o si la original ya no existe (soft-deleted).
+
+    Compartido por las DOS ramas que pueden encontrar la clave ya usada — la consulta
+    previa (camino feliz) y el `except IntegrityError` de abajo (la petición perdió una
+    carrera contra otra con la misma clave). Antes de este fix esa segunda rama
+    devolvía la transacción sin comparar el hash (un payload distinto se "colaba"
+    silenciosamente) y, si la original estaba borrada, devolvía `None` — un `500` de
+    validación de respuesta en vez de un error de dominio legible (Decisión 10.4.3).
+    """
+    if existente.request_hash != request_hash:
+        raise ConflictError("Esta Idempotency-Key ya se usó con datos distintos.")
+    transaccion_previa = db.query(models.Transaction).filter(models.Transaction.id == existente.transaction_id).first()
+    if not transaccion_previa:
+        # La transacción original fue borrada (soft-delete) desde el envío original —
+        # ver caso borde en el spec de Fase 10, ítem 10.4.
+        raise ConflictError("La transacción original de esta Idempotency-Key ya no existe.")
+    return transaccion_previa
+
+
 # --- RUTA PROTEGIDA ---
 @router.post("/", response_model=schemas.TransactionResponse)
 @limiter.limit("60/minute", key_func=key_func_por_usuario_o_ip)
@@ -122,16 +147,7 @@ def crear_transaccion(
             .first()
         )
         if existente:
-            if existente.request_hash != request_hash:
-                raise ConflictError("Esta Idempotency-Key ya se usó con datos distintos.")
-            transaccion_previa = (
-                db.query(models.Transaction).filter(models.Transaction.id == existente.transaction_id).first()
-            )
-            if not transaccion_previa:
-                # La transacción original fue borrada (soft-delete) desde el envío
-                # original — ver caso borde en el spec de Fase 10, ítem 10.4.
-                raise ConflictError("La transacción original de esta Idempotency-Key ya no existe.")
-            return transaccion_previa
+            return _resolver_transaccion_idempotente(db, existente, request_hash)
 
     # 🔒 1. Resolución de la cuenta (Fase 16 §16.2, Decisión 16.2.4 — ver
     # _resolver_cuenta). Aplica ANTES de la verificación de pertenencia de abajo: una vez
@@ -197,15 +213,25 @@ def crear_transaccion(
         db.refresh(nueva_transaccion)
     except IntegrityError:
         db.rollback()
-        # Se perdió la carrera: otra petición con la misma clave ya insertó primero.
+        # Se perdió la carrera: otra petición con la misma clave ya insertó primero. Se
+        # resuelve con el MISMO helper que la consulta previa (B7): compara el hash del
+        # payload (409 si difiere) y valida que la original siga viva (409 si la
+        # borraron) — antes esta rama devolvía la transacción sin comparar nada.
         existente = (
             db.query(models.IdempotencyKey)
             .filter(models.IdempotencyKey.user_id == current_user.id, models.IdempotencyKey.key == idempotency_key)
             .first()
         )
         if existente:
-            return db.query(models.Transaction).filter(models.Transaction.id == existente.transaction_id).first()
+            return _resolver_transaccion_idempotente(db, existente, request_hash)
         raise InternalServerError("Error interno al procesar la transacción contable.") from None
+    except DataError:
+        # Fase 31 (Decisión B4, QA-015): con B3 el monto en sí ya es válido — el único
+        # DataError posible acá es el desborde del UPDATE de Account.balance
+        # (NumericValueOutOfRange en Postgres; no ocurre en SQLite, que no aplica
+        # Numeric). Es un 422 de dominio, no un 500 en texto plano.
+        db.rollback()
+        raise ValidationError("La operación dejaría el saldo de la cuenta fuera del rango permitido.") from None
     except Exception:
         db.rollback()
         logger.exception("Error al crear transacción para el usuario %s", current_user.id)
@@ -244,7 +270,17 @@ def obtener_transacciones(
     if start_date and end_date and start_date > end_date:
         raise BadRequestError("La fecha inicial no puede ser mayor que la fecha final.")
 
-    query = db.query(models.Transaction).filter(models.Transaction.user_id == current_user.id)
+    # Fase 31 (Decisión B5, QA-006): `deleted_at IS NULL` explícito, aunque el filtro
+    # global de `core/database.py` ya lo aplique a este SELECT — `total`, más abajo,
+    # sale de `with_entities(func.count())`, que NO tiene entidad mapeada y por eso es
+    # el único agregado del backend que el filtro global NO alcanza (H9). Dejarlo
+    # implícito solo en el SELECT normal habría dejado el `total` contando las
+    # borradas mientras `items` sí las excluía — "N de M" nunca cuadraba con la lista y
+    # "Cargar más" quedaba disponible para siempre.
+    query = db.query(models.Transaction).filter(
+        models.Transaction.user_id == current_user.id,
+        models.Transaction.deleted_at.is_(None),
+    )
 
     if account_id is not None:
         query = query.filter(models.Transaction.account_id == account_id)
@@ -279,23 +315,64 @@ def obtener_transacciones(
 def eliminar_transaccion(
     transaction_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
-    transaccion = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
+    # Fase 31 (Decisión B1, QA-003): `SELECT ... FOR UPDATE` es la PRIMERA consulta, con
+    # el filtro `deleted_at IS NULL` explícito (el filtro global ya lo agrega a nivel
+    # ORM, pero es lo que hace que, en Postgres, una segunda petición que estaba
+    # esperando este lock reevalúe el WHERE al liberarse y no devuelva fila si la
+    # primera ya la borró — así se serializan dos DELETE o un DELETE y un PUT
+    # concurrentes sobre la misma transacción). En SQLite `with_for_update()` no genera
+    # nada (no soportado) y la suite sigue corriendo sin el lock real.
+    transaccion = (
+        db.query(models.Transaction)
+        .filter(
+            models.Transaction.id == transaction_id,
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.deleted_at.is_(None),
+        )
+        .with_for_update()
+        .first()
+    )
 
-    if not transaccion or transaccion.user_id != current_user.id:
+    if not transaccion:
         raise NotFoundError("La transacción no existe o no tienes permisos.")
 
-    # 1. Obtener la cuenta asociada a esta transacción
-    cuenta = db.query(models.Account).filter(models.Account.id == transaccion.account_id).first()
-
-    # 🧮 2. Lógica Contable Inversa: Revertir el impacto de forma atómica (Fase 25 §25.1
-    # — el filtro deleted_at IS NULL vive en ledger.aplicar_delta)
-    if cuenta:
-        ledger.revertir_impacto(db, transaccion.account_id, transaccion.type, transaccion.amount)
-
     try:
-        transaccion.deleted_at = datetime.now(UTC)  # borrado lógico: el impacto contable ya fue revertido arriba
+        # 1. Borrado condicional (segunda defensa, Q2): un UPDATE Core con el mismo
+        # WHERE que la SELECT de arriba. Si otra petición ganó la carrera entre esa
+        # SELECT y este UPDATE (imposible en Postgres gracias al lock, pero es la
+        # defensa que SQLite sí necesita, sin FOR UPDATE real), `rowcount == 0` y no se
+        # toca el saldo.
+        resultado = db.execute(
+            update(models.Transaction)
+            .where(
+                models.Transaction.id == transaction_id,
+                models.Transaction.user_id == current_user.id,
+                models.Transaction.deleted_at.is_(None),
+            )
+            .values(deleted_at=datetime.now(UTC))
+        )
+        if resultado.rowcount == 0:
+            db.rollback()
+            raise NotFoundError("La transacción no existe o no tienes permisos.")
+
+        # 🧮 2. Lógica Contable Inversa: revertir el impacto de forma atómica (Fase 25
+        # §25.1 — el filtro deleted_at IS NULL vive en ledger.aplicar_delta), SOLO
+        # después de confirmar el borrado — antes el orden era el inverso (revertía el
+        # saldo y recién después marcaba deleted_at sin condición), que es justamente lo
+        # que permitía revertir el saldo dos veces con dos DELETE simultáneos.
+        cuenta = db.query(models.Account).filter(models.Account.id == transaccion.account_id).first()
+        if cuenta:
+            ledger.revertir_impacto(db, transaccion.account_id, transaccion.type, transaccion.amount)
+
         db.commit()
         return {"estado": "OK", "mensaje": "Transacción eliminada y saldo de cuenta revertido exitosamente."}
+    except NotFoundError:
+        raise
+    except DataError:
+        # Fase 31 (Decisión B4, QA-015): desborde del saldo al revertir el impacto
+        # (p. ej. revertir un gasto sobre una cuenta ya en el tope de Numeric(14,2)).
+        db.rollback()
+        raise ValidationError("La operación dejaría el saldo de la cuenta fuera del rango permitido.") from None
     except Exception:
         db.rollback()
         logger.exception("Error al eliminar la transacción %s del usuario %s", transaction_id, current_user.id)
@@ -309,10 +386,21 @@ def actualizar_transaccion(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ) -> models.Transaction:
-    # 1. Buscamos la transacción original
+    # 1. Buscamos la transacción original — `SELECT ... FOR UPDATE` (Fase 31, Decisión
+    # B1, QA-003): el mismo lock de fila que `eliminar_transaccion`, para que el delta
+    # se calcule sobre el `amount`/`type`/`account_id` que dejó la última escritura
+    # confirmada, no sobre una versión ya obsoleta leída antes de que otra petición
+    # concurrente terminara. Sin segunda defensa condicional acá (a diferencia de
+    # DELETE): el UPDATE del ORM de abajo va por clave primaria y su seguridad
+    # descansa en este lock. En SQLite `with_for_update()` no genera nada.
     transaccion_db = (
         db.query(models.Transaction)
-        .filter(models.Transaction.id == transaction_id, models.Transaction.user_id == current_user.id)
+        .filter(
+            models.Transaction.id == transaction_id,
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.deleted_at.is_(None),
+        )
+        .with_for_update()
         .first()
     )
 
@@ -388,6 +476,11 @@ def actualizar_transaccion(
 
         db.commit()
         db.refresh(transaccion_db)
+    except DataError:
+        # Fase 31 (Decisión B4, QA-015): desborde del saldo de alguna de las cuentas
+        # involucradas (misma cuenta con delta neto, o la vieja/nueva si se movió).
+        db.rollback()
+        raise ValidationError("La operación dejaría el saldo de la cuenta fuera del rango permitido.") from None
     except Exception:
         db.rollback()
         logger.exception("Error al actualizar la transacción %s del usuario %s", transaction_id, current_user.id)
