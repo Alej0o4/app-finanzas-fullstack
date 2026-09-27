@@ -304,14 +304,14 @@ export interface paths {
     /**
      * Obtener Resumen Mensual Cuenta
      * @description Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
-     *     Actualizado Fase 30 B2: usa `core.periods.limites_mes_utc` para el techo del mes
-     *     en curso = "ahora", igual que `dashboard/summary`.
+     *     Actualizado Fase 30 B2: usa `core.periods.rango_mes_utc` para el techo del mes en
+     *     curso = "ahora", igual que `dashboard/summary`. Fase 31 (B9): mismo criterio que
+     *     `DashboardSummary.monthly_flow_balance` desde esta fase — tampoco depende de
+     *     ningún valor declarado por el usuario, y el balance nunca es `null`.
      *
      *     `ingreso_del_mes - gasto_del_mes` calculado SOLO con transacciones reales de esa
-     *     cuenta en el mes en curso (no eliminadas) — a diferencia de
-     *     `DashboardSummary.monthly_flow_balance`, no depende de ningún valor declarado
-     *     por el usuario, así que el balance nunca es `null`. Misma verificación de
-     *     pertenencia que `reconciliar_cuenta` (404 si no existe o no es del usuario).
+     *     cuenta en el mes en curso (no eliminadas). Misma verificación de pertenencia que
+     *     `reconciliar_cuenta` (404 si no existe o no es del usuario).
      */
     get: operations['obtener_resumen_mensual_cuenta_api_v1_accounts__account_id__monthly_summary_get'];
     put?: never;
@@ -811,10 +811,11 @@ export interface components {
      * AccountMonthlySummary
      * @description Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
      *
-     *     A diferencia de `DashboardSummary.monthly_flow_balance` (que puede ser `null` si el
-     *     usuario no fijó `monthly_income`), este balance SIEMPRE se calcula: se deriva
-     *     íntegramente de transacciones reales de la cuenta en el mes en curso, sin ningún
-     *     dato declarado de por medio — `monthly_flow_balance` nunca es `None`, mínimo 0.00.
+     *     Igual que `DashboardSummary.monthly_flow_balance` desde Fase 31 (Decisión B9): se
+     *     deriva íntegramente de transacciones reales de la cuenta en el mes en curso, sin
+     *     ningún dato declarado de por medio — `monthly_flow_balance` nunca es `None`, mínimo
+     *     0.00. Antes de esa fase la comparación era con un `monthly_flow_balance` que sí
+     *     podía ser `null`; ya no es el caso.
      */
     AccountMonthlySummary: {
       /** Currency */
@@ -1140,12 +1141,13 @@ export interface components {
       /** Monthly Expense By Currency */
       monthly_expense_by_currency: components['schemas']['BalanceByCurrency'][];
       /** Monthly Flow Balance */
-      monthly_flow_balance?: string | null;
+      monthly_flow_balance: string;
       /**
        * Monthly Flow Basis
-       * @enum {string}
+       * @deprecated
+       * @constant
        */
-      monthly_flow_basis: 'declared' | 'actual';
+      monthly_flow_basis: 'actual';
       /** First Transaction Month */
       first_transaction_month?: string | null;
       /**
