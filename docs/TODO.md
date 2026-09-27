@@ -34,6 +34,15 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 > vale la pena no postergar demasiado el envío real de email (recuperación de contraseña si
 > perdés acceso) y el cron de backup.
 
+> **2026-09-26 — Primera pasada de QA** (agente `qa-engineer` + Playwright) sobre `bc9dcb9`, en un
+> entorno aislado (SQLite, puertos 8001/3001, sin Docker — ver QA-001). Reporte completo con
+> pasos de reproducción y capturas: `.scratch/qa-2026-09-26/REPORTE_QA.md` (no versionado).
+> Ítems nuevos marcados `(QA 2026-09-26, QA-NNN)` abajo. Una tercera pasada el mismo día
+> re-verificó contra un Postgres 16 desechable (contenedor suelto en 5433, tmpfs) los ítems que
+> podían depender del motor: QA-003, QA-006 y QA-015 confirmados; los "artefactos de SQLite"
+> (fechas sin zona, saldos REAL) no existen en Postgres; los KPIs de Analítica cuadran en todos
+> los bordes de periodo. Aportó QA-019 a QA-022.
+
 ---
 
 ## 🔴 Bloqueantes de seguridad (histórico — sin ítems abiertos desde el pivote a uso personal)
@@ -60,6 +69,87 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 ---
 
 ## 🟠 Bugs confirmados (auditoría 2026-08-22 + 2026-09-15)
+
+- [ ] **Condición de carrera en `DELETE`/`PUT /transactions/{id}` descuadra el saldo de la
+  cuenta (QA 2026-09-26, QA-003) — 🔴 crítico.**
+  - 8 `DELETE` paralelos sobre la misma transacción → 6 respuestas `200` y saldo final
+    100.050,00 en vez de 100.000,00 (−50); 8 `PUT` paralelos → discrepancia 35,00.
+  - Causa: `backend/app/api/transactions.py:278-297` (y el `PUT`) leen la transacción sin
+    lock y aplican el delta de `services/ledger.py` sin condición; no hay `with_for_update`
+    en todo el backend. El soft-delete no es condicional (`UPDATE ... WHERE deleted_at IS NULL`
+    + chequeo de filas afectadas).
+  - **Confirmado también en Postgres 16** (READ COMMITTED): 8 `DELETE` paralelos → de 1 a 5
+    respuestas `200` por ronda, discrepancia siempre `(n200 − 1) × monto` (hasta +200 sobre un
+    gasto de 50); 8 `PUT` paralelos → 8/8 `200` y discrepancias de −15 a −135 (deltas calculados
+    sobre un `amount` viejo). Escenario mixto 4 `PUT` + 4 `DELETE`: ambos responden `200` y la
+    transacción queda borrada con el monto editado, aplicando el delta de edición *y* la
+    reversión. `POST /accounts/{id}/reconcile` detecta y corrige la discrepancia.
+  - En la UI el doble clic manda un solo `DELETE`; el riesgo real es reintentos de red, dos
+    pestañas o clientes con API key.
+  - Fix probable: `with_for_update()` sobre la transacción (y la cuenta) + borrado condicional;
+    test de regresión concurrente que corra contra Postgres (SQLite serializa distinto) — hoy
+    `backend/tests/conftest.py` usa siempre SQLite en memoria, habría que aceptar algo como
+    `TEST_DATABASE_URL` para ese test.
+
+- [ ] **Montos o saldos por encima de `Numeric(14,2)` dan `500` en vez de `422`
+  (QA 2026-09-26, QA-015).** Confirmado en Postgres.
+  - `POST`/`PUT /transactions` con 13 dígitos enteros (`1234567890123.45`,
+    `1000000000000.00`) → `500` "Error interno al procesar la transacción contable.";
+    `POST /accounts` con `balance` de 13 dígitos y `PATCH /users/me` con `monthly_income` de 13
+    dígitos → `500` en texto plano (excepción no controlada en ASGI, no pasa por `DomainError`).
+    12 dígitos (`999999999999.99`) pasa bien.
+  - Variante: con la cuenta en 999.999.999.999,99, un ingreso válido de 1,00 también da `500`
+    — desborda el `UPDATE accounts SET balance = balance + …`, no el monto en sí.
+    Log: `psycopg2.errors.NumericValueOutOfRange: numeric field overflow`.
+  - El rollback funciona (saldo intacto). Impacto práctico bajo (montos irreales), pero son
+    `500` evitables: `max_digits=14, decimal_places=2` en los schemas + traducir el overflow
+    del saldo a un `422`/`ValidationError`.
+
+- [ ] **Bucle infinito de recargas en `/login` con una cookie `csrf_token` huérfana
+  (QA 2026-09-26, QA-021).**
+  - Con una `csrf_token` presente pero sin refresh token válido en la base, `/login` se recarga
+    ~5 veces por segundo (157 `401` de `/auth/refresh` en el log) y es imposible iniciar sesión
+    sin borrar las cookies a mano.
+  - Causa: `UserPreferencesSync` (global) activa la query de preferencias si `haySesionActiva()`
+    (`lib/authSession.ts`, solo mira si existe `csrf_token`) → `401` → `auth/refresh` `401` →
+    el interceptor (`lib/api.ts:71`) hace `window.location.href = '/login'` aunque ya esté en
+    `/login`. Además el `401` de `/auth/refresh` (`backend/app/api/auth.py`) no llama a
+    `limpiar_cookies_de_sesion`, así que la cookie huérfana nunca se borra.
+  - Disparador real sospechado (no reproducido): un reset de contraseña desde otro dispositivo
+    revoca los refresh tokens pero la `csrf_token` (30 días) sobrevive en el otro navegador; al
+    expirar el `access_token` (15 min) ese navegador cae en el bucle. Lo mismo tras restaurar o
+    recrear la base.
+  - Fix probable: no redirigir si ya está en `/login`, y limpiar cookies en el `401` de refresh.
+
+- [ ] **Un `422` con `detail` en forma de lista tumba la página entera (QA 2026-09-26,
+  QA-004).**
+  - Monto `0.001` en `/capture` o `12.345` en el modal de transacción → backend `422` con
+    `detail: [...]` (formato Pydantic) → `getApiError` (`frontend/lib/utils.ts:3-6`) lo pasa
+    tal cual a `toast.error` → "Objects are not valid as a React child" → "This page couldn't
+    load". Se pierde lo escrito en el formulario.
+  - `getApiError` se usa en 13 archivos: arreglarlo ahí (aplanar `detail` lista/objeto a texto)
+    cubre todos. De paso, validar decimales en el cliente antes de enviar.
+
+- [ ] **El onboarding (moneda + ingreso) nunca aparece para registros con contraseña
+  (QA 2026-09-26, QA-005).**
+  - Registro → auto-login `403 EMAIL_NOT_VERIFIED` → `/login?registered=true` → verificar →
+    login → `/capture` **sin `?onboarding=1`**. El único push a `/capture?onboarding=1` está
+    en `app/(auth)/register/page.tsx:71`, dentro del auto-login que siempre falla desde que la
+    verificación es obligatoria (2026-09-12, ver Resueltos). `app/(auth)/login/page.tsx:85-87`
+    manda a `/capture` sin el flag. Forzando `?onboarding=1` a mano el wizard funciona.
+  - Fix probable: que el login decida el onboarding desde el estado del usuario (p. ej.
+    `!has_transaction_history` y sin onboarding completado), no desde el flag de la URL.
+
+- [ ] **El entorno "dev" de Docker comparte base de datos, puertos y nombre de proyecto con
+  producción (QA 2026-09-26, QA-001).**
+  - `docker-compose.dev.yml` solo cambia `command`, `COOKIE_SECURE` y volúmenes del frontend:
+    mismo volumen `pgdata`, mismos puertos 3000/8000, mismo proyecto `app-finanzas-fullstack`.
+    Correr el comando dev de `CLAUDE.md` en la máquina de despliegue **reemplaza los
+    contenedores de producción y escribe en la base real**. Probable origen del usuario
+    semilla encontrado en producción (QA-002, ver Resueltos).
+  - Fix: un override aislado (p. ej. `docker-compose.qa.yml` con `name: oikos-qa`, volumen
+    Postgres propio, puertos 3001/8001/5433, `NEXT_PUBLIC_API_URL`/`ALLOWED_ORIGINS`/
+    `FRONTEND_URL` ajustados) y corregir el comando dev de `CLAUDE.md`.
 
 - [x] **El dashboard confunde "error de red" con "no hay datos" (auditoría 2026-09-15) —
   resuelto.** *(2026-09-18, Fase 24 §24.1, `docs/specs/fase_24_spec.md`, commit `529de0c`)*
@@ -235,6 +325,60 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 ---
 
 ## 🟡 Integridad y escala
+
+- [ ] **Bugs de dinero/visualización de la QA 2026-09-26 (🟡).** Detalle y capturas en
+  `.scratch/qa-2026-09-26/REPORTE_QA.md`.
+  - **QA-006** — `GET /transactions` cuenta las borradas en `total`
+    (`transactions.py:261`: `with_entities(func.count())` se salta el filtro global de
+    soft-delete) → "Cargar más (12 de 17)" eterno, cada clic trae una página vacía.
+  - **QA-007** — `formatters.ts` redondea todos los montos a la unidad, también USD/EUR: un
+    gasto de 0,10 se ve "-US$ 0".
+  - **QA-008** — "Te quedan" usa el ingreso *declarado* pero la tarjeta muestra "Ingresos del
+    Mes" *real*: 3.200 − 106 ≠ 2.894 a simple vista.
+  - **QA-009** — Editar un gasto a Ingreso muestra "Salario" en la UI pero envía el
+    `category_id` de la categoría de gasto, y el backend lo acepta (no valida tipo de
+    transacción vs naturaleza de la categoría). Tampoco impide cambiar la naturaleza de una
+    categoría con movimientos.
+  - **QA-011** — `/accounts/[id]` y `/categories/[id]` muestran solo 100 movimientos, sin
+    paginación ni aviso.
+  - **QA-012** — `BudgetRing` topa en "100% GASTADO" con 105,5% real (la notificación dice
+    106%).
+  - (QA-006 confirmado también en Postgres: con 9 borradas, `total` 110 vs 101 items reales.)
+
+- [ ] **UX, estados de error y accesibilidad de la QA 2026-09-26 (🟡/🟢).**
+  - **QA-010** — `/transactions` muestra un error de API como "Aún no tienes movimientos"
+    (misma clase de bug que Fase 24 arregló en el dashboard); permite rango de fechas
+    invertido sin aviso; durante reintentos los filtros desaparecen tras el skeleton.
+  - **QA-013** — Paso de ingreso del onboarding: negativo o vacío → "Continuar" no hace nada,
+    sin mensaje (mismo patrón que Fase 12 §12.8 / Fase 24 §24.2).
+  - **QA-014** — `ModalShell` sin `role="dialog"` ni gestión/trampa de foco; los botones
+    editar/borrar categoría no son alcanzables visualmente con foco en escritorio.
+  - **QA-016** — `seed.py` deja las cuentas descuadradas contra `opening_balance`
+    (2.519.000 COP, 2.735 USD, −150.000 COP) y crea 76 transacciones, no las 45 que dice
+    `CLAUDE.md`. Además, sobre una base recién migrada, el seed corrido *antes* del primer
+    arranque de uvicorn crea solo 1 presupuesto y 9 transacciones: las categorías del sistema
+    las siembra `main.py` al arrancar. Documentar el orden (arrancar backend, luego seed) o que
+    el seed las cree si faltan.
+  - **QA-019** 🟢 — El techo de un mes cerrado en `backend/app/core/periods.py:80` es
+    `23:59:59` sin fracción: una transacción a las `23:59:59.xxx` UTC del último día desaparece
+    de `summary` (y por lectura de código de `budgets-progress` y las alertas), mientras
+    Analítica —que usa `23:59:59.999Z` desde el frontend— sí la cuenta. Confirmado en Postgres
+    (`/?month=2025-12`: "Ingresos $0" con un ingreso de 3.300 visible en la lista de la misma
+    página). Fix: límite superior exclusivo (`< primer día del mes siguiente`).
+  - **QA-020** 🟢 — Misma `Idempotency-Key` con payloads *distintos* en carrera: la rama
+    `except IntegrityError` de `crear_transaccion` (`transactions.py:~198-207`) devuelve la
+    transacción existente sin comparar `request_hash`, así que algunas peticiones reciben `200`
+    con una transacción ajena en vez de `409` (Decisión 10.4.3). Con payload idéntico funciona
+    bien; el saldo no se descuadra.
+  - **QA-022** 🟢 — Riesgo latente, no aplica hoy: `cashflow-series` (buckets vía
+    `to_char(timestamptz)`) y `summary` (límites naive) asumen que la sesión Postgres está en
+    UTC. Con `timezone='America/Bogota'` en la base los buckets se corren un día y `summary`
+    cambia de totales. La imagen `postgres:16-alpine` usa UTC por defecto; blindarlo es barato
+    (`connect_args={"options": "-c timezone=UTC"}` en `database.py`).
+  - **QA-017** 🟢 — Hydration mismatch en `/settings` (solo dev).
+  - **QA-018** 🟢 — "Entretenimiento" desborda su casilla en `/capture` a 390 px; Flujo de Caja
+    vacío sin mensaje; ~7 s en blanco ante un 404 de recurso ajeno; descripción obligatoria
+    solo en el modal (no en `/capture`); "Último uso: Nunca" desactualizado en API keys.
 
 - [ ] **El filtro de cuentas destacadas no es el mismo en todo el dashboard (Fase 29,
   aceptado).**
@@ -425,6 +569,7 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 | Fecha | Item |
 |-------|------|
+| 2026-09-26 | Usuario semilla `test@test.com` / `testpass123` presente en la base de **producción** (id 18, creado 2026-09-25, 3 cuentas / 75 transacciones / 6 presupuestos) — alcanzable desde internet vía Funnel con contraseña pública en `CLAUDE.md` (QA 2026-09-26, QA-002). Borrado con `delete_user_by_email`; en producción quedan solo los ids 15 y 17. Causa probable: QA-001 (el comando dev apunta a la base real) — sigue abierto en 🟠 |
 | 2026-09-13 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` no llegaba al bundle del frontend en Docker — `docker-compose.yml` solo pasaba `NEXT_PUBLIC_API_URL` como build arg del servicio `frontend`, y `frontend/Dockerfile` no tenía el `ARG`/`ENV` correspondiente para `NEXT_PUBLIC_GOOGLE_CLIENT_ID`. Efecto: aunque se configurara la variable en `.env`, `GoogleAuthButton` nunca la vería y el botón de Google no aparecía en `login`/`register`. Corregido: build arg agregado en `docker-compose.yml` (prod) y `docker-compose.dev.yml` (dev, vía `environment:`), `ARG`/`ENV` agregado en `frontend/Dockerfile`. Sigue pendiente generar el Client ID real en Google Cloud Console y setearlo en el `.env` de despliegue — sin eso, el botón sigue sin aparecer aunque el plumbing ya esté arreglado |
 | 2026-09-13 | Login con Google (Fase 20 §20.3, ítem 3) — `POST /api/v1/auth/google` con ID token de Google Identity Services: `users.password_hash` pasa a nullable + nueva columna `users.google_id` (migración `5b79ad1d27e4`), auto-link de cuentas existentes por email y `email_verified=true` de inmediato (Decisión P4), cuenta por defecto + categorías ocultas vía helper compartido `inicializar_datos_usuario_nuevo`, botón `GoogleAuthButton` en login/register (oculto si falta `NEXT_PUBLIC_GOOGLE_CLIENT_ID`). Nota P4 sobre el bloqueo de SMTP (ver entrada 2026-09-12): ya **no es un bloqueo total** — el login con Google es una vía de registro que funciona de punta a punta incluso con `EMAIL_PROVIDER=console`; el registro por contraseña sigue dependiendo de SMTP real. Ver `docs/specs/fase_20_spec.md` |
 | 2026-09-13 | Plantilla de correo con marca (Fase 20) — los correos de verificación/reset ya no son un `<p>` con link pelado; ahora usan `render_email_html()` (header "Oikos", botón real, link de respaldo en texto) — ver `docs/ROADMAP.md` Fase 20 |
