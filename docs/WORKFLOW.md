@@ -7,8 +7,12 @@
 > `docs/agents/issue-tracker.md`.
 >
 > Este archivo define la **secuencia**. El **formato** de specs y tickets vive en
-> `docs/agents/issue-tracker.md`, y las reglas del código en `CLAUDE.md` y
+> `docs/agents/issue-tracker.md`, y las reglas del código en `AGENTS.md` y
 > `backend/docs/BUSINESS_RULES.md`. Si difieren, mandan esos archivos.
+>
+> El flujo no depende de la herramienta: cada `/nombre` es una skill de `.agents/skills/` que
+> Claude Code, Codex y OpenCode leen por igual (en Codex se invoca con `$nombre`). Ver
+> `docs/agents/harness.md`.
 
 ---
 
@@ -70,8 +74,11 @@ corrigen o se aceptan explícitamente.
 
 ### 6. Rama o worktree
 
-Desde `main` actualizado (`git checkout main && git pull`). Una rama por fase; un worktree en
-`.claude/worktrees/` cuando conviene trabajar en paralelo sin tocar el árbol principal.
+Desde `main` actualizado (`git checkout main && git pull`). Una rama por fase; un worktree
+cuando conviene trabajar en paralelo sin tocar el árbol principal (Claude Code los crea en
+`.claude/worktrees/`; con Codex u OpenCode, `git worktree add ../oikos-<rama> -b <rama>`). En un
+worktree nuevo no hay `backend/venv` ni `frontend/node_modules`: los hooks reutilizan el `ruff`
+del checkout principal, pero eslint/prettier necesitan `pnpm install` en el worktree.
 
 ### 7. Implementar
 
@@ -89,11 +96,15 @@ Siguiendo el `Orden de ejecución`, en orden de dependencias:
 ### 8. `/run-tests`
 
 pytest, ruff, eslint y prettier. Es el sustituto manual de CI (no hay CI configurado). Un test
-que falla se reporta; no se "arregla" en silencio.
+que falla se reporta; no se "arregla" en silencio. El `pre-commit` versionado
+(`scripts/git-hooks/pre-commit`) vuelve a correr lint/formato sobre lo que está en stage, con
+cualquier herramienta, pero no corre pytest: no reemplaza este paso.
 
-### 9. `/code-review`
+### 9. Revisión de código
 
-Revisión del diff de la rama buscando bugs de correctitud. Si toca auth, cookies o CORS, pasar
+Revisión del diff de la rama buscando bugs de correctitud. Es el único paso sin skill del repo,
+porque cada herramienta trae la suya: `/code-review` en Claude Code, `/review` en Codex, y la
+skill global `code-review` en OpenCode (o pedirle a un subagente que revise el diff). Si toca auth, cookies o CORS, pasar
 también por `security-reviewer`: no para abrir trabajo de hardening nuevo, sino para no romper
 la base existente.
 
@@ -111,7 +122,7 @@ cambiados sin decisión que los explique, tests y docs faltantes.
   consciente.
 - Si cambió un contrato de API, actualizar **ambos** `backend/docs/API_REFERENCE.md` y
   `frontend/docs/API_CONTRACT.md`.
-- `backend/docs/BUSINESS_RULES.md` si cambió una regla, y `CLAUDE.md` si cambió un hecho
+- `backend/docs/BUSINESS_RULES.md` si cambió una regla, y `AGENTS.md` si cambió un hecho
   operativo.
 - `graphify update .` si cambió código.
 
@@ -147,4 +158,4 @@ cambia al flujo completo.
 ## Resumen de una línea
 
 `ROADMAP` → `/grilling` → `/to-spec` → resolver marcadores → `/analyze-spec` → rama →
-implementar → `/run-tests` → `/code-review` → `/analyze-spec cierre` → docs → PR → `git pull`.
+implementar → `/run-tests` → revisión de código → `/analyze-spec cierre` → docs → PR → `git pull`.

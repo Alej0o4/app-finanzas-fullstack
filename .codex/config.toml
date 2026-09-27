@@ -1,0 +1,5 @@
+# GENERADO por scripts/sync-agents.py desde .agents/mcp.json — no editar a mano.
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest", "--browser", "chromium"]
