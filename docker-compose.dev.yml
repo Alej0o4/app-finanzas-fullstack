@@ -1,12 +1,28 @@
+name: oikos-dev
+
 services:
+  postgres:
+    restart: "no"
+
   backend:
+    restart: "no"
     environment:
       - COOKIE_SECURE=false
+      - ALLOWED_ORIGINS=http://localhost:3001
+      - FRONTEND_URL=http://localhost:3001
+      - EMAIL_PROVIDER=console
     volumes:
       - ./backend/app:/app/app
+    # !override reemplaza la lista de puertos en vez de sumarla a la de docker-compose.yml
+    # (Compose >= 2.24.4, instalado v5.5.0) — sin esto, `docker compose config` publica
+    # 8000 Y 8001 a la vez y el stack dev pisa el puerto de producción en la misma máquina
+    # (Fase 31, Decisión I1, QA-001).
+    ports: !override
+      - "8001:8000"
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
+    restart: "no"
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
@@ -15,9 +31,20 @@ services:
       - frontend_node_modules:/app/node_modules
       - frontend_next:/app/.next
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8001
       - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+    ports: !override
+      - "3001:3000"
     command: pnpm dev
+
+  # Fuera del stack dev por defecto (Decisión I1): sin este perfil, `docker compose up`
+  # también lo levantaría, y correría contra la base `oikos-dev_pgdata` con las
+  # credenciales de rclone de producción — subiendo backups de datos de prueba al mismo
+  # remoto y desplazando la rotación de 30 días de los backups reales (QA-001). Se activa
+  # a propósito con `docker compose -f docker-compose.yml -f docker-compose.dev.yml
+  # --profile backup up backup`, nunca por accidente.
+  backup:
+    profiles: ["backup"]
 
 volumes:
   frontend_node_modules:
