@@ -148,7 +148,13 @@ function TransactionsPageContent() {
   useEffect(() => {
     if (!data) return;
     setTotal(data.total);
-    setAllItems((prev) => (skip === 0 ? data.items : [...prev, ...data.items]));
+    // Sin repetir ids: la misma página puede llegar dos veces (reintento automático de
+    // React Query + "Cargar más" reintentando esa página tras un error, QA Fase 31).
+    setAllItems((prev) => {
+      if (skip === 0) return data.items;
+      const cargados = new Set(prev.map((t) => t.id));
+      return [...prev, ...data.items.filter((t) => !cargados.has(t.id))];
+    });
   }, [data]);
 
   // Fase 31 F6: un rango invertido limpia lo que hubiera cargado antes (como
