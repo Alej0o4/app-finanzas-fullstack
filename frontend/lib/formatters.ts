@@ -17,8 +17,10 @@ export function formatCurrency(
   // Fase 31 F7 (QA-007): antes se fijaba siempre en 0 decimales, así que un gasto de
   // US$ 0,10 se mostraba como "US$ 0". COP se lista explícito (el default de `Intl` para
   // COP es 2 decimales por ISO 4217, no lo que el dueño espera ver a diario); el resto de
-  // las monedas siempre muestra dos, salvo que se pida el modo entero para gráficos.
-  const minimumFractionDigits = options?.integer ? 0 : currency === 'COP' ? 0 : 2;
+  // las monedas siempre muestra dos, salvo que se pida el modo entero para gráficos. Un
+  // COP con centavos también va con dos ("$ 1.234,50", nunca "$ 1.234,5").
+  const copSinCentavos = currency === 'COP' && Number.isInteger(Math.round(amount * 100) / 100);
+  const minimumFractionDigits = options?.integer || copSinCentavos ? 0 : 2;
   const maximumFractionDigits = options?.integer ? 0 : 2;
 
   return new Intl.NumberFormat(locale, {

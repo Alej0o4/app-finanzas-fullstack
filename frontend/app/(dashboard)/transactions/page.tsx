@@ -249,6 +249,12 @@ function TransactionsPageContent() {
   };
 
   const handleLoadMore = () => {
+    // Si falló la página pedida, reintentar esa misma en vez de avanzar `skip`: avanzar
+    // saltaría una página entera de movimientos (review de Fase 31, F6).
+    if (isError) {
+      refetch();
+      return;
+    }
     setSkip((prev) => prev + PAGE_SIZE);
   };
 
