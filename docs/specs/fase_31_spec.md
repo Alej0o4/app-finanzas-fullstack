@@ -17,7 +17,9 @@
 
 **Estado:** spec escrita el 2026-09-27. El único marcador (B10) y los seams de testing los
 confirmó el dueño el mismo día; sin marcadores abiertos. `/analyze-spec 31` (2026-09-27): sin
-CRÍTICO/ALTO; los 4 MEDIO y 4 BAJO se aplicaron a esta spec. Siguiente paso: implementar.
+CRÍTICO/ALTO; los 4 MEDIO y 4 BAJO se aplicaron a esta spec. **Implementada y cerrada el
+2026-09-27** (`/analyze-spec 31 cierre`: el test de T4 faltaba y se agregó; desviaciones
+registradas en la entrada de `docs/CHANGELOG.md`).
 
 ---
 

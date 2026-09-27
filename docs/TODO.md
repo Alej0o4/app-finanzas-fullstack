@@ -70,8 +70,14 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🟠 Bugs confirmados (auditoría 2026-08-22 + 2026-09-15)
 
-- [ ] **Condición de carrera en `DELETE`/`PUT /transactions/{id}` descuadra el saldo de la
-  cuenta (QA 2026-09-26, QA-003) — 🔴 crítico.**
+- [x] **Condición de carrera en `DELETE`/`PUT /transactions/{id}` descuadra el saldo de la
+  cuenta (QA 2026-09-26, QA-003) — 🔴 crítico — resuelto.** *(2026-09-27, Fase 31, `docs/specs/fase_31_spec.md`)*
+  - Resolución: `SELECT … FOR UPDATE` sobre la transacción como primera consulta de `PUT` y
+    `DELETE`, borrado condicional (`UPDATE … WHERE deleted_at IS NULL`, `404` sin tocar el saldo
+    si no afecta filas) y reversión del saldo solo después; `aplicar_edicion` ordena los
+    `UPDATE` de cuentas por `account_id` (sin deadlock A→B/B→A). Tests: intercalado
+    determinista en SQLite + `tests/test_concurrency_pg.py` (marker `postgres`,
+    `reconcile.discrepancy == 0` en los 4 escenarios).
   - 8 `DELETE` paralelos sobre la misma transacción → 6 respuestas `200` y saldo final
     100.050,00 en vez de 100.000,00 (−50); 8 `PUT` paralelos → discrepancia 35,00.
   - Causa: `backend/app/api/transactions.py:278-297` (y el `PUT`) leen la transacción sin
@@ -91,8 +97,12 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     `backend/tests/conftest.py` usa siempre SQLite en memoria, habría que aceptar algo como
     `TEST_DATABASE_URL` para ese test.
 
-- [ ] **Montos o saldos por encima de `Numeric(14,2)` dan `500` en vez de `422`
-  (QA 2026-09-26, QA-015).** Confirmado en Postgres.
+- [x] **Montos o saldos por encima de `Numeric(14,2)` dan `500` en vez de `422`
+  (QA 2026-09-26, QA-015) — resuelto.** *(2026-09-27, Fase 31, `docs/specs/fase_31_spec.md`)*
+  - Resolución: `max_digits=14` (`MAX_DIGITS_MONEY` en `schemas/common.py`) en los cuatro
+    campos de dinero de entrada (incluido `amount_limit` de presupuestos) → `422` de Pydantic;
+    el desborde del saldo en `POST`/`PUT`/`DELETE /transactions` → `422` de dominio con saldo
+    intacto. Tests en `tests/test_money_limits.py` (SQLite + Postgres).
   - `POST`/`PUT /transactions` con 13 dígitos enteros (`1234567890123.45`,
     `1000000000000.00`) → `500` "Error interno al procesar la transacción contable.";
     `POST /accounts` con `balance` de 13 dígitos y `PATCH /users/me` con `monthly_income` de 13
@@ -105,8 +115,12 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     `500` evitables: `max_digits=14, decimal_places=2` en los schemas + traducir el overflow
     del saldo a un `422`/`ValidationError`.
 
-- [ ] **Bucle infinito de recargas en `/login` con una cookie `csrf_token` huérfana
-  (QA 2026-09-26, QA-021).**
+- [x] **Bucle infinito de recargas en `/login` con una cookie `csrf_token` huérfana
+  (QA 2026-09-26, QA-021) — resuelto.** *(2026-09-27, Fase 31, `docs/specs/fase_31_spec.md`)*
+  - Resolución: el `401` de `POST /auth/refresh` borra las tres cookies de sesión (siempre,
+    B10), y el interceptor de `lib/api.ts` no redirige a `/login` desde una ruta de
+    autenticación (F4). Revisado por `security-reviewer` sin hallazgos; verificado con
+    Playwright (una sola carga, cookie borrada, login OK).
   - Con una `csrf_token` presente pero sin refresh token válido en la base, `/login` se recarga
     ~5 veces por segundo (157 `401` de `/auth/refresh` en el log) y es imposible iniciar sesión
     sin borrar las cookies a mano.
@@ -121,8 +135,11 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     recrear la base.
   - Fix probable: no redirigir si ya está en `/login`, y limpiar cookies en el `401` de refresh.
 
-- [ ] **Un `422` con `detail` en forma de lista tumba la página entera (QA 2026-09-26,
-  QA-004).**
+- [x] **Un `422` con `detail` en forma de lista tumba la página entera (QA 2026-09-26,
+  QA-004) — resuelto.** *(2026-09-27, Fase 31, `docs/specs/fase_31_spec.md`)*
+  - Resolución: `getApiError` aplana cualquier `detail` (texto, lista de Pydantic, objeto) a
+    texto (F1), y todos los formularios con montos validan decimales/dígitos antes de enviar
+    con error de campo (`lib/validateAmount.ts`, F2).
   - Monto `0.001` en `/capture` o `12.345` en el modal de transacción → backend `422` con
     `detail: [...]` (formato Pydantic) → `getApiError` (`frontend/lib/utils.ts:3-6`) lo pasa
     tal cual a `toast.error` → "Objects are not valid as a React child" → "This page couldn't
@@ -130,8 +147,12 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   - `getApiError` se usa en 13 archivos: arreglarlo ahí (aplanar `detail` lista/objeto a texto)
     cubre todos. De paso, validar decimales en el cliente antes de enviar.
 
-- [ ] **El onboarding (moneda + ingreso) nunca aparece para registros con contraseña
-  (QA 2026-09-26, QA-005).**
+- [x] **El onboarding (moneda + ingreso) nunca aparece para registros con contraseña
+  (QA 2026-09-26, QA-005) — resuelto.** *(2026-09-27, Fase 31, `docs/specs/fase_31_spec.md`)*
+  - Resolución: `lib/postLoginDestination.ts`, compartido por login y Google: sin historial →
+    `/capture?onboarding=1`; el wizard pide moneda e ingreso solo si `monthly_income` es
+    `null`, con placeholder mientras carga el usuario (F5). Verificado con Playwright de punta
+    a punta (registro → verificación → login → wizard).
   - Registro → auto-login `403 EMAIL_NOT_VERIFIED` → `/login?registered=true` → verificar →
     login → `/capture` **sin `?onboarding=1`**. El único push a `/capture?onboarding=1` está
     en `app/(auth)/register/page.tsx:71`, dentro del auto-login que siempre falla desde que la
@@ -140,8 +161,12 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   - Fix probable: que el login decida el onboarding desde el estado del usuario (p. ej.
     `!has_transaction_history` y sin onboarding completado), no desde el flag de la URL.
 
-- [ ] **El entorno "dev" de Docker comparte base de datos, puertos y nombre de proyecto con
-  producción (QA 2026-09-26, QA-001).**
+- [x] **El entorno "dev" de Docker comparte base de datos, puertos y nombre de proyecto con
+  producción (QA 2026-09-26, QA-001) — resuelto.** *(2026-09-27, Fase 31, `docs/specs/fase_31_spec.md`)*
+  - Resolución: `docker-compose.dev.yml` con `name: oikos-dev`, volumen propio, puertos
+    `!override` 3001/8001, `EMAIL_PROVIDER=console`, `restart: "no"` y `backup` detrás de
+    `profiles: ["backup"]` (I1); `gen:types` contra `:8001` (I2); comandos de `CLAUDE.md`
+    corregidos (seed solo en dev, `-p oikos-dev`).
   - `docker-compose.dev.yml` solo cambia `command`, `COOKIE_SECURE` y volúmenes del frontend:
     mismo volumen `pgdata`, mismos puertos 3000/8000, mismo proyecto `app-finanzas-fullstack`.
     Correr el comando dev de `CLAUDE.md` en la máquina de despliegue **reemplaza los
@@ -326,7 +351,11 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🟡 Integridad y escala
 
-- [ ] **Bugs de dinero/visualización de la QA 2026-09-26 (🟡).** Detalle y capturas en
+- [x] **Bugs de dinero/visualización de la QA 2026-09-26 (🟡) — resueltos todos.** *(2026-09-27, Fase 31, `docs/specs/fase_31_spec.md`)*
+  QA-006 (B5), QA-007 (F7), QA-008 (B9/F8: balance = ingreso real − gasto real, "esperado"
+  como referencia), QA-009 (F3: toggle "ver todas" en los dos modales; aceptar categorías de
+  la otra naturaleza es intencional — reembolsos, ver `BUSINESS_RULES.md`), QA-011 (F10: 20 +
+  "Ver todos"), QA-012 (F9: porcentaje real y segunda vuelta). Detalle y capturas en
   `.scratch/qa-2026-09-26/REPORTE_QA.md`.
   - **QA-006** — `GET /transactions` cuenta las borradas en `total`
     (`transactions.py:261`: `with_entities(func.count())` se salta el filtro global de
@@ -345,11 +374,14 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     106%).
   - (QA-006 confirmado también en Postgres: con 9 borradas, `total` 110 vs 101 items reales.)
 
-- [ ] **UX, estados de error y accesibilidad de la QA 2026-09-26 (🟡/🟢).**
-  - **QA-010** — `/transactions` muestra un error de API como "Aún no tienes movimientos"
+- [ ] **UX, estados de error y accesibilidad de la QA 2026-09-26 (🟡/🟢).** Resueltos en la
+  Fase 31 (`docs/specs/fase_31_spec.md`, 2026-09-27): QA-010 (F6), QA-013 (F2), QA-019 (B6),
+  QA-020 (B7) y QA-022 (B8), marcados `[x]` abajo. Siguen abiertos, por flujo corto: QA-014,
+  QA-016, QA-017 y QA-018.
+  - [x] *(2026-09-27, Fase 31)* **QA-010** — `/transactions` muestra un error de API como "Aún no tienes movimientos"
     (misma clase de bug que Fase 24 arregló en el dashboard); permite rango de fechas
     invertido sin aviso; durante reintentos los filtros desaparecen tras el skeleton.
-  - **QA-013** — Paso de ingreso del onboarding: negativo o vacío → "Continuar" no hace nada,
+  - [x] *(2026-09-27, Fase 31)* **QA-013** — Paso de ingreso del onboarding: negativo o vacío → "Continuar" no hace nada,
     sin mensaje (mismo patrón que Fase 12 §12.8 / Fase 24 §24.2).
   - **QA-014** — `ModalShell` sin `role="dialog"` ni gestión/trampa de foco; los botones
     editar/borrar categoría no son alcanzables visualmente con foco en escritorio.
@@ -359,18 +391,18 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     arranque de uvicorn crea solo 1 presupuesto y 9 transacciones: las categorías del sistema
     las siembra `main.py` al arrancar. Documentar el orden (arrancar backend, luego seed) o que
     el seed las cree si faltan.
-  - **QA-019** 🟢 — El techo de un mes cerrado en `backend/app/core/periods.py:80` es
+  - [x] *(2026-09-27, Fase 31)* **QA-019** 🟢 — El techo de un mes cerrado en `backend/app/core/periods.py:80` es
     `23:59:59` sin fracción: una transacción a las `23:59:59.xxx` UTC del último día desaparece
     de `summary` (y por lectura de código de `budgets-progress` y las alertas), mientras
     Analítica —que usa `23:59:59.999Z` desde el frontend— sí la cuenta. Confirmado en Postgres
     (`/?month=2025-12`: "Ingresos $0" con un ingreso de 3.300 visible en la lista de la misma
     página). Fix: límite superior exclusivo (`< primer día del mes siguiente`).
-  - **QA-020** 🟢 — Misma `Idempotency-Key` con payloads *distintos* en carrera: la rama
+  - [x] *(2026-09-27, Fase 31)* **QA-020** 🟢 — Misma `Idempotency-Key` con payloads *distintos* en carrera: la rama
     `except IntegrityError` de `crear_transaccion` (`transactions.py:~198-207`) devuelve la
     transacción existente sin comparar `request_hash`, así que algunas peticiones reciben `200`
     con una transacción ajena en vez de `409` (Decisión 10.4.3). Con payload idéntico funciona
     bien; el saldo no se descuadra.
-  - **QA-022** 🟢 — Riesgo latente, no aplica hoy: `cashflow-series` (buckets vía
+  - [x] *(2026-09-27, Fase 31)* **QA-022** 🟢 — Riesgo latente, no aplica hoy: `cashflow-series` (buckets vía
     `to_char(timestamptz)`) y `summary` (límites naive) asumen que la sesión Postgres está en
     UTC. Con `timezone='America/Bogota'` en la base los buckets se corren un día y `summary`
     cambia de totales. La imagen `postgres:16-alpine` usa UTC por defecto; blindarlo es barato
@@ -379,6 +411,25 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   - **QA-018** 🟢 — "Entretenimiento" desborda su casilla en `/capture` a 390 px; Flujo de Caja
     vacío sin mensaje; ~7 s en blanco ante un 404 de recurso ajeno; descripción obligatoria
     solo en el modal (no en `/capture`); "Último uso: Nunca" desactualizado en API keys.
+
+- [ ] **Deuda nueva consciente de la Fase 31 (2026-09-27).**
+  - **H11** 🟢 — El filtro "hasta el día X" de `/transactions` convierte la fecha final a
+    `T23:59:59` sin fracción, y Analítica manda `23:59:59.999Z`: un movimiento a las
+    `23:59:59,5` UTC queda fuera del filtro. Misma familia que QA-019; candidato a flujo corto
+    (límite exclusivo "< día siguiente").
+  - 🟡 `/accounts/[id]` y `/categories/[id]` tienen su **propio** modal de edición en línea
+    (no `EditTransactionModal`), con los mismos problemas que F2/F3 corrigieron en los modales
+    compartidos: validación nativa sin error de campo y categoría visible ≠ enviada. Reusar
+    `EditTransactionModal` ahí lo cierra.
+  - 🟢 Insumo de la Fase 32 (inventario de T10): con `TEST_DATABASE_URL` la suite da 1 falla
+    previa, solo en Postgres: `test_soft_delete.py::TestUpdatedAt::test_updated_at_changes_on_
+    put_but_not_on_read` — `now()` de Postgres es la hora de inicio de la transacción, y el
+    fixture `db_session` envuelve todo el test en una sola transacción, así que `updated_at`
+    no cambia tras el `PUT`. No es un bug de producción (cada request es su propia
+    transacción).
+  - 🟢 Pydantic ignora ceros finales en `decimal_places` (`12.340` pasa en el backend), pero
+    `lib/validateAmount.ts` cuenta los decimales escritos y lo rechaza en el cliente. Más
+    estricto a propósito; anotado por si molesta.
 
 - [ ] **El filtro de cuentas destacadas no es el mismo en todo el dashboard (Fase 29,
   aceptado).**

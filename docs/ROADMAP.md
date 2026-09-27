@@ -101,9 +101,9 @@ Spec: `docs/specs/fase_26_spec.md`.
 La Fase 29 (navegación por mes + selector de moneda) se completó el 2026-09-26 — ver "Fase 29 —
 completada" abajo. La Fase 30 (chip "Esta semana" en Transacciones, KPIs de Analítica desde el
 backend y la deuda chica que dejó la Fase 29) también, el mismo día — ver "Fase 30 — completada".
-La Fase 31 (corrección de los hallazgos de la QA 2026-09-26) está planeada, con el `/grilling`
-hecho y la spec escrita (`docs/specs/fase_31_spec.md`) — ver "Fase 31 — planeada". La Fase 32 (suite de tests sobre
-Postgres) sale de ese grilling y está pendiente del suyo.
+La Fase 31 (corrección de los hallazgos de la QA 2026-09-26) se completó el 2026-09-27 — ver
+"Fase 31 — completada". La Fase 32 (suite de tests sobre Postgres) sale de ese grilling y está
+pendiente del suyo.
 
 ---
 
@@ -277,7 +277,7 @@ dueño). Flujo completo de `docs/WORKFLOW.md` (spec corta), porque Q6 cambia un 
 
 ---
 
-## Fase 31 — planeada (2026-09-27): corrección de los hallazgos de la QA 2026-09-26
+## Fase 31 — completada (2026-09-27): corrección de los hallazgos de la QA 2026-09-26
 
 Sale de la primera pasada de QA (agente `qa-engineer` + Playwright, 2026-09-26, sobre `bc9dcb9`,
 re-verificada contra Postgres 16). Reporte completo:
@@ -285,7 +285,9 @@ re-verificada contra Postgres 16). Reporte completo:
 `docs/TODO.md` (`QA-001` a `QA-022`). Desde `bc9dcb9` solo entraron commits de docs, así que las
 referencias de archivo y línea del reporte siguen vigentes.
 
-**Estado: `/grilling` hecho el 2026-09-27 (decisiones Q1–Q16, tomadas por el dueño) y `/to-spec`
+**Estado: completada el 2026-09-27** (ver `docs/CHANGELOG.md` y la spec): 17 de los 22 ítems
+de la QA resueltos; QA-014, QA-016, QA-017 y QA-018 quedan para flujo corto (Q1) y QA-002 ya
+estaba resuelto. Historia previa: `/grilling` hecho el 2026-09-27 (decisiones Q1–Q16, tomadas por el dueño) y `/to-spec`
 escrito el mismo día: `docs/specs/fase_31_spec.md`, sin marcadores abiertos (B10 resuelto: opción a) y
 revisado con `/analyze-spec 31` el mismo día (sin CRÍTICO/ALTO, ajustes aplicados): listo para implementar.** **Flujo completo** de `docs/WORKFLOW.md`: la fase toca backend y frontend a la vez,
 cambia reglas de `backend/docs/BUSINESS_RULES.md` (Q9, Q10) y contratos de API (Q9, QA-015).
@@ -408,7 +410,9 @@ aplica `Numeric(14,2)`). Probar contra el mismo motor que producción es la prá
 
 **Estado: planeada, pendiente de `/grilling`.** Parte de lo que deje la Fase 31: `conftest.py` ya
 acepta `TEST_DATABASE_URL` y la suite completa ya se habrá corrido una vez contra Postgres, así que
-el inventario de tests que fallan por diferencias de motor va a existir antes de empezar.
+el inventario de tests que fallan por diferencias de motor va a existir antes de empezar. **Ya
+existe (2026-09-27):** 348 pasan y 1 falla solo en Postgres (`TestUpdatedAt`, ver `docs/TODO.md`
+§"Deuda nueva consciente de la Fase 31").
 
 Alcance tentativo, a decidir en el `/grilling`:
 
