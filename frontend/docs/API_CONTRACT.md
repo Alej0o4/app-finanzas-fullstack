@@ -50,13 +50,17 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
 - `POST /api/v1/auth/refresh` → rota el refresh token y setea cookies nuevos. Desde Fase 26 el
   frontend lo llama **sin body** (el cookie `refresh_token`, HttpOnly con Path
   `/api/v1/auth`, viaja solo — Decisión F1/Hallazgo 3); el body `{ refresh_token }`
-  sigue siendo aceptado para clientes no-browser.
+  sigue siendo aceptado para clientes no-browser. Su `401` (token ausente/inválido/expirado)
+  **también limpia los tres cookies de sesión**, siempre (Fase 31, Decisión B10) — antes no
+  limpiaba nada, y una cookie `csrf_token` huérfana dejaba `/login` recargándose en bucle
+  (QA-021). El interceptor de `lib/api.ts` no redirige a `/login` si la pantalla actual ya es
+  de autenticación (Decisión F4).
 - `POST /api/v1/auth/logout` → revoca el refresh token y limpia los tres cookies de sesión en
   su propia respuesta (Decisión B7). Desde Fase 26 el frontend lo llama **sin body** (Decisión
   F4) — el cookie viaja solo; el body `{ refresh_token }` sigue siendo aceptado para clientes
   no-browser.
 - `GET /api/v1/users/me`
-- `PATCH /api/v1/users/me` (acepta `{ monthly_income }` — usado por la card "Balance del mes" del dashboard para fijar el ingreso mensual inline, Fase 11 §11.3)
+- `PATCH /api/v1/users/me` (acepta `{ monthly_income }` — usado por la card "Balance de \<mes\>" del dashboard para fijar el ingreso mensual esperado inline, cuando todavía no está definido; puramente una referencia visual desde Fase 31, Decisión B9/Q14, no un cálculo)
 - `GET /api/v1/users/me/preferences`
 - `PATCH /api/v1/users/me/preferences`
 - `DELETE /api/v1/users/me` — elimina la cuenta del usuario autenticado (Fase 21 §21.2). Body `{ password }`; `204` si ok, `403` si la contraseña es incorrecta, `401` sin token. Irreversible (hard delete de todo el usuario).
@@ -69,10 +73,10 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
 - `GET /api/v1/accounts/{account_id}/monthly-summary` (Fase 17 §17.1.2, Decisión 17.1.2,
   actualizado Fase 30 B2) — saldo/balance del mes de **una sola cuenta**, derivado de sus
   transacciones del mes actual (`monthly_income − monthly_expense`). **Actualizado Fase 30 B2**:
-  usa `core.periods.limites_mes_utc` para que el techo del mes en curso sea "ahora" (igual que
-  `dashboard/summary`), en vez del fin de mes calendario. A diferencia del `monthly_flow_balance`
-  del dashboard (que usa ingreso declarado y puede ser `null`), este endpoint **nunca** devuelve
-  `null` para `monthly_flow_balance`: sin transacciones devuelve `0`. Responde
+  usa `core.periods.rango_mes_utc` para que el techo del mes en curso sea "ahora" (igual que
+  `dashboard/summary`), en vez del fin de mes calendario. Igual que `monthly_flow_balance` del
+  dashboard desde Fase 31 (Decisión B9): este endpoint **nunca** devuelve `null` para
+  `monthly_flow_balance` — sin transacciones devuelve `0`. Responde
   `AccountMonthlySummary`: `{ currency, monthly_income, monthly_expense, monthly_flow_balance }`.
   Los montos `Decimal` llegan serializados como `string` (Decisión 15.6) — el frontend los
   normaliza con `Number(...)` antes de formatear (ver `AccountMonthlyBalanceCard`).
@@ -128,9 +132,15 @@ Filtros soportados por el feed:
 El endpoint devuelve una respuesta paginada:
 
 - `items`: `Transaction[]`
-- `total`: `int` — total de resultados sin paginación
+- `total`: `int` — total de resultados sin paginación, **excluye las borradas** (Fase 31,
+  Decisión B5) — antes el conteo sí las incluía aunque `items` ya las excluyera, y "Cargar
+  más" quedaba disponible para siempre.
 - `page`: `int` — página actual
 - `page_size`: `int` — items por página
+
+Concurrencia sobre `PUT`/`DELETE` (Fase 31, Decisión B1, QA-003): dos peticiones simultáneas
+sobre la misma transacción se serializan — una segunda petición sobre una transacción que otra
+ya borró (también en simultáneo) recibe `404` y no vuelve a mover el saldo.
 
 Body de creación (`POST`) desde Fase 16 §16.2:
 
@@ -155,7 +165,9 @@ Header opcional en `POST`:
   - con un payload idéntico → se devuelve la transacción original sin crear otra ni volver a mover
     el saldo (replay);
   - con un payload distinto → `409 Conflict` ("Esta Idempotency-Key ya se usó con datos
-    distintos"); si la transacción original fue eliminada, también `409`.
+    distintos"); si la transacción original fue eliminada, también `409`. Fase 31 (Decisión
+    B7): las mismas dos reglas aplican también si la petición pierde una carrera contra otra
+    con la misma clave.
 
 Cómo lo usa el frontend (`TransactionCaptureForm.tsx`): genera una clave con `crypto.randomUUID()`
 una vez por montaje del formulario y la regenera tras cada envío exitoso — así, los reintentos de
@@ -173,7 +185,7 @@ ignoran.
 
 ### Dashboard
 
-- `GET /api/v1/dashboard/summary` — incluye `monthly_flow_balance: number | null` desde Fase 11 §11.3 (ver "Contratos de datos" abajo). Desde Fase 29 acepta los query params `year`/`month` y devuelve tres campos nuevos: `monthly_flow_basis`, `first_transaction_month` y `expense_currencies` (ver "Navegación por mes del dashboard" y "Contratos de datos > Dashboard").
+- `GET /api/v1/dashboard/summary` — incluye `monthly_flow_balance: number` desde Fase 11 §11.3, sin `null` desde Fase 31 (Decisión B9; ver "Contratos de datos" abajo). Desde Fase 29 acepta los query params `year`/`month` y devuelve tres campos nuevos: `monthly_flow_basis` (obsoleto desde Fase 31, siempre `"actual"`), `first_transaction_month` y `expense_currencies` (ver "Navegación por mes del dashboard" y "Contratos de datos > Dashboard"). El mes cerrado se acota hasta el primer instante del mes siguiente, exclusivo (Fase 31, Decisión B6).
 - `GET /api/v1/dashboard/budgets-progress` — cada fila incluye `currency` desde Fase 11 §11.1.
   Desde Fase 17 §17.2.3 acepta además un query param opcional `currency: string` (Decisión
   17.2.3): si se pasa, el backend filtra las filas a esa moneda **sin recalcular `spent`**
@@ -325,7 +337,7 @@ Reglas de consumo:
 - `preferred_currency` (default `"COP"`)
 - `preferred_locale` (default `"es-CO"`)
 - `preferred_theme` (default `"dark"`)
-- `monthly_income` (`number | null`) — dato financiero del perfil, editable vía `PATCH /api/v1/users/me`. El dashboard lo consume dos veces (Fase 11 §11.3): indirectamente a través de `monthly_flow_balance` en `/dashboard/summary`, y directamente vía el formulario inline de la card "Balance del mes" cuando ese valor es `null`.
+- `monthly_income` (`number | null`) — dato financiero del perfil, editable vía `PATCH /api/v1/users/me`. Desde Fase 31 (Decisión B9, Q14) es puramente una **referencia visual**: ya no alimenta `monthly_flow_balance` de `/dashboard/summary` ni ningún otro cálculo del backend — el dashboard lo muestra junto a los ingresos reales del mes ("· esperado $X"), sin restarlo de nada.
 - `has_transaction_history` (`boolean`, Fase 19 §19.1) — `true` si el usuario tiene 2+ transacciones. El login (`login/page.tsx`) lo lee para condicionar el redirect: `/dashboard` si es `true`, `/capture` si no (resuelve la Decisión 10.1.4 de Fase 10). Solo se calcula en `GET /users/me`; en `PATCH /me` llega como `false` fijo sin consultar — ningún call site de ese endpoint lee el campo (Decisión 19.1.3).
 - `has_password` (`boolean`, Fase 22 §22.4, Decisión D4) — `true` si la cuenta tiene contraseña, `false` = cuenta creada solo con Google. Se computa en los tres endpoints de `UserResponse` via `model_validator` del schema (no hay que asignarlo por handler). El modal de "Eliminar mi cuenta" en `/settings` lo usa para no pedir contraseña a una cuenta Google-only (`requiresPassword = currentUser?.has_password !== false`).
 
@@ -447,11 +459,17 @@ El frontend asume:
 
 - `balances` (`BalanceByCurrency[]`) — saldos por moneda de las cuentas **destacadas** (o todas si no hay destacadas). Desde Fase 11 §11.3 el dashboard ya no renderiza este array como card "Balance Total": esa vista vive en `/accounts` vía `GET /accounts/summary`, que no filtra por destacadas. **No depende del mes consultado** (Fase 29): sigue siendo el saldo actual de las cuentas, no un saldo histórico del mes que se está mirando.
 - `monthly_income_by_currency` / `monthly_expense_by_currency` (`BalanceByCurrency[]`) — del mes consultado, también solo sobre cuentas destacadas.
-- `monthly_flow_balance` (`number | null`, Fase 11 §11.3; Fase 29) — en la moneda preferida, calculado por el backend. **Su significado lo dice `monthly_flow_basis`**, no el frontend:
-  - `"declared"` (mes en curso) — ingreso mensual declarado por el usuario menos el gasto del mes; `null` significa que el usuario no fijó `monthly_income` todavía (el frontend lo distingue del estado de carga y muestra un formulario inline).
-  - `"actual"` (mes ya cerrado) — ingresos reales registrados menos gastos reales del mes; **nunca `null`** (sin filas, `0.00`).
-    Limitación conocida, aceptada a propósito en ambos casos: el gasto en monedas distintas a la preferida no resta (misma limitación de una-sola-moneda que cashflow-series/category-distribution).
-- `monthly_flow_basis` (`'declared' | 'actual'`, Fase 29) — el rótulo de la tarjeta sale de acá ("Te quedan…" vs. "Balance de <mes>"), no de comparar fechas locales con el mes actual: el mes es UTC y el reloj del navegador puede no coincidir con el del servidor.
+- `monthly_flow_balance` (`number`, Fase 11 §11.3; Fase 29; reescrito Fase 31 — Decisión B9,
+  Q9) — en la moneda preferida, calculado por el backend: **siempre** ingresos reales
+  registrados menos gastos reales del período consultado, igual en el mes en curso que en uno
+  cerrado. **Nunca `null`** (sin filas, `0.00`), y puede ser negativo (a principio de mes,
+  antes de cobrar — es un dato, no un error, ver la referencia "esperado" más abajo).
+  Limitación conocida, aceptada a propósito: el gasto en monedas distintas a la preferida no
+  resta (misma limitación de una-sola-moneda que cashflow-series/category-distribution).
+- `monthly_flow_basis` (`'actual'`, Fase 29; **obsoleto desde Fase 31**) — antes de Fase 31
+  tenía dos bases (`'declared' | 'actual'`) y el rótulo de la tarjeta salía de acá; ya no hace
+  falta (el rótulo es siempre "Balance de \<mes\>"), pero el campo se conserva sin default —
+  un cliente que lo siga leyendo ve siempre `'actual'`, nunca un campo ausente.
 - `first_transaction_month` (`string | null`, Fase 29) — mes UTC `"YYYY-MM"` de la transacción más antigua del usuario, sobre todas las cuentas. Es el límite inferior del `◀`; `null` = usuario sin transacciones, la navegación no tiene hacia dónde ir.
 - `expense_currencies` (`string[]`, Fase 29) — monedas con gasto en el mes consultado, sobre **todas** las cuentas (no solo las destacadas), con la preferida primero. Alimenta los chips de moneda de "Gastos por categoría": las barras que el chip filtra cuentan todas las cuentas, así que el universo tiene que ser ese. La moneda preferida solo aparece si tiene gasto en el mes, y el frontend la suma igual a las opciones para que el chip nunca quede sin nada que mostrar.
 
@@ -498,7 +516,14 @@ Reglas:
 - `401`: token ausente o inválido.
 - `403`: acción no permitida (ej: editar/eliminar categoría base del sistema).
 - `404`: recurso inexistente o fuera de alcance del usuario.
-- `422`: validación de entrada — de esquema (`?year=abc` en `dashboard/summary` o `dashboard/budgets-progress`, con `detail` como **lista**) o de período del dashboard (con `detail` como **string**); ver "Navegación por mes del dashboard" para los mensajes.
+- `422`: validación de entrada, en dos formas que el cliente debe distinguir (Fase 31, D1) — de
+  esquema Pydantic (`detail` como **lista**: `?year=abc` en `dashboard/summary`/`budgets-progress`,
+  o un monto con más de 12 dígitos enteros/2 decimales en `POST`/`PUT /transactions`,
+  `POST /accounts`, `PATCH /users/me`, `POST`/`PUT /budgets` — Decisión B3) o de dominio
+  (`detail` como **string**: un período de dashboard inválido, o un saldo que desbordaría
+  `Numeric(14,2)` en `POST`/`PUT`/`DELETE /transactions` — Decisión B4); ver "Navegación por mes
+  del dashboard" para los mensajes de período. El frontend muestra cualquiera de las dos formas
+  como texto con `getApiError` (F1).
 - `429`: rate limiting excedido (`/api/v1/auth/login`, `POST /api/v1/users/`, `/api/v1/auth/password-reset/request`, `/api/v1/auth/resend-verification`, `/api/v1/auth/google`, todos 5 req/min).
 
 ## Reglas de consumo

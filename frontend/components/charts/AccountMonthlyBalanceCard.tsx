@@ -16,8 +16,8 @@ interface AccountMonthlyBalanceCardProps {
  * (GET /accounts/{id}/monthly-summary, campo `monthly_flow_balance`) y solo lo pinta — el
  * backend es la fuente de verdad del dato. Fase 19 §19.2.3 cerró el recalculo
  * (`income - expense`) que este componente hacía en cliente (Hallazgo 7 del spec).
- * Intencionalmente más simple que la card inline del dashboard: no describe un "sin definir"
- * posible (a diferencia de monthly_flow_balance del dashboard).
+ * Desde Fase 31 (Decisión B9) el balance del dashboard también es siempre real (nunca
+ * "sin definir"), igual que este — el contraste que había acá quedó obsoleto.
  */
 export default function AccountMonthlyBalanceCard({
   label,

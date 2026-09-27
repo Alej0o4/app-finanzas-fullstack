@@ -4,11 +4,16 @@ Alcance de Fase 7 §4.2: "solo la lógica que mueve dinero" — no cobertura com
 `transactions.py` (paginación, filtros de fecha, etc. quedan fuera).
 """
 
+import hashlib
+import json
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
+from sqlalchemy import event, update
 
 from app.models import models
+from app.schemas import schemas
 
 
 def _get_account(client: TestClient, headers: dict, account_id: int) -> dict:
@@ -168,6 +173,136 @@ class TestDeleteTransactionRevertsBalance:
         # y el saldo no debe haberse tocado
         cuenta_final = _get_account(client, auth_headers, cuenta["id"])
         assert Decimal(str(cuenta_final["balance"])) == Decimal("900.00")
+
+
+class TestConcurrencyGuardsSqlite:
+    """T2 — QA-003 (B1, B2): regresión de `PUT`/`DELETE /transactions/{id}` bajo
+    concurrencia. SQLite no soporta `FOR UPDATE` (Further Notes de la spec: "B1 solo
+    protege de verdad en Postgres"); la protección real la prueba
+    `tests/test_concurrency_pg.py`, marcado `postgres`. Acá se prueban dos guardas sin
+    carrera real y una reproducción determinista del borrado condicional (segunda
+    defensa, Q2) vía intercalado de sesión — mismo mecanismo que
+    `test_race_condition_integrity_error_rolls_back_without_raising`
+    (`tests/test_budget_recurrence.py`)."""
+
+    def test_second_delete_on_same_transaction_returns_404_and_does_not_touch_balance(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """Guarda, NO reproduce el bug de QA-003: sin carrera real, el filtro global de
+        `core/database.py` ya oculta la fila soft-deleted en el segundo DELETE — este
+        test pasa también antes del fix de B1."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        creada = _create_transaction(
+            client,
+            auth_headers,
+            amount="300.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+        ).json()
+
+        primero = client.delete(f"/api/v1/transactions/{creada['id']}", headers=auth_headers)
+        assert primero.status_code == 200, primero.text
+
+        segundo = client.delete(f"/api/v1/transactions/{creada['id']}", headers=auth_headers)
+        assert segundo.status_code == 404
+
+        cuenta_final = _get_account(client, auth_headers, cuenta["id"])
+        assert Decimal(str(cuenta_final["balance"])) == Decimal("1000.00")
+
+    def test_update_on_deleted_transaction_returns_404_and_does_not_touch_balance(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """Guarda, NO reproduce el bug de QA-003 — pasa también antes del fix de B1."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        creada = _create_transaction(
+            client,
+            auth_headers,
+            amount="300.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+        ).json()
+        client.delete(f"/api/v1/transactions/{creada['id']}", headers=auth_headers)
+
+        update_payload = {
+            "amount": "500.00",
+            "currency": "COP",
+            "type": "expense",
+            "description": "intento de editar lo borrado",
+            "account_id": cuenta["id"],
+            "category_id": categoria["id"],
+        }
+        response = client.put(f"/api/v1/transactions/{creada['id']}", json=update_payload, headers=auth_headers)
+        assert response.status_code == 404
+
+        cuenta_final = _get_account(client, auth_headers, cuenta["id"])
+        assert Decimal(str(cuenta_final["balance"])) == Decimal("1000.00")
+
+    def test_delete_intercalated_with_winning_concurrent_delete_returns_404_and_reverts_once(
+        self, client, db_session, auth_headers, make_account, make_category
+    ):
+        """Reproducción determinista del borrado condicional (B1, segunda defensa, Q2).
+
+        Un listener sobre `db_session` intercepta el UPDATE condicional de
+        `eliminar_transaccion` justo antes de que se ejecute — el punto exacto "entre
+        la lectura de la transacción y la escritura" — y en su lugar simula que OTRA
+        petición ya ganó la carrera: revierte el saldo y marca la transacción borrada,
+        con un commit real (mismos savepoints que usa `db_session`, no hace falta
+        threading para esta parte). Cuando el UPDATE condicional de nuestra propia
+        petición se ejecuta después, `rowcount == 0` (la fila ya no cumple
+        `deleted_at IS NULL`).
+
+        Falla antes del fix: el código viejo revertía el saldo sin condición (sin este
+        UPDATE condicional en absoluto) y devolvía `200` sin importar lo que hiciera la
+        "otra" petición — el saldo se revertía dos veces."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        creada = _create_transaction(
+            client,
+            auth_headers,
+            amount="300.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+        ).json()
+
+        disparado = {"n": 0}
+
+        def _delete_ganador(execute_state):
+            stmt = execute_state.statement
+            if (
+                disparado["n"] == 0
+                and getattr(stmt, "is_update", False)
+                and getattr(getattr(stmt, "table", None), "name", None) == "transactions"
+            ):
+                disparado["n"] += 1
+                db_session.execute(
+                    update(models.Account)
+                    .where(models.Account.id == cuenta["id"])
+                    .values(balance=models.Account.balance + Decimal("300.00"))
+                )
+                db_session.execute(
+                    update(models.Transaction)
+                    .where(models.Transaction.id == creada["id"])
+                    .values(deleted_at=datetime.now(UTC))
+                )
+                db_session.commit()
+
+        event.listen(db_session, "do_orm_execute", _delete_ganador)
+        try:
+            response = client.delete(f"/api/v1/transactions/{creada['id']}", headers=auth_headers)
+        finally:
+            event.remove(db_session, "do_orm_execute", _delete_ganador)
+
+        assert disparado["n"] == 1  # la intercalación sí ocurrió (rama ejercitada)
+        assert response.status_code == 404, response.text
+
+        # El saldo se revirtió UNA sola vez (por el "ganador" simulado), no dos.
+        cuenta_final = _get_account(client, auth_headers, cuenta["id"])
+        assert Decimal(str(cuenta_final["balance"])) == Decimal("1000.00")
 
 
 class TestUpdateTransactionAdjustsBalance:
@@ -533,6 +668,155 @@ class TestIdempotencyKeyHeader:
         saldo_b = _get_account(client, other_user["headers"], cuenta_b["id"])
         assert Decimal(str(saldo_a["balance"])) == Decimal("900.00")
         assert Decimal(str(saldo_b["balance"])) == Decimal("1950.00")
+
+    @staticmethod
+    def _hash_payload(payload: dict) -> str:
+        """Replica exactamente el hash que calcula `crear_transaccion` (mismo
+        `TransactionCreate.model_dump(mode="json")` + `sha256` + `sort_keys=True`)
+        ANTES de resolver `account_id`/`category_id` — por eso el payload de este
+        helper debe traer `account_id`/`category_id` explícitos, igual que el que se
+        manda por HTTP."""
+        modelo = schemas.TransactionCreate(**payload)
+        return hashlib.sha256(json.dumps(modelo.model_dump(mode="json"), sort_keys=True).encode()).hexdigest()
+
+    def test_replay_key_losing_race_with_different_payload_returns_409(
+        self, client, db_session, test_user, make_account, make_category
+    ):
+        """T6 — QA-020 (B7): reproduce la carrera intercalando DENTRO del `commit`
+        parcheado, mismo mecanismo que
+        `test_race_condition_integrity_error_rolls_back_without_raising`
+        (`tests/test_budget_recurrence.py`): la "otra" petición inserta y comitea de
+        verdad su propia `IdempotencyKey` con la MISMA clave y OTRO hash antes de que
+        la nuestra intente insertar la suya — nuestro `db.commit()` final choca contra
+        el índice único `(user_id, key)` con un `IntegrityError` GENUINO.
+
+        Falla antes del fix: la rama `except IntegrityError` de `crear_transaccion`
+        devolvía la transacción de la clave ganadora SIN comparar el hash — un
+        payload distinto se colaba en silencio en vez de responder 409."""
+        headers = test_user["headers"]
+        cuenta = make_account(headers, balance="1000.00")
+        categoria = make_category(headers, name="Comida", type="expense")
+        key = "carrera-payload-distinto"
+        payload = {
+            "amount": "100.00",
+            "type": "expense",
+            "description": "compra con posible carrera",
+            "account_id": cuenta["id"],
+            "category_id": categoria["id"],
+        }
+
+        commit_real = db_session.commit
+        llamadas = {"n": 0}
+
+        def commit_que_pierde_la_carrera():
+            llamadas["n"] += 1
+            if llamadas["n"] == 1:
+                lote = list(db_session.new)
+                for fila in lote:
+                    db_session.expunge(fila)
+                ganadora_tx = models.Transaction(
+                    amount=Decimal("999.00"),
+                    type="expense",
+                    currency="COP",
+                    account_id=cuenta["id"],
+                    category_id=categoria["id"],
+                    user_id=test_user["id"],
+                )
+                db_session.add(ganadora_tx)
+                db_session.flush()  # asigna ganadora_tx.id
+                db_session.add(
+                    models.IdempotencyKey(
+                        user_id=test_user["id"],
+                        key=key,
+                        request_hash="hash-totalmente-distinto-de-otro-payload",
+                        transaction_id=ganadora_tx.id,
+                    )
+                )
+                commit_real()  # la ganadora queda durable
+                db_session.add_all(lote)
+                commit_real()  # nuestra propia clave choca contra el índice único
+            commit_real()
+
+        monkeypatch_target = db_session
+        original_commit = monkeypatch_target.commit
+        monkeypatch_target.commit = commit_que_pierde_la_carrera
+        try:
+            response = self._post(client, {**headers, "Idempotency-Key": key}, payload)
+        finally:
+            monkeypatch_target.commit = original_commit
+
+        assert llamadas["n"] >= 1  # la rama SÍ se ejercitó
+        assert response.status_code == 409, response.text
+        assert "datos distintos" in response.json()["detail"]
+
+    def test_replay_key_losing_race_with_original_already_deleted_returns_409(
+        self, client, db_session, test_user, make_account, make_category
+    ):
+        """T6 — QA-020 (B7), la otra rama del mismo `except IntegrityError`: la clave
+        ganadora tiene el MISMO hash que la nuestra (el mismo payload, dos clientes
+        reintentando a la vez) pero su transacción original ya está soft-deleted para
+        cuando resolvemos la carrera.
+
+        Falla antes del fix: la rama vieja devolvía
+        `db.query(...).first()` sin chequear `None` — un `500` de validación de
+        respuesta (Pydantic no puede serializar `None` como `TransactionResponse`) en
+        vez de un 409 de dominio legible."""
+        headers = test_user["headers"]
+        cuenta = make_account(headers, balance="1000.00")
+        categoria = make_category(headers, name="Comida", type="expense")
+        key = "carrera-original-ya-borrada"
+        payload = {
+            "amount": "100.00",
+            "type": "expense",
+            "description": "compra que se reintenta",
+            "account_id": cuenta["id"],
+            "category_id": categoria["id"],
+        }
+        hash_real = self._hash_payload(payload)
+
+        commit_real = db_session.commit
+        llamadas = {"n": 0}
+
+        def commit_que_pierde_la_carrera():
+            llamadas["n"] += 1
+            if llamadas["n"] == 1:
+                lote = list(db_session.new)
+                for fila in lote:
+                    db_session.expunge(fila)
+                ganadora_tx = models.Transaction(
+                    amount=Decimal("100.00"),
+                    type="expense",
+                    currency="COP",
+                    account_id=cuenta["id"],
+                    category_id=categoria["id"],
+                    user_id=test_user["id"],
+                    deleted_at=datetime.now(UTC),  # ya borrada para cuando la resolvemos
+                )
+                db_session.add(ganadora_tx)
+                db_session.flush()
+                db_session.add(
+                    models.IdempotencyKey(
+                        user_id=test_user["id"],
+                        key=key,
+                        request_hash=hash_real,  # MISMO payload — el hash sí coincide
+                        transaction_id=ganadora_tx.id,
+                    )
+                )
+                commit_real()
+                db_session.add_all(lote)
+                commit_real()
+            commit_real()
+
+        original_commit = db_session.commit
+        db_session.commit = commit_que_pierde_la_carrera
+        try:
+            response = self._post(client, {**headers, "Idempotency-Key": key}, payload)
+        finally:
+            db_session.commit = original_commit
+
+        assert llamadas["n"] >= 1
+        assert response.status_code == 409, response.text
+        assert "ya no existe" in response.json()["detail"]
 
 
 class TestCapturaRapidaPorNombre:

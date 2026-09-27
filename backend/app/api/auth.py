@@ -5,7 +5,7 @@ from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from sqlalchemy.orm import Session
-from starlette.responses import Response  # 🆕 Fase 26
+from starlette.responses import JSONResponse, Response  # 🆕 Fase 26 / Fase 31 (B10)
 
 from app.api.users import enviar_email_verificacion, inicializar_datos_usuario_nuevo
 from app.core import auth_cookies, security  # 🆕 Fase 26: auth_cookies
@@ -160,6 +160,27 @@ def login_google(
     }
 
 
+def _refresh_unauthorized_response() -> JSONResponse:
+    """401 de `POST /auth/refresh` (Fase 31, Decisión B10, H1): construido a mano en vez
+    de `raise UnauthorizedError(...)`.
+
+    `refresh` recibe un `response: Response` inyectado por FastAPI, pero el handler
+    global de `DomainError` (`main.py`) arma un `JSONResponse` NUEVO al traducir la
+    excepción — los `Set-Cookie` que se le hubieran agregado al `response` inyectado se
+    pierden con él. Llamar a `limpiar_cookies_de_sesion(response)` y después `raise` no
+    borra nada; hay que devolver el `JSONResponse(401)` ya armado, con las cookies
+    borradas encima. Mismo cuerpo que antes de esta fase.
+
+    Borra las tres cookies de sesión SIEMPRE (Q5) — también cuando el token presentado
+    se acaba de revocar por una rotación legítima de otra pestaña (H2): en esa carrera,
+    rara, las dos pestañas pierden la sesión y hay que volver a iniciar sesión. Se
+    descartó agregar una consulta y un umbral de gracia por revocación reciente —
+    decisión del dueño, 2026-09-27 (opción a)."""
+    resp = JSONResponse(status_code=401, content={"detail": "Refresh token inválido o expirado"})
+    auth_cookies.limpiar_cookies_de_sesion(resp)
+    return resp
+
+
 @router.post("/refresh", response_model=schemas.TokenResponse)
 def refresh(
     request: Request,  # 🆕 Fase 26 — leer el cookie refresh_token cuando no viene body
@@ -172,7 +193,7 @@ def refresh(
     # ambos, se usa el body (misma semántica de rotación/reuso que el flujo viejo).
     raw_refresh = body.refresh_token if body else request.cookies.get(auth_cookies.REFRESH_COOKIE_NAME)
     if raw_refresh is None:
-        raise UnauthorizedError("Refresh token inválido o expirado")
+        return _refresh_unauthorized_response()
 
     token_hash = security.hash_token(raw_refresh)
     stored = (
@@ -186,7 +207,7 @@ def refresh(
     )
 
     if not stored:
-        raise UnauthorizedError("Refresh token inválido o expirado")
+        return _refresh_unauthorized_response()
 
     stored.revoked_at = datetime.now(UTC)
 

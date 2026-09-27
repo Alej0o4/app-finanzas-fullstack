@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime
 import pytest
 
 from app.core.exceptions import ValidationError as DomainValidationError
-from app.core.periods import limites_mes_utc, resolver_mes
+from app.core.periods import rango_mes_utc, resolver_mes
 
 # Momento de referencia inyectado en todos los casos: 15 de marzo de 2026, 10:30 UTC.
 AHORA = datetime(2026, 3, 15, 10, 30, 0, tzinfo=UTC)
@@ -101,50 +101,59 @@ class TestResolverMes:
             assert exc.value.detail != "Error de dominio."
 
 
-class TestLimitesMesUtc:
+class TestRangoMesUtc:
+    """Fase 31 (Decisión B6, QA-019): límite superior EXCLUSIVO — `fin` es el primer
+    día del mes siguiente (00:00), no el último día del mes pedido a las 23:59:59.
+    Renombrada desde `limites_mes_utc`."""
+
     def test_mes_actual_se_acota_a_ahora(self):
-        inicio, limite = limites_mes_utc(2026, 3, AHORA)
+        inicio, limite = rango_mes_utc(2026, 3, AHORA)
         assert inicio == datetime(2026, 3, 1)
         assert limite == datetime(2026, 3, 15, 10, 30, 0)  # naive, sin tzinfo
 
     def test_mes_actual_devuelve_limite_naive_aunque_ahora_venga_tz_aware(self):
         """Los callers pasan `datetime.now(UTC)` y las columnas `Transaction.date` son
         naive en SQLite: comparar tz-aware contra naive revienta en el filter."""
-        inicio, limite = limites_mes_utc(2026, 3, AHORA)
+        inicio, limite = rango_mes_utc(2026, 3, AHORA)
         assert limite.tzinfo is None
         assert inicio.tzinfo is None
 
     def test_mes_actual_con_ahora_naive_no_lo_rompe(self):
         ahora_naive = datetime(2026, 3, 15, 10, 30, 0)
-        inicio, limite = limites_mes_utc(2026, 3, ahora_naive)
+        inicio, limite = rango_mes_utc(2026, 3, ahora_naive)
         assert limite == ahora_naive
         assert limite.tzinfo is None
 
     def test_mes_pasado_no_se_acota_a_ahora(self):
-        inicio, limite = limites_mes_utc(2026, 2, AHORA)
+        """`fin` es el primer día del mes SIGUIENTE, exclusivo — no el 28 a las
+        23:59:59."""
+        inicio, limite = rango_mes_utc(2026, 2, AHORA)
         assert inicio == datetime(2026, 2, 1)
-        assert limite == datetime(2026, 2, 28, 23, 59, 59)
+        assert limite == datetime(2026, 3, 1)
 
     def test_febrero_bisiesto_29_dias(self):
-        inicio, limite = limites_mes_utc(2024, 2, datetime(2026, 3, 15, tzinfo=UTC))
+        """El límite exclusivo no depende de cuántos días tiene febrero — es siempre el
+        1 de marzo, bisiesto o no (a diferencia del cálculo viejo con `monthrange`)."""
+        inicio, limite = rango_mes_utc(2024, 2, datetime(2026, 3, 15, tzinfo=UTC))
         assert inicio == datetime(2024, 2, 1)
-        assert limite == datetime(2024, 2, 29, 23, 59, 59)
+        assert limite == datetime(2024, 3, 1)
 
     def test_febrero_no_bisiesto_28_dias(self):
-        inicio, limite = limites_mes_utc(2026, 2, datetime(2026, 3, 15, tzinfo=UTC))
-        assert limite == datetime(2026, 2, 28, 23, 59, 59)
+        inicio, limite = rango_mes_utc(2026, 2, datetime(2026, 3, 15, tzinfo=UTC))
+        assert limite == datetime(2026, 3, 1)
 
     def test_mes_pasado_que_cruza_diciembre_enero(self):
-        inicio, limite = limites_mes_utc(2025, 12, datetime(2026, 1, 9, tzinfo=UTC))
+        """Diciembre → el límite exclusivo es el 1 de enero del año SIGUIENTE."""
+        inicio, limite = rango_mes_utc(2025, 12, datetime(2026, 1, 9, tzinfo=UTC))
         assert inicio == datetime(2025, 12, 1)
-        assert limite == datetime(2025, 12, 31, 23, 59, 59)
+        assert limite == datetime(2026, 1, 1)
 
     def test_mes_futuro_devuelve_el_mes_completo_sin_excepcion(self):
         """Regresión del motivo de la separación: `budget_alerts.spent_por_categoria_y_
         moneda` se llama legítimamente con meses futuros (presupuestos anticipados) y su
         llamador se traga las excepciones. Si esto levantara, el motor de alertas
         moriría en silencio."""
-        inicio, limite = limites_mes_utc(2026, 4, AHORA)
+        inicio, limite = rango_mes_utc(2026, 4, AHORA)
         assert inicio == datetime(2026, 4, 1)
-        assert limite == datetime(2026, 4, 30, 23, 59, 59)
-        assert limite.date() == date(2026, 4, 30)
+        assert limite == datetime(2026, 5, 1)
+        assert limite.date() == date(2026, 5, 1)

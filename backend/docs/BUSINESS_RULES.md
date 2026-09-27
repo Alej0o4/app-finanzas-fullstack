@@ -23,6 +23,14 @@
 - `logout` y `DELETE /users/me` limpian los tres cookies de sesión en su propia respuesta —
   los cookies `httpOnly` no pueden borrarse desde JS, así que cada endpoint que termina una
   sesión es responsable de limpiarlos.
+- **El `401` de `POST /auth/refresh` también limpia los tres cookies de sesión, siempre**
+  (Fase 31, Decisión B10, QA-021) — sin cookie ni body, con un token desconocido, o con uno
+  recién revocado por una rotación legítima de otra pestaña (carrera rara y aceptada: en ese
+  caso las dos pestañas pierden la sesión y hay que volver a iniciar sesión). Antes, ese `401`
+  se lanzaba como una excepción de dominio genérica y el handler global armaba una respuesta
+  nueva que perdía cualquier `Set-Cookie` — una cookie `csrf_token` huérfana (p. ej. tras
+  resetear la contraseña desde otro dispositivo) dejaba `/login` recargándose en bucle sin
+  poder iniciar sesión.
 
 ### API keys (Fase 16 §16.1)
 
@@ -112,10 +120,52 @@
   → `400`. No se resuelve `account` por nombre en v1.
 - `income` suma al saldo de la cuenta.
 - `expense` resta del saldo de la cuenta.
+- **Reembolsos (Fase 31, Q10):** una categoría acepta transacciones de los dos tipos —
+  no hay validación cruzada tipo/categoría. Un `income` en una categoría de gasto (p.
+  ej. un reembolso de "Restaurante") es un caso soportado, no un error de datos.
+  Limitación actual: solo la dona de Analítica con `?neto=true` lo netea
+  (`expense - income` de la categoría); la tarjeta del dashboard y los KPIs de
+  Analítica lo cuentan como ingreso normal, y los presupuestos/alertas solo suman
+  gastos (no lo restan). Netear los reembolsos en toda la app (tarjeta, KPIs,
+  presupuestos, alertas, resumen semanal) es backlog, con su propio `/grilling` (Q15).
 - Al borrar una transacción se revierte su impacto sobre la cuenta.
 - Al editar una transacción se revierte el efecto anterior y se aplica el nuevo.
 - Las consultas de listado permiten filtrar por cuenta, categoría y rango de fechas.
 - Si el rango de fechas está invertido, la API responde con error de validación.
+- **Rango de `amount` (Fase 31, Decisión B3):** 12 dígitos enteros y 2 decimales
+  (el rango real de `Numeric(14,2)`), validado con `max_digits`/`decimal_places` en
+  el schema — un valor fuera de rango es `422` con `detail` en lista, antes de llegar
+  a la base. Mismo límite en `AccountCreate.balance`, `UserProfileUpdate.monthly_income`
+  y `BudgetBase.amount_limit`: son los cuatro campos de entrada con dinero, y todos
+  usan la misma constante (`app/schemas/common.py`).
+- **Desborde de saldo (Fase 31, Decisión B4, QA-015):** si `POST`/`PUT`/`DELETE
+  /transactions/{id}` dejarían el saldo de una cuenta fuera del rango de
+  `Numeric(14,2)` (`NumericValueOutOfRange` en Postgres — SQLite no aplica `Numeric` y
+  no lo reproduce), la API responde `422` con `detail` string y no toca el saldo.
+- **Concurrencia sobre una misma transacción (Fase 31, Decisión B1, QA-003):** `PUT` y
+  `DELETE /transactions/{id}` bloquean la fila (`SELECT ... FOR UPDATE`) como primera
+  consulta y se serializan entre sí — dos peticiones simultáneas sobre la misma
+  transacción se aplican una después de la otra, nunca a la vez. `DELETE` además
+  marca `deleted_at` con un `UPDATE` condicional (`WHERE deleted_at IS NULL`): si
+  pierde la carrera, no afecta filas, responde `404` y no revierte el saldo una
+  segunda vez. Editar o borrar una transacción que otra petición ya borró también es
+  `404`. Protección real solo en Postgres — SQLite no soporta `FOR UPDATE`.
+- **`aplicar_edicion` y el orden de cuentas (Fase 31, Decisión B2):** cuando un `PUT`
+  mueve una transacción de una cuenta a otra, los dos `UPDATE` de saldo se ejecutan en
+  orden de `account_id` ascendente (los deltas conmutan, el resultado es el mismo) —
+  evita un `DeadlockDetected` de Postgres cuando dos `PUT` concurrentes mueven
+  transacciones distintas en sentidos opuestos entre las mismas dos cuentas.
+- **`total` de `GET /transactions` (Fase 31, Decisión B5, QA-006):** excluye las
+  transacciones borradas — antes, el conteo (`with_entities(func.count())`, el único
+  agregado del backend que el filtro global de borrado lógico no alcanza) contaba las
+  borradas aunque la página de resultados ya las excluyera, y "Cargar más" del
+  frontend quedaba disponible para siempre.
+- **`Idempotency-Key` reusada con otro payload en carrera (Fase 31, Decisión B7,
+  QA-020):** también responde `409` cuando la comparación de hashes ocurre en la rama
+  que perdió una carrera de inserción (`IntegrityError`) contra otra petición con la
+  misma clave — antes esa rama devolvía la transacción ganadora sin comparar el hash,
+  y si la original ya estaba borrada devolvía un `500` de validación de respuesta en
+  vez de un `409` de dominio.
 
 ## Presupuestos
 
@@ -156,16 +206,22 @@
 - El progreso de presupuestos ya sale calculado para uso directo del Frontend.
 - El dashboard expone además serie temporal de flujo de caja y distribución por categoría.
 - El período consultado (`?year=&month=`, ambos o ninguno) es un mes calendario **UTC**: sin
-  parámetros es el mes actual. El mes en curso tiene techo "ahora" — una transacción con fecha
-  futura del mismo mes no cuenta como gasto del mes — y un mes ya cerrado llega hasta el
-  último día a las 23:59:59.
+  parámetros es el mes actual. El rango es semiabierto `[día 1 00:00, fin)` — el mes en curso
+  tiene techo "ahora" (una transacción con fecha futura del mismo mes no cuenta como gasto del
+  mes) y un mes ya cerrado tiene como techo el primer instante del mes siguiente, **exclusivo**
+  (Fase 31, Decisión B6 — antes era "hasta el último día a las 23:59:59", y un `<=` contra ese
+  valor perdía cualquier instante con fracción de segundo después de esa marca, QA-019).
 - `balances` es siempre el saldo **actual** (stock) de las cuentas, con independencia del mes
   consultado: no es un saldo histórico ni una foto del mes pedido.
-- `monthly_flow_balance` tiene dos bases y `monthly_flow_basis` dice cuál: `"declared"` en el
-  mes en curso (ingreso mensual declarado − gasto del mes, `null` si el usuario todavía no
-  fijó `monthly_income`) y `"actual"` en un mes cerrado (ingresos reales registrados − gastos
-  reales, nunca `null`). En las dos bases solo cuenta la moneda preferida: no hay conversión
-  de moneda en ningún punto.
+- `monthly_flow_balance` es siempre ingreso real − gasto real en la moneda preferida, en
+  cualquier mes — igual en el mes en curso que en un mes cerrado (Fase 31, Decisión B9, Q9).
+  Nunca `null`: sin filas vale `0.00`, y puede ser negativo (a principio de mes, antes de
+  cobrar — es un dato, no un error). `monthly_income` (el ingreso declarado por el usuario)
+  **no participa de este cálculo**: es una referencia visual del frontend, sin ningún cómputo
+  detrás. `monthly_flow_basis` se conserva en el contrato pero queda `deprecated` — siempre
+  vale `"actual"` desde esta fase (antes tenía dos bases, `"declared"` en el mes en curso y
+  `"actual"` en uno cerrado). En cualquier caso solo cuenta la moneda preferida: no hay
+  conversión de moneda en ningún punto.
 - El filtro de cuentas destacadas y el resto de las cuentas usan universos distintos **dentro
   del mismo dashboard** (ver la sección "Cuentas"). Es una inconsistencia conocida, no una
   decisión redondeada, y está registrada en `docs/TODO.md`.

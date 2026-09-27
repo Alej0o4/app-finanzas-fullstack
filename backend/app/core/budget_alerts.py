@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.notification_dispatch import crear_y_enviar_notificacion
-from app.core.periods import limites_mes_utc
+from app.core.periods import rango_mes_utc
 from app.models import models
 
 logger = logging.getLogger(__name__)
@@ -39,15 +39,16 @@ def spent_por_categoria_y_moneda(
     `evaluate_budget_thresholds_for_category` (escritura de avisos). El motor de
     alertas NO recalcula el gasto de otra forma para no divergir del dashboard.
     """
-    # El rango lo acota `core/periods.limites_mes_utc`: techo "ahora" en el mes en curso
-    # (para que una transacción con fecha futura del mismo mes no cuente como "ya
-    # gastado" acá, mientras category-distribution/cashflow-series sí la acotan a `hoy` —
-    # Fase 11 §11.4/Fase 17 §17.1.3) y mes completo en cualquier otro período, incluido
+    # El rango lo acota `core/periods.rango_mes_utc` (Fase 31, B6): techo "ahora" en el
+    # mes en curso (para que una transacción con fecha futura del mismo mes no cuente
+    # como "ya gastado" acá, mientras category-distribution/cashflow-series sí la
+    # acotan a `hoy` — Fase 11 §11.4/Fase 17 §17.1.3) y mes completo (límite superior
+    # EXCLUSIVO: el primer día del mes siguiente) en cualquier otro período, incluido
     # un mes FUTURO: los presupuestos anticipados (creados para el próximo período, ver
     # test_two_budgets_same_category_different_currencies_evaluate_own_spent_by_currency)
     # se evalúan completos desde que existen. Esa semántica de mes futuro es
-    # obligatoria y es la razón por la que `limites_mes_utc` no valida nada.
-    primer_dia, limite = limites_mes_utc(year, month, datetime.now(UTC))
+    # obligatoria y es la razón por la que `rango_mes_utc` no valida nada.
+    primer_dia, limite = rango_mes_utc(year, month, datetime.now(UTC))
 
     spent_rows = (
         db.query(
@@ -60,7 +61,7 @@ def spent_por_categoria_y_moneda(
             models.Transaction.type == "expense",
             models.Transaction.category_id.in_(category_ids),
             models.Transaction.date >= primer_dia,
-            models.Transaction.date <= limite,
+            models.Transaction.date < limite,
         )
         .group_by(models.Transaction.category_id, models.Transaction.currency)
         .all()

@@ -10,7 +10,7 @@ from app.core.budget_alerts import spent_por_categoria_y_moneda
 from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.database import get_db
 from app.core.exceptions import InternalServerError, NotFoundError
-from app.core.periods import limites_mes_utc, resolver_mes
+from app.core.periods import rango_mes_utc, resolver_mes
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
@@ -57,7 +57,7 @@ def _monedas_con_gasto(db: Session, user_id: int, inicio: datetime, limite: date
             models.Transaction.user_id == user_id,
             models.Transaction.type == "expense",
             models.Transaction.date >= inicio,
-            models.Transaction.date <= limite,
+            models.Transaction.date < limite,
         )
         .distinct()
         .all()
@@ -106,12 +106,15 @@ def obtener_resumen(
         .all()
     )
 
-    # El rango del mes lo acota `core/periods.limites_mes_utc`: el límite superior real
-    # de "este mes" es hoy, no el fin de calendario — de lo contrario una transacción con
-    # fecha futura (mismo mes) cuenta como "ya gastado/recibido" aquí pero queda afuera de
-    # category-distribution/cashflow-series, que sí acotan a `hoy` (Fase 11 §11.4/Fase 17
-    # §17.1.3). Para un mes ya cerrado el techo es el fin de mes real.
-    primer_dia, limite_gasto = limites_mes_utc(year, month, ahora)
+    # El rango del mes lo acota `core/periods.rango_mes_utc` (Fase 31, B6): el límite
+    # superior real de "este mes" es hoy, no el fin de calendario — de lo contrario una
+    # transacción con fecha futura (mismo mes) cuenta como "ya gastado/recibido" aquí
+    # pero queda afuera de category-distribution/cashflow-series, que sí acotan a `hoy`
+    # (Fase 11 §11.4/Fase 17 §17.1.3). Para un mes ya cerrado el límite superior es
+    # EXCLUSIVO: el primer día del mes siguiente — por eso las comparaciones de abajo
+    # son `<`, no `<=` (QA-019: un `<=` contra "el último día a las 23:59:59" perdía
+    # cualquier instante con fracción de segundo después de esa marca).
+    primer_dia, limite_gasto = rango_mes_utc(year, month, ahora)
 
     # Transacciones del mes solo de cuentas destacadas (o todas si no hay)
     tx_account_ids = db.query(models.Account.id).filter(*account_filter).subquery()
@@ -127,7 +130,7 @@ def obtener_resumen(
             models.Transaction.type == "income",
             models.Transaction.account_id.in_(tx_account_ids),
             models.Transaction.date >= primer_dia,
-            models.Transaction.date <= limite_gasto,
+            models.Transaction.date < limite_gasto,
         )
         .group_by(models.Transaction.currency)
         .all()
@@ -144,7 +147,7 @@ def obtener_resumen(
             models.Transaction.type == "expense",
             models.Transaction.account_id.in_(tx_account_ids),
             models.Transaction.date >= primer_dia,
-            models.Transaction.date <= limite_gasto,
+            models.Transaction.date < limite_gasto,
         )
         .group_by(models.Transaction.currency)
         .all()
@@ -172,32 +175,27 @@ def obtener_resumen(
         Decimal("0.00"),
     )
 
-    # Tarjeta de flujo (Fase 11 §11.3 + Fase 29 B2). El mismo campo cubre dos bases, y
-    # `monthly_flow_basis` le dice al front cuál es:
-    # - Mes en curso: ingreso mensual DECLARADO por el usuario menos el gasto del mes. None
-    #   si el usuario no ha fijado monthly_income todavía — el frontend debe distinguir
-    #   "0" de "sin definir".
-    # - Mes cerrado: ingresos REALES registrados menos gastos reales, en la moneda
-    #   preferida, desde las mismas filas agrupadas de arriba. NUNCA None (User Story 12):
-    #   sin filas vale 0.00, aunque monthly_income sea None — el histórico siempre tiene un
-    #   número.
-    if es_mes_actual:
-        monthly_flow_balance = (
-            current_user.monthly_income - gasto_moneda_preferida if current_user.monthly_income is not None else None
-        )
-    else:
-        ingreso_real = next(
-            (item["total"] for item in income if item["currency"] == preferred_currency),
-            Decimal("0.00"),
-        )
-        monthly_flow_balance = ingreso_real - gasto_moneda_preferida
+    # Tarjeta de flujo (Fase 11 §11.3 + Fase 29 B2, reescrita en Fase 31 B9, Q9/Q14): el
+    # balance es SIEMPRE ingreso real menos gasto real en la moneda preferida, igual en
+    # el mes en curso que en un mes cerrado, desde las mismas filas agrupadas de arriba.
+    # NUNCA None (User Story 12/34): sin filas vale 0.00, y puede ser negativo (a
+    # principio de mes, antes de cobrar — es un dato, no un error). `monthly_income`
+    # (el ingreso DECLARADO por el usuario) ya NO participa de este cálculo — queda
+    # como referencia visual del frontend ("esperado"), nunca como sustituto del gasto
+    # real. `monthly_flow_basis` se conserva por compatibilidad de contrato pero ya
+    # siempre vale "actual" (ver `schemas/dashboard.py`, campo `deprecated`).
+    ingreso_real = next(
+        (item["total"] for item in income if item["currency"] == preferred_currency),
+        Decimal("0.00"),
+    )
+    monthly_flow_balance = ingreso_real - gasto_moneda_preferida
 
     return {
         "balances": balances,
         "monthly_income_by_currency": income,
         "monthly_expense_by_currency": expense,
         "monthly_flow_balance": monthly_flow_balance,
-        "monthly_flow_basis": "declared" if es_mes_actual else "actual",
+        "monthly_flow_basis": "actual",
         "first_transaction_month": _first_transaction_month(db, current_user.id),
         "expense_currencies": expense_currencies,
     }

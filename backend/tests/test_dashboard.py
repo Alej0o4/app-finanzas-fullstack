@@ -852,33 +852,19 @@ class TestCategoryDistributionAccountFilter:
 
 
 class TestMonthlyFlowBalance:
-    """Fase 11 §11.3: monthly_flow_balance en GET /dashboard/summary."""
+    """Fase 11 §11.3, reescrita en Fase 31 (Decisión B9, T8, Q9/Q14):
+    `monthly_flow_balance` en `GET /dashboard/summary` es SIEMPRE ingreso real - gasto
+    real en la moneda preferida, también en el mes en curso — `monthly_income` (el
+    ingreso declarado) ya no participa de este cálculo, es solo una referencia visual
+    del frontend."""
 
-    def test_user_without_monthly_income_gets_null(self, client, auth_headers, make_account):
-        make_account(auth_headers, balance="1000.00")
-
-        response = client.get("/api/v1/dashboard/summary", headers=auth_headers)
-        assert response.status_code == 200, response.text
-
-        resumen = response.json()
-        assert resumen["monthly_flow_balance"] is None
-
-    def test_with_income_and_no_expenses_returns_declared_income(self, client, auth_headers, make_account):
-        make_account(auth_headers, balance="1000.00")
-        _set_monthly_income(client, auth_headers, "1000000.00")
-
-        response = client.get("/api/v1/dashboard/summary", headers=auth_headers)
-        assert response.status_code == 200, response.text
-
-        resumen = response.json()
-        assert Decimal(str(resumen["monthly_flow_balance"])) == Decimal("1000000.00")
-
-    def test_expenses_in_preferred_currency_are_subtracted(self, client, auth_headers, make_account, make_category):
-        # Cuenta destacada: /summary agrega transacciones solo de cuentas destacadas
-        # cuando existe al menos una (la cuenta por defecto del registro lo es).
-        cuenta_cop = make_account(
-            auth_headers, name="Cuenta COP", currency="COP", balance="1000000.00", highlighted=True
-        )
+    def test_current_month_with_monthly_income_and_no_real_income_is_negative(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """Con `monthly_income` fijado pero sin ingresos REALES registrados, el balance
+        es `-gasto` (negativo) — `monthly_income` no lo compensa, y `monthly_flow_basis`
+        sigue siendo "actual" (única base desde esta fase)."""
+        cuenta = make_account(auth_headers, currency="COP", balance="1000000.00", highlighted=True)
         categoria = make_category(auth_headers, name="Comida", type="expense")
         _set_monthly_income(client, auth_headers, "1000000.00")
 
@@ -887,8 +873,39 @@ class TestMonthlyFlowBalance:
             auth_headers,
             amount="250000.00",
             type="expense",
-            account_id=cuenta_cop["id"],
+            account_id=cuenta["id"],
             category_id=categoria["id"],
+        )
+
+        response = client.get("/api/v1/dashboard/summary", headers=auth_headers)
+        assert response.status_code == 200, response.text
+
+        resumen = response.json()
+        assert resumen["monthly_flow_basis"] == "actual"
+        assert Decimal(str(resumen["monthly_flow_balance"])) == Decimal("-250000.00")
+
+    def test_current_month_with_income_and_expenses_is_real_income_minus_real_expense(
+        self, client, auth_headers, make_account, make_category
+    ):
+        cuenta = make_account(auth_headers, currency="COP", balance="1000000.00", highlighted=True)
+        categoria_gasto = make_category(auth_headers, name="Comida", type="expense")
+        categoria_ingreso = make_category(auth_headers, name="Salario", type="income")
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="1000000.00",
+            type="income",
+            account_id=cuenta["id"],
+            category_id=categoria_ingreso["id"],
+        )
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="250000.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria_gasto["id"],
         )
 
         response = client.get("/api/v1/dashboard/summary", headers=auth_headers)
@@ -897,14 +914,50 @@ class TestMonthlyFlowBalance:
         resumen = response.json()
         assert Decimal(str(resumen["monthly_flow_balance"])) == Decimal("750000.00")
 
+    def test_monthly_income_declared_does_not_change_the_balance(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """`monthly_income` es puramente informativo desde esta fase: fijarlo, o fijarlo
+        en otro valor, no mueve `monthly_flow_balance` para nada."""
+        cuenta = make_account(auth_headers, currency="COP", balance="1000000.00", highlighted=True)
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="100000.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+        )
+
+        sin_ingreso_declarado = client.get("/api/v1/dashboard/summary", headers=auth_headers).json()
+        assert Decimal(str(sin_ingreso_declarado["monthly_flow_balance"])) == Decimal("-100000.00")
+
+        _set_monthly_income(client, auth_headers, "500000.00")
+        con_ingreso_declarado = client.get("/api/v1/dashboard/summary", headers=auth_headers).json()
+        assert con_ingreso_declarado["monthly_flow_balance"] == sin_ingreso_declarado["monthly_flow_balance"]
+
+        _set_monthly_income(client, auth_headers, "9000000.00")
+        con_otro_ingreso_declarado = client.get("/api/v1/dashboard/summary", headers=auth_headers).json()
+        assert con_otro_ingreso_declarado["monthly_flow_balance"] == sin_ingreso_declarado["monthly_flow_balance"]
+
+    def test_without_transactions_nor_monthly_income_returns_zero_not_null(self, client, auth_headers, make_account):
+        make_account(auth_headers, balance="1000.00")
+
+        response = client.get("/api/v1/dashboard/summary", headers=auth_headers)
+        assert response.status_code == 200, response.text
+
+        resumen = response.json()
+        assert resumen["monthly_flow_balance"] is not None
+        assert resumen["monthly_flow_balance"] == "0.00"
+
     def test_expenses_only_in_other_currency_do_not_subtract(self, client, auth_headers, make_account, make_category):
         """Limitación documentada en el spec (Decisión 11.3.1): el balance de flujo solo
-        resta el gasto del mes en la moneda preferida."""
+        cuenta la moneda preferida."""
         # Destacada: el gasto USD SÍ entra al agregado del mes (bucket USD) y aun así
-        # no debe restar del balance de flujo.
+        # no debe restar del balance de flujo (en COP, la preferida).
         cuenta_usd = make_account(auth_headers, name="Cuenta USD", currency="USD", balance="1000.00", highlighted=True)
         categoria = make_category(auth_headers, name="Comida", type="expense")
-        _set_monthly_income(client, auth_headers, "1000000.00")
 
         _create_transaction(
             client,
@@ -919,7 +972,7 @@ class TestMonthlyFlowBalance:
         assert response.status_code == 200, response.text
 
         resumen = response.json()
-        assert Decimal(str(resumen["monthly_flow_balance"])) == Decimal("1000000.00")
+        assert Decimal(str(resumen["monthly_flow_balance"])) == Decimal("0.00")
 
 
 class TestMonoCurrencyRegression:
@@ -1185,6 +1238,92 @@ class TestFutureDatedTransactionExcludedFromCurrentMonth:
         assert Decimal(str(fila["spent"])) == Decimal("0.00")
 
 
+class TestMonthBoundaryExclusiveUpperBound:
+    """T5 — QA-019 (B6): el límite superior de un mes CERRADO es exclusivo. Fechas fijas
+    en el pasado (diciembre de 2025) para no depender de en qué mes corre la suite.
+
+    Antes del fix, `rango_mes_utc` (entonces `limites_mes_utc`) devolvía el último día a
+    las 23:59:59 y los cinco consumidores comparaban con `<=`: en SQLite los timestamps
+    se comparan como TEXTO, y "2025-12-31 23:59:59" ordena DESPUÉS de
+    "2025-12-31T23:59:59.500000" como string (el punto decimal rompe el orden
+    lexicográfico esperado) — el test de ingreso de abajo falla antes del fix."""
+
+    def test_ingreso_al_ultimo_segundo_del_mes_cuenta_en_ese_mes(
+        self, client, auth_headers, make_account, make_category
+    ):
+        cuenta = make_account(auth_headers, currency="COP", balance="1000000.00", highlighted=True)
+        categoria = make_category(auth_headers, name="Salario", type="income")
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="500000.00",
+            type="income",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+            date="2025-12-31T23:59:59.500000",
+        )
+
+        resumen = _get_summary(client, auth_headers, year=2025, month=12)
+        ingreso_cop = next(i["total"] for i in resumen["monthly_income_by_currency"] if i["currency"] == "COP")
+        assert Decimal(str(ingreso_cop)) == Decimal("500000.00")
+
+    def test_gasto_al_ultimo_segundo_del_mes_cuenta_en_budgets_progress(
+        self, client, auth_headers, make_account, make_category
+    ):
+        cuenta = make_account(auth_headers, currency="COP", balance="1000000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        presupuesto = client.post(
+            "/api/v1/budgets/",
+            json={
+                "category_id": categoria["id"],
+                "amount_limit": "100000.00",
+                "currency": "COP",
+                "month": 12,
+                "year": 2025,
+            },
+            headers=auth_headers,
+        )
+        assert presupuesto.status_code == 200, presupuesto.text
+
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="30000.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+            date="2025-12-31T23:59:59.500000",
+        )
+
+        progreso = client.get(
+            "/api/v1/dashboard/budgets-progress", params={"year": 2025, "month": 12}, headers=auth_headers
+        )
+        assert progreso.status_code == 200, progreso.text
+        fila = next(p for p in progreso.json() if p["budget_id"] == presupuesto.json()["id"])
+        assert Decimal(str(fila["spent"])) == Decimal("30000.00")
+
+    def test_transaccion_a_medianoche_del_mes_siguiente_no_cuenta_en_diciembre(
+        self, client, auth_headers, make_account, make_category
+    ):
+        """El borde opuesto (User Story 13): las 00:00 del día 1 no se duplican contra
+        el mes anterior — el límite superior exclusivo de diciembre es exactamente esa
+        medianoche."""
+        cuenta = make_account(auth_headers, currency="COP", balance="1000000.00", highlighted=True)
+        categoria = make_category(auth_headers, name="Salario", type="income")
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="500000.00",
+            type="income",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+            date="2026-01-01T00:00:00",
+        )
+
+        resumen = _get_summary(client, auth_headers, year=2025, month=12)
+        assert resumen["monthly_income_by_currency"] == []
+
+
 # =============================================================================
 # Fase 29 — navegación por mes en el dashboard (Decisiones B2, B3, B6, B7; T2-T5, T7)
 #
@@ -1241,17 +1380,25 @@ class TestSummaryPeriodParams:
     def test_mes_actual_explicito_es_identico_a_sin_parametros(self, client, auth_headers, make_account, make_category):
         """User Story 47 + 49: el dashboard de siempre no cambia. `year`/`month` del mes en
         curso explícitos dan byte a byte la misma respuesta que no mandarlos, y el rótulo
-        del balance es "declared"."""
+        del balance es "actual" (única base desde Fase 31, Decisión B9)."""
         cuenta = make_account(auth_headers, name="Cuenta COP", currency="COP", balance="1000000.00", highlighted=True)
-        categoria = make_category(auth_headers, name="Comida", type="expense")
-        _set_monthly_income(client, auth_headers, "1000000.00")
+        categoria_gasto = make_category(auth_headers, name="Comida", type="expense")
+        categoria_ingreso = make_category(auth_headers, name="Salario", type="income")
+        _create_transaction(
+            client,
+            auth_headers,
+            amount="1000000.00",
+            type="income",
+            account_id=cuenta["id"],
+            category_id=categoria_ingreso["id"],
+        )
         _create_transaction(
             client,
             auth_headers,
             amount="250000.00",
             type="expense",
             account_id=cuenta["id"],
-            category_id=categoria["id"],
+            category_id=categoria_gasto["id"],
         )
 
         sin_parametros = _get_summary(client, auth_headers)
@@ -1259,7 +1406,7 @@ class TestSummaryPeriodParams:
         explicito = _get_summary(client, auth_headers, year=year, month=month)
 
         assert explicito == sin_parametros
-        assert explicito["monthly_flow_basis"] == "declared"
+        assert explicito["monthly_flow_basis"] == "actual"
         assert Decimal(str(explicito["monthly_flow_balance"])) == Decimal("750000.00")
 
     def test_mes_pasado_es_mes_pasado_no_actual(self, client, auth_headers):
@@ -1422,9 +1569,9 @@ class TestSummaryPreviousMonth:
         assert resumen["monthly_income_by_currency"] == []
 
     def test_no_es_null_sin_monthly_income_declarado(self, client, auth_headers, make_account, make_category):
-        """`null` solo es posible con basis "declared". En un mes cerrado el balance se
-        deriva de transacciones reales, así que no depende de que el usuario haya fijado
-        ingreso mensual."""
+        """Fase 31 (B9): el balance nunca es `null`, ni en el mes en curso ni en un mes
+        cerrado — en los dos sale de transacciones reales, así que no depende de que el
+        usuario haya fijado ingreso mensual."""
         mes_pasado, anio_pasado = _previous_month_year()
         fecha = _fecha_en_mes(anio_pasado, mes_pasado, 10)
         cuenta = make_account(auth_headers, name="Cuenta COP", currency="COP", balance="1000000.00", highlighted=True)
@@ -1440,10 +1587,12 @@ class TestSummaryPreviousMonth:
             date=fecha,
         )
 
-        # El usuario nunca fijó monthly_income: en el mes EN CURSO eso da null...
-        assert _get_summary(client, auth_headers)["monthly_flow_balance"] is None
+        # El usuario nunca fijó monthly_income: en el mes EN CURSO (sin transacciones
+        # todavía) el balance es "0.00", no null.
+        assert _get_summary(client, auth_headers)["monthly_flow_balance"] is not None
+        assert _get_summary(client, auth_headers)["monthly_flow_balance"] == "0.00"
 
-        # ...pero en el mes cerrado el balance sale de transacciones reales y nunca es null.
+        # Y en el mes cerrado el balance sale de las transacciones reales de ese mes.
         resumen = _get_summary(client, auth_headers, year=anio_pasado, month=mes_pasado)
         assert resumen["monthly_flow_balance"] is not None
         assert Decimal(str(resumen["monthly_flow_balance"])) == Decimal("-75000.00")
