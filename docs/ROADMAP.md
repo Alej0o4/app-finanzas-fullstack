@@ -102,8 +102,8 @@ La Fase 29 (navegación por mes + selector de moneda) se completó el 2026-09-26
 completada" abajo. La Fase 30 (chip "Esta semana" en Transacciones, KPIs de Analítica desde el
 backend y la deuda chica que dejó la Fase 29) también, el mismo día — ver "Fase 30 — completada".
 La Fase 31 (corrección de los hallazgos de la QA 2026-09-26) se completó el 2026-09-27 — ver
-"Fase 31 — completada". La Fase 32 (suite de tests sobre Postgres) sale de ese grilling y está
-pendiente del suyo.
+"Fase 31 — completada". La Fase 32 (suite de tests sobre Postgres por defecto) hizo su `/grilling`
+el 2026-09-27 y está pendiente de `/to-spec` — ver "Fase 32" abajo.
 
 ---
 
@@ -404,25 +404,120 @@ decimal_places=2` en los schemas + overflow del saldo traducido a `ValidationErr
 ## Fase 32 — planeada (2026-09-27): suite de tests sobre Postgres por defecto
 
 Sale de la Q3 del `/grilling` de la Fase 31. Hoy `backend/tests/conftest.py` corre siempre contra
-SQLite en memoria, mientras producción corre en Postgres 16, y esa diferencia dejó fuera de los 313
-tests a QA-003 (SQLite serializa las escrituras y no aplica `FOR UPDATE`) y QA-015 (SQLite no
+SQLite en memoria, mientras producción corre en Postgres 16, y esa diferencia dejó fuera de la
+suite a QA-003 (SQLite serializa las escrituras y no aplica `FOR UPDATE`) y QA-015 (SQLite no
 aplica `Numeric(14,2)`). Probar contra el mismo motor que producción es la práctica recomendada.
 
-**Estado: planeada, pendiente de `/grilling`.** Parte de lo que deje la Fase 31: `conftest.py` ya
-acepta `TEST_DATABASE_URL` y la suite completa ya se habrá corrido una vez contra Postgres, así que
-el inventario de tests que fallan por diferencias de motor va a existir antes de empezar. **Ya
-existe (2026-09-27):** 348 pasan y 1 falla solo en Postgres (`TestUpdatedAt`, ver `docs/TODO.md`
-§"Deuda nueva consciente de la Fase 31").
+**Estado: `/grilling` hecho el 2026-09-27** (decisiones Q1-Q10, tomadas por el dueño), pendiente de
+`/to-spec`. Esta sección queda como registro de ese grilling. Parte de lo que dejó la Fase 31:
+`conftest.py` ya acepta `TEST_DATABASE_URL` y la suite completa ya se había corrido una vez contra
+Postgres, así que el inventario de tests que fallan por diferencias de motor existía antes de
+empezar — y se volvió a medir para este grilling.
 
-Alcance tentativo, a decidir en el `/grilling`:
+### Inventario medido (2026-09-27, contra HEAD)
 
-- Postgres como default de `pytest` (probablemente con `testcontainers-python`, que levanta y
-  destruye el contenedor solo) y qué hacer con SQLite (fallback o eliminarlo).
-- Arreglar los tests que fallen por diferencias de motor (`test_seed.py` referencia SQLite
-  explícitamente).
-- ¿Crear el schema con `alembic upgrade head` en vez de `Base.metadata.create_all`, para que la
-  suite pruebe también las migraciones?
-- Actualizar `CLAUDE.md` ("no Docker/Postgres needed") y el skill `/run-tests`.
+Medido sobre un `postgres:16-alpine` desechable en tmpfs, con la receta de `AGENTS.md` (puerto
+5433, base `oikos_test`):
+
+| Corrida | Resultado | Tiempo |
+|---|---|---|
+| SQLite en memoria (default actual) | 341 pasan, 9 skip | 135 s |
+| `TEST_DATABASE_URL=…oikos_test` | **349 pasan, 1 falla** | 149 s |
+
+- El único fallo es
+  `tests/test_soft_delete.py::TestUpdatedAt::test_updated_at_changes_on_put_but_not_on_read` —
+  artefacto del fixture `db_session`, no bug de producción (Q4). Inventariado en
+  `docs/TODO.md` §"Deuda nueva consciente de la Fase 31".
+- **Postgres es ~10% más lento, no más rápido.** El argumento "SQLite es rápido" no sostiene el
+  default, y el arranque del mecanismo que eligió Q1 es irrelevante contra los ~2.5 min de
+  suite: un `docker run` pelado son 1-3 s, y el `PostgresContainer` de testcontainers medido en
+  esta máquina tarda **8,6 s** (incluye el import de la librería y la espera del log de
+  readiness).
+- `alembic upgrade head` contra base limpia aplica las 12 migraciones sin problema, y
+  **`alembic check` responde "No new upgrade operations detected"**: hoy no hay drift entre las
+  migraciones y `models.py`, así que Q3 no requiere remediación previa — es ganancia pura.
+  Ojo con el matiz que sí importa: ese `check` hay que correrlo contra una base **migrada**.
+  Contra la base que arma el `create_all` de la suite (sin `alembic_version`) responde
+  `FAILED: Target database is not up to date`, que es un falso positivo, no drift. De ahí el
+  aislamiento que la spec le prescribe al test de drift.
+- Entorno: Docker 29.7.2 y compose v5.5.0 disponibles. `testcontainers` **no** instalado
+  (agregarlo es dependencia nueva); `psycopg2-binary` ya es dependencia; `pytest-xdist` tampoco.
+
+### Estado del código relevado (2026-09-27)
+
+- `conftest.py:68-88` — fixture `engine` de sesión: `drop_all`/`create_all` sobre
+  `TEST_DATABASE_URL`, o `sqlite://` + `StaticPool`. `conftest.py:42-53` — guarda: el nombre de la
+  base debe contener `test`. `conftest.py:56-65` — `pytest_collection_modifyitems` autoskippea el
+  marker `postgres` si no hay env var. `conftest.py:271-404` — el seam `pg_*`: 4 fixtures que dan
+  **sesión real por request** (con commits reales) en vez del savepoint único de `db_session`.
+- `conftest.py:91-113` — `db_session` = **una sola conexión** con transacción externa + savepoints.
+  Es lo que impide probar `FOR UPDATE`, y también lo que congela `now()` (Q4).
+- `test_concurrency_pg.py:24` — marker a nivel de módulo. `:278,311` — lee
+  `os.environ["TEST_DATABASE_URL"]` **directo** y duplica `create_engine` +
+  `engine_kwargs_for_url` (ya disponibles por el fixture `engine`). `:284,300,317,359` —
+  `ALTER DATABASE … SET timezone`, que es **a nivel de base**, con restore en `finally`.
+- `conftest.py:306-313` — el teardown de `pg_client` hace `TRUNCATE` de tablas **globales**.
+- `test_seed.py:46-55` — arma su **propio engine SQLite** con `PRAGMA foreign_keys=ON`; su
+  docstring (`test_seed.py:1-9`) dice explícitamente que sin ese pragma la regresión que vigila
+  pasaría inadvertida.
+- `test_money_limits.py:206` — el otro test con marker `postgres` (overflow del saldo).
+- `alembic/env.py:23` — la URL sale de `SQLALCHEMY_DATABASE_URL` (de `app.core.database`, que la
+  construye **al import** desde `DATABASE_URL`), no de `alembic.ini`; `env.py:66-70` usa
+  `engine_from_config` sin el `options: -c timezone=UTC` de `engine_kwargs_for_url`.
+- La rama SQLite de `engine_kwargs_for_url` (`database.py:13-28`) es **código de producción** — el
+  fallback de `app/core/database.py:10` para correr sin Docker —, no solo de test; ya está cubierta
+  como función pura por `test_database.py`.
+- Docs que nombran la base de test: `AGENTS.md:138,143-154` (§Tests) y
+  `.agents/skills/run-tests/SKILL.md:14-17` (ese paso es el que la Fase 32 reescribe: hoy no nombra
+  la base de test ni menciona Docker). `README.md:11`, `backend/README.md:43`,
+  `backend/docs/DEPLOYMENT.md:11` y `backend/docs/ARCHITECTURE.md:30` hablan del fallback SQLite de
+  la **app**, no de los tests → no se tocan. `scripts/git-hooks/pre-commit` no corre pytest (solo
+  ruff/eslint/prettier) → no se toca. Sin CI (fuera de scope).
+
+### Decisiones tomadas con el dueño
+
+| # | Decisión | Resolución |
+|---|---|---|
+| Q1 | ¿Default de `pytest` y quién levanta el Postgres? | **`testcontainers-python`**: `pytest` levanta y destruye un `postgres:16-alpine` por sesión. Una `TEST_DATABASE_URL` explícita tiene prioridad si está definida. El argumento es la fricción, no la velocidad: `/run-tests` es el sustituto manual de CI y su valor depende de que `cd backend && pytest` **siempre** funcione. Un servicio de compose o un Postgres "largo" convierten "no levanté la DB" en un fallo que desincentiva correr la suite. |
+| Q2 | ¿Qué pasa con SQLite? | **Sobrevive como opt-in explícito**, nunca como fallback automático. Un `pytest` "verde" en SQLite cuando se pidió Postgres es justo la clase de bug que esta fase viene a matar. Se conserva además porque la rama SQLite de `engine_kwargs_for_url` es código de producción. Si en la práctica nunca se usa, borrarlo después es un commit chico. |
+| Q3 | ¿Schema por `create_all` o por `alembic upgrade head`? | **Las dos, con responsabilidades separadas**: `create_all` para la suite (rápido) + `alembic check` como test de sesión que falle si metadata y migraciones divergen. El valor real es el drift: hoy **nada** verifica que el head coincida con `models.py`, y un modelo editado sin migración pasa los 350 tests en verde y revienta en el `CMD` de Docker. |
+| Q4 | El único test que falla en Postgres | **Se arregla el test, no producción.** `updated_at` se queda con `now()`: en producción cada request es su propia transacción, así que el comportamiento real es correcto y no hay bug que corregir. La restricción que ata la solución: `now()` en Postgres es `transaction_timestamp()` y **no se puede avanzar dentro de una transacción**, así que el `PUT` del test tiene que ocurrir fuera de la transacción externa de `db_session` — por el seam de sesión real por request (Q6). El `time.sleep(1.1)` se queda: sigue siendo lo que garantiza que los timestamps difieran. Resuelto en `docs/specs/fase_32_spec.md` (B6, 2026-09-28): **un solo `TestUpdatedAt` sobre el seam real**, sin partirlo en dos tests — el `INSERT` y los 4 `PUT` salen por sesiones reales por request y la lectura de `updated_at` por una sesión aparte, así que el `PUT` queda fuera de la transacción externa de `db_session`. Al usar el seam, el test se marca `concurrencia` (Q6) y **no corre en el opt-in de SQLite**: ese modo queda en 10 skips en vez de 9. Se evaluó y se descartó un teardown dialect-aware (`TRUNCATE … CASCADE` vs `DELETE FROM`) para conservarlo en los dos motores, porque volvería el teardown del seam dependiente del dialecto y del orden de borrado por FKs. |
+| Q5 | Si el motor nuevo destapa bugs reales, ¿entran en la fase? | **Se anotan en `docs/TODO.md` con severidad**, no se arreglan acá. Excepción: si descuadra un saldo o rompe el login, entra igual — mismo criterio del pivote 2026-09-19 ("algo está roto de verdad" y las dos garantías centrales). La fase 32 es de infraestructura de test; mezclarla con fixes de dominio la hace inejecutable. |
+| Q6 | El seam `pg_*` y el marker `postgres` | El marker **deja de ser de motor y pasa a ser de aislamiento**: `postgres` → `concurrencia`, fixtures `pg_*` → `real_*`, `test_concurrency_pg.py` → `test_concurrency.py`, y `test_money_limits.py:206` al marker nuevo. En modo SQLite se autoskippea con razón explícita ("requiere sesiones reales por request"), no porque le falte el motor. Con Postgres como default, un marker llamado `postgres` que dice "requiere Postgres" es redundante y garantiza que alguien lo skipee creyéndolo opcional. De paso, `test_concurrency_pg.py` deja de leer `os.environ["TEST_DATABASE_URL"]` y usa el fixture `engine`. |
+| Q7 | ¿Cómo se pide explícitamente el modo SQLite? | **`TEST_DATABASE_URL=sqlite://`**, reusando la variable existente — cero conceptos nuevos, y la precedencia queda uniforme. La guarda de `conftest.py:42-53` pasa a aplicar **solo a URLs de Postgres**: existe para proteger una base real del `drop_all`, y una `sqlite://` no tiene nombre de base que proteger. Regla final: si hay `TEST_DATABASE_URL`, se usa tal cual; si no, testcontainers. |
+| Q8 | `test_seed.py` y la aplicación de foreign keys | **Engine propio parametrizado por el dialecto activo**, con el `PRAGMA foreign_keys=ON` solo en SQLite. Lo que el test necesita es una *capacidad* (FKs aplicadas), no un motor: Postgres la da gratis, SQLite hay que pedirla. Usar el `engine` de la suite lo volvería **vacuo en modo SQLite** — el mismo falso verde que su propio docstring quiere evitar. |
+| Q9 | `pytest-xdist` / paralelismo | **Fuera de la fase**, anotado en `docs/TODO.md` con el porqué. No está instalado y la suite no es paralelizable tal como está: `TRUNCATE` de tablas globales en el teardown de `pg_client`, una sola base compartida, y sobre todo `ALTER DATABASE … SET timezone` (a nivel de **base**) en los dos tests de timezone — eso no se aísla ni con esquemas por worker. Paralelizar obligaría a un contenedor o un `CREATE DATABASE` por worker. ~2.5 min es tolerable para un gate manual. |
+| Q10 | Docs | `AGENTS.md` §Tests deja de decir "sin Docker/Postgres needed"; `run-tests/SKILL.md` gana el requisito de Docker y los dos modos; `docs/TODO.md` §"Insumo de la Fase 32" se marca resuelto; esta sección pasa a "completada" al cerrar. La receta `docker run` de `AGENTS.md:151-154` **sobrevive reducida a una línea**, reetiquetada como override: es el camino para correr la suite sin que testcontainers tenga el control, que es justo lo que uno quiere cuando el problema *es* testcontainers. No cambian `README.md` / `backend/README.md` / `DEPLOYMENT.md` / `ARCHITECTURE.md` (hablan del fallback de la app), ni el hook `pre-commit` (no corre pytest), ni las specs de Fases 7/20/29 (son historia). |
+
+### Supuestos aceptados (sin pregunta dedicada)
+
+1. `testcontainers` se agrega a `requirements.txt` en la sección de tests, y el contenedor usa
+   `postgres:16-alpine` — la misma imagen que `docker-compose.yml`.
+2. La suite se corre **completa en los dos modos** (Postgres default y SQLite opt-in) antes de dar
+   la fase por cerrada, más el `alembic check` nuevo.
+3. Sin cambios de contrato de API → no toca `backend/docs/API_REFERENCE.md` ni
+   `frontend/docs/API_CONTRACT.md`.
+4. `docs/specs/fase_07_spec.md` §4.2.1 ("SQLite en memoria para tests, no Postgres real") queda
+   como historia: la Fase 32 lo revierte en la práctica, y esta sección del ROADMAP es donde se
+   registra la reversión.
+5. Flujo **completo** de `docs/WORKFLOW.md` (`/to-spec` → `/analyze-spec` → implementar →
+   `/run-tests` → revisión de código → `/analyze-spec` cierre → docs de cierre → PR): el cambio no
+   cabe en una frase, toca todo el conftest y agrega una dependencia. Spec `docs/specs/fase_32_spec.md`.
+6. La suite se verifica en los **dos motores antes de cerrar** (Q2), no solo en Postgres: el modo
+   SQLite es el que nadie va a ejercitar si no se corre a mano en cada cierre.
+
+### Fuera de la Fase 32
+
+- `pytest-xdist` / paralelismo de la suite (Q9) → `docs/TODO.md`, con el bloqueo de
+  `ALTER DATABASE` anotado.
+- **Borrar SQLite** del conftest si el opt-in de Q2 nunca llega a usarse — commit chico posterior.
+- Tests de frontend (Vitest + React Testing Library) y CI/CD — siguen fuera de scope
+  (ver "Fuera de scope").
+- Los 🟡 de la QA que quedaron abiertos (QA-014, QA-016, QA-017, QA-018) — por flujo corto aparte,
+  aunque `test_seed.py` se toque en esta fase. QA-016 (el seed descuadrado) **no** entra: es un bug
+  del seed, no del motor de tests.
+- La deuda ya aceptada de las Fases 29-31 (filtro de cuentas destacadas inconsistente, mes UTC
+  contra hora Bogotá, `GET /budgets/?month=&year=` en meses cerrados) — no es de esta fase.
 
 ---
 
