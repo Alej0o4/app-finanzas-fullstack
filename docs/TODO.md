@@ -432,6 +432,20 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     `lib/validateAmount.ts` cuenta los decimales escritos y lo rechaza en el cliente. Más
     estricto a propósito; anotado por si molesta.
 
+- [x] **QA-023** 🔴 — `GET /budgets/?month=&year=` sin validar creaba presupuestos recurrentes basura (`month=13`, `year=99999`) y dejaba `GET /budgets/` en 500 permanente (`ResponseValidationError` por `BudgetResponse.month/year` con `ge/le`). **Resuelto (2026-10-03, flujo corto QA 2ª pasada):** `Query(ge/le)` en `api/budgets.py` (`month` 1–12, `year` 2020–2100); guarda en `ensure_recurring_budgets_for_period`; `BudgetResponse` desacoplado de `BudgetBase` (sin `ge/le`, sin patrón de moneda); estado de error + "Reintentar" en `budgets/page.tsx`. Limpieza SQL para dev/prod provista. Tests: `test_budgets.py` + `test_budget_recurrence.py`.
+
+- [x] **QA-024** 🔴 — Borrar un presupuesto recurrente del mes en curso reaparecía al recargar (se re-clonaba desde la plantilla). **Resuelto (2026-10-03, flujo corto QA 2ª pasada):** "lápida" del soft-delete — `select()` Core en `ensure_recurring_budgets_for_period` cuenta filas borradas como "período saltado"; borrar = saltea ese mes, la recurrencia sigue en los siguientes. Copy del confirm actualizado. Tests unit + HTTP en `test_budget_recurrence.py` y `test_budgets.py`.
+
+- [x] **QA-025** 🟠 — `limit`/`skip` negativos daban 500; `limit` sin tope. `currency` libre (`varchar(3)`) → 500 por `StringDataRightTruncation`. **Resuelto (2026-10-03, flujo corto QA 2ª pasada):** `Query(ge/le)` en `transactions.py` (`le=1000`), `accounts.py` (`le=200`), `notifications.py` (`le=1000`). Patrón `^[A-Z]{3}$` en schemas de request (`AccountBase`, `TransactionBase`, `BudgetBase`, `PreferencesUpdate`); response models redeclarados sin patrón (tolerancia a filas heredadas). Tests de 422 en todos los endpoints.
+
+- [x] **QA-026** 🟡 — `PUT /transactions` borraba `description` si el cliente no la reenviaba (distinto de `payment_method` y `date`). **Resuelto (2026-10-03, flujo corto QA 2ª pasada):** `model_fields_set` (mismo idioma que `accounts.py` Fase 24): ausente conserva, `null` explícito limpia. Aplicado a `description` **y** `payment_method` (unificación); `date` queda `is not None` porque `TransactionResponse.date` es `datetime` no opcional. Web sin cambios de comportamiento.
+
+- [x] **QA-027** 🟡 — `PUT /categories` permitía cambiar el `type` con transacciones/presupuestos asociados. **Resuelto (2026-10-03, flujo corto QA 2ª pasada):** bloqueo con `ConflictError` 409 (mismo ámbito que el delete). Reembolsos cruzados previos intactos. Tests en `test_categories.py`.
+
+- [x] **QA-028** 🟡 — Nombres en blanco (`"   "` pasaba `min_length=1`) y duplicados. **Resuelto (2026-10-03, flujo corto QA 2ª pasada):** validador `strip` + no-vacío en `CategoryBase.name` y `AccountBase.name` (compartido en `schemas/common.py`). Unicidad por usuario y `type` entre activas, comparando normalizado (NFKD→ascii→strip→lower); pre-chequeo en API, sin restricción en DB. Tests en `test_categories.py`.
+
+- [x] **QA-031** 🟢 — Guarda defensiva: `PUT /transactions` con cuenta anterior borrada haría `AttributeError` (hoy inalcanzable). **Resuelto (2026-10-03, flujo corto QA 2ª pasada):** eliminada query redundante de `cuenta_vieja`; se pasa `transaccion_db.account_id` (mismo efecto, `ledger` ya no-opera sobre soft-deleted). Test en `test_transactions.py`.
+
 - [ ] **El filtro de cuentas destacadas no es el mismo en todo el dashboard (Fase 29,
   aceptado).**
   - `GET /dashboard/summary` filtra `balances`, `monthly_income_by_currency` y

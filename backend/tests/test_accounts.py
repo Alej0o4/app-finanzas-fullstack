@@ -1,7 +1,8 @@
 """Tests de cuentas (Fase 11 §11.5 + Fase 16 §16.4).
 
 Fase 11: el endpoint GET /api/v1/accounts/summary. Fase 16: `opening_balance` en la
-creación y el endpoint POST /api/v1/accounts/{id}/reconcile (Decisión 16.4.2).
+creación y el endpoint POST /api/v1/accounts/{id}/reconcile (Decisión 16.4.2). QA-025:
+validación de la moneda y de la paginación del listado; QA-028: nombre en blanco.
 """
 
 from calendar import monthrange
@@ -9,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+import sqlalchemy as sa
 
 from app.models import models
 
@@ -448,12 +450,98 @@ class TestUpdateAccount:
         assert response.json()["name"] == "Otro nombre"
         assert response.json()["currency"] == "COP"
 
-    def test_foreign_account_returns_404(self, client, auth_headers, other_user, make_account):
-        cuenta = make_account(other_user["headers"])
 
-        response = client.put(
+def test_foreign_account_returns_404(client, auth_headers, other_user, make_account):
+    cuenta_ajena = make_account(other_user["headers"])
+
+    response = client.put(
+        f"/api/v1/accounts/{cuenta_ajena['id']}",
+        json={"name": "x", "type": "cash"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+class TestCurrencyInvalida:
+    """QA-025 (moneda): `Account.currency` es `String(3)` en el modelo, así que un valor más
+    largo ("zzzzzz") llegaba hasta el INSERT y volvía como 500 (`StringDataRightTruncation` es
+    un `DataError`, sin capturar). Ahora `^[A-Z]{3}$` vive en el schema de REQUEST."""
+
+    @staticmethod
+    def _payload(**overrides) -> dict:
+        payload = {"name": "Cuenta de prueba", "type": "cash", "balance": "100.00"}
+        payload.update(overrides)
+        return payload
+
+    def test_currency_invalida_devuelve_422(self, client, auth_headers, make_account):
+        for currency in ("zzzzzz", "", "cop", "XX"):
+            create = client.post("/api/v1/accounts/", json=self._payload(currency=currency), headers=auth_headers)
+            assert create.status_code == 422, f"POST {currency!r} → {create.status_code} {create.text}"
+
+        cuenta = make_account(auth_headers, name="Para editar")
+        update = client.put(
             f"/api/v1/accounts/{cuenta['id']}",
-            json={"name": "x", "type": "cash"},
+            json={"name": cuenta["name"], "type": cuenta["type"], "currency": "zzzzzz"},
             headers=auth_headers,
         )
-        assert response.status_code == 404
+        assert update.status_code == 422, update.text
+
+    def test_cuenta_con_moneda_rara_no_rompe_el_get(self, client, db_session, auth_headers, make_account):
+        """El response NO revalida el patrón: una cuenta con `currency="ZZ"` (que `String(3)`
+        acepta sin problema) tiene que poder listarse y leerse, no devolver 500. Regresión
+        del modo de falla de QA-023: un `ResponseValidationError` deja el endpoint caído
+        para siempre, sin nada que el cliente pueda corregir."""
+        cuenta = make_account(auth_headers, name="Moneda rara")
+
+        # Por SQL crudo: la API ya no acepta una moneda fuera de patrón, pero la fila puede
+        # existir (importación, seed viejo, edición directa en la base).
+        db_session.execute(sa.text("UPDATE accounts SET currency = 'ZZ' WHERE id = :id"), {"id": cuenta["id"]})
+        db_session.commit()
+
+        detalle = client.get(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers)
+        assert detalle.status_code == 200, detalle.text
+        assert detalle.json()["currency"] == "ZZ"
+
+        listado = client.get("/api/v1/accounts/", headers=auth_headers)
+        assert listado.status_code == 200, listado.text
+        assert next(c for c in listado.json() if c["id"] == cuenta["id"])["currency"] == "ZZ"
+
+
+class TestNombreEnBlanco:
+    """QA-028: `min_length=1` no alcanza — `"   "` tiene longitud 3 y pasaba el filtro,
+    dejando una cuenta cuyo nombre en la UI es indistinguible de otro."""
+
+    def test_nombre_en_blanco_devuelve_422(self, client, auth_headers, make_account):
+        create = client.post(
+            "/api/v1/accounts/", json={"name": "   ", "type": "cash", "balance": "100.00"}, headers=auth_headers
+        )
+        assert create.status_code == 422, create.text
+
+        cuenta = make_account(auth_headers, name="Cuenta real")
+        update = client.put(
+            f"/api/v1/accounts/{cuenta['id']}",
+            json={"name": "   ", "type": cuenta["type"]},
+            headers=auth_headers,
+        )
+        assert update.status_code == 422, update.text
+        # El nombre no se tocó (la validación es previo al handler).
+        detalle = client.get(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers)
+        assert detalle.json()["name"] == "Cuenta real"
+
+
+class TestPaginacionInvalida:
+    """QA-025 (paginación): `OFFSET -1` / `LIMIT -1` son error de sintaxis en Postgres, así
+    que un `skip`/`limit` negativo devolvía 500 en texto plano."""
+
+    def test_paginacion_invalida_devuelve_422(self, client, auth_headers):
+        for params in ("skip=-1", "limit=-1", "limit=0", "limit=201"):
+            response = client.get(f"/api/v1/accounts/?{params}", headers=auth_headers)
+            assert response.status_code == 422, f"{params} → {response.status_code} {response.text}"
+
+    def test_limit_en_el_tope_sigue_funcionando(self, client, auth_headers, make_account):
+        make_account(auth_headers, name="Cuenta con historial largo")
+
+        response = client.get("/api/v1/accounts/?limit=200", headers=auth_headers)
+        assert response.status_code == 200, response.text
+        # Trae la cuenta del registro + la recién creada: el tope no recorta el uso real.
+        assert len(response.json()) == 2

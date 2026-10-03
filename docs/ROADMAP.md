@@ -62,21 +62,19 @@ El flujo corto de QA-014/016/017/018 ya está mergeado. La segunda pasada del `q
 QA-033. Todo lo corregible sin decisión de producto se agrupa en **un solo flujo corto** de
 `docs/WORKFLOW.md` (fix → test → `/run-tests` → `/code-review` → PR), en este orden:
 
-**Estado: planificado, sin código tocado.** Se marca `[x]` al mergear.
+**Estado: completado y mergeado (2026-10-03).** 406 tests en verde, lint limpio.
 
-| Ítem | Qué se va a hacer | Lado |
+| Ítem | Qué se hizo | Lado |
 |---|---|---|
-| **QA-023** 🔴 | `GET /budgets/?month=&year=` sin validar crea presupuestos recurrentes basura (`month=13`, `year=99999`) y deja `GET /budgets/` en 500 para siempre (`/budgets` queda en skeleton eterno). Validar `month` 1–12 y `year` 2020–2100 con `Query(ge, le)` / `resolver_mes` (`budgets.py:74-75`); que `ensure_recurring_budgets_for_period` rechace períodos fuera de rango; estado de error visible en `budgets/page.tsx:58`. Test de regresión. Limpieza de datos basura en dev: `delete from budgets where month not between 1 and 12 or year not between 2020 and 2100` (solo `-p oikos-dev`). | backend + frontend |
-| **QA-024** 🔴 | Un presupuesto recurrente del mes en curso no se puede borrar: reaparece al recargar porque se re-clona desde la plantilla de otro mes. Al borrar una fila recurrente, apagar la recurrencia de la plantilla o guardar una marca de período saltado (decidir al implementar; la más simple que no requiera migración si se puede). Test: crear en mes previo → generar → borrar → no reaparece. | backend |
-| **QA-025** 🟠 | `limit`/`skip` negativos dan 500 en `/transactions/` y `/accounts/`; `limit` sin tope. `Query(ge=0)` y tope razonable. `currency` libre en `AccountBase`/`TransactionBase`/`BudgetBase`: patrón `^[A-Z]{3}$` (hoy `"zzzzzz"` da 500 por `varchar(3)`; verificar qué pasa con `""`, `"cop"`, `"XX"`). Tests de 422. | backend |
-| **QA-026** 🟡 | `PUT /transactions/{id}` borra la descripción si el cliente no la reenvía (`transactions.py:465`), a diferencia de `payment_method` y `date`. Conservar el valor cuando falta (distinguir ausente de `null` explícito). | backend |
-| **QA-027** 🟡 | `PUT /categories/{id}` permite cambiar el `type` con transacciones o presupuestos asociados. Bloquear el cambio de tipo en ese caso, igual que el delete (`DomainError` 409). Los reembolsos con categoría cruzada creados antes siguen siendo válidos. | backend |
-| **QA-028** 🟡 | `POST/PUT /categories/` acepta nombres en blanco y duplicados. `strip` + `min_length=1` y unicidad por usuario (entre activas, sin distinguir mayúsculas). Revisar si hay duplicados existentes antes de agregar una restricción en DB; preferir validación en la capa de API. | backend |
-| **QA-031** 🟢 | `PUT /transactions` con la cuenta anterior borrada daría `AttributeError` en `transactions.py:455`. Hoy no es alcanzable; agregar guarda defensiva + test unitario. | backend |
+| **QA-023** 🔴 | Validación `Query(ge/le)` en `budgets.py` (`month` 1–12, `year` 2020–2100); guarda de rango en `ensure_recurring_budgets_for_period`; `BudgetResponse` sin `ge/le` (mata el 500 eterno); estado de error + "Reintentar" en `budgets/page.tsx`. Limpieza SQL de basura provista para dev (`-p oikos-dev`) y prod (manual). | backend + frontend |
+| **QA-024** 🔴 | Lápida del soft-delete: `select()` Core en `budget_recurrence.py` para que la fila borrada bloquee su período; borrar = saltar ese mes, la recurrencia sigue. Copy del confirm actualizado. | backend |
+| **QA-025** 🟠 | `Query(ge/le)` en `transactions.py` (`le=1000`), `accounts.py` (`le=200`), `notifications.py` (`le=1000`). Patrón `^[A-Z]{3}$` en schemas de request (`AccountBase`, `TransactionBase`, `BudgetBase`, `PreferencesUpdate`); response models redeclarados sin patrón (tolerancia a filas heredadas). | backend |
+| **QA-026** 🟡 | `PUT /transactions` usa `model_fields_set`: ausente conserva, `null` explícito limpia (aplicado a `description` y `payment_method`; `date` queda `is not None` porque el response exige `datetime`). | backend |
+| **QA-027** 🟡 | `PUT /categories` bloquea cambio de `type` si hay transacciones o presupuestos activos → `ConflictError` 409. Reembolsos cruzados previos intactos. | backend |
+| **QA-028** 🟡 | Validador `strip` + no-vacío en `CategoryBase.name` y `AccountBase.name` (compartido en `schemas/common.py`). Unicidad por usuario y `type` entre activas, comparando normalizado (NFKD→ascii→strip→lower). Pre-chequeo en API, sin restricción en DB. | backend |
+| **QA-031** 🟢 | Eliminada query redundante de `cuenta_vieja` en `PUT /transactions`; se pasa `transaccion_db.account_id` (mismo efecto, `ledger` ya no-opera sobre soft-deleted). | backend |
 
-Decisiones que se toman al implementar: mecanismo de QA-024 (plantilla vs. marca) y la política de
-unicidad de QA-028 (caso/espacios). Si alguna resulta ser de producto, se para y se hace
-`/grilling` corto.
+Decisiones tomadas al implementar: **QA-024 → lápida** (la fila borrada es tombstone); **QA-028 → unicidad por (usuario, type)**; **moneda minúsculas → 422** (no normalizar). Aprobadas en el flujo corto, sin `/grilling` adicional.
 
 **Pendiente de verificar (la segunda pasada no lo cubrió):** escritura en la UI (crear/editar
 transacciones, onboarding con cuenta nueva, modales, estados de error y carga), push y alertas de
@@ -132,6 +130,14 @@ en gastos periódicos conocidos, por eso van después.
       inconsistente entre `summary` y el resto (decisión de producto), mes/semana en UTC frente a
       hora Bogotá (incluye la fecha por defecto del modal, que propone el día siguiente después
       de las 19:00) y `GET /budgets/?month=&year=` en meses cerrados (con efecto de escritura; el caso de períodos inválidos es QA-023, en curso).
+- [ ] **Apagar la recurrencia de un presupuesto desde la UI** (hallado al revisar el PR #11,
+      relacionado con QA-024; ya existía antes). Desmarcar "Repetir cada mes" en el mes actual
+      no detiene la serie: `ensure_recurring_budgets_for_period` clona desde la fila recurrente
+      más reciente de *otro* período, así que el mes siguiente se regenera desde una plantilla
+      anterior que el usuario no ve. Hoy la única forma de cortarla es editar esa fila vieja.
+      Flujo corto con `/grilling` corto primero: decidir si desmarcar corta la serie hacia
+      adelante desde ese mes (recomendado) o apaga toda la serie de la categoría. Test: serie
+      de 3 meses → desmarcar el actual → el siguiente no se genera.
 - [ ] **Candidatas a flujo corto aparte** (observaciones de la QA que no son bugs): aviso en
       Ajustes de que el ingreso declarado se reinterpreta al cambiar la moneda principal, cobertura
       baja de `email.py`/`user_deletion.py`/`weekly_summary.py`, warnings de pytest (`SAWarning`,

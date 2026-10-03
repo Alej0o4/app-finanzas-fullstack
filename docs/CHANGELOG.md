@@ -9,6 +9,27 @@
 
 ---
 
+## Flujo corto — Segunda pasada de QA (2026-10-03)
+
+Fix de los 9 ítems de la segunda pasada de QA (QA-023 a QA-031), todos corregibles sin decisión de producto. Un solo flujo corto (fix → test → `/run-tests` → revisión → PR), 406 tests en verde, lint limpio.
+
+**Backend (9 ítems):**
+- **QA-023:** Validación `Query(ge/le)` en `GET /budgets/` (`month` 1–12, `year` 2020–2100); guarda en `ensure_recurring_budgets_for_period`; `BudgetResponse` desacoplado de `BudgetBase` (sin `ge/le` en `month`/`year`, sin patrón de moneda) para evitar 500 eterno por filas heredadas; SQL de limpieza de basura provisto.
+- **QA-024:** Lápida del soft-delete — `select()` Core en `budget_recurrence.py` para que la fila borrada bloquee su período; borrar = saltea ese mes, la recurrencia sigue. Copy del confirm actualizado.
+- **QA-025:** Paginación `Query(ge/le)` en `transactions` (`le=1000`), `accounts` (`le=200`), `notifications` (`le=1000`). Patrón `^[A-Z]{3}$` en schemas de request (`AccountBase`, `TransactionBase`, `BudgetBase`, `PreferencesUpdate`); response models redeclarados sin patrón (tolerancia a filas heredadas). Minúsculas → 422 (no se normalizan).
+- **QA-026:** `PUT /transactions` usa `model_fields_set`: ausente conserva, `null` explícito limpia (aplicado a `description` y `payment_method`; `date` queda `is not None`).
+- **QA-027:** `PUT /categories` bloquea cambio de `type` si hay transacciones/presupuestos → `ConflictError` 409.
+- **QA-028:** Validador `strip` + no-vacío en `CategoryBase.name` y `AccountBase.name` (compartido en `schemas/common.py`). Unicidad por usuario y `type` entre activas, comparando normalizado (NFKD→ascii→strip→lower). Pre-chequeo en API, sin restricción en DB.
+- **QA-031:** Eliminada query redundante de `cuenta_vieja` en `PUT /transactions`; se pasa `transaccion_db.account_id` (mismo efecto).
+
+**Frontend (2 ítems):**
+- **QA-023:** Estado de error visible en `/budgets` (mensaje + "Reintentar") en vez de `EmptyState` engañoso. Mismo criterio que `TransactionList` (Fase 31 F6).
+- **QA-024:** Copy del confirm de borrado: "Si es recurrente, se borra el de este mes. Si venía de meses anteriores, el siguiente se vuelve a generar desde ahí."
+
+**Tests añadidos:** `test_budgets.py` (7 nuevos), `test_budget_recurrence.py` (3 nuevos), `test_transactions.py` (5 nuevos), `test_accounts.py` (4 nuevos), `test_categories.py` (clase nueva con 7 tests), `test_notifications.py` (1 nuevo), `test_preferences.py` (1 nuevo).
+
+---
+
 ## Fase 32 — Suite de tests sobre Postgres por defecto (2026-10-02)
 
 Fase de infraestructura de test (`docs/specs/fase_32_spec.md`, decisiones del `/grilling` Q1–Q10): la suite del backend pasa a correr contra el motor de producción. `cd backend && pytest` levanta y destruye un `postgres:16-alpine` desechable por sesión con `testcontainers` — **requiere Docker**; sin él la suite **aborta con exit code 2** y un mensaje con las tres salidas, nunca cae a SQLite en silencio ni se saltea entera. Sin cambios de contrato de API.

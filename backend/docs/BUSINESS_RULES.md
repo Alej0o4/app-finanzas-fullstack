@@ -82,6 +82,16 @@
   presupuestos y los campos `first_transaction_month` / `expense_currencies` del summary usan
   todas las cuentas (ver la sección "Dashboard").
 
+- **Validación de nombre (QA-028):** `name` debe tener 1–100 caracteres tras `strip` —
+  `"   "` → `422`. El validador `nombre_sin_espacios` en `schemas/common.py` lo aplica en
+  `AccountBase.name`. `AccountResponse` redeclara `name` sin el validador para tolerar filas
+  heredadas con nombre en blanco (misma lección que QA-023/QA-025: response models no
+  revalidan reglas de input).
+
+- **Validación de moneda (QA-025):** `currency` en `AccountBase` debe cumplir `^[A-Z]{3}$`.
+  `"zzzzzz"`, `""`, `"cop"`, `"XX"` → `422`. `AccountResponse` redeclara `currency` sin
+  patrón para tolerar filas heredadas.
+
 ## Categorías
 
 - Las categorías con `user_id = null` son categorías base del sistema.
@@ -100,6 +110,26 @@
   atajos móviles existen para saltarse el selector visual). Los endpoints
   `POST`/`DELETE /categories/{id}/hide` aplican a categorías propias **y** de sistema,
   sin rama de ownership (Decisión 18.3.4).
+
+- **Validación de nombre (QA-028):** `name` debe tener 1–100 caracteres tras `strip` —
+  `"   "` (solo espacios) → `422`. El validador `nombre_sin_espacios` en `schemas/common.py`
+  lo aplica en `CategoryBase.name` y `AccountBase.name`. `CategoryResponse` y
+  `AccountResponse` redeclaran `name` sin el validador para tolerar filas heredadas con
+  nombre en blanco (misma lección que QA-023/QA-025: response models no revalidan reglas de
+  input).
+
+- **Unicidad por usuario y `type` (QA-028):** el nombre normalizado (NFKD → ascii → strip →
+  lower) no puede repetirse entre las categorías **propias y activas** del mismo usuario
+  **del mismo `type`**. `400` en `POST`/`PUT` si se detecta duplicado. Las categorías de
+  sistema (`user_id IS NULL`) no bloquean (el resolver prioriza la propia del usuario).
+  Soft-deleted no bloquean (crear → borrar → volver a crear con el mismo nombre = 201).
+  Chequeo en la capa de API, sin restricción en DB (misma política que presupuesto).
+
+- **Cambio de `type` bloqueado (QA-027):** si la categoría tiene transacciones o presupuestos
+  asociados (solo activos, soft-deleted no cuentan), cambiar su `type` se rechaza con
+  `ConflictError` 409 (`"No se puede cambiar la naturaleza de una categoría con
+  transacciones/presupuestos asociados."`). Editar solo el `name` o mantener el `type` no
+  se bloquea. Reembolsos con categoría cruzada creados antes del bloqueo siguen válidos.
 
 ## Transacciones
 
@@ -167,6 +197,29 @@
   y si la original ya estaba borrada devolvía un `500` de validación de respuesta en
   vez de un `409` de dominio.
 
+- **Actualización parcial en `PUT /transactions` (QA-026):** se usa `model_fields_set`
+  para distinguir "ausente" de `null` explícito — ausente conserva, `null` limpia.
+  Aplica a `description` y `payment_method` (la web siempre manda `description`;
+  `payment_method` ausente conserva, `null` limpia). `date` no acepta `null` explícito
+  (el response exige `datetime` no opcional).
+
+- **Guarda defensiva en `PUT /transactions` con cuenta anterior borrada (QA-031):**
+  eliminada la query redundante de `cuenta_vieja`; se pasa `transaccion_db.account_id`
+  directamente. `ledger.aplicar_delta` ya no-opera sobre cuentas soft-deleted
+  (`deleted_at IS NULL`, Decisión 6.1), así que la semántica no cambia — la cuenta
+  desaparecida conserva su saldo obsoleto, invisible en cualquier lista.
+
+- **Validación de paginación (QA-025):** `skip` ≥ 0, `limit` 1–1000 en `GET /transactions`;
+  `skip` ≥ 0, `limit` 1–200 en `GET /accounts`; `skip` ≥ 0, `limit` 1–1000 en
+  `GET /notifications`. Valores fuera de rango → `422`.
+
+- **Validación de moneda (QA-025):** `currency` en schemas de request (`AccountBase`,
+  `TransactionBase`, `BudgetBase`, `PreferencesUpdate`) debe cumplir `^[A-Z]{3}$`.
+  `"zzzzzz"`, `""`, `"cop"`, `"XX"` → `422`. Minúsculas → `422` (no se normalizan).
+  Response models (`AccountResponse`, `TransactionResponse`, `BudgetResponse`,
+  `UserResponse`) redeclaran `currency` sin patrón para tolerar filas heredadas
+  (misma lección que QA-023/QA-028: response models no revalidan reglas de input).
+
 ## Presupuestos
 
 - Un usuario solo puede tener un presupuesto por categoría, mes, año **y moneda** (Fase 17
@@ -178,7 +231,7 @@
   del mes actual (Fase 29): `GET /dashboard/budgets-progress` con `?year=&month=` devuelve los
   presupuestos de ese mes con su gasto real de ese mes. El `spent` suma transacciones de
   **todas** las cuentas del usuario en la moneda del presupuesto — no solo las destacadas — y
-  sale del mismo cálculo que el motor de alertas, para que la vista y el aviso no divergan.
+  sale del mismo cálculo que el motor de alertas, para que la vista y el aviso no diverjan.
 - La generación perezosa de las filas recurrentes (plantilla `is_recurring`) depende del
   caller: `budgets-progress` genera **solo para el mes actual**, y el motor de alertas
   (disparado por crear/actualizar un gasto, con el mes de la fecha de esa transacción) genera
@@ -190,6 +243,26 @@
 - Los presupuestos se pueden listar por mes y año en `GET /budgets/` (filtros opcionales y
   combinables). Ese listado no calcula progreso: el gasto real por presupuesto solo lo entrega
   `GET /dashboard/budgets-progress`.
+
+- **Validación de período (QA-023):** `GET /budgets/?month=&year=` valida `month` 1–12 y
+  `year` 2020–2100 en el endpoint (`Query(ge/le)`). `ensure_recurring_budgets_for_period`
+  tiene guarda de rango (defensa en profundidad) para sus 3 callers (`budgets.py`,
+  `dashboard.py`, `budget_alerts.py`). Períodos fuera de rango → `422`.
+- **Response model tolerante (QA-023):** `BudgetResponse` no revalida `month`/`year`/`currency`
+  con los rangos/patrones de entrada — filas heredadas con valores fuera de rango se
+  serializan sin 500. La limpieza SQL recomendada:
+  `DELETE FROM budgets WHERE month NOT BETWEEN 1 AND 12 OR year NOT BETWEEN 2020 AND 2100`.
+- **Validación de moneda (QA-025):** `currency` en `BudgetBase` debe cumplir `^[A-Z]{3}$`.
+  `"zzzzzz"`, `""`, `"cop"`, `"XX"` → `422`. `BudgetResponse` redeclara `currency` sin
+  patrón para tolerar filas heredadas.
+- **Lápida del soft-delete (QA-024):** borrar un presupuesto recurrente (lógico) sirve de
+  "lápida" para su período — `ensure_recurring_budgets_for_period` cuenta también las filas
+  soft-deleted en el chequeo "ya hay fila para este período". Borrar = saltar ese mes; la
+  recurrencia sigue en los meses siguientes (la fila borrada ya no es plantilla). Semántica
+  explicada en el copy del confirm del frontend: "Se borra solo el de este mes; los meses
+  siguientes se siguen generando."
+- **Validación de período en `PUT` (QA-023):** `month` 1–12, `year` 2020–2100, `currency`
+  `^[A-Z]{3}$` — valores fuera de rango/patrón → `422`.
 
 ## Eliminaciones
 
@@ -248,3 +321,6 @@
   (con log) y solo queda la bandeja.
 - El resumen semanal es opt-out (`User.weekly_summary_enabled`, default `true`); se
   calcula cada lunes en `America/Bogota` sobre la moneda preferida del usuario.
+
+- **Validación de paginación (QA-025):** `GET /notifications` valida `skip` ≥ 0 y `limit`
+  1–1000 (default 50). `limit=0`, negativo o `>1000` → `422`.

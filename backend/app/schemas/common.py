@@ -26,6 +26,35 @@ class PaginatedResponse[T](BaseModel):
 MAX_DIGITS_MONEY = 14
 
 
+# --- MONEDA (QA-025) ---
+# `Account.currency`, `Transaction.currency`, `Budget.currency` y `User.preferred_currency`
+# son `String(3)` en `models.py`: un valor más largo ("zzzzzz") llegaba hasta el INSERT y
+# volvía como un 500 en texto plano (`StringDataRightTruncation` es un `DataError`), no como
+# un 422 de validación — el mismo modo de fallo que QA-015 ya resolvió para el rango de los
+# campos de dinero.
+#
+# El patrón va SOLO en los schemas de REQUEST. Los de response no lo llevan a propósito: si
+# una fila heredada tuviera una moneda fuera de patrón, el `ResponseValidationError` dejaría
+# ese endpoint en 500 para siempre — exactamente la lección de QA-023 con
+# `Budget.month`/`year` (datos que una versión anterior dejó entrar sin validar).
+CURRENCY_PATTERN = r"^[A-Z]{3}$"
+
+
+# --- NOMBRES DE TEXTO (QA-028) ---
+def nombre_sin_espacios(nombre: str) -> str:
+    """Recorta el nombre y rechaza el que queda vacío.
+
+    `min_length=1` no alcanza: `"   "` tiene longitud 3 y pasaba el filtro, dejando
+    categorías y cuentas cuyo nombre en la UI es indistinguible de otro. Se usa como
+    `field_validator("name", mode="after")` (el tipo `str` ya está garantizado ahí, y
+    `min_length`/`max_length` del `Field` siguen corriendo antes).
+    """
+    recortado = nombre.strip()
+    if not recortado:
+        raise ValueError("El nombre no puede estar vacío.")
+    return recortado
+
+
 # --- POLÍTICA DE CONTRASEÑAS (Fase 7, §2.3) ---
 # NIST 800-63B recomienda priorizar longitud sobre complejidad artificial — por eso
 # min_length=10 en vez de reglas de "1 mayúscula + 1 símbolo", y una lista corta de

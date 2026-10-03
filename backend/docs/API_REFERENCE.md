@@ -427,7 +427,8 @@ Actualiza preferencias del usuario autenticado.
 
 Entrada (campos opcionales):
 
-- `preferred_currency`: string
+- `preferred_currency`: string — código de moneda ISO 4217 de 3 letras mayúsculas
+  (`^[A-Z]{3}$`). `"zzzzzz"`, `""`, `"cop"`, `"XX"` → `422`.
 - `preferred_locale`: string
 - `preferred_theme`: string
 - `weekly_summary_enabled`: bool (Fase 14)
@@ -449,13 +450,14 @@ Crea una cuenta para el usuario autenticado.
 
 Entrada:
 
-- `name`
+- `name`: obligatorio, 1–100 caracteres. **Validación (QA-028):** `strip` + no vacío — `"   "` → `422`.
 - `type`: `cash | debit | credit`
 - `balance`: saldo inicial permitido solo en creación (Fase 16 §16.4: alimenta las dos
   columnas `balance` y `opening_balance` al mismo valor — `opening_balance` queda inmutable).
   Como máximo 12 dígitos enteros + 2 decimales (Fase 31, Decisión B3); fuera de rango →
   `422` de Pydantic, `detail` en lista.
-- `currency`: código de moneda (default `"COP"`). Ej: `"COP"`, `"USD"`, `"EUR"`.
+- `currency`: código de moneda ISO 4217 de 3 letras mayúsculas (default `"COP"`). Formato
+  `^[A-Z]{3}$` — `"zzzzzz"`, `""`, `"cop"`, `"XX"` → `422`.
 - `highlighted`: si la cuenta es destacada (default `false`).
 
 Salida:
@@ -493,6 +495,12 @@ el body — `name`, `type`, `highlighted` y/o `currency`. Un campo ausente no se
 schema). Nunca modifica `balance` ni `opening_balance` (regla de negocio: el saldo solo
 lo mueven las transacciones).
 
+**Validaciones de entrada (QA-025/QA-028):**
+
+- `name`: obligatorio, 1–100 caracteres. `strip` + no vacío — `"   "` → `422`.
+- `currency`: código de moneda ISO 4217 de 3 letras mayúsculas (`^[A-Z]{3}$`) —
+  `"zzzzzz"`, `""`, `"cop"`, `"XX"` → `422`.
+
 `currency` solo se aplica si además el valor enviado es distinto del actual. Si la cuenta
 tiene al menos una transacción activa, el cambio se bloquea con `400` y detail plano
 "No se puede cambiar la moneda de una cuenta con transacciones asociadas." (mismo
@@ -504,6 +512,7 @@ Errores esperados:
 - `404` si la cuenta no existe o no pertenece al usuario autenticado.
 - `400` si se intenta cambiar `currency` a un valor distinto del actual y la cuenta
   tiene transacciones asociadas.
+- `422` si `name` o `currency` fuera de patrón.
 
 ### `PATCH /api/v1/accounts/{account_id}/highlighted`
 
@@ -570,14 +579,22 @@ Crea una categoría personalizada.
 
 Entrada:
 
-- `name`
+- `name`: obligatorio, 1–100 caracteres. **Validación (QA-028):** `strip` + no vacío — `"   "` → `422`.
 - `type`: `income | expense`
+
+**Unicidad (QA-028):** el nombre normalizado (NFKD → ascii → strip → lower) no puede repetirse
+entre las categorías **propias y activas** del mismo usuario **del mismo `type`**. Las
+categorías de sistema (`user_id IS NULL`) no bloquean (el resolver prioriza la propia del
+usuario). `400` con `"Ya existe una categoría de tipo {tipo} llamada '{nombre}'."`.
 
 Respuesta (`CategoryResponse`):
 
 - `id`, `name`, `type`, `user_id`
 - `icon`: opcional.
 - `is_hidden`: `false` siempre al crear (una categoría recién creada nunca puede estar ya oculta) — Fase 18.
+
+**Nota:** `CategoryResponse` no revalida `name` con el validador de request — filas heredadas
+con nombre en blanco se serializan sin 500.
 
 ### `GET /api/v1/categories/`
 
@@ -596,6 +613,20 @@ usuario autenticado (Fase 18). `404` si no existe o no es del usuario.
 Actualiza una categoría personalizada. `403` sobre categorías de sistema. La respuesta
 incluye `is_hidden` computado (Fase 18) — editar una categoría propia que estaba oculta
 la mantiene oculta en la respuesta.
+
+**Entrada (QA-028):**
+
+- `name`: obligatorio, 1–100 caracteres. `strip` + no vacío — `"   "` → `422`.
+- `type`: `income | expense`
+
+**Validaciones (QA-028):**
+
+- Mismo chequeo de unicidad normalizada que `POST` (excluyendo la categoría que se edita).
+- **Cambio de `type` bloqueado (QA-027):** si la categoría tiene transacciones o
+  presupuestos asociados (solo activos, soft-deleted no cuentan), el cambio de `type`
+  se rechaza con `409 ConflictError` (`"No se puede cambiar la naturaleza de una categoría con transacciones/presupuestos asociados."`). Editar solo el `name` o mantener el mismo `type` no se bloquea.
+
+La respuesta incluye `is_hidden` computado (Fase 18).
 
 ### `DELETE /api/v1/categories/{category_id}`
 
@@ -677,8 +708,8 @@ Lista transacciones del usuario autenticado con paginación.
 
 Filtros opcionales:
 
-- `skip` (default: 0)
-- `limit` (default: 100, usado internamente: 50)
+- `skip` (default: 0, validado `ge=0`)
+- `limit` (default: 100, validado `ge=1, le=1000`; `limit=0` o negativo → `422`; `limit>1000` → `422`)
 - `account_id`
 - `category_id`
 - `start_date`
@@ -695,8 +726,14 @@ Salida paginada:
 
 ### `PUT /api/v1/transactions/{transaction_id}`
 
-Actualiza una transacción y recalcula saldos de forma inversa y luego aplicada. Si
-`payment_method` no se reenvía, conserva su valor actual.
+Actualiza una transacción y recalcula saldos de forma inversa y luego aplicada.
+
+**Actualización parcial (QA-026, Fase 24 §24.3 Decisión C1):** se usa `model_fields_set`
+para distinguir "ausente" de "null explícito":
+
+- `description` ausente → conserva; `description: null` → limpia.
+- `payment_method` ausente → conserva; `payment_method: null` → limpia.
+- `date`: ausente → conserva; `null` no se acepta (el response exige `datetime` no opcional).
 
 `amount` respeta el mismo rango de `POST` (arriba), y el mismo `422` de dominio si el
 recálculo desborda el saldo de alguna cuenta involucrada (la única, o la vieja/nueva si la
@@ -707,6 +744,10 @@ efectivo en Postgres) antes de leer sus valores — dos `PUT` concurrentes sobre
 transacción se aplican uno después del otro, cada uno sobre el monto que dejó el anterior.
 `PUT` sobre una transacción ya borrada (por esta misma petición perdiendo una carrera, o por
 un `DELETE` previo) responde `404`.
+
+**Nota:** la query redundante de la cuenta anterior (QA-031) se eliminó — se pasa
+`transaccion_db.account_id` directamente; `ledger` ya no-opera sobre cuentas soft-deleted
+(`deleted_at IS NULL`, Decisión 6.1), así que la semántica no cambia.
 
 ### `DELETE /api/v1/transactions/{transaction_id}`
 
@@ -730,20 +771,23 @@ Entrada:
 - `amount_limit`: mayor a cero, y como máximo 12 dígitos enteros + 2 decimales (Fase 31,
   Decisión B3); fuera de rango → `422` de Pydantic, `detail` en lista. Mismo límite en `PUT
   /api/v1/budgets/{budget_id}`.
-- `currency`: código de moneda (default `"COP"`).
-- `month`: entre 1 y 12.
-- `year`
+- `currency`: código de moneda ISO 4217 de 3 letras mayúsculas (default `"COP"`). Ej: `"COP"`,
+  `"USD"`, `"EUR"`. Formato `^[A-Z]{3}$` — `"zzzzzz"`, `""`, `"cop"`, `"XX"` → `422`.
+- `month`: entre 1 y 12 (validado en `Query(ge=1, le=12)`).
+- `year`: entre 2020 y 2100 (validado en `Query(ge=2020, le=2100)`).
 - `category_id`
 - `is_recurring` (opcional, default `false`): si es `true`, la fila actúa como plantilla —
   el presupuesto se genera automáticamente para los períodos futuros que se consulten
   (Fase 8 §3). Editar el monto del presupuesto de un mes también actualiza el monto de los
   meses futuros, porque la plantilla siempre es la fila recurrente más reciente. Para
-  "apagar" la recurrencia se edita con `is_recurring: false`; borrar la fila no corta la
-  generación de los meses siguientes.
+  "apagar" la recurrencia se edita con `is_recurring: false`; **borrar la fila no corta la
+  generación de los meses siguientes** — la fila borrada sirve de "lápida" para su período:
+  ese mes queda saltado y la recurrencia sigue en los siguientes (QA-024).
 
 Errores esperados:
 
 - `400` si ya existe un presupuesto (activo) para la misma categoría, mes, año y moneda.
+- `422` si `month`/`year` fuera de rango o `currency` no cumple `^[A-Z]{3}$`.
 
 ### `GET /api/v1/budgets/`
 
@@ -751,8 +795,8 @@ Lista presupuestos del usuario autenticado, con filtros opcionales por mes y añ
 
 Filtros opcionales:
 
-- `month`
-- `year`
+- `month` (validado: 1–12)
+- `year` (validado: 2020–2100)
 
 Cuando se pasan `month` y `year`, antes de listar se generan las filas recurrentes
 pendientes de ese período (generación perezosa) — **también si el período ya está
@@ -760,20 +804,32 @@ cerrado**: este endpoint es el único caller de la generación que no acota al m
 (ver "Generación de presupuestos recurrentes" en la sección Dashboard). Sin filtros
 devuelve el historial completo sin generar nada.
 
+**Nota sobre filas heredadas:** `BudgetResponse` no revalida `month`/`year`/`currency` con
+los rangos/patrones de entrada; filas con valores fuera de rango (insertadas antes de la
+validación QA-023) se serializan sin 500 — el response model es tolerante a propósito
+(QA-023). La limpieza SQL recomendada: `DELETE FROM budgets WHERE month NOT BETWEEN 1 AND 12
+OR year NOT BETWEEN 2020 AND 2100`.
+
 ### `PUT /api/v1/budgets/{budget_id}`
 
 Actualiza un presupuesto existente (incluido `is_recurring` y `currency` — Fase 17 §17.2.5).
+Los mismos validadores de entrada que `POST`: `month` 1–12, `year` 2020–2100, `currency` `^[A-Z]{3}$`.
 
 Errores esperados:
 
 - `400` si el cambio deja `currency`/categoría/período ocupados por otro presupuesto activo
   (misma categoría, mes, año y moneda).
+- `422` si `month`/`year`/`currency` fuera de rango/patrón.
 - `404` si el presupuesto no existe o no pertenece al usuario autenticado.
 
 ### `DELETE /api/v1/budgets/{budget_id}`
 
 Elimina (lógicamente) un presupuesto del usuario autenticado. La categoría/período queda
 disponible para crear uno nuevo de inmediato.
+
+**Si el presupuesto es recurrente:** solo se elimina para ese mes; los meses siguientes
+se siguen generando desde la plantilla (la fila borrada sirve de "lápida" para su período
+— QA-024).
 
 ## Dashboard
 
@@ -977,8 +1033,12 @@ budgets/dashboard).
 
 ### `GET /api/v1/notifications/`
 
-Lista las notificaciones del usuario actual, más recientes primero, con paginación simple
-(`skip`/`limit`, mismo patrón que `GET /api/v1/transactions/`).
+Lista las notificaciones del usuario actual, más recientes primero, con paginación.
+
+Filtros opcionales:
+
+- `skip` (default: 0, validado `ge=0`)
+- `limit` (default: 50, validado `ge=1, le=1000`; `limit=0` o negativo → `422`; `limit>1000` → `422`)
 
 Salida (paginada):
 

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -63,8 +63,25 @@ def crear_presupuesto(
 
 @router.get("/", response_model=list[schemas.BudgetResponse])
 def obtener_presupuestos(
-    month: int | None = None,
-    year: int | None = None,
+    # Rangos copiados de `BudgetBase.month/year` (`app/schemas/budgets.py`), que es la
+    # frontera donde el mismo dato entra por el body de POST/PUT. Aquí se repiten porque
+    # acá también es entrada de usuario: `?month=13&year=99999` pasaba de largo, la
+    # generación perezosa clonaba las plantillas recurrentes a ese período basura, y como
+    # esas filas no se podían serializar (QA-023) el endpoint quedaba en 500 permanente —
+    # la página de presupuestos, en skeleton eterno. Mismo criterio que `MAX_DIGITS_MONEY`
+    # para el dinero: el límite se declara en el schema, no se deja que la base lo rechace.
+    #
+    # Por qué NO `core/periods.resolver_mes`, que es lo que usan los endpoints del
+    # dashboard: es más estricto de lo que este endpoint necesita en dos puntos.
+    #   (a) `resolver_mes` rechaza los meses FUTUROS, y el presupuesto anticipado es un
+    #       caso válido: `core/budget_alerts.py` evalúa umbrales de meses futuros de
+    #       presupuestos ya creados (se disparan con la fecha de la transacción).
+    #   (b) `resolver_mes` exige mandar `year` y `month` juntos o ninguno. Este endpoint
+    #       hoy tolera `month` solo o `year` solo, y los filtros son opcionales y
+    #       combinables (`backend/docs/BUSINESS_RULES.md`, sección "Presupuestos"): se
+    #       filtra por lo que venga y solo se genera cuando vienen los dos.
+    month: int | None = Query(None, ge=1, le=12, description="Mes del período a listar, entre 1 y 12"),
+    year: int | None = Query(None, ge=2020, le=2100, description="Año del período a listar"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -76,9 +93,9 @@ def obtener_presupuestos(
 
     query = db.query(models.Budget).filter(models.Budget.user_id == current_user.id)
 
-    if month:
+    if month is not None:
         query = query.filter(models.Budget.month == month)
-    if year:
+    if year is not None:
         query = query.filter(models.Budget.year == year)
 
     return query.all()

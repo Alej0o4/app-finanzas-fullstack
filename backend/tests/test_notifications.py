@@ -240,3 +240,19 @@ class TestNotificationsEliminar:
         # La leída del dueño real sigue intacta
         bandeja = client.get("/api/v1/notifications/", headers=auth_headers).json()
         assert bandeja["total"] == 1
+
+
+class TestPaginacionInvalida:
+    """QA-025 (paginación): `OFFSET -1` / `LIMIT -1` son error de sintaxis en Postgres, así
+    que un `skip`/`limit` negativo devolvía 500 en texto plano. Mismo guard que en
+    `GET /transactions` y `GET /accounts`."""
+
+    def test_paginacion_invalida_devuelve_422(self, client, auth_headers):
+        for params in ("skip=-1", "limit=-1", "limit=0", "limit=1001"):
+            response = client.get(f"/api/v1/notifications/?{params}", headers=auth_headers)
+            assert response.status_code == 422, f"{params} → {response.status_code} {response.text}"
+
+    def test_limit_en_el_tope_sigue_funcionando(self, client, auth_headers):
+        response = client.get("/api/v1/notifications/?limit=1000", headers=auth_headers)
+        assert response.status_code == 200, response.text
+        assert response.json() == {"items": [], "total": 0, "page": 1, "page_size": 1000}
