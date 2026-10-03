@@ -1,6 +1,6 @@
 # Spec — Fase 30: Semana calendario en Transacciones y deuda chica post-Fase 29
 
-> Sintetiza el `/grilling` del 2026-09-26, registrado en `docs/ROADMAP.md` §"Fase 30 — planificada"
+> Sintetiza el `/grilling` del 2026-09-26, registrado en `docs/archive/ROADMAP_fases_26-32.md` §"Fase 30 — planificada"
 > (decisiones **Q1–Q10** y 4 supuestos aceptados). Esas decisiones las tomó el dueño y esta spec
 > no las reabre. Las cita por su número y las baja a decisiones implementables **B** (backend),
 > **F** (frontend), **T** (testing) y **D** (docs), con la misma convención que `fase_29_spec.md`.
@@ -417,7 +417,7 @@ Sin migraciones: ningún cambio toca `models.py`.
 
 ## Decisiones resueltas con el usuario (2026-09-26)
 
-Todas vienen del `/grilling` (Q1–Q10 de `docs/ROADMAP.md`). Esta spec no abrió preguntas nuevas:
+Todas vienen del `/grilling` (Q1–Q10 de `docs/archive/ROADMAP_fases_26-32.md`). Esta spec no abrió preguntas nuevas:
 los hallazgos H1–H4 precisan cómo se implementan Q6 y Q8 sin cambiar lo decidido.
 
 ## Further Notes

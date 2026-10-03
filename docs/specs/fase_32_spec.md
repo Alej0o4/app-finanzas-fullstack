@@ -1,6 +1,6 @@
 # Spec — Fase 32: suite de tests sobre Postgres por defecto
 
-> Sintetiza el `/grilling` del 2026-09-27, registrado en `docs/ROADMAP.md` §"Fase 32"
+> Sintetiza el `/grilling` del 2026-09-27, registrado en `docs/archive/ROADMAP_fases_26-32.md` §"Fase 32"
 > (decisiones **Q1–Q10** y 6 supuestos aceptados), y el inventario de `docs/TODO.md`
 > §"Deuda nueva consciente de la Fase 31" (el ítem "Insumo de la Fase 32"). Esas decisiones
 > las tomó el dueño y esta spec no las reabre: las cita por su número y las baja a decisiones
@@ -541,7 +541,7 @@ Q3: `create_all` para la suite (rápido) y esta guardia para el drift.
   `postgres`. Describen el seam *actual*, no historia: si no se tocan, el próximo que grepee
   `test_concurrency` no encuentra nada. Las de `test_money_limits.py:6-7` y `:211-212` ya están
   en B7, y `docs/TODO.md:79` / `docs/CHANGELOG.md:20` se dejan como registro de la Fase 31.
-- Al cerrar: `docs/CHANGELOG.md` (3-5 líneas) y `docs/ROADMAP.md` §Fase 32 → "completada".
+- Al cerrar: `docs/CHANGELOG.md` (3-5 líneas) y `docs/archive/ROADMAP_fases_26-32.md` §Fase 32 → "completada".
 
 ## Testing Decisions
 
@@ -678,7 +678,7 @@ que pasó, no de lo que hay — mismo criterio que las specs).
 ## Decisiones resueltas con el usuario (2026-09-27 / 2026-09-28)
 
 - **Q1-Q10** las respondió el dueño en el `/grilling` del 2026-09-27, registrado en
-  `docs/ROADMAP.md` §Fase 32. Esta spec no las reabre: las implementa.
+  `docs/archive/ROADMAP_fases_26-32.md` §Fase 32. Esta spec no las reabre: las implementa.
 - Los marcadores `[NEEDS CLARIFICATION]` que se resuelvan después van aquí, reemplazando el
   marcador en su lugar.
 

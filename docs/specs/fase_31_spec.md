@@ -1,6 +1,6 @@
 # Spec — Fase 31: Corrección de los hallazgos de la QA 2026-09-26
 
-> Sintetiza el `/grilling` del 2026-09-27, registrado en `docs/ROADMAP.md` §"Fase 31 — planeada"
+> Sintetiza el `/grilling` del 2026-09-27, registrado en `docs/archive/ROADMAP_fases_26-32.md` §"Fase 31 — planeada"
 > (decisiones **Q1–Q16** y 3 supuestos aceptados), y los ítems `QA-001`…`QA-022` de
 > `docs/TODO.md` (reporte completo en `.scratch/qa-2026-09-26/REPORTE_QA.md`, no versionado).
 > Esas decisiones las tomó el dueño y esta spec no las reabre. Las cita por su número y las baja a
@@ -1022,7 +1022,7 @@ columna.
 
 ## Decisiones resueltas con el usuario (2026-09-27)
 
-Q1–Q16 vienen del `/grilling` (`docs/ROADMAP.md` §Fase 31) y no se reabren. Esta spec abrió una
+Q1–Q16 vienen del `/grilling` (`docs/archive/ROADMAP_fases_26-32.md` §Fase 31) y no se reabren. Esta spec abrió una
 pregunta nueva, a partir de H2, y el dueño confirmó además los seams de testing:
 
 - **B10** — comportamiento del `401` de refresh ante una rotación legítima de otra pestaña:

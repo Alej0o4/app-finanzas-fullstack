@@ -1,6 +1,6 @@
 # Spec — Fase 29: Navegación por mes en el dashboard y selector de moneda
 
-> Sintetiza el `/grilling` del 2026-09-26, registrado en `docs/ROADMAP.md` §"Fase 29 — en
+> Sintetiza el `/grilling` del 2026-09-26, registrado en `docs/archive/ROADMAP_fases_26-32.md` §"Fase 29 — en
 > definición" (decisiones **Q1–Q16** y 6 supuestos aceptados). Esas decisiones las tomó el dueño
 > y esta spec no las reabre. Las cita por su número y las baja a decisiones implementables
 > **B** (backend), **F** (frontend), **T** (testing) y **D** (docs), con la misma convención que
@@ -591,7 +591,7 @@ El paso 1 bloquea todo el backend y el 3 fija el contrato del que dependen el 8 
 
 ## Decisiones resueltas con el usuario (2026-09-26)
 
-Las decisiones Q1–Q16 y los supuestos 1–6 de `docs/ROADMAP.md` §"Fase 29 — en definición" se
+Las decisiones Q1–Q16 y los supuestos 1–6 de `docs/archive/ROADMAP_fases_26-32.md` §"Fase 29 — en definición" se
 resolvieron en el `/grilling` del 2026-09-26 y esta spec las toma como base.
 
 Los dos marcadores `[NEEDS CLARIFICATION]` de la primera versión se resolvieron el mismo día,
