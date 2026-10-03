@@ -55,31 +55,49 @@ a "fuera de scope" con este cambio; los demás se resolvieron en las Fases 23–
 
 ---
 
-## En curso — Flujo corto: cierre de la QA 2026-09-26 (2026-10-03)
+## En curso — Flujo corto: bugs de la segunda pasada de QA (2026-10-03)
 
-Los cuatro ítems que la Fase 31 dejó fuera a propósito (Q1) y que por tamaño no justifican fase
-ni spec: se hacen por el **flujo corto** de `docs/WORKFLOW.md` (bug → fix → test → `/run-tests` →
-`/code-review` → PR), sin `/grilling` ni `/to-spec`. Detalle y causa de cada uno en
-`docs/TODO.md` (sección "UX, estados de error y accesibilidad de la QA 2026-09-26").
+El flujo corto de QA-014/016/017/018 ya está mergeado. La segunda pasada del `qa-engineer`
+(352 tests en verde, lint limpio, saldos de las 65 cuentas dev cuadrados) encontró QA-023 a
+QA-033. Todo lo corregible sin decisión de producto se agrupa en **un solo flujo corto** de
+`docs/WORKFLOW.md` (fix → test → `/run-tests` → `/code-review` → PR), en este orden:
 
 **Estado: planificado, sin código tocado.** Se marca `[x]` al mergear.
 
 | Ítem | Qué se va a hacer | Lado |
 |---|---|---|
-| **QA-016** 🟡 | `seed.py` deja las cuentas descuadradas contra `opening_balance` (2.519.000 COP, 2.735 USD, −150.000 COP). Cuadrarlas con el seed. Hoy crea 76 transacciones y `AGENTS.md` dice 45: corregir el doc o el seed, lo que sea más simple. Con la base recién migrada, el seed corrido antes del primer arranque de uvicorn crea casi nada porque las categorías del sistema las siembra `main.py`: que el seed las cree si faltan, o documentar el orden. | backend + docs |
-| **QA-014** 🟡 | `ModalShell` sin `role="dialog"`, `aria-modal`, foco inicial ni trampa de foco; los botones editar/borrar de categoría no se ven con foco de teclado en escritorio. | frontend |
-| **QA-017** 🟢 | Hydration mismatch en `/settings` (solo se ve en dev). | frontend |
-| **QA-018** 🟢 | "Entretenimiento" desborda su casilla en `/capture` a 390 px; Flujo de Caja vacío sin mensaje; ~7 s en blanco ante un 404 de recurso ajeno; descripción obligatoria solo en el modal y no en `/capture`; "Último uso: Nunca" desactualizado en API keys. | frontend |
+| **QA-023** 🔴 | `GET /budgets/?month=&year=` sin validar crea presupuestos recurrentes basura (`month=13`, `year=99999`) y deja `GET /budgets/` en 500 para siempre (`/budgets` queda en skeleton eterno). Validar `month` 1–12 y `year` 2020–2100 con `Query(ge, le)` / `resolver_mes` (`budgets.py:74-75`); que `ensure_recurring_budgets_for_period` rechace períodos fuera de rango; estado de error visible en `budgets/page.tsx:58`. Test de regresión. Limpieza de datos basura en dev: `delete from budgets where month not between 1 and 12 or year not between 2020 and 2100` (solo `-p oikos-dev`). | backend + frontend |
+| **QA-024** 🔴 | Un presupuesto recurrente del mes en curso no se puede borrar: reaparece al recargar porque se re-clona desde la plantilla de otro mes. Al borrar una fila recurrente, apagar la recurrencia de la plantilla o guardar una marca de período saltado (decidir al implementar; la más simple que no requiera migración si se puede). Test: crear en mes previo → generar → borrar → no reaparece. | backend |
+| **QA-025** 🟠 | `limit`/`skip` negativos dan 500 en `/transactions/` y `/accounts/`; `limit` sin tope. `Query(ge=0)` y tope razonable. `currency` libre en `AccountBase`/`TransactionBase`/`BudgetBase`: patrón `^[A-Z]{3}$` (hoy `"zzzzzz"` da 500 por `varchar(3)`; verificar qué pasa con `""`, `"cop"`, `"XX"`). Tests de 422. | backend |
+| **QA-026** 🟡 | `PUT /transactions/{id}` borra la descripción si el cliente no la reenvía (`transactions.py:465`), a diferencia de `payment_method` y `date`. Conservar el valor cuando falta (distinguir ausente de `null` explícito). | backend |
+| **QA-027** 🟡 | `PUT /categories/{id}` permite cambiar el `type` con transacciones o presupuestos asociados. Bloquear el cambio de tipo en ese caso, igual que el delete (`DomainError` 409). Los reembolsos con categoría cruzada creados antes siguen siendo válidos. | backend |
+| **QA-028** 🟡 | `POST/PUT /categories/` acepta nombres en blanco y duplicados. `strip` + `min_length=1` y unicidad por usuario (entre activas, sin distinguir mayúsculas). Revisar si hay duplicados existentes antes de agregar una restricción en DB; preferir validación en la capa de API. | backend |
+| **QA-031** 🟢 | `PUT /transactions` con la cuenta anterior borrada daría `AttributeError` en `transactions.py:455`. Hoy no es alcanzable; agregar guarda defensiva + test unitario. | backend |
 
-Decisiones que se toman al implementar (no hay producto de por medio): cómo cuadrar el seed
-(QA-016) y si el desborde y la validación de descripción de QA-018 se unifican entre el modal y
-`/capture`. Si alguno resulta ser de producto, se para y se hace `/grilling` corto.
+Decisiones que se toman al implementar: mecanismo de QA-024 (plantilla vs. marca) y la política de
+unicidad de QA-028 (caso/espacios). Si alguna resulta ser de producto, se para y se hace
+`/grilling` corto.
 
-**Después, una segunda pasada del `qa-engineer`** (Playwright, desktop y 390×844) sobre el
-entorno dev aislado (`-p oikos-dev`, `:3001`/`:8001`) ya sembrado, para ver si encuentra algo
-nuevo antes de empezar la Fase 33. Con la suite en Postgres, los hallazgos entran a
-`docs/TODO.md` como `QA-023+` con severidad; lo que descuadre un saldo o impida entrar se corrige
-de inmediato, lo demás se agenda. Nunca contra el stack por defecto de Docker, que es producción.
+**Pendiente de verificar (la segunda pasada no lo cubrió):** escritura en la UI (crear/editar
+transacciones, onboarding con cuenta nueva, modales, estados de error y carga), push y alertas de
+presupuesto de punta a punta, y el borde domingo/lunes del resumen semanal. El MCP de Playwright no
+tiene Chromium instalado; el agente usó `playwright-core` de la caché de npx. Instalar el browser
+antes de la siguiente pasada, o verificar esos flujos a mano al cerrar este flujo corto.
+
+**Decisiones de producto separadas (no entran al flujo corto):**
+
+- **QA-029** 🟡 — Una cuenta de crédito no puede crearse con deuda inicial (`AccountCreate.balance`
+  exige `ge=0`); el seed solo logra −250.000 por vía interna. Decidir: permitir saldo negativo
+  solo en crédito, o un campo "deuda inicial".
+- **QA-030** 🟡 — No hay transferencias entre cuentas: mover dinero propio hay que registrarlo
+  como gasto + ingreso, lo que infla los KPI de flujo, la dona y las alertas. Decidir junto con
+  la fila "Reembolsos" del backlog (`/grilling` antes de spec).
+- **QA-032 / QA-033** 🟢 — Desfase UTC/Bogotá visible en el dashboard (ya aceptado) y tarjeta
+  "Balance" que ignora monedas distintas de la preferida sin advertencia. Candidatas a un aviso
+  discreto en UI; sin prioridad.
+
+Los hallazgos entran a `docs/TODO.md` como `QA-023+` al implementar. Nunca verificar contra el
+stack por defecto de Docker, que es producción.
 
 ---
 
@@ -113,7 +131,7 @@ en gastos periódicos conocidos, por eso van después.
 - [ ] **Deuda aceptada de las Fases 29–31**, sin fecha: filtro de cuentas destacadas
       inconsistente entre `summary` y el resto (decisión de producto), mes/semana en UTC frente a
       hora Bogotá (incluye la fecha por defecto del modal, que propone el día siguiente después
-      de las 19:00) y `GET /budgets/?month=&year=` en meses cerrados.
+      de las 19:00) y `GET /budgets/?month=&year=` en meses cerrados (con efecto de escritura; el caso de períodos inválidos es QA-023, en curso).
 - [ ] **Candidatas a flujo corto aparte** (observaciones de la QA que no son bugs): aviso en
       Ajustes de que el ingreso declarado se reinterpreta al cambiar la moneda principal, cobertura
       baja de `email.py`/`user_deletion.py`/`weekly_summary.py`, warnings de pytest (`SAWarning`,
