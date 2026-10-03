@@ -130,6 +130,14 @@ en gastos periódicos conocidos, por eso van después.
       inconsistente entre `summary` y el resto (decisión de producto), mes/semana en UTC frente a
       hora Bogotá (incluye la fecha por defecto del modal, que propone el día siguiente después
       de las 19:00) y `GET /budgets/?month=&year=` en meses cerrados (con efecto de escritura; el caso de períodos inválidos es QA-023, en curso).
+- [ ] **Apagar la recurrencia de un presupuesto desde la UI** (hallado al revisar el PR #11,
+      relacionado con QA-024; ya existía antes). Desmarcar "Repetir cada mes" en el mes actual
+      no detiene la serie: `ensure_recurring_budgets_for_period` clona desde la fila recurrente
+      más reciente de *otro* período, así que el mes siguiente se regenera desde una plantilla
+      anterior que el usuario no ve. Hoy la única forma de cortarla es editar esa fila vieja.
+      Flujo corto con `/grilling` corto primero: decidir si desmarcar corta la serie hacia
+      adelante desde ese mes (recomendado) o apaga toda la serie de la categoría. Test: serie
+      de 3 meses → desmarcar el actual → el siguiente no se genera.
 - [ ] **Candidatas a flujo corto aparte** (observaciones de la QA que no son bugs): aviso en
       Ajustes de que el ingreso declarado se reinterpreta al cambiar la moneda principal, cobertura
       baja de `email.py`/`user_deletion.py`/`weekly_summary.py`, warnings de pytest (`SAWarning`,
