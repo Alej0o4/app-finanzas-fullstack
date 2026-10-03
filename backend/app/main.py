@@ -55,6 +55,7 @@ def seed_default_categories() -> None:
     db = SessionLocal()
     try:
         ensure_default_categories(db)
+        db.commit()
     finally:
         db.close()
 

@@ -64,7 +64,8 @@ BASE_REGISTRATION_CATEGORY_NAMES = {
 
 
 def ensure_default_categories(db: Session) -> None:
-    """Crea/actualiza las categorías base (user_id NULL) sobre la sesión dada y commitea.
+    """Crea/actualiza las categorías base (user_id NULL) sobre la sesión dada y hace `flush()`; el commit
+    es del llamador (así el seed sigue siendo atómico).
 
     Compartida por el startup de la app (`main.seed_default_categories`) y `core/seed.py`
     (QA-016: el seed corrido antes del primer arranque no encontraba las categorías)."""
@@ -101,4 +102,4 @@ def ensure_default_categories(db: Session) -> None:
         else:
             db.add(models.Category(**category_data, user_id=None))
 
-    db.commit()
+    db.flush()
