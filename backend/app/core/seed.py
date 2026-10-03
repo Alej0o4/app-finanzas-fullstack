@@ -5,9 +5,11 @@ from decimal import Decimal
 from sqlalchemy import or_
 
 from app.core.database import SessionLocal
+from app.core.default_categories import ensure_default_categories
 from app.core.security import get_password_hash
 from app.core.user_deletion import delete_user_cascade
 from app.models import models
+from app.services.ledger import registrar_impacto
 
 # Cuántos meses hacia atrás cubre el seed, además del mes en curso (Fase 11, seguimiento:
 # antes las fechas estaban fijas en mayo-julio 2026 y quedaban "viejas" apenas cambiaba el
@@ -123,6 +125,9 @@ def run_seed():
         )
         db.add(user)
         db.flush()
+        # QA-016: las categorías del sistema las siembra el startup de la app; si el seed corre
+        # antes del primer arranque de uvicorn, las crea acá (misma función, idempotente).
+        ensure_default_categories(db)
         print(f"User created: id={user.id}")
 
         freelance = models.Category(name="Freelance", type="income", user_id=user.id)
@@ -134,6 +139,7 @@ def run_seed():
             name="Cuenta Principal",
             type="cash",
             balance=Decimal("14478000"),
+            opening_balance=Decimal("14478000"),
             currency="COP",
             user_id=user.id,
             highlighted=True,
@@ -142,6 +148,7 @@ def run_seed():
             name="Ahorros USD",
             type="debit",
             balance=Decimal("4615"),
+            opening_balance=Decimal("4615"),
             currency="USD",
             user_id=user.id,
             highlighted=True,
@@ -150,6 +157,7 @@ def run_seed():
             name="Tarjeta Crédito",
             type="credit",
             balance=Decimal("-250000"),
+            opening_balance=Decimal("-250000"),
             currency="COP",
             user_id=user.id,
         )
@@ -167,6 +175,11 @@ def run_seed():
                 transactions.append(tx)
 
         db.add_all(transactions)
+        db.flush()
+        # QA-016: `balance` arranca en `opening_balance` y cada transacción lo mueve por el
+        # mismo servicio que usa la API, así balance == opening_balance + neto.
+        for tx in transactions:
+            registrar_impacto(db, tx.account_id, tx.type, tx.amount)
         db.flush()
         print(f"Transactions created: {len(transactions)} (cubren hoy y los {MONTHS_BACK} meses anteriores)")
 

@@ -178,7 +178,7 @@ cuando el problema *es* testcontainers. Nunca contra el Postgres de compose:
 Solo contra dev o una DB descartable — nunca producción.
 `python -c "from app.core.seed import run_seed; run_seed()"` desde `backend/` (venv activo,
 `DATABASE_URL` apuntando a una DB que no sea producción), o el comando `-p oikos-dev` de arriba —
-crea 3 cuentas, 45 transacciones y 6 presupuestos bajo `test@test.com` / `testpass123`.
+crea 3 cuentas, 76 transacciones y 6 presupuestos bajo `test@test.com` / `testpass123`.
 
 ## Arquitectura
 

@@ -21,7 +21,7 @@ sola conexión— y con el esquema el aislamiento deja de depender del orden de 
 from collections.abc import Generator
 
 import pytest
-from sqlalchemy import Engine, create_engine, event, text
+from sqlalchemy import Engine, case, create_engine, event, func, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -166,3 +166,36 @@ def test_run_seed_twice_with_api_key_and_hidden_category_does_not_raise(engine_s
     # Con delete_user_cascade (que borra ApiKey e HiddenCategory ANTES de Category/User) la
     # segunda corrida pasa; con el borrado inline viejo lanza IntegrityError.
     run_seed()
+
+
+def test_run_seed_saldos_cuadran_con_opening_balance_mas_transacciones(engine_seed, monkeypatch):
+    """QA-016: balance == opening_balance + neto de transacciones, y el seed corre sobre una
+    base SIN categorías del sistema (las crea él mismo si faltan)."""
+    session_factory = sessionmaker(bind=engine_seed, autoflush=False, autocommit=False)
+    monkeypatch.setattr("app.core.seed.SessionLocal", session_factory)
+
+    run_seed()
+
+    db = session_factory()
+    try:
+        assert db.query(models.Category).filter(models.Category.user_id.is_(None)).count() > 0
+        cuentas = db.query(models.Account).all()
+        assert len(cuentas) == 3
+        for cuenta in cuentas:
+            neto = (
+                db.query(
+                    func.sum(
+                        case(
+                            (models.Transaction.type == "income", models.Transaction.amount),
+                            else_=-models.Transaction.amount,
+                        )
+                    )
+                )
+                .filter(models.Transaction.account_id == cuenta.id, models.Transaction.deleted_at.is_(None))
+                .scalar()
+            )
+            assert cuenta.balance == cuenta.opening_balance + neto, cuenta.name
+        # Sin categorías faltantes no se omite ninguna fila ni presupuesto.
+        assert db.query(models.Budget).count() == 6
+    finally:
+        db.close()

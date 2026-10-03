@@ -28,12 +28,11 @@ from app.api import (
 )
 from app.core.csrf import csrf_protection_middleware  # 🆕 Fase 26
 from app.core.database import SessionLocal
-from app.core.default_categories import DEFAULT_CATEGORIES, LEGACY_DEFAULT_CATEGORY_NAMES
+from app.core.default_categories import ensure_default_categories
 from app.core.exceptions import DomainError
 from app.core.logging_config import configure_logging, request_id_var
 from app.core.rate_limit import limiter
 from app.core.weekly_summary import run_weekly_summary_job
-from app.models import models
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -55,40 +54,7 @@ scheduler = BackgroundScheduler()
 def seed_default_categories() -> None:
     db = SessionLocal()
     try:
-        for category_data in DEFAULT_CATEGORIES:
-            existing_category = (
-                db.query(models.Category)
-                .filter(
-                    models.Category.user_id.is_(None),
-                    models.Category.name == category_data["name"],
-                    models.Category.type == category_data["type"],
-                )
-                .first()
-            )
-
-            if existing_category is None:
-                legacy_name = LEGACY_DEFAULT_CATEGORY_NAMES.get((category_data["type"], category_data["name"]))
-                if legacy_name:
-                    existing_category = (
-                        db.query(models.Category)
-                        .filter(
-                            models.Category.user_id.is_(None),
-                            models.Category.name == legacy_name,
-                            models.Category.type == category_data["type"],
-                        )
-                        .first()
-                    )
-
-                    if existing_category is not None:
-                        existing_category.name = category_data["name"]
-
-            if existing_category is not None:
-                if existing_category.icon != category_data.get("icon"):
-                    existing_category.icon = category_data.get("icon")
-            else:
-                db.add(models.Category(**category_data, user_id=None))
-
-        db.commit()
+        ensure_default_categories(db)
     finally:
         db.close()
 

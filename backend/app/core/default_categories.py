@@ -7,6 +7,10 @@ tanto `main.py` (seed de startup) como `api/users.py` (pre-siembra de ocultas en
 registro) importan.
 """
 
+from sqlalchemy.orm import Session
+
+from app.models import models
+
 DEFAULT_CATEGORIES = [
     {"name": "Alimentación", "type": "expense", "icon": "UtensilsCrossed"},
     {"name": "Transporte", "type": "expense", "icon": "Car"},
@@ -57,3 +61,44 @@ BASE_REGISTRATION_CATEGORY_NAMES = {
     "Salario",
     "Otros ingresos",
 }
+
+
+def ensure_default_categories(db: Session) -> None:
+    """Crea/actualiza las categorías base (user_id NULL) sobre la sesión dada y commitea.
+
+    Compartida por el startup de la app (`main.seed_default_categories`) y `core/seed.py`
+    (QA-016: el seed corrido antes del primer arranque no encontraba las categorías)."""
+    for category_data in DEFAULT_CATEGORIES:
+        existing_category = (
+            db.query(models.Category)
+            .filter(
+                models.Category.user_id.is_(None),
+                models.Category.name == category_data["name"],
+                models.Category.type == category_data["type"],
+            )
+            .first()
+        )
+
+        if existing_category is None:
+            legacy_name = LEGACY_DEFAULT_CATEGORY_NAMES.get((category_data["type"], category_data["name"]))
+            if legacy_name:
+                existing_category = (
+                    db.query(models.Category)
+                    .filter(
+                        models.Category.user_id.is_(None),
+                        models.Category.name == legacy_name,
+                        models.Category.type == category_data["type"],
+                    )
+                    .first()
+                )
+
+                if existing_category is not None:
+                    existing_category.name = category_data["name"]
+
+        if existing_category is not None:
+            if existing_category.icon != category_data.get("icon"):
+                existing_category.icon = category_data.get("icon")
+        else:
+            db.add(models.Category(**category_data, user_id=None))
+
+    db.commit()

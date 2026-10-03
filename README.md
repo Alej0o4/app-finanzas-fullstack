@@ -56,7 +56,7 @@ docker compose exec backend python -c "from app.core.seed import run_seed; run_s
 python -c "from app.core.seed import run_seed; run_seed()"
 ```
 
-Crea 3 cuentas, 45 transacciones y 6 presupuestos multi-moneda.
+Crea 3 cuentas, 76 transacciones y 6 presupuestos multi-moneda.
 
 ### Credenciales de prueba
 
