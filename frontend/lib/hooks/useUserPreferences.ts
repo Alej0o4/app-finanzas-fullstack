@@ -5,14 +5,26 @@ import { api } from '@/lib/api';
 import { haySesionActiva } from '@/lib/authSession';
 import { queryKeys } from '@/lib/queryKeys';
 import { useAppConfig } from '@/providers/AppConfigProvider';
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import type { PreferencesUpdatePayload, UserPreferences } from '@/types/api';
+
+const noopSubscribe = () => () => {};
 
 export function useUserPreferences() {
   const { updateConfig } = useAppConfig();
   const queryClient = useQueryClient();
 
-  const hasToken = haySesionActiva();
+  // QA-017: `haySesionActiva()` lee `document.cookie`, que no existe en el servidor. Usado
+  // directo en el render, `enabled` valía false al renderizar en el server y true al hidratar,
+  // así que `isLoading` (y el skeleton de /settings) difería entre ambos → hydration mismatch.
+  // `useSyncExternalStore` entrega el snapshot del servidor (false) durante la hidratación y
+  // recién después el valor real del cliente.
+  const hasToken = useSyncExternalStore(noopSubscribe, haySesionActiva, () => false);
+  const hydrated = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false
+  );
 
   const query = useQuery({
     queryKey: queryKeys.userPreferences(),
@@ -79,7 +91,9 @@ export function useUserPreferences() {
 
   return {
     preferences: query.data,
-    isLoading: query.isLoading,
+    // Hasta hidratar, `enabled` aún es false y `query.isLoading` también: se cuenta como carga
+    // para no parpadear el contenido por defecto antes de pedir las preferencias.
+    isLoading: query.isLoading || !hydrated,
     error: query.error,
     updatePreferences: mutation,
   };
