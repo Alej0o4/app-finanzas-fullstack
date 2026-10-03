@@ -30,7 +30,7 @@ mes y cuánto me queda?"*). Ambos conviven — los saldos de cuentas siguen visi
 secundaria — pero la cifra principal del dashboard es el flujo mensual
 (`monthly_income − gastos del mes`).
 
-**Las Fases 0–31 están completas** (2026-07-06 a 2026-09-27) — ver `docs/CHANGELOG.md` para la
+**Las Fases 0–32 están completas** (2026-07-06 a 2026-10-02) — ver `docs/CHANGELOG.md` para la
 historia completa y `docs/specs/fase_NN_spec.md` para el detalle de implementación de cada
 fase. En producción, no solo planeado: el dashboard de flujo, alertas de presupuesto + push
 notifications, el resumen semanal, el onboarding de 3 minutos, atajos móviles con API keys,
@@ -51,7 +51,11 @@ calendario (chip "Esta semana", UTC) y movió los totales KPI de Analytics al se
 los hallazgos del primer QA: `PUT`/`DELETE /transactions` con row-lock, `422` por rango de
 montos, rangos de mes semiabiertos, el balance de flujo del dashboard es siempre ingreso real −
 gasto real (`monthly_income` es solo una referencia visual), y el override de Docker para dev
-queda aislado de producción.
+queda aislado de producción. La Fase 32 (2026-10-02) movió el default de la suite de tests del
+backend a Postgres 16 desechable vía `testcontainers` (SQLite quedó como opt-in explícito), hizo
+que el marker `postgres` pasara a ser de aislamiento (`concurrencia`) y agregó una guardia que
+corre `alembic check`: editar `models.py` sin migración ahora falla en la suite, no en el `CMD`
+de Docker.
 
 Algunos hechos operativos de esa historia siguen vigentes hoy, no son solo registro:
 
@@ -136,23 +140,35 @@ corre ruff/eslint/prettier sobre lo que está en stage.
 ### Tests
 
 ```sh
-cd backend && pytest          # suite completa (SQLite en memoria, sin Docker/Postgres)
+cd backend && pytest          # suite completa (Postgres 16 desechable vía testcontainers — requiere Docker)
 cd backend && pytest -v       # verbose
 cd backend && pytest --cov    # con cobertura (pytest-cov)
 ```
 
-Postgres (Fase 31, T1): con `TEST_DATABASE_URL` definido, la suite corre contra Postgres
-(`drop_all`/`create_all` por sesión) y además corre los tests `@pytest.mark.postgres`
-(concurrencia real, overflow de `Numeric`, timezone de sesión — se saltan solos en SQLite). La
-suite **aborta** si el nombre de la DB no contiene `test`. Usar un contenedor descartable, nunca
-el Postgres de compose:
+Motor de la suite (Fase 32, I1): **Postgres 16 es el default** — `pytest` levanta y destruye un
+`postgres:16-alpine` desechable por sesión con `testcontainers` (la misma imagen que
+`docker-compose.yml`), y el header de la corrida dice con qué motor se corrió. Sin Docker la
+suite **aborta con exit code 2** y un mensaje con las tres salidas: nunca cae a SQLite en
+silencio ni se saltea entera. El único selector es `TEST_DATABASE_URL` — definida se usa tal
+cual (precedencia sobre testcontainers), y `TEST_DATABASE_URL=sqlite://` es el **opt-in
+offline**: mismo código, sin Docker, ejercita la rama SQLite de `engine_kwargs_for_url` (que es
+código de producción) y deja 10 tests en skip. La suite **aborta** si el nombre de la base no
+contiene `test` (guarda de QA-001; solo aplica a Postgres, una `sqlite://` en memoria no tiene
+nombre de base que proteger).
 
-```sh
-docker run -d --rm --name oikos-test-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=oikos_test \
-  -p 127.0.0.1:5433:5432 --tmpfs /var/lib/postgresql/data postgres:16-alpine
-cd backend && TEST_DATABASE_URL=postgresql://postgres:test@127.0.0.1:5433/oikos_test pytest
-docker stop oikos-test-pg
-```
+`@pytest.mark.concurrencia` (antes `postgres`) es de **aislamiento**, no de motor: marca lo que
+necesita sesiones reales por request — concurrencia real, overflow de `Numeric`, timezone de
+sesión y `TestUpdatedAt` — y se autoskippea en el opt-in SQLite con el motivo "requiere sesiones
+reales por request" (`pytest -rs` para leerlo). `tests/test_migrations.py` corre `alembic check`
+contra una base propia migrada a `head` y **falla si `models.py` y la cadena de migraciones
+divergen** (en los dos motores): editar un modelo sin migración ya no pasa la suite en verde para
+reventar recién en el `CMD` de Docker.
+
+Override del operador — correr la suite sin que testcontainers tenga el control, que es justo
+cuando el problema *es* testcontainers. Nunca contra el Postgres de compose:
+`docker run -d --rm --name oikos-test-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=oikos_test -p 127.0.0.1:5433:5432 --tmpfs /var/lib/postgresql/data postgres:16-alpine`, y después
+`cd backend && TEST_DATABASE_URL=postgresql://postgres:test@127.0.0.1:5433/oikos_test pytest`
+(`docker stop oikos-test-pg`).
 
 ### Datos de prueba (seed)
 
