@@ -120,7 +120,7 @@ export default function TransactionModal({
     if (errors.category) return categoryRef.current?.focus();
 
     createMutation.mutate({
-      description,
+      description: description.trim() || null,
       amount: Number(amount),
       type,
       date,
@@ -170,11 +170,10 @@ export default function TransactionModal({
 
         <Input
           label="Descripción"
-          required
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           className="bg-background"
-          placeholder="Ej. Almuerzo il forno..."
+          placeholder="Opcional"
         />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -47,13 +47,11 @@ export default function EditTransactionModal({
   // Fase 12 §12.8.3: errores por campo (no globo nativo del navegador) + foco en el primero.
   const [editErrors, setEditErrors] = useState<{
     amount?: string;
-    description?: string;
     accountId?: string;
     categoryId?: string;
     date?: string;
   }>({});
   const editAmountRef = useRef<HTMLInputElement>(null);
-  const editDescriptionRef = useRef<HTMLInputElement>(null);
   const editAccountRef = useRef<HTMLSelectElement>(null);
   const editCategoryRef = useRef<HTMLSelectElement>(null);
   const editDateRef = useRef<HTMLInputElement>(null);
@@ -98,21 +96,19 @@ export default function EditTransactionModal({
     const errors: typeof editErrors = {};
     const amountError = validateAmountText(editAmount);
     if (amountError) errors.amount = amountError;
-    if (!editDescription.trim()) errors.description = 'Ingresa una descripción.';
     if (!editAccountId) errors.accountId = 'Elige una cuenta.';
     if (!editCategoryId) errors.categoryId = 'Elige una categoría.';
     if (!editDate) errors.date = 'Ingresa una fecha válida.';
     setEditErrors(errors);
 
     if (errors.amount) return editAmountRef.current?.focus();
-    if (errors.description) return editDescriptionRef.current?.focus();
     if (errors.accountId) return editAccountRef.current?.focus();
     if (errors.categoryId) return editCategoryRef.current?.focus();
     if (errors.date) return editDateRef.current?.focus();
 
     onSave({
       id: transaction.id,
-      description: editDescription,
+      description: editDescription.trim() || null,
       amount: Number(editAmount),
       type: editType as 'income' | 'expense',
       date: editDate,
@@ -153,14 +149,12 @@ export default function EditTransactionModal({
         />
 
         <Input
-          ref={editDescriptionRef}
           label="Descripción"
           type="text"
-          required
           value={editDescription}
           onChange={(e) => setEditDescription(e.target.value)}
-          error={editErrors.description}
           className="bg-background"
+          placeholder="Opcional"
         />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

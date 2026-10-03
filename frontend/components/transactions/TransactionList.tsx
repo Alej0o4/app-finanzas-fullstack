@@ -86,7 +86,9 @@ export default function TransactionList({
                       {isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-text truncate text-sm font-medium">{tx.description}</p>
+                      <p className="text-text truncate text-sm font-medium">
+                        {tx.description || category?.name || 'Sin categoría'}
+                      </p>
                       <div className="text-text-muted mt-0.5 flex space-x-2 text-xs">
                         <span className="truncate">{account?.name || 'Cuenta eliminada'}</span>
                         <span className="hidden sm:inline">•</span>

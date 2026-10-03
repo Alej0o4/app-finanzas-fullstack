@@ -169,7 +169,7 @@ export interface UserPreferences {
 }
 
 export interface CreateTransactionPayload {
-  description: string;
+  description: string | null;
   amount: number;
   type: 'income' | 'expense';
   /** Opcional: si se omite, el backend la puebla con server_default=func.now(). */
@@ -182,7 +182,7 @@ export interface CreateTransactionPayload {
 
 export interface UpdateTransactionPayload {
   id: number;
-  description: string;
+  description: string | null;
   amount: number;
   type: 'income' | 'expense';
   date: string;

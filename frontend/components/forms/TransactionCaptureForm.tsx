@@ -122,7 +122,7 @@ export default function TransactionCaptureForm({
       : 'cash';
 
     createMutation.mutate({
-      description,
+      description: description.trim() || null,
       amount: Number(amount),
       type,
       account_id: Number(effectiveAccountId),

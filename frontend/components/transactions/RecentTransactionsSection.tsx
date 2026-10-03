@@ -6,6 +6,7 @@ import { AlertCircle, PieChart } from 'lucide-react';
 import Link from 'next/link';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useTransactions } from '@/lib/hooks/useTransactions';
+import { useCategories } from '@/lib/hooks/useCategories';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import Button from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
@@ -52,6 +53,11 @@ export default function RecentTransactionsSection({
   });
 
   const transactions = data?.items ?? [];
+  const { data: categories } = useCategories();
+  const categoryNames = useMemo(
+    () => new Map((categories ?? []).map((c) => [c.id, c.name])),
+    [categories]
+  );
 
   return (
     <div>
@@ -110,7 +116,9 @@ export default function RecentTransactionsSection({
                   className="hover:bg-surface-elevated flex items-center justify-between gap-3 p-3 transition-colors sm:gap-4 sm:p-4 sm:px-6"
                 >
                   <div className="min-w-0">
-                    <p className="text-text truncate text-sm font-medium">{tx.description}</p>
+                    <p className="text-text truncate text-sm font-medium">
+                      {tx.description || categoryNames.get(tx.category_id) || 'Sin categoría'}
+                    </p>
                     <p className="text-text-muted mt-0.5 text-xs capitalize">
                       {formatDate(tx.date, config.locale)}
                     </p>

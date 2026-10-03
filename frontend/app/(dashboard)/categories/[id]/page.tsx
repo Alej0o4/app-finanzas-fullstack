@@ -129,7 +129,7 @@ export default function CategoryDetailPage() {
 
     updateMutation.mutate({
       id: selectedTransaction.id,
-      description,
+      description: description.trim() || null,
       amount: Number(amount),
       type: type as 'income' | 'expense',
       date: transactionDate,
@@ -197,7 +197,9 @@ export default function CategoryDetailPage() {
                         {isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
                       </div>
                       <div>
-                        <p className="text-text text-sm font-medium">{tx.description}</p>
+                        <p className="text-text text-sm font-medium">
+                          {tx.description || category.name}
+                        </p>
                         <p className="text-text-muted mt-0.5 text-xs">
                           {account?.name || 'Cuenta eliminada'}
                         </p>
@@ -291,7 +293,7 @@ export default function CategoryDetailPage() {
 
             <Input
               label="Descripción"
-              required
+              placeholder="Opcional"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="bg-background"
