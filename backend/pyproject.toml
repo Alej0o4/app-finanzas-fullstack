@@ -28,5 +28,5 @@ indent-style = "space"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-  "postgres: requiere TEST_DATABASE_URL (Postgres desechable) — se salta automáticamente sin esa env var (Fase 31, T1).",
+  "concurrencia: requiere sesiones reales por request (Postgres) — se salta automáticamente en el opt-in SQLite, `TEST_DATABASE_URL=sqlite://` (Fase 32, B4; antes `postgres`).",
 ]
