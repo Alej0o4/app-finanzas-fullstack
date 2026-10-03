@@ -1,8 +1,8 @@
 """Test de `app/core/database.engine_kwargs_for_url` (Fase 31, T7 — parte SQLite, sin
-marker `postgres`: es una función pura, no necesita una conexión real para probarse).
+marker `concurrencia`: es una función pura, no necesita una conexión real para probarse).
 
 La parte Postgres de T7 (sesión realmente en UTC pese a un `ALTER DATABASE ... SET
-timezone`) vive en `tests/test_concurrency_pg.py`, marcada `postgres`.
+timezone`) vive en `tests/test_concurrency.py`, marcada `concurrencia`.
 """
 
 from app.core.database import engine_kwargs_for_url

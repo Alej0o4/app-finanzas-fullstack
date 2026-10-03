@@ -179,7 +179,7 @@ class TestConcurrencyGuardsSqlite:
     """T2 — QA-003 (B1, B2): regresión de `PUT`/`DELETE /transactions/{id}` bajo
     concurrencia. SQLite no soporta `FOR UPDATE` (Further Notes de la spec: "B1 solo
     protege de verdad en Postgres"); la protección real la prueba
-    `tests/test_concurrency_pg.py`, marcado `postgres`. Acá se prueban dos guardas sin
+    `tests/test_concurrency.py`, marcado `concurrencia` (Fase 32, B4). Acá se prueban dos guardas sin
     carrera real y una reproducción determinista del borrado condicional (segunda
     defensa, Q2) vía intercalado de sesión — mismo mecanismo que
     `test_race_condition_integrity_error_rolls_back_without_raising`

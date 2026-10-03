@@ -3,12 +3,20 @@
 Cubre ambas direcciones del riesgo del filtro global: que SÍ filtre lecturas en todos
 lados, y que NO interfiera donde no corresponde (los UPDATE de saldo llevan su filtro
 manual — Opción A de la Decisión 6.1).
+
+Desde la Fase 32 (B6) este archivo tiene una clase que NO usa el aislamiento por rollback de
+`db_session`: `TestUpdatedAt` corre sobre el seam de sesiones reales por request y está marcada
+`concurrencia`, así que se salta en el opt-in SQLite. El resto del archivo sigue con `client` /
+`db_session`. Consecuencia medida: las filas que crea ese test (incluido el presupuesto) no
+quedan para el resto de la sesión, porque el teardown del seam trunca las 13 tablas con
+`CASCADE` (hallazgo 13).
 """
 
 import time
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import update
 
@@ -305,15 +313,30 @@ class TestOwnershipUnderSoftDelete:
         assert edicion.status_code == 404
 
 
+@pytest.mark.concurrencia
 class TestUpdatedAt:
+    """Fase 32, B6 (Q4): la garantía es "leer no mueve `updated_at`, escribir sí", y solo se
+    puede comprobar sobre el seam de sesiones reales por request.
+
+    Con `db_session` el `INSERT` y el `PUT` comparten la transacción externa que abre ese
+    fixture, así que comparten también su `transaction_timestamp()`: en Postgres los dos
+    `updated_at` salían idénticos al microsegundo y el test fallaba. `now()` se queda como está
+    (producción abre una transacción por request, que es donde sí avanza) y el `sleep` se queda;
+    lo que cambia es dónde corre el `PUT`.
+
+    Marcado `concurrencia` por esa dependencia (opción A, resuelta con el dueño el 2026-09-28):
+    este test no corre en el opt-in SQLite y ese modo queda en 341 pasan / 10 skip. Se acepta a
+    propósito —el `TRUNCATE` del teardown del seam no tiene equivalente en SQLite (hallazgo 17)—,
+    y es coherente con la semántica del marker: lo que pide es aislamiento, no hilos."""
+
     def test_updated_at_changes_on_put_but_not_on_read(
-        self, db_session, client, auth_headers, make_account, make_category
+        self, real_client, real_session, real_register_and_login, real_make_account, real_make_category
     ):
-        """CURRENT_TIMESTAMP en SQLite tiene resolución de segundos: un solo sleep antes
-        de las mutaciones garantiza que los timestamps difieran de los de creación."""
-        cuenta = make_account(auth_headers, name="Cuenta ts")
-        categoria = make_category(auth_headers, name="Categoría ts", type="expense")
-        creada = client.post(
+        user = real_register_and_login(email="updated-at@example.com")
+        headers = user["headers"]
+        cuenta = real_make_account(headers, name="Cuenta ts")
+        categoria = real_make_category(headers, name="Categoría ts", type="expense")
+        creada = real_client.post(
             "/api/v1/transactions/",
             json={
                 "amount": "50.00",
@@ -321,10 +344,10 @@ class TestUpdatedAt:
                 "account_id": cuenta["id"],
                 "category_id": categoria["id"],
             },
-            headers=auth_headers,
+            headers=headers,
         ).json()
         month, year = _now_month_year()
-        presupuesto = client.post(
+        presupuesto = real_client.post(
             "/api/v1/budgets/",
             json={
                 "amount_limit": "900.00",
@@ -333,13 +356,16 @@ class TestUpdatedAt:
                 "year": year,
                 "category_id": categoria["id"],
             },
-            headers=auth_headers,
+            headers=headers,
         ).json()
 
         # updated_at es metadata de auditoría: los schemas de respuesta no la exponen,
-        # así que se verifica directo contra la fila.
+        # así que se verifica directo contra la fila — y por sesión REAL, no por `db_session`:
+        # esa vive en la transacción externa que la suite revierte y no ve los commits de
+        # `real_client`. La sesión de lectura puede haber empezado su transacción antes de los
+        # `PUT` y aun así verlos: READ COMMITTED toma un snapshot por sentencia.
         def _updated_at(tabla: str, fila_id: int):
-            return db_session.execute(
+            return real_session.execute(
                 sa.text(f"SELECT updated_at FROM {tabla} WHERE id = :id"), {"id": fila_id}
             ).scalar()
 
@@ -355,19 +381,24 @@ class TestUpdatedAt:
         # Leer no mueve updated_at
         assert _updated_at(*recursos["account"]) == iniciales["account"]
 
+        # El `sleep` sigue: sin él los `PUT` podrían caer dentro del mismo microsegundo que el
+        # `INSERT`. En SQLite además era lo que compensaba su `CURRENT_TIMESTAMP` de resolución
+        # de segundos, pero ese motor ya no corre este test (marker `concurrencia`).
         time.sleep(1.1)
 
-        client.put(
+        # Los 4 PUT por `real_client`: cada request abre y cierra su propia sesión, que es
+        # donde `now()` (=`transaction_timestamp()`) sí avanza.
+        real_client.put(
             f"/api/v1/accounts/{cuenta['id']}",
             json={"name": "Cuenta ts editada", "type": "cash", "highlighted": False},
-            headers=auth_headers,
+            headers=headers,
         )
-        client.put(
+        real_client.put(
             f"/api/v1/categories/{categoria['id']}",
             json={"name": "Categoría ts editada", "type": "expense"},
-            headers=auth_headers,
+            headers=headers,
         )
-        client.put(
+        real_client.put(
             f"/api/v1/transactions/{creada['id']}",
             json={
                 "amount": "60.00",
@@ -377,9 +408,9 @@ class TestUpdatedAt:
                 "account_id": cuenta["id"],
                 "category_id": categoria["id"],
             },
-            headers=auth_headers,
+            headers=headers,
         )
-        client.put(
+        real_client.put(
             f"/api/v1/budgets/{presupuesto['id']}",
             json={
                 "amount_limit": "950.00",
@@ -389,7 +420,7 @@ class TestUpdatedAt:
                 "category_id": categoria["id"],
                 "is_recurring": False,
             },
-            headers=auth_headers,
+            headers=headers,
         )
 
         finales = {nombre: _updated_at(tabla, fila_id) for nombre, (tabla, fila_id) in recursos.items()}

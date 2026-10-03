@@ -413,6 +413,9 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     solo en el modal (no en `/capture`); "Último uso: Nunca" desactualizado en API keys.
 
 - [ ] **Deuda nueva consciente de la Fase 31 (2026-09-27).**
+  - Resuelto en la Fase 32 (2026-10-02): el insumo de T10, marcado `[x]` abajo. Siguen abiertos
+    H11, el modal de edición propio de `/accounts/[id]` y `/categories/[id]`, y el de
+    `decimal_places`.
   - **H11** 🟢 — El filtro "hasta el día X" de `/transactions` convierte la fecha final a
     `T23:59:59` sin fracción, y Analítica manda `23:59:59.999Z`: un movimiento a las
     `23:59:59,5` UTC queda fuera del filtro. Misma familia que QA-019; candidato a flujo corto
@@ -421,12 +424,7 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     (no `EditTransactionModal`), con los mismos problemas que F2/F3 corrigieron en los modales
     compartidos: validación nativa sin error de campo y categoría visible ≠ enviada. Reusar
     `EditTransactionModal` ahí lo cierra.
-  - 🟢 Insumo de la Fase 32 (inventario de T10): con `TEST_DATABASE_URL` la suite da 1 falla
-    previa, solo en Postgres: `test_soft_delete.py::TestUpdatedAt::test_updated_at_changes_on_
-    put_but_not_on_read` — `now()` de Postgres es la hora de inicio de la transacción, y el
-    fixture `db_session` envuelve todo el test en una sola transacción, así que `updated_at`
-    no cambia tras el `PUT`. No es un bug de producción (cada request es su propia
-    transacción).
+  - [x] *(2026-10-02, Fase 32)* **Insumo de la Fase 32 (inventario de T10)** 🟢 — con `TEST_DATABASE_URL` la suite daba 1 falla previa, solo en Postgres: `test_soft_delete.py::TestUpdatedAt::test_updated_at_changes_on_put_but_not_on_read` — `now()` de Postgres es la hora de inicio de la transacción, y el fixture `db_session` envuelve todo el test en una sola transacción, así que `updated_at` no cambia tras el `PUT`. No era un bug de producción (cada request es su propia transacción). Resuelto en `docs/specs/fase_32_spec.md` B6: `TestUpdatedAt` pasó al seam de sesión real por request (el `INSERT` y los 4 `PUT` salen por transacciones propias) y quedó marcado `concurrencia`, así que hoy pasa en el default de Postgres — y no corre en el opt-in de SQLite, que es la consecuencia asumida (10 skips en vez de 9).
   - 🟢 Pydantic ignora ceros finales en `decimal_places` (`12.340` pasa en el backend), pero
     `lib/validateAmount.ts` cuenta los decimales escritos y lo rechaza en el cliente. Más
     estricto a propósito; anotado por si molesta.
@@ -612,6 +610,17 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 - [ ] CI/CD (lint + test + build en cada cambio).
 - [ ] Tests de frontend (Vitest + React Testing Library).
+- [ ] Paralelizar la suite del backend (`pytest-xdist`) — no instalado y bloqueado, no es falta de
+  ganas: `ALTER DATABASE … SET timezone` de los dos tests de timezone es **a nivel de base** y no
+  se aísla ni con esquemas por worker, el teardown del seam de sesiones reales hace `TRUNCATE` de
+  tablas globales y hay una sola base compartida. Paralelizar obligaría a un contenedor o un
+  `CREATE DATABASE` por worker, y ~2,5 min es tolerable para un gate manual. Decisión Q9 del
+  `/grilling` de la Fase 32 (`docs/specs/fase_32_spec.md`).
+- [ ] 🟢 Detector de fugas entre tests del seam real (Fase 32, review): es posicional —
+  `test_soft_delete.py:94` es hoy el único conteo global que delata una fuga de filas—, así que
+  un test nuevo que commitee datos sin pasar por `real_client`/`real_session` (cuyo teardown
+  trunca) contaminaría a los demás sin que nada lo avise. Un fixture `autouse` que verifique las
+  tablas vacías tras cada test `concurrencia` lo haría explícito. Sin urgencia: hoy no hay fuga.
 - [ ] Sincronización offline (las columnas `updated_at` de la Fase 8 la dejan preparada).
 
 ---

@@ -9,6 +9,16 @@
 
 ---
 
+## Fase 32 — Suite de tests sobre Postgres por defecto (2026-10-02)
+
+Fase de infraestructura de test (`docs/specs/fase_32_spec.md`, decisiones del `/grilling` Q1–Q10): la suite del backend pasa a correr contra el motor de producción. `cd backend && pytest` levanta y destruye un `postgres:16-alpine` desechable por sesión con `testcontainers` — **requiere Docker**; sin él la suite **aborta con exit code 2** y un mensaje con las tres salidas, nunca cae a SQLite en silencio ni se saltea entera. Sin cambios de contrato de API.
+
+**Tests:** SQLite sobrevive como opt-in explícito (`TEST_DATABASE_URL=sqlite://`, sin Docker) y una `TEST_DATABASE_URL` definida tiene precedencia sobre testcontainers; la guarda de QA-001 sigue abortando si el nombre de la base no contiene `test`. El marker `postgres` pasó a ser de aislamiento: `concurrencia` (10 tests que necesitan sesiones reales por request, autoskip en el opt-in SQLite con ese motivo), con fixtures `pg_*` → `real_*` y `tests/test_concurrency_pg.py` → `tests/test_concurrency.py`. `TestUpdatedAt` —el único test que fallaba en Postgres, inventariado en la Fase 31— pasó al seam de sesión real y ahora pasa; `test_seed.py` quedó aislado en un esquema propio. Nuevo `tests/test_migrations.py`: `alembic check` contra una base propia migrada a `head`, en los dos motores, así que editar `models.py` sin migración falla en la suite y no en el `CMD` de Docker. Suite: **351 pasan / 0 skip** en el default de Postgres, **341 pasan / 10 skip** en el opt-in de SQLite. El motor nuevo no destapó bugs nuevos (Q5).
+
+**Desviaciones registradas:** la User Story 11 (saber con qué motor corrió la suite) enunció el qué pero no dejó decisión implementable — salió como hook `pytest_report_header` en `conftest.py`, aislado en su propio commit para poder revertirlo. El motivo que la spec daba para el `AUTOCOMMIT` de `admin_engine` era incorrecto (`ALTER DATABASE … SET timezone` sí funciona dentro de una transacción; verificado contra `postgres:16-alpine`): se dejó igual porque simplifica los call sites, y el docstring dice lo que realmente aporta, que es `NullPool`. La guardia de drift no pudo reusar `admin_engine` (fixture de función contra un test de sesión, `ScopeMismatch`) y tiene su propio `_motor_de_administracion()`, con una nota de que dos motores de administración son la señal de que toca unificarlos.
+
+---
+
 ## Fase 31 — Corrección de los hallazgos de la QA 2026-09-26 (2026-09-27)
 
 Fase de bugs (`docs/specs/fase_31_spec.md`, decisiones del `/grilling` Q1–Q16): resuelve 17 de los 22 ítems de la QA (QA-001, 003–013, 015, 019–022); QA-014/016/017/018 quedan para flujo corto.

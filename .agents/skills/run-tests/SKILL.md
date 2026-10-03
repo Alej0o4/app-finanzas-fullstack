@@ -11,9 +11,14 @@ Oikos has no CI/CD configured yet (tracked in `docs/TODO.md` under "Solo si el p
 
 Run all of these from the repo root. Report failures grouped by suite; don't stop at the first failure — run everything and summarize.
 
-1. **Backend tests**:
+1. **Backend tests** (needs Docker: the suite starts and destroys a disposable
+   `postgres:16-alpine` per session via `testcontainers`):
    ```sh
    cd backend && ./venv/bin/pytest -v
+   ```
+   Offline opt-in, same code, skips the 10 `concurrencia` tests:
+   ```sh
+   cd backend && TEST_DATABASE_URL=sqlite:// ./venv/bin/pytest -v
    ```
 
 2. **Backend lint**:
@@ -34,5 +39,6 @@ Run all of these from the repo root. Report failures grouped by suite; don't sto
 ## Notes
 
 - There is no frontend test suite yet (Vitest + React Testing Library is backlog, see `docs/TODO.md`) and no `tsc` typecheck script configured — don't invent one, just note the gap if relevant.
+- With Docker down the backend suite aborts with exit code 2 (it never falls back to SQLite silently) — report that, don't route around it.
 - If `ruff format --check` or `pnpm format:check` fail, offer to run the writing variant (`ruff format .` / `pnpm format`) rather than hand-fixing formatting.
 - A failing test is not automatically a regression to fix silently — report what failed and let the user decide, unless they've asked you to fix as you go.
