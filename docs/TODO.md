@@ -383,14 +383,17 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     invertido sin aviso; durante reintentos los filtros desaparecen tras el skeleton.
   - [x] *(2026-09-27, Fase 31)* **QA-013** — Paso de ingreso del onboarding: negativo o vacío → "Continuar" no hace nada,
     sin mensaje (mismo patrón que Fase 12 §12.8 / Fase 24 §24.2).
-  - **QA-014** — `ModalShell` sin `role="dialog"` ni gestión/trampa de foco; los botones
+  - [x] *(2026-10-03, flujo corto)* **QA-014** — `ModalShell` sin `role="dialog"` ni gestión/trampa de foco; los botones
     editar/borrar categoría no son alcanzables visualmente con foco en escritorio.
-  - **QA-016** — `seed.py` deja las cuentas descuadradas contra `opening_balance`
+  - [x] *(2026-10-03, flujo corto)* **QA-016** — `seed.py` deja las cuentas descuadradas contra `opening_balance`
     (2.519.000 COP, 2.735 USD, −150.000 COP) y crea 76 transacciones, no las 45 que dice
     `CLAUDE.md`. Además, sobre una base recién migrada, el seed corrido *antes* del primer
     arranque de uvicorn crea solo 1 presupuesto y 9 transacciones: las categorías del sistema
     las siembra `main.py` al arrancar. Documentar el orden (arrancar backend, luego seed) o que
     el seed las cree si faltan.
+    Resuelto: el seed fija `opening_balance` y aplica cada transacción con `ledger.registrar_impacto`
+    (balance == opening + neto), llama a `ensure_default_categories` (extraída de `main.py` a
+    `core/default_categories.py`) y README/AGENTS.md dicen 76 transacciones. Test en `tests/test_seed.py`.
   - [x] *(2026-09-27, Fase 31)* **QA-019** 🟢 — El techo de un mes cerrado en `backend/app/core/periods.py:80` es
     `23:59:59` sin fracción: una transacción a las `23:59:59.xxx` UTC del último día desaparece
     de `summary` (y por lectura de código de `budgets-progress` y las alertas), mientras
@@ -407,8 +410,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     UTC. Con `timezone='America/Bogota'` en la base los buckets se corren un día y `summary`
     cambia de totales. La imagen `postgres:16-alpine` usa UTC por defecto; blindarlo es barato
     (`connect_args={"options": "-c timezone=UTC"}` en `database.py`).
-  - **QA-017** 🟢 — Hydration mismatch en `/settings` (solo dev).
-  - **QA-018** 🟢 — "Entretenimiento" desborda su casilla en `/capture` a 390 px; Flujo de Caja
+  - [x] *(2026-10-03, flujo corto)* **QA-017** 🟢 — Hydration mismatch en `/settings` (solo dev). Causa: `useUserPreferences` leía `document.cookie` en el render para `enabled`, distinto en server y cliente.
+  - [x] *(2026-10-03, flujo corto; (d) resuelto como "descripción opcional en todo", 2026-10-03)* **QA-018** 🟢 — "Entretenimiento" desborda su casilla en `/capture` a 390 px; Flujo de Caja
     vacío sin mensaje; ~7 s en blanco ante un 404 de recurso ajeno; descripción obligatoria
     solo en el modal (no en `/capture`); "Último uso: Nunca" desactualizado en API keys.
 
