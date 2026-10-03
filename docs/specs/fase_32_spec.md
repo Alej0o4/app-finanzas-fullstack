@@ -20,9 +20,12 @@
 **Estado:** spec escrita el 2026-09-28, con el único marcador `[NEEDS CLARIFICATION]` (B6)
 resuelto con el dueño ese mismo día: opción (A), marcar `TestUpdatedAt` con
 `@pytest.mark.concurrencia` y **asumir** que ese test no corre en el opt-in de SQLite (10 skips
-en ese modo, en vez de 9). Sin marcadores vivos y con `/analyze-spec` en modo
-pre-implementación sin hallazgos ALTO/MEDIO, la spec está **lista para implementar**
-(`docs/WORKFLOW.md` paso 4).
+en ese modo, en vez de 9). Sin marcadores vivos y con `/analyze-spec` en modo pre-implementación
+sin hallazgos ALTO/MEDIO, la spec quedó **lista para implementar** (`docs/WORKFLOW.md` paso 4).
+**Implementada y cerrada el 2026-10-02** (commits `b2dfa37`, `5eab603`, `3b648d3`, `e8cd646`): T1
+corrida en los dos motores con los conteos que la spec predijo — **351 pasan / 0 skip** en Postgres
+y **341 pasan / 10 skip** en el opt-in de SQLite. Desviaciones de la implementación registradas en
+"Desviaciones de la implementación" abajo.
 
 ---
 
@@ -689,6 +692,29 @@ que pasó, no de lo que hay — mismo criterio que las specs).
    el opt-in de SQLite existe para cubrir la rama SQLite de `engine_kwargs_for_url` (código de
    producción), no para dar paridad completa de suite. El marcador quedó reemplazado por la
    decisión en B6; el resto de la spec (conteos, marker, orden de ejecución) ya la asume.
+
+## Desviaciones de la implementación (2026-10-02)
+
+Tres, todas medidas durante la implementación y todas anotadas en el código cerca de donde
+importan. Ninguna cambió una decisión de esta spec.
+
+1. **User Story 11 no tenía decisión implementable.** La spec enunció el qué ("saber con qué motor
+   corrió la suite") y no el cómo. Salió como un hook `pytest_report_header` en `conftest.py` que
+   imprime el dialecto —y la imagen del contenedor, o el nombre de la base del operador, nunca
+   credenciales ni la URL completa—. Va en su propio commit (`e8cd646`) para poder revertirlo sin
+   tocar el resto. Se deduce del entorno, no levantando el contenedor: `pytest_report_header` corre
+   antes que cualquier fixture y hacerlo cobraría los ~9 s de arranque también en
+   `pytest --collect-only` (User Story 10, B1).
+2. **El motivo que daba B5 para el `AUTOCOMMIT` de `admin_engine` era incorrecto.**
+   `ALTER DATABASE … SET timezone` **sí** funciona dentro de una transacción — verificado contra
+   `postgres:16-alpine`. El `AUTOCOMMIT` se dejó igual porque simplifica los call sites (nada de
+   `conn.commit()` repetido en cada test), pero el docstring del fixture dice lo que realmente
+   aporta: **`NullPool`**, que garantiza una sesión nueva de verdad por `connect()` y es lo que
+   hace que el `SHOW timezone` de control mida el default actual de la base y no uno anterior.
+3. **La guardia de drift (B9) no pudo reusar `admin_engine`**: es un fixture de función y el test
+   es de sesión (`ScopeMismatch`). Tiene su propio `_motor_de_administracion()` local, con una
+   nota de que **si mañana hace falta otro motor de administración, la señal de que hay que
+   unificar los dos** es justamente este duplicado.
 
 ## Further Notes
 

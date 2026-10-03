@@ -102,8 +102,8 @@ La Fase 29 (navegación por mes + selector de moneda) se completó el 2026-09-26
 completada" abajo. La Fase 30 (chip "Esta semana" en Transacciones, KPIs de Analítica desde el
 backend y la deuda chica que dejó la Fase 29) también, el mismo día — ver "Fase 30 — completada".
 La Fase 31 (corrección de los hallazgos de la QA 2026-09-26) se completó el 2026-09-27 — ver
-"Fase 31 — completada". La Fase 32 (suite de tests sobre Postgres por defecto) hizo su `/grilling`
-el 2026-09-27 y está pendiente de `/to-spec` — ver "Fase 32" abajo.
+"Fase 31 — completada". La Fase 32 (suite de tests sobre Postgres por defecto) también, el
+2026-10-02 — ver "Fase 32 — completada".
 
 ---
 
@@ -401,18 +401,25 @@ decimal_places=2` en los schemas + overflow del saldo traducido a `ValidationErr
 
 ---
 
-## Fase 32 — planeada (2026-09-27): suite de tests sobre Postgres por defecto
+## Fase 32 — completada (2026-10-02): suite de tests sobre Postgres por defecto
 
-Sale de la Q3 del `/grilling` de la Fase 31. Hoy `backend/tests/conftest.py` corre siempre contra
-SQLite en memoria, mientras producción corre en Postgres 16, y esa diferencia dejó fuera de la
-suite a QA-003 (SQLite serializa las escrituras y no aplica `FOR UPDATE`) y QA-015 (SQLite no
-aplica `Numeric(14,2)`). Probar contra el mismo motor que producción es la práctica recomendada.
+Sale de la Q3 del `/grilling` de la Fase 31. Hasta esta fase `backend/tests/conftest.py` corría
+siempre contra SQLite en memoria, mientras producción corre en Postgres 16, y esa diferencia dejó
+fuera de la suite a QA-003 (SQLite serializa las escrituras y no aplica `FOR UPDATE`) y QA-015
+(SQLite no aplica `Numeric(14,2)`). Probar contra el mismo motor que producción es la práctica
+recomendada.
 
-**Estado: `/grilling` hecho el 2026-09-27** (decisiones Q1-Q10, tomadas por el dueño), pendiente de
-`/to-spec`. Esta sección queda como registro de ese grilling. Parte de lo que dejó la Fase 31:
-`conftest.py` ya acepta `TEST_DATABASE_URL` y la suite completa ya se había corrido una vez contra
-Postgres, así que el inventario de tests que fallan por diferencias de motor existía antes de
-empezar — y se volvió a medir para este grilling.
+**Estado: implementada y cerrada el 2026-10-02** — spec en `docs/specs/fase_32_spec.md`, resumen
+en `docs/CHANGELOG.md`. Historia previa: `/grilling` hecho el 2026-09-27 (decisiones Q1–Q10,
+tomadas por el dueño) y `/to-spec` escrito al día siguiente, sin marcadores abiertos (B6 resuelto
+con el dueño el 2026-09-28). Esta sección queda como registro de ese grilling y del terreno que se
+midió antes de implementar. Suite verificada en los dos motores (supuesto 6): **351 pasan / 0 skip**
+en el default de Postgres vía `testcontainers`, **341 pasan / 10 skip** en el opt-in
+`TEST_DATABASE_URL=sqlite://`. El motor nuevo no destapó bugs nuevos (Q5).
+
+Parte de lo que dejó la Fase 31: `conftest.py` ya aceptaba `TEST_DATABASE_URL` y la suite
+completa ya se había corrido una vez contra Postgres, así que el inventario de tests que fallan por
+diferencias de motor existía antes de empezar — y se volvió a medir para este grilling.
 
 ### Inventario medido (2026-09-27, contra HEAD)
 
@@ -483,7 +490,7 @@ Medido sobre un `postgres:16-alpine` desechable en tmpfs, con la receta de `AGEN
 | Q3 | ¿Schema por `create_all` o por `alembic upgrade head`? | **Las dos, con responsabilidades separadas**: `create_all` para la suite (rápido) + `alembic check` como test de sesión que falle si metadata y migraciones divergen. El valor real es el drift: hoy **nada** verifica que el head coincida con `models.py`, y un modelo editado sin migración pasa los 350 tests en verde y revienta en el `CMD` de Docker. |
 | Q4 | El único test que falla en Postgres | **Se arregla el test, no producción.** `updated_at` se queda con `now()`: en producción cada request es su propia transacción, así que el comportamiento real es correcto y no hay bug que corregir. La restricción que ata la solución: `now()` en Postgres es `transaction_timestamp()` y **no se puede avanzar dentro de una transacción**, así que el `PUT` del test tiene que ocurrir fuera de la transacción externa de `db_session` — por el seam de sesión real por request (Q6). El `time.sleep(1.1)` se queda: sigue siendo lo que garantiza que los timestamps difieran. Resuelto en `docs/specs/fase_32_spec.md` (B6, 2026-09-28): **un solo `TestUpdatedAt` sobre el seam real**, sin partirlo en dos tests — el `INSERT` y los 4 `PUT` salen por sesiones reales por request y la lectura de `updated_at` por una sesión aparte, así que el `PUT` queda fuera de la transacción externa de `db_session`. Al usar el seam, el test se marca `concurrencia` (Q6) y **no corre en el opt-in de SQLite**: ese modo queda en 10 skips en vez de 9. Se evaluó y se descartó un teardown dialect-aware (`TRUNCATE … CASCADE` vs `DELETE FROM`) para conservarlo en los dos motores, porque volvería el teardown del seam dependiente del dialecto y del orden de borrado por FKs. |
 | Q5 | Si el motor nuevo destapa bugs reales, ¿entran en la fase? | **Se anotan en `docs/TODO.md` con severidad**, no se arreglan acá. Excepción: si descuadra un saldo o rompe el login, entra igual — mismo criterio del pivote 2026-09-19 ("algo está roto de verdad" y las dos garantías centrales). La fase 32 es de infraestructura de test; mezclarla con fixes de dominio la hace inejecutable. |
-| Q6 | El seam `pg_*` y el marker `postgres` | El marker **deja de ser de motor y pasa a ser de aislamiento**: `postgres` → `concurrencia`, fixtures `pg_*` → `real_*`, `test_concurrency_pg.py` → `test_concurrency.py`, y `test_money_limits.py:206` al marker nuevo. En modo SQLite se autoskippea con razón explícita ("requiere sesiones reales por request"), no porque le falte el motor. Con Postgres como default, un marker llamado `postgres` que dice "requiere Postgres" es redundante y garantiza que alguien lo skipee creyéndolo opcional. De paso, `test_concurrency_pg.py` deja de leer `os.environ["TEST_DATABASE_URL"]` y usa el fixture `engine`. |
+| Q6 | El seam `pg_*` y el marker `postgres` | El marker **deja de ser de motor y pasa a ser de aislamiento**: `postgres` → `concurrencia`, fixtures `pg_*` → `real_*`, `test_concurrency_pg.py` → `test_concurrency.py`, y `test_money_limits.py:206` al marker nuevo. En modo SQLite se autoskippea con razón explícita ("requiere sesiones reales por request"), no porque le falte el motor. Con Postgres como default, un marker llamado `postgres` que dice "requiere Postgres" es redundante y garantiza que alguien lo skipee creyéndolo opcional. De paso, `test_concurrency_pg.py` deja de leer `os.environ["TEST_DATABASE_URL"]`. **Corregido al implementar:** no usa el fixture `engine` sino el de URL resuelta (`test_db_url`, para el nombre de la base) más un `admin_engine` nuevo (`NullPool` + `AUTOCOMMIT`), porque el `engine` de la suite no sirve ni para el `ALTER DATABASE` ni para garantizar la conexión nueva de verdad que necesita el `SHOW timezone` de control — ver B5 en `docs/specs/fase_32_spec.md`. |
 | Q7 | ¿Cómo se pide explícitamente el modo SQLite? | **`TEST_DATABASE_URL=sqlite://`**, reusando la variable existente — cero conceptos nuevos, y la precedencia queda uniforme. La guarda de `conftest.py:42-53` pasa a aplicar **solo a URLs de Postgres**: existe para proteger una base real del `drop_all`, y una `sqlite://` no tiene nombre de base que proteger. Regla final: si hay `TEST_DATABASE_URL`, se usa tal cual; si no, testcontainers. |
 | Q8 | `test_seed.py` y la aplicación de foreign keys | **Engine propio parametrizado por el dialecto activo**, con el `PRAGMA foreign_keys=ON` solo en SQLite. Lo que el test necesita es una *capacidad* (FKs aplicadas), no un motor: Postgres la da gratis, SQLite hay que pedirla. Usar el `engine` de la suite lo volvería **vacuo en modo SQLite** — el mismo falso verde que su propio docstring quiere evitar. |
 | Q9 | `pytest-xdist` / paralelismo | **Fuera de la fase**, anotado en `docs/TODO.md` con el porqué. No está instalado y la suite no es paralelizable tal como está: `TRUNCATE` de tablas globales en el teardown de `pg_client`, una sola base compartida, y sobre todo `ALTER DATABASE … SET timezone` (a nivel de **base**) en los dos tests de timezone — eso no se aísla ni con esquemas por worker. Paralelizar obligaría a un contenedor o un `CREATE DATABASE` por worker. ~2.5 min es tolerable para un gate manual. |
