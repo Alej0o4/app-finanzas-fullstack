@@ -113,6 +113,19 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
 - `DELETE /api/v1/categories/{category_id}/hide` (Fase 18 §18.3) — la vuelve visible (204,
   idempotente).
 
+**Validaciones de entrada (QA-028):**
+- `name`: obligatorio, 1–100 caracteres. `strip` + no vacío — `"   "` → `422`.
+- `type`: `income | expense`
+
+**Unicidad por usuario y `type` (QA-028):** el nombre normalizado (NFKD→ascii→strip→lower)
+no puede repetirse entre las categorías **propias y activas** del mismo usuario **del mismo
+`type`**. `400` si se intenta crear/editar con nombre duplicado. Las categorías de sistema
+no bloquean (el resolver prioriza la propia).
+
+**Cambio de `type` bloqueado (QA-027):** `PUT` con `type` distinto al actual → `409` si la
+categoría tiene transacciones o presupuestos activos asociados. Editar solo el `name` o
+mantener el `type` no se bloquea.
+
 ### Transacciones
 
 - `GET /api/v1/transactions/`
@@ -122,8 +135,8 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
 
 Filtros soportados por el feed:
 
-- `skip` (default: 0)
-- `limit` (default: 100, usado internamente: 50)
+- `skip` (default: 0, validado `ge=0`)
+- `limit` (default: 100, usado internamente: 50; validado `ge=1, le=1000`; `limit=0` o negativo → `422`; `limit>1000` → `422`)
 - `account_id`
 - `category_id`
 - `start_date`
@@ -141,6 +154,11 @@ El endpoint devuelve una respuesta paginada:
 Concurrencia sobre `PUT`/`DELETE` (Fase 31, Decisión B1, QA-003): dos peticiones simultáneas
 sobre la misma transacción se serializan — una segunda petición sobre una transacción que otra
 ya borró (también en simultáneo) recibe `404` y no vuelve a mover el saldo.
+
+**Actualización parcial en `PUT` (QA-026):** se usa `model_fields_set` para distinguir
+"ausente" de `null` explícito — ausente conserva, `null` limpia. Aplica a `description` y
+`payment_method` (la web siempre manda `description`; `payment_method` ausente conserva,
+`null` limpia). `date` no acepta `null` explícito (el response exige `datetime` no opcional).
 
 Body de creación (`POST`) desde Fase 16 §16.2:
 
@@ -182,6 +200,18 @@ ignoran.
 - `POST /api/v1/budgets/`
 - `PUT /api/v1/budgets/{budget_id}`
 - `DELETE /api/v1/budgets/{budget_id}`
+
+**Validaciones de entrada (QA-023/QA-025):**
+- `month`: 1–12 (`Query(ge=1, le=12)`); `year`: 2020–2100 (`Query(ge=2020, le=2100)`).
+- `currency`: código ISO 4217 de 3 letras mayúsculas (`^[A-Z]{3}$`) — `"zzzzzz"`, `""`, `"cop"`, `"XX"` → `422`.
+
+**Respuesta tolerante (QA-023):** `BudgetResponse` no revalida `month`/`year`/`currency` con los
+rangos/patrones de entrada; filas heredadas con valores fuera de rango se serializan sin 500.
+El response model es tolerante a propósito.
+
+**Lápida de borrado (QA-024):** `DELETE` de un recurrente solo elimina ese mes; la recurrencia
+sigue en los meses siguientes (la fila borrada sirve de "lápida" para su período). El confirm
+en el frontend dice: "Se borra solo el de este mes; los meses siguientes se siguen generando."
 
 ### Dashboard
 
@@ -262,6 +292,10 @@ Todos requieren `Bearer` y devuelven los timestamps en ISO 8601.
   paginada con el mismo shape que transacciones. Los consumidores usan `limit=50` (la lista
   completa de la bandeja) — sin paginación "load more": el popover muestra las primeras 50.
   Devuelve `PaginatedResponse<AppNotification>`.
+
+**Validación de paginación (QA-025):**
+- `skip` (default: 0, validado `ge=0`)
+- `limit` (default: 50, validado `ge=1, le=1000`; `limit=0` o negativo → `422`; `limit>1000` → `422`)
 - `GET /api/v1/notifications/unread-count` — `{ "count": number }` para el badge de la
   campana. Es la única query con `refetchInterval` corto (60 s, Decisión 13.5.4): un
   `COUNT(*)` barato en el backend; el badge no dispara la query de lista completa.
