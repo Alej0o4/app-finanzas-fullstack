@@ -8,7 +8,7 @@ autenticados, sin vector de abuso nuevo — mismo criterio que budgets/dashboard
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
@@ -23,8 +23,11 @@ router = APIRouter()
 
 @router.get("/", response_model=schemas.PaginatedResponse[schemas.NotificationResponse])
 def listar_notificaciones(
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    # Tope de 1000 (QA-025), mismo criterio que GET /transactions: sin `le`, un cliente
+    # puede pedir la bandeja entera con un `limit` enorme. La bandeja personal es chica
+    # (presupuestos + resumen semanal), así que el tope nunca se nota en el uso real.
+    limit: int = Query(50, ge=1, le=1000),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -42,7 +45,9 @@ def listar_notificaciones(
         .all()
     )
 
-    page = (skip // limit) + 1 if limit > 0 else 1
+    # Con `ge=1` (QA-025) la división ya nunca es por cero — el `if limit > 0 else 1` de
+    # antes solo estaba para defenderse de un `limit=0` que el schema ahora rechaza con 422.
+    page = (skip // limit) + 1
 
     return schemas.PaginatedResponse(
         items=notificaciones,

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
@@ -34,8 +34,12 @@ def crear_cuenta(
 
 @router.get("/", response_model=list[schemas.AccountResponse])
 def obtener_cuentas(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    # Tope de 200 (QA-025): más chico que el de transacciones (1000) a propósito — el
+    # frontend NUNCA pagina esta lista (la pide entera) y la usa para los selectores de
+    # moneda y de cuenta, así que un `limit` enorme solo sirve para que un cliente se
+    # descargue la tabla completa en una request.
+    limit: int = Query(100, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):

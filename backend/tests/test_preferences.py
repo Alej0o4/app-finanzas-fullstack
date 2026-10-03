@@ -14,6 +14,7 @@ explícitamente.
 
 from decimal import Decimal
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.models import models
@@ -174,4 +175,32 @@ class TestApplyToDefaultAccount:
         assert response.status_code == 200, response.text
 
         principal = self._get_default_account(client, headers)
+        assert principal["currency"] == "COP"
+
+
+class TestPreferredCurrencyInvalida:
+    """QA-025 (moneda): `User.preferred_currency` es `String(3)`, y este PATCH además
+    cascada la moneda a la cuenta por defecto (Fase 22, Decisión A5) — un valor fuera de
+    patrón se propagaba a las dos columnas y, en la base, era un 500
+    (`StringDataRightTruncation` es un `DataError` sin capturar). El patrón `^[A-Z]{3}$`
+    va en el schema de request; sin normalizar, "cop" en minúsculas es 422."""
+
+    @pytest.mark.parametrize("currency", ["zzzzzz", "", "cop", "XX"])
+    def test_currency_invalida_devuelve_422(self, client, register_and_login, currency):
+        # Un solo email para los cuatro parámetros: cada caso es un test con su propia
+        # transacción (el fixture `db_session` la revierte al final), así que no colisiona
+        # con el índice único de `users.email`.
+        user = register_and_login(email="moneda-invalida@example.com")
+
+        response = client.patch(
+            "/api/v1/users/me/preferences",
+            json={"preferred_currency": currency, "apply_to_default_account": True},
+            headers=user["headers"],
+        )
+
+        assert response.status_code == 422, f"{currency!r} → {response.status_code} {response.text}"
+        # Ni la preferencia ni la cuenta por defecto se tocaron.
+        me = client.get("/api/v1/users/me", headers=user["headers"])
+        assert me.json()["preferred_currency"] == "COP"
+        principal = TestApplyToDefaultAccount._get_default_account(client, user["headers"])
         assert principal["currency"] == "COP"

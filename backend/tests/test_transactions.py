@@ -1,7 +1,9 @@
 """Tests del módulo contable: transacciones y su impacto en `Account.balance`.
 
 Alcance de Fase 7 §4.2: "solo la lógica que mueve dinero" — no cobertura completa de
-`transactions.py` (paginación, filtros de fecha, etc. quedan fuera).
+`transactions.py` (paginación, filtros de fecha, etc. quedan fuera), más lo que añadieron
+los fixes de QA: `PUT` parcial (QA-026), moneda y paginación (QA-025) y el `PUT` con la
+cuenta de origen ya borrada (QA-031).
 """
 
 import hashlib
@@ -9,6 +11,7 @@ import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import sqlalchemy as sa
 from fastapi.testclient import TestClient
 from sqlalchemy import event, update
 
@@ -20,6 +23,16 @@ def _get_account(client: TestClient, headers: dict, account_id: int) -> dict:
     response = client.get(f"/api/v1/accounts/{account_id}", headers=headers)
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def _saldo_crudo(db_session, account_id: int) -> Decimal:
+    """Saldo leído por SQL crudo. Necesario para filas soft-deleted: el filtro global de
+    `core/database.py` las esconde tanto a las queries ORM como a un `select()` Core
+    (con `with_loader_criteria`acting sobre cualquier statement con entidades ORM), y el
+    objeto del identity map guarda el valor anterior al UPDATE — el ledger muta por Core
+    SQL. Mismo patrón que `tests/test_ledger.py::_raw_balance`."""
+    balance = db_session.execute(sa.text("SELECT balance FROM accounts WHERE id = :id"), {"id": account_id}).scalar()
+    return Decimal(str(balance))
 
 
 def _create_transaction(client: TestClient, headers: dict, **overrides) -> dict:
@@ -533,6 +546,231 @@ class TestPaymentMethod:
         assert creada.json()["payment_method"] is None
 
 
+class TestUpdateParcialOpcionales:
+    """QA-026: `PUT /transactions/{id}` actualiza de verdad solo los campos presentes en el
+    body — ausente conserva, `null` explícito limpia. Antes `description` se asignaba siempre
+    (`transaccion_db.description = transaccion_actualizada.description`), así que un cliente
+    API que mandara un payload parcial —un atajo móvil, una captura por nombre— borraba la
+    descripción sin querer. `payment_method` conservaba pero no limpiaba: el `null` explícito
+    se ignoraba en silencio."""
+
+    def _creada(self, client, headers, cuenta, categoria, **overrides) -> dict:
+        payload = {
+            "amount": "100.00",
+            "type": "expense",
+            "description": "descripción original",
+            "payment_method": "card",
+            "account_id": cuenta["id"],
+            "category_id": categoria["id"],
+        }
+        payload.update(overrides)
+        creada = _create_transaction(client, headers, **payload).json()
+        assert creada["description"] == "descripción original"
+        assert creada["payment_method"] == "card"
+        return creada
+
+    def _put(self, client, headers, transaction_id: int, cuenta, categoria, **overrides):
+        payload = {
+            "amount": "150.00",
+            "type": "expense",
+            "currency": "COP",
+            "account_id": cuenta["id"],
+            "category_id": categoria["id"],
+        }
+        payload.update(overrides)
+        return client.put(f"/api/v1/transactions/{transaction_id}", json=payload, headers=headers)
+
+    def test_put_sin_description_conserva_la_descripcion(self, client, auth_headers, make_account, make_category):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        creada = self._creada(client, auth_headers, cuenta, categoria)
+
+        response = self._put(client, auth_headers, creada["id"], cuenta, categoria)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["description"] == "descripción original"
+
+    def test_put_con_description_null_la_limpia(self, client, auth_headers, make_account, make_category):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        creada = self._creada(client, auth_headers, cuenta, categoria)
+
+        response = self._put(client, auth_headers, creada["id"], cuenta, categoria, description=None)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["description"] is None
+
+    def test_put_sin_payment_method_lo_conserva(self, client, auth_headers, make_account, make_category):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        creada = self._creada(client, auth_headers, cuenta, categoria)
+
+        response = self._put(client, auth_headers, creada["id"], cuenta, categoria)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["payment_method"] == "card"
+
+    def test_put_con_payment_method_null_lo_limpia(self, client, auth_headers, make_account, make_category):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        creada = self._creada(client, auth_headers, cuenta, categoria)
+
+        response = self._put(client, auth_headers, creada["id"], cuenta, categoria, payment_method=None)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["payment_method"] is None
+
+    def test_put_sin_description_no_toca_la_fecha_ni_el_saldo(self, client, auth_headers, make_account, make_category):
+        """El resto del PUT sigue siendo un PUT completo: lo que no se toca es solo lo que
+        el cliente no mandó. El saldo se recalcula contra el monto nuevo (100 → 150)."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        creada = self._creada(client, auth_headers, cuenta, categoria)
+        fecha_original = creada["date"]
+
+        response = self._put(client, auth_headers, creada["id"], cuenta, categoria)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["date"] == fecha_original
+        assert Decimal(str(_get_account(client, auth_headers, cuenta["id"])["balance"])) == Decimal("850.00")
+
+
+class TestPutConCuentaAnteriorBorrada:
+    """QA-031: `PUT /transactions/{id}` con la cuenta de ORIGEN ya borrada (soft-delete).
+
+    Hoy es inalcanzable por la API —`eliminar_cuenta` bloquea borrar una cuenta con
+    transacciones— pero la fila se puede llegar a tener así (un borrado manual, un script, o
+    el futuro de la fila si el guard cambia). El código viejo hacía una query para traer la
+    cuenta vieja y usaba `cuenta_vieja.id`: con la fila borrada devolvía `None` y el `.id`
+    reventaba con `AttributeError` → 500. El fix pasa `transaccion_db.account_id` directo,
+    que por construcción ES el mismo id, así que el saldo de la cuenta desaparecida
+    conserva su valor obsoleto (filtro `deleted_at IS NULL` de `ledger.aplicar_delta`,
+    Decisión 6.1) y el saldo de la cuenta destino se calcula de verdad."""
+
+    def test_put_con_cuenta_anterior_borrada_no_revienta(
+        self, client, db_session, auth_headers, make_account, make_category
+    ):
+        cuenta_vieja = make_account(auth_headers, name="Cuenta que desaparece", balance="1000.00")
+        cuenta_nueva = make_account(auth_headers, name="Cuenta destino", balance="500.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        creada = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            description="gasto que se mueve de cuenta",
+            account_id=cuenta_vieja["id"],
+            category_id=categoria["id"],
+        ).json()
+
+        # Se fuerza el invariante por SQL crudo (el filtro global de soft-delete oculta la
+        # fila a las queries ORM, y la API no tiene ruta para llegar acá) — mismo patrón que
+        # `tests/test_ledger.py::TestAplicarDelta.test_cuenta_soft_deleted_no_cambia_su_balance`.
+        db_session.execute(
+            sa.text("UPDATE accounts SET deleted_at = CURRENT_TIMESTAMP WHERE id = :id"), {"id": cuenta_vieja["id"]}
+        )
+        db_session.commit()
+
+        response = client.put(
+            f"/api/v1/transactions/{creada['id']}",
+            json={
+                "amount": "100.00",
+                "currency": "COP",
+                "type": "expense",
+                "description": "gasto que se mueve de cuenta",
+                "account_id": cuenta_nueva["id"],
+                "category_id": categoria["id"],
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["account_id"] == cuenta_nueva["id"]
+
+        # El saldo de la cuenta nueva se aplicó de verdad (500 - 100), y el de la borrada
+        # quedó con su valor obsoleto (1000 - 100), sin reventar.
+        assert Decimal(str(_get_account(client, auth_headers, cuenta_nueva["id"])["balance"])) == Decimal("400.00")
+        assert _saldo_crudo(db_session, cuenta_vieja["id"]) == Decimal("900.00")
+
+
+class TestCurrencyInvalida:
+    """QA-025 (moneda): `TransactionBase.currency` es `String(3)` en el modelo, así que un
+    valor más largo llegaba al INSERT y volvía como 500 (`StringDataRightTruncation` es un
+    `DataError`). Ahora el patrón `^[A-Z]{3}$` vive en el schema de REQUEST."""
+
+    @staticmethod
+    def _payload(cuenta, categoria, **overrides) -> dict:
+        payload = {
+            "amount": "100.00",
+            "type": "expense",
+            "account_id": cuenta["id"],
+            "category_id": categoria["id"],
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_currency_invalida_devuelve_422(self, client, auth_headers, make_account, make_category):
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+
+        for currency in ("zzzzzz", "", "cop", "XX"):
+            response = client.post(
+                "/api/v1/transactions/",
+                json=self._payload(cuenta, categoria, currency=currency),
+                headers=auth_headers,
+            )
+            assert response.status_code == 422, f"{currency!r} → {response.status_code} {response.text}"
+
+    def test_cuenta_con_moneda_rara_no_rompe_el_get(
+        self, client, db_session, auth_headers, make_account, make_category
+    ):
+        """El response NO revalida el patrón: una cuenta con `currency="ZZ"` (que `String(3)`
+        acepta) tiene que poder listarse y leerse, no devolver 500. Regresión del modo de
+        falla de QA-023 con los budgets: un `ResponseValidationError` deja el endpoint
+        caído para siempre."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        categoria = make_category(auth_headers, name="Comida", type="expense")
+        creada = _create_transaction(
+            client,
+            auth_headers,
+            amount="100.00",
+            type="expense",
+            account_id=cuenta["id"],
+            category_id=categoria["id"],
+        ).json()
+
+        # Moneda fuera de patrón por SQL crudo: la API ya no la acepta, pero la fila puede
+        # existir (importación, seed viejo, edition directa).
+        db_session.execute(sa.text("UPDATE accounts SET currency = 'ZZ' WHERE id = :id"), {"id": cuenta["id"]})
+        db_session.execute(sa.text("UPDATE transactions SET currency = 'ZZ' WHERE id = :id"), {"id": creada["id"]})
+        db_session.commit()
+
+        detalle = client.get(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers)
+        assert detalle.status_code == 200, detalle.text
+        assert detalle.json()["currency"] == "ZZ"
+
+        listado = client.get("/api/v1/transactions/", headers=auth_headers)
+        assert listado.status_code == 200, listado.text
+        assert listado.json()["items"][0]["currency"] == "ZZ"
+
+
+class TestPaginacionInvalida:
+    """QA-025 (paginación): `OFFSET -1` / `LIMIT -1` son error de sintaxis en Postgres, así
+    que un `skip`/`limit` negativo devolvía un 500 en texto plano. Ahora ambos tienen
+    `ge`, y `limit` además un tope."""
+
+    def test_paginacion_invalida_devuelve_422(self, client, auth_headers):
+        for params in ("skip=-1", "limit=-1", "limit=0", "limit=1001"):
+            response = client.get(f"/api/v1/transactions/?{params}", headers=auth_headers)
+            assert response.status_code == 422, f"{params} → {response.status_code} {response.text}"
+
+    def test_limit_en_el_tope_sigue_funcionando(self, client, auth_headers):
+        response = client.get("/api/v1/transactions/?limit=1000", headers=auth_headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["page_size"] == 1000
+        assert response.json()["page"] == 1
+
+
 def test_update_moving_to_different_currency_account_updates_currency(
     client, auth_headers, make_account, make_category
 ):
@@ -921,13 +1159,30 @@ class TestCapturaRapidaPorNombre:
         )
         assert response.status_code == 404
 
-    def test_duplicate_own_categories_same_name_returns_409(self, client, auth_headers, make_account, make_category):
-        """Hallazgo 3 del spec: la API cruda permite crear dos categorías propias con el
-        mismo nombre+tipo (la UI no, pero el cliente crudo sí) — la resolución por nombre
-        no adivina: 409 (Decisión 16.2.2)."""
-        cuenta = make_account(auth_headers, balance="1000.00")
+    def test_duplicate_own_categories_api_rechaza_400(self, client, auth_headers, make_account, make_category):
+        """QA-028: la API rechaza crear dos categorías propias con el mismo nombre+tipo (400)."""
+        make_account(auth_headers, balance="1000.00")
         make_category(auth_headers, name="Comida", type="expense")
-        make_category(auth_headers, name="Comida", type="expense")  # duplicado vía API
+        # Usamos client directo porque el fixture asertea 200
+        respuesta = client.post(
+            "/api/v1/categories/",
+            json={"name": "Comida", "type": "expense"},
+            headers=auth_headers,
+        )
+        assert respuesta.status_code == 400
+        assert "Ya existe una categoría de tipo expense llamada 'Comida'" in respuesta.json()["detail"]
+
+    def test_resolucion_por_nombre_con_duplicado_en_db_devuelve_409(
+        self, client, auth_headers, make_account, db_session, test_user
+    ):
+        """Si de algún modo existen dos categorías propias con el mismo nombre+tipo en la DB
+        (p.ej. insert directo, migración antigua, o antes de QA-028), el resolver por nombre
+        devuelve 409 y no adivina (Decisión 16.2.2)."""
+        cuenta = make_account(auth_headers, balance="1000.00")
+        cat = models.Category(name="Comida", type="expense", user_id=test_user["id"])
+        cat2 = models.Category(name="Comida", type="expense", user_id=test_user["id"])
+        db_session.add_all([cat, cat2])
+        db_session.commit()
 
         response = _create_transaction(
             client,

@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
-from app.schemas.common import MAX_DIGITS_MONEY, _validate_password_strength
+from app.schemas.common import CURRENCY_PATTERN, MAX_DIGITS_MONEY, _validate_password_strength
 
 
 # --- USUARIOS ---
@@ -50,7 +50,12 @@ class UserResponse(UserBase):
 
 
 class PreferencesUpdate(BaseModel):
-    preferred_currency: str | None = None
+    # QA-025: `User.preferred_currency` es `String(3)`, y este PATCH además hace la
+    # cascada a `Account.currency` de la cuenta por defecto (Fase 22, Decisión A5) — un
+    # "zzzzzz" aquí se propagaba a las dos columnas. Patrón en el request, sin normalizar:
+    # "cop" en minúsculas es 422. `UserResponse` NO lleva el patrón (mismo criterio que los
+    # demás responses: la fila gana sobre la regla).
+    preferred_currency: str | None = Field(None, pattern=CURRENCY_PATTERN)
     preferred_locale: str | None = None
     preferred_theme: str | None = None
     weekly_summary_enabled: bool | None = None  # Fase 14

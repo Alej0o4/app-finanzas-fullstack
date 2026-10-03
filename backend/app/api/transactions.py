@@ -1,10 +1,9 @@
 import hashlib
 import json
 import logging
-import unicodedata
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy import desc, func, or_, update
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
@@ -24,6 +23,7 @@ from app.core.rate_limit import key_func_por_usuario_o_ip, limiter
 
 # 🔒 Importamos a nuestro Guardia de Seguridad
 from app.core.security import get_current_user
+from app.core.text import normalizar_nombre
 from app.models import models
 from app.schemas import schemas
 from app.services import ledger
@@ -33,13 +33,6 @@ logger = logging.getLogger(__name__)
 
 
 # --- Helpers de resolución por nombre (Fase 16 §16.2) ---
-def _normalizar_nombre_categoria(nombre: str) -> str:
-    """Normaliza un nombre de categoría para comparar sin acentos ni mayúsculas
-    (Decisión 16.2.2) — "Alimentación" == "alimentacion" == "ALIMENTACIÓN"."""
-    sin_acentos = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode()
-    return sin_acentos.strip().lower()
-
-
 def _resolver_categoria_por_nombre(db: Session, user_id: int, nombre: str, tipo: str) -> models.Category:
     """Resuelve una categoría por nombre (Fase 16 §16.2, Decisión 16.2.2).
 
@@ -47,8 +40,13 @@ def _resolver_categoria_por_nombre(db: Session, user_id: int, nombre: str, tipo:
     categoría propia sobre categoría de sistema si ambas matchean, y `409` si hay más de un
     match dentro del mismo alcance (propio o sistema). Sin match → `404` con la lista de
     nombres válidos para ese tipo (sin fuzzy match, a propósito).
+
+    La normalización del nombre vive en `app/core/text.py` (compartida con el chequeo de
+    duplicados de `api/categories.py`, QA-028): la regla por la que este resolver llama
+    "duplicado" es exactamente por (nombre normalizado, `type`), dentro de las categorías
+    PROPIAS del usuario — el mismo ámbito en el que el 409 se manifiesta.
     """
-    objetivo = _normalizar_nombre_categoria(nombre)
+    objetivo = normalizar_nombre(nombre)
     candidatas = (
         db.query(models.Category)
         .filter(
@@ -57,7 +55,7 @@ def _resolver_categoria_por_nombre(db: Session, user_id: int, nombre: str, tipo:
         )
         .all()
     )
-    matches = [c for c in candidatas if _normalizar_nombre_categoria(c.name) == objetivo]
+    matches = [c for c in candidatas if normalizar_nombre(c.name) == objetivo]
     propias = [c for c in matches if c.user_id == user_id]
     sistema = [c for c in matches if c.user_id is None]
 
@@ -258,8 +256,11 @@ def crear_transaccion(
 # --- RUTA PROTEGIDA ---
 @router.get("/", response_model=schemas.PaginatedResponse[schemas.TransactionResponse])
 def obtener_transacciones(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    # Tope de 1000 (QA-025): sin `le`, un cliente puede pedir `limit=999999999` y el backend
+    # ejecuta un SELECT de toda la tabla — el filtro `user_id` acota, pero el trabajo no.
+    # 1000 deja de sobra margen para el "Cargar más" del frontend, que suma 20 por página.
+    limit: int = Query(100, ge=1, le=1000),
     account_id: int | None = None,
     category_id: int | None = None,
     start_date: datetime | None = None,
@@ -300,7 +301,9 @@ def obtener_transacciones(
         query.order_by(desc(models.Transaction.date), desc(models.Transaction.id)).offset(skip).limit(limit).all()
     )
 
-    page = (skip // limit) + 1 if limit > 0 else 1
+    # Con `ge=1` (QA-025) la división ya nunca es por cero: el `if limit > 0 else 1` de
+    # antes solo estaba para defenderse de un `limit=0` que el schema ahora rechaza con 422.
+    page = (skip // limit) + 1
 
     return schemas.PaginatedResponse(
         items=transacciones,
@@ -426,8 +429,9 @@ def actualizar_transaccion(
         transaccion_actualizada.category_id = categoria_resuelta.id
         transaccion_actualizada.category = None  # nunca llega al model_dump (exclude_none)
 
-    # 2. Buscamos las cuentas (la vieja y la nueva, por si el usuario movió el gasto a otra cuenta)
-    cuenta_vieja = db.query(models.Account).filter(models.Account.id == transaccion_db.account_id).first()
+    # 2. La cuenta DESTINO (la vieja no se consulta: su id YA es `transaccion_db.account_id`
+    # por construcción, y con la query de más el `cuenta_vieja.id` de abajo era un
+    # `AttributeError` si la fila estaba borrada — QA-031).
     cuenta_nueva = (
         db.query(models.Account)
         .filter(models.Account.id == transaccion_actualizada.account_id, models.Account.user_id == current_user.id)
@@ -452,7 +456,14 @@ def actualizar_transaccion(
     try:
         ledger.aplicar_edicion(
             db,
-            cuenta_vieja_id=cuenta_vieja.id,
+            # QA-031: se pasa el id directo. La query que lo traía era redundante por
+            # construcción —`cuenta_vieja.id` ES `transaccion_db.account_id`— y solo servía
+            # para tapar el caso "la cuenta vieja ya está borrada", donde devolvía `None` y
+            # el `.id` de abajo reventaba con `AttributeError`. La semántica NO cambia:
+            # `ledger.aplicar_delta` filtra `deleted_at IS NULL` (Decisión 6.1 de la Fase 31),
+            # así que una cuenta desaparecida conserva su saldo obsoleto — que además no
+            # aparece en ninguna lista.
+            cuenta_vieja_id=transaccion_db.account_id,
             cuenta_nueva_id=cuenta_nueva.id,
             tipo_viejo=transaccion_db.type,
             monto_viejo=transaccion_db.amount,
@@ -462,15 +473,32 @@ def actualizar_transaccion(
 
         transaccion_db.amount = transaccion_actualizada.amount
         transaccion_db.type = transaccion_actualizada.type
-        transaccion_db.description = transaccion_actualizada.description
         transaccion_db.account_id = transaccion_actualizada.account_id
         transaccion_db.category_id = transaccion_actualizada.category_id
         # Sin condición: la moneda es un dato derivado de la cuenta, no un campo que el
         # usuario edite — siempre hereda la de la cuenta destino, igual que crear_transaccion.
         transaccion_db.currency = cuenta_nueva.currency
-        # Opcional: si el cliente no reenvía payment_method conservamos el valor actual
-        if transaccion_actualizada.payment_method is not None:
+
+        # 🐛 QA-026 — actualización parcial real para los campos opcionales, con el mismo
+        # idioma que `actualizar_cuenta` (`model_fields_set`, Fase 24 §24.3 Decisión C1):
+        # AUSENTE conserva, `null` explícito limpia. Antes `description` se asignaba siempre
+        # (`transaccion_db.description = transaccion_actualizada.description`), así que un
+        # cliente API que actualizara solo el monto —sin reenviar el texto— borraba la
+        # descripción sin querer (los atajos móviles y la captura por nombre son justamente
+        # clientes que mandan payloads parciales).
+        #
+        # La WEB no cambia de comportamiento: `EditTransactionModal` siempre manda la clave
+        # `description`, y vacía → `null`, así que borrar el texto sigue borrándolo.
+        campos_enviados = transaccion_actualizada.model_fields_set
+        if "description" in campos_enviados:
+            transaccion_db.description = transaccion_actualizada.description
+        if "payment_method" in campos_enviados:
             transaccion_db.payment_method = transaccion_actualizada.payment_method
+        # `date` NO lleva la misma regla a propósito: `Transaction.date` es nullable en el
+        # modelo, pero `TransactionResponse.date` es `datetime` (no opcional). Aceptar un
+        # `null` explícito dejaría la fila sin fecha y el response en 500
+        # (`ResponseValidationError`), así que acá sigue la regla anterior: ausente o null
+        # → conserva la fecha actual.
         if transaccion_actualizada.date is not None:
             transaccion_db.date = transaccion_actualizada.date
 

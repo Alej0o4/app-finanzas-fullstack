@@ -6,7 +6,7 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.schemas.common import MAX_DIGITS_MONEY
+from app.schemas.common import CURRENCY_PATTERN, MAX_DIGITS_MONEY
 
 
 # --- TRANSACCIONES ---
@@ -25,7 +25,11 @@ class TransactionBase(BaseModel):
     amount: Decimal = Field(
         ..., gt=0, decimal_places=2, max_digits=MAX_DIGITS_MONEY, description="El monto debe ser mayor a cero"
     )
-    currency: str = "COP"
+    # QA-025: patrón en el schema de request (el de la fila es `String(3)`, que trunca en
+    # vez de rechazar). El valor se ignora y lo pisa `cuenta.currency` en el router — la
+    # validación queda porque el campo ES parte del contrato de entrada. La nota de por qué
+    # el response NO lo revalida está en `TransactionResponse`.
+    currency: str = Field("COP", pattern=CURRENCY_PATTERN)
     type: TransactionType
     description: str | None = Field(None, max_length=500)
     account_id: int | None = None  # antes: obligatorio (Fase 16 §16.2, Decisión 16.2.4)
@@ -49,6 +53,14 @@ class TransactionResponse(TransactionBase):
     id: int
     date: datetime
     user_id: int
+
+    # 🔓 Un response model NO revalida reglas de input (QA-025): `currency` se REDECLARA
+    # para no heredar el patrón de `TransactionBase`. Sin esto, una fila con una moneda
+    # heredada fuera de patrón (p. ej. `"ZZ"`, que `String(3)` acepta) dejaría
+    # `GET /transactions/` y `PUT /transactions/{id}` en 500 para siempre — un
+    # `ResponseValidationError` no tiene salida. Mismo criterio que QA-023 con
+    # `Budget.month`/`year`: la regla va en el request, el response tolera la fila.
+    currency: str = "COP"
 
     class Config:
         from_attributes = True
