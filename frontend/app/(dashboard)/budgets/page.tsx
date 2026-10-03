@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, PieChart, Edit2, Trash2, CalendarDays, Repeat } from 'lucide-react';
+import { Plus, PieChart, Edit2, Trash2, CalendarDays, Repeat, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { formatCurrency, getApiError } from '@/lib/utils';
@@ -53,10 +53,27 @@ export default function BudgetsPage() {
   const amountRef = useRef<HTMLInputElement>(null);
   const monthYearRef = useRef<HTMLInputElement>(null);
 
-  const { data: budgets, isLoading: loadingBudgets } = useQuery<Budget[]>({
+  const {
+    data: budgets,
+    isLoading: loadingBudgets,
+    isError: budgetsError,
+    refetch: refetchBudgets,
+  } = useQuery<Budget[]>({
     queryKey: queryKeys.budgets.all(),
     queryFn: async () => (await api.get('budgets/')).data,
   });
+
+  // QA-023: la carga inicial falló y no hay presupuestos en pantalla — la app no sabe si hay o
+  // no, así que no puede mostrar el vacío de "No has definido ningún límite para este mes"
+  // (mentiría). Mismo criterio que `initialLoadFailed` en `transactions/page.tsx` (Fase 31 F6):
+  // el error solo reemplaza la lista cuando no llegó ningún dato; si hay presupuestos cacheados
+  // y lo que falla es un refetch posterior, se sigue mostrando la lista.
+  const budgetsFailedToLoad = budgetsError && !budgets;
+  // El error le gana al skeleton (durante los reintentos automáticos de React Query `isLoading`
+  // puede seguir en true, y el mensaje de error es más honesto que los placeholders girando);
+  // también le gana al vacío: solo una respuesta exitosa con lista vacía autoriza el `EmptyState`.
+  // Al reintentar a mano el error permanece en pantalla en vez de parpadear a skeleton.
+  const loadingInitial = loadingBudgets && !budgetsFailedToLoad;
 
   const { data: categories } = useCategories();
 
@@ -166,15 +183,9 @@ export default function BudgetsPage() {
     setEditingBudget(null);
   };
 
-  if (loadingBudgets)
-    return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-32 rounded-2xl" />
-        ))}
-      </div>
-    );
-
+  // QA-023 (mismo criterio que Fase 31 F6 en /transactions): el encabezado y el botón "Nuevo
+  // Presupuesto" quedan siempre visibles — solo el área de la grilla cambia entre skeleton,
+  // error y lista, así el usuario nunca queda encerrado en un error ni sin salida.
   return (
     <div className="relative space-y-6">
       <div className="flex items-center justify-between">
@@ -192,7 +203,29 @@ export default function BudgetsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {!budgets || budgets.length === 0 ? (
+        {loadingInitial ? (
+          <>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-32 rounded-2xl" />
+            ))}
+          </>
+        ) : budgetsFailedToLoad ? (
+          // QA-023: `GET /budgets/` puede devolver 500 — el backend no validaba `?month=&year=`
+          // y dejaba filas basura que rompían la respuesta. Decimos lo que pasó en vez de
+          // afirmar que no hay presupuestos. Mismo bloque que `TransactionList` (QA-010) y que
+          // el progreso de presupuestos del dashboard: `EmptyState` + `AlertCircle` + "Reintentar".
+          <div className="col-span-full">
+            <EmptyState
+              icon={<AlertCircle size={48} className="opacity-20" />}
+              message="No se pudieron cargar tus presupuestos. Intenta de nuevo más tarde."
+              action={
+                <Button variant="secondary" size="sm" onClick={() => refetchBudgets()}>
+                  Reintentar
+                </Button>
+              }
+            />
+          </div>
+        ) : !budgets || budgets.length === 0 ? (
           <div className="col-span-full">
             <EmptyState
               icon={<PieChart size={48} className="opacity-20" />}
@@ -240,11 +273,18 @@ export default function BudgetsPage() {
                     </button>
                     <button
                       onClick={() =>
-                        useConfirmStore
-                          .getState()
-                          .confirm('¿Eliminar este presupuesto?', () =>
-                            deleteMutation.mutate(budget.id)
-                          )
+                        useConfirmStore.getState().confirm(
+                          // QA-024: borrar una fila recurrente ya no apaga la recurrencia —
+                          // elimina solo ese mes y los meses siguientes se siguen generando
+                          // (arreglo backend en curso). El confirm decía solo "¿Eliminar este
+                          // presupuesto?", que dejaba al usuario sin forma de saber qué pasa
+                          // con "Repetir cada mes". Para no recurrente el borrado es el de
+                          // siempre, así que el mensaje se arma según el flag.
+                          budget.is_recurring
+                            ? '¿Eliminar este presupuesto? Se borra solo el de este mes; los meses siguientes se siguen generando.'
+                            : '¿Eliminar este presupuesto?',
+                          () => deleteMutation.mutate(budget.id)
+                        )
                       }
                       className="text-text-muted hover:text-danger p-1 transition-colors active:scale-95"
                       aria-label="Eliminar presupuesto"
