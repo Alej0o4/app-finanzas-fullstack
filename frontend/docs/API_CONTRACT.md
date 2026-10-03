@@ -211,7 +211,7 @@ El response model es tolerante a propósito.
 
 **Lápida de borrado (QA-024):** `DELETE` de un recurrente solo elimina ese mes; la recurrencia
 sigue en los meses siguientes (la fila borrada sirve de "lápida" para su período). El confirm
-en el frontend dice: "Se borra solo el de este mes; los meses siguientes se siguen generando."
+en el frontend dice: "Se borra el de este mes. Si venía de meses anteriores, el siguiente se vuelve a generar desde ahí."
 
 ### Dashboard
 

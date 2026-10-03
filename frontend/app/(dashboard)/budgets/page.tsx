@@ -274,14 +274,14 @@ export default function BudgetsPage() {
                     <button
                       onClick={() =>
                         useConfirmStore.getState().confirm(
-                          // QA-024: borrar una fila recurrente ya no apaga la recurrencia —
-                          // elimina solo ese mes y los meses siguientes se siguen generando
-                          // (arreglo backend en curso). El confirm decía solo "¿Eliminar este
+                          // QA-024: borrar una fila recurrente saltea ese mes (lápida): el
+                          // siguiente se regenera desde la plantilla de un mes anterior, si la
+                          // hay; si la serie nació este mes, el borrado la termina. El confirm decía solo "¿Eliminar este
                           // presupuesto?", que dejaba al usuario sin forma de saber qué pasa
                           // con "Repetir cada mes". Para no recurrente el borrado es el de
                           // siempre, así que el mensaje se arma según el flag.
                           budget.is_recurring
-                            ? '¿Eliminar este presupuesto? Se borra solo el de este mes; los meses siguientes se siguen generando.'
+                            ? '¿Eliminar este presupuesto? Se borra el de este mes. Si venía de meses anteriores, el siguiente se vuelve a generar desde ahí.'
                             : '¿Eliminar este presupuesto?',
                           () => deleteMutation.mutate(budget.id)
                         )

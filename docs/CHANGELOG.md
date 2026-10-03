@@ -24,7 +24,7 @@ Fix de los 9 ítems de la segunda pasada de QA (QA-023 a QA-031), todos corregib
 
 **Frontend (2 ítems):**
 - **QA-023:** Estado de error visible en `/budgets` (mensaje + "Reintentar") en vez de `EmptyState` engañoso. Mismo criterio que `TransactionList` (Fase 31 F6).
-- **QA-024:** Copy del confirm de borrado: "Si es recurrente, se borra solo el de este mes; los meses siguientes se siguen generando."
+- **QA-024:** Copy del confirm de borrado: "Si es recurrente, se borra el de este mes. Si venía de meses anteriores, el siguiente se vuelve a generar desde ahí."
 
 **Tests añadidos:** `test_budgets.py` (7 nuevos), `test_budget_recurrence.py` (3 nuevos), `test_transactions.py` (5 nuevos), `test_accounts.py` (4 nuevos), `test_categories.py` (clase nueva con 7 tests), `test_notifications.py` (1 nuevo), `test_preferences.py` (1 nuevo).
 
