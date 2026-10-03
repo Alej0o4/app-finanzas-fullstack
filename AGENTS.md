@@ -149,7 +149,10 @@ Motor de la suite (Fase 32, I1): **Postgres 16 es el default** — `pytest` leva
 `postgres:16-alpine` desechable por sesión con `testcontainers` (la misma imagen que
 `docker-compose.yml`), y el header de la corrida dice con qué motor se corrió. Sin Docker la
 suite **aborta con exit code 2** y un mensaje con las tres salidas: nunca cae a SQLite en
-silencio ni se saltea entera. El único selector es `TEST_DATABASE_URL` — definida se usa tal
+silencio ni se saltea entera. Ese abort es **perezoso** (dispara en el primer test que pide la
+base), así que un archivo que no la toca —`tests/test_database.py`, que es función pura— puede
+correr sin Docker sin que salte: no lo tomes como evidencia de que Docker es opcional.
+El único selector es `TEST_DATABASE_URL` — definida se usa tal
 cual (precedencia sobre testcontainers), y `TEST_DATABASE_URL=sqlite://` es el **opt-in
 offline**: mismo código, sin Docker, ejercita la rama SQLite de `engine_kwargs_for_url` (que es
 código de producción) y deja 10 tests en skip. La suite **aborta** si el nombre de la base no
