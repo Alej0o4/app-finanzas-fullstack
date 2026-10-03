@@ -38,13 +38,10 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-solo-para-pytest-no-usar-en
 from urllib.parse import urlparse
 
 import pytest
-from docker.errors import DockerException
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool, StaticPool
-from testcontainers.community.postgres import PostgresContainer
-from testcontainers.core.container import ContainerStartException
 
 from app.core.database import Base, engine_kwargs_for_url, get_db
 from app.core.rate_limit import limiter
@@ -170,6 +167,12 @@ def postgres_ephemeral():
     if TEST_DATABASE_URL:
         yield None
         return
+
+    # Import perezoso: el opt-in `TEST_DATABASE_URL=sqlite://` no debe exigir Docker ni
+    # `testcontainers` instalados — solo este ramo los usa.
+    from docker.errors import DockerException
+    from testcontainers.community.postgres import PostgresContainer
+    from testcontainers.core.container import ContainerStartException
 
     # Credenciales EXPLÍCITAS, nunca las del entorno (hallazgo 11): `testcontainers` lee
     # `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` como defaults, y si el shell del dueño
@@ -443,16 +446,24 @@ def real_session_factory(engine: Engine) -> sessionmaker:
 
 
 @pytest.fixture
-def real_session(real_session_factory: sessionmaker) -> Generator[Session, None, None]:
+def real_session(real_session_factory: sessionmaker, real_client: TestClient) -> Generator[Session, None, None]:
     """Una sesión de `real_session_factory`, para leer o escribir FUERA de HTTP.
 
     `db_session` no sirve para eso: es la transacción externa que la suite revierte al final
     del test, así que las sesiones de `real_client` —que commitean de verdad— nunca verían sus
     escrituras (y al revés: esto tampoco ve los commits ajenos hasta que se reabre la
-    transacción)."""
+    transacción).
+
+    Depende de `real_client` aunque no lo use: su teardown trunca la base con locks exclusivos,
+    y pytest destruye los fixtures en orden inverso al de instanciación, así que esta sesión
+    tiene que cerrarse ANTES — si no, un test que pidiera `real_session` antes que
+    `real_client` colgaría el `TRUNCATE` contra su transacción abierta. Además, así lo que esta
+    sesión commitee también lo limpia ese teardown."""
     session = real_session_factory()
-    yield session
-    session.close()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 @pytest.fixture
@@ -511,17 +522,18 @@ def real_client(real_session_factory: sessionmaker, engine: Engine) -> Generator
 
     app.dependency_overrides[get_db] = _override_get_db
     test_client = TestClient(app)
-    yield test_client
-    app.dependency_overrides.clear()
-
-    with engine.connect() as conn:
-        conn.execute(
-            text(
-                "TRUNCATE TABLE transactions, idempotency_keys, refresh_tokens, "
-                "accounts, categories, users RESTART IDENTITY CASCADE"
+    try:
+        yield test_client
+    finally:
+        app.dependency_overrides.clear()
+        with engine.connect() as conn:
+            conn.execute(
+                text(
+                    "TRUNCATE TABLE transactions, idempotency_keys, refresh_tokens, "
+                    "accounts, categories, users RESTART IDENTITY CASCADE"
+                )
             )
-        )
-        conn.commit()
+            conn.commit()
 
 
 @pytest.fixture

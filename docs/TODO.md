@@ -616,6 +616,11 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
   tablas globales y hay una sola base compartida. Paralelizar obligaría a un contenedor o un
   `CREATE DATABASE` por worker, y ~2,5 min es tolerable para un gate manual. Decisión Q9 del
   `/grilling` de la Fase 32 (`docs/specs/fase_32_spec.md`).
+- [ ] 🟢 Detector de fugas entre tests del seam real (Fase 32, review): es posicional —
+  `test_soft_delete.py:94` es hoy el único conteo global que delata una fuga de filas—, así que
+  un test nuevo que commitee datos sin pasar por `real_client`/`real_session` (cuyo teardown
+  trunca) contaminaría a los demás sin que nada lo avise. Un fixture `autouse` que verifique las
+  tablas vacías tras cada test `concurrencia` lo haría explícito. Sin urgencia: hoy no hay fuga.
 - [ ] Sincronización offline (las columnas `updated_at` de la Fase 8 la dejan preparada).
 
 ---

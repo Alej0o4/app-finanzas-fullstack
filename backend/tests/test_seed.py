@@ -114,6 +114,11 @@ def engine_seed(test_db_url: str) -> Generator[Engine, None, None]:
         try:
             cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{ESQUEMA_SEED}"')
             cursor.execute(f'SET search_path TO "{ESQUEMA_SEED}"')
+            # Sin este commit, el `CREATE SCHEMA`/`SET` quedan en la transacción implícita de
+            # psycopg2 y el reset-on-return del pool los revierte si la primera operación de la
+            # conexión es de solo lectura o termina en rollback: el `search_path` volvería a
+            # `public` y el seed pegaría contra las tablas de la suite.
+            dbapi_con.commit()
         finally:
             cursor.close()
 

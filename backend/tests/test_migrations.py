@@ -32,6 +32,7 @@ Story 22).
 import os
 import subprocess
 import sys
+import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -116,12 +117,14 @@ def resultado_alembic_check(test_db_url: str, tmp_path_factory) -> tuple[str, su
         url_drift = f"sqlite:///{archivo}"
     else:
         url_suite = make_url(test_db_url)
-        url_drift_obj = url_suite.set(database=f"{url_suite.database}{SUFIJO_BASE_DRIFT}")
+        # Sufijo aleatorio: dos sesiones de pytest contra el mismo Postgres del operador no
+        # deben pisarse la base de drift (el `DROP … IF EXISTS` de abajo borraría la ajena).
+        url_drift_obj = url_suite.set(database=f"{url_suite.database}{SUFIJO_BASE_DRIFT}_{uuid.uuid4().hex[:8]}")
         url_drift = url_drift_obj.render_as_string(hide_password=False)
 
         try:
             with _motor_de_administracion(test_db_url) as motor, motor.connect() as conn:
-                # `IF EXISTS` primero, por si una corrida anterior murió antes de su teardown.
+                # `IF EXISTS` por defensa: con el sufijo aleatorio no debería existir.
                 conn.execute(text(f'DROP DATABASE IF EXISTS "{url_drift_obj.database}"'))
                 conn.execute(text(f'CREATE DATABASE "{url_drift_obj.database}"'))
         except DBAPIError as exc:
