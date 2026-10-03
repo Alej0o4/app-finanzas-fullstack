@@ -97,14 +97,14 @@ function CategoryCard({
       {/* Fase 18 §18.3: ocultar/mostrar se renderiza incondicionalmente (Decisión
           Q6 — alcanza categorías de sistema y propias); editar/eliminar sigue
           reservado a categorías propias (Fase 11 §11.6, ahora activo vía 18.4). */}
-      <div className="bg-surface absolute top-4 right-4 z-10 flex gap-2 rounded-lg pl-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+      <div className="bg-surface absolute top-4 right-4 z-10 flex gap-2 rounded-lg pl-2 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
         <button
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
             onToggleHidden(category);
           }}
-          className="text-text-muted hover:text-text p-1 transition-colors active:scale-95"
+          className="text-text-muted hover:text-text focus-visible:ring-primary/50 rounded p-1 transition-colors focus-visible:ring-2 focus-visible:outline-none active:scale-95"
           title={category.is_hidden ? 'Mostrar categoría' : 'Ocultar categoría'}
           aria-label={category.is_hidden ? 'Mostrar categoría' : 'Ocultar categoría'}
         >
@@ -118,7 +118,7 @@ function CategoryCard({
                 e.stopPropagation();
                 onEdit(category);
               }}
-              className="text-text-muted hover:text-primary p-1 transition-colors active:scale-95"
+              className="text-text-muted hover:text-primary focus-visible:ring-primary/50 rounded p-1 transition-colors focus-visible:ring-2 focus-visible:outline-none active:scale-95"
               title="Editar categoría"
               aria-label="Editar categoría"
             >
@@ -130,7 +130,7 @@ function CategoryCard({
                 e.stopPropagation();
                 onDelete(category.id, category.name);
               }}
-              className="text-text-muted hover:text-danger p-1 transition-colors active:scale-95"
+              className="text-text-muted hover:text-danger focus-visible:ring-primary/50 rounded p-1 transition-colors focus-visible:ring-2 focus-visible:outline-none active:scale-95"
               title="Eliminar categoría"
               aria-label="Eliminar categoría"
             >
