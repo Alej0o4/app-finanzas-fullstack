@@ -11,7 +11,8 @@ import {
   LabelList,
 } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
+import { BarChart3, Loader2 } from 'lucide-react';
+import EmptyState from '@/components/ui/EmptyState';
 import { useMemo } from 'react';
 import ChartControlsPopover from '@/components/ChartControlsPopover';
 import { useAppConfig } from '@/providers/AppConfigProvider';
@@ -81,6 +82,10 @@ export default function CashflowChart({
     return Math.min(Math.max(labelLength * 8 + 30, 84), 160);
   }, [data, activeCurrency]);
 
+  // QA-018b: sin movimientos en el período el gráfico quedaba como un eje vacío sin
+  // explicación. Se distingue de "cargando" y de "error" con un estado vacío propio.
+  const isEmpty = data.every((item) => Number(item.income) === 0 && Number(item.expense) === 0);
+
   return (
     <div className="bg-surface/80 border-border/70 shadow-background/20 rounded-2xl border p-6 shadow-sm backdrop-blur-sm">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -116,6 +121,14 @@ export default function CashflowChart({
       ) : isLoading ? (
         <div className="flex h-72 items-center justify-center">
           <Loader2 className="text-info h-6 w-6 animate-spin" />
+        </div>
+      ) : isEmpty ? (
+        <div className="border-border flex h-72 items-center justify-center rounded-xl border border-dashed">
+          <EmptyState
+            icon={<BarChart3 size={28} />}
+            message="Sin movimientos en este período"
+            description="Cuando registres ingresos o gastos, aparecerán acá."
+          />
         </div>
       ) : (
         <div className="h-72 w-full">

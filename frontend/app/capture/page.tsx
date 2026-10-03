@@ -46,7 +46,7 @@ function CaptureScreen() {
 
   if (isOnboarding && isLoading) {
     return (
-      <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
+      <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-5 shadow-2xl sm:p-8">
         <div className="space-y-4">
           <Skeleton className="h-6 w-3/4" />
           <Skeleton className="h-4 w-full" />
@@ -62,7 +62,7 @@ function CaptureScreen() {
     isOnboarding && !showCurrencyStep && user?.monthly_income == null && !incomeStepDone;
 
   return (
-    <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-8 shadow-2xl">
+    <div className="bg-surface border-border/70 shadow-background/40 w-full max-w-md rounded-3xl border p-5 shadow-2xl sm:p-8">
       {showCurrencyStep ? (
         <OnboardingCurrencyStep
           onDone={(currency) => {

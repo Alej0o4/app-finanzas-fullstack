@@ -20,6 +20,11 @@ export function useApiKeys() {
       const response = await api.get('api-keys/');
       return response.data as ApiKey[];
     },
+    // QA-018e: `last_used_at` lo actualiza el backend cuando una automatización usa la key,
+    // fuera de esta sesión del navegador — ninguna mutación local lo invalida. Con el
+    // `staleTime` global (1 min) "Último uso: Nunca" quedaba viejo al volver a /settings.
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 }
 

@@ -198,9 +198,9 @@ export default function TransactionCaptureForm({
 
       <fieldset ref={categoryFieldsetRef} tabIndex={-1}>
         <legend className="sr-only">Categoría</legend>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {filteredCategories.map((category) => (
-            <label key={category.id} className="cursor-pointer">
+            <label key={category.id} className="min-w-0 cursor-pointer">
               <input
                 type="radio"
                 name="category"
@@ -209,9 +209,11 @@ export default function TransactionCaptureForm({
                 onChange={() => setCategoryId(String(category.id))}
                 className="peer sr-only"
               />
-              <div className="peer-checked:border-primary peer-checked:bg-primary/10 peer-focus-visible:ring-primary/50 border-border/70 flex flex-col items-center gap-1 rounded-xl border p-3 transition-colors peer-focus-visible:ring-2">
+              <div className="peer-checked:border-primary peer-checked:bg-primary/10 peer-focus-visible:ring-primary/50 border-border/70 flex flex-col items-center gap-1 rounded-xl border p-2 transition-colors peer-focus-visible:ring-2 sm:p-3">
                 <CategoryIcon icon={category.icon} size={22} />
-                <span className="text-xs">{category.name}</span>
+                <span className="max-w-full text-center text-xs break-words hyphens-auto">
+                  {category.name}
+                </span>
               </div>
             </label>
           ))}
