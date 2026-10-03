@@ -1,5 +1,6 @@
-"""Tests de presupuestos: la unique constraint (§1.4 del spec) y el cálculo de progreso
-(`spent`/`percentage`) que consume `dashboard.py::obtener_progreso_presupuestos`.
+"""Tests de presupuestos: la unique constraint (§1.4 del spec), el cálculo de progreso
+(`spent`/`percentage`) que consume `dashboard.py::obtener_progresos`, la recurrencia
+(Fase 8 §3) y los límites de entrada del período y de la moneda (QA-023 y QA-025).
 """
 
 from datetime import UTC, datetime
@@ -269,6 +270,203 @@ class TestRecurringBudgets:
         )
         assert response.status_code == 200, response.text
         assert response.json()["is_recurring"] is False
+
+    @pytest.mark.parametrize(
+        ("month_plantilla", "month_objetivo", "year"),
+        [
+            (1, 2, 2030),  # enero → febrero
+            (11, 12, 2030),  # el mes 12 es el borde superior de `month`
+            (12, 1, 2031),  # salto de año, con enero como borde inferior
+            (5, 6, 2020),  # 2020 es el borde inferior de `year`
+        ],
+        ids=["febrero", "diciembre", "salto-de-ano", "year-2020"],
+    )
+    def test_periodo_valido_sigue_generando(
+        self, client, auth_headers, make_category, month_plantilla, month_objetivo, year
+    ):
+        """Regresión de QA-023: el `Query(ge=1, le=12)` / `(ge=2020, le=2100)` del listado no
+        puede haberorado los períodos legítimos. Casos borde a propósito (mes 1, mes 12 y el
+        año más bajo permitido), porque un `ge`/`le` mal puesto solo se nota en los bordes.
+        """
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        anio_plantilla = year - 1 if month_objetivo < month_plantilla else year
+        self._crear_presupuesto(
+            client, auth_headers, categoria, month=month_plantilla, year=anio_plantilla, amount="750.00"
+        )
+
+        response = client.get("/api/v1/budgets/", params={"month": month_objetivo, "year": year}, headers=auth_headers)
+        assert response.status_code == 200, response.text
+
+        filas = [b for b in response.json() if b["category_id"] == categoria["id"]]
+        assert len(filas) == 1
+        assert filas[0]["month"] == month_objetivo
+        assert filas[0]["year"] == year
+        assert Decimal(str(filas[0]["amount_limit"])) == Decimal("750.00")
+        assert filas[0]["is_recurring"] is True
+
+    def test_presupuesto_recurrente_borrado_no_reaparece_al_recargar(self, client, auth_headers, make_category):
+        """QA-024 end-to-end: borrar un recurrente del mes en curso tiene que aguantar la recarga.
+
+        Sin la lápida (el chequeo de "esta categoría ya tiene fila en este período" ahora
+        incluye las filas soft-deleted), la fila borrada dejaba de bloquear la generación
+        perezosa y el presupuesto volvía a aparecer en la siguiente carga de la página.
+        """
+        categoria = make_category(auth_headers, name="Ocio", type="expense")
+        prev_month, prev_year = _previous_month_year()
+        self._crear_presupuesto(client, auth_headers, categoria, month=prev_month, year=prev_year)
+        month, year = _now_month_year()
+
+        generado = client.get("/api/v1/budgets/", params={"month": month, "year": year}, headers=auth_headers)
+        assert generado.status_code == 200, generado.text
+        fila = next(b for b in generado.json() if b["category_id"] == categoria["id"])
+        budget_id = fila["id"]
+
+        borrado = client.delete(f"/api/v1/budgets/{budget_id}", headers=auth_headers)
+        assert borrado.status_code == 200, borrado.text
+
+        # La recarga de la página (misma consulta con período, que es la que regenera):
+        # sigue sin aparecer.
+        despues = client.get("/api/v1/budgets/", params={"month": month, "year": year}, headers=auth_headers)
+        assert despues.status_code == 200, despues.text
+        assert [b for b in despues.json() if b["category_id"] == categoria["id"]] == []
+
+        # Y tampoco en el listado sin filtros (el historial completo tampoco lo lista).
+        historial = client.get("/api/v1/budgets/", headers=auth_headers)
+        assert historial.status_code == 200, historial.text
+        assert [b for b in historial.json() if b["id"] == budget_id] == []
+
+
+class TestPresupuestosPeriodoInvalido:
+    """QA-023: el query param de `GET /budgets/` es frontera de confianza.
+
+    `?month=13&year=99999` pasaba sin validar, la generación perezosa clonaba las plantillas
+    recurrentes a ese período basura y —como `BudgetResponse` heredaba el `ge/le` del
+    request— esas filas no se podían serializar: `ResponseValidationError` → **500
+    permanente** de `GET /budgets/`, con la página de presupuestos en skeleton para siempre.
+    """
+
+    def _plantilla_recurrente(self, client, auth_headers, categoria):
+        response = client.post(
+            "/api/v1/budgets/",
+            json={
+                "amount_limit": "500000.00",
+                "currency": "COP",
+                "month": 1,
+                "year": 2030,
+                "category_id": categoria["id"],
+                "is_recurring": True,
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    @pytest.mark.parametrize(
+        ("month", "year"),
+        [(13, 2026), (10, 99999)],
+        ids=["month-13", "year-99999"],
+    )
+    def test_periodo_invalido_devuelve_422_y_no_crea_presupuestos(
+        self, client, auth_headers, make_category, db_session, test_user, month, year
+    ):
+        """El corazón de QA-023: 422 y, sobre todo, CERO filas basura en la base.
+
+        El assert de `db_session` es el que importa: sin él, un 422 ""arreglado" que igual
+        alcanzara a clonar la plantilla dejaría la fila imposible metida en la base, y esa
+        fila sola basta para volver a dejar el listado en 500 (mitad del bug).
+        """
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._plantilla_recurrente(client, auth_headers, categoria)
+
+        response = client.get("/api/v1/budgets/", params={"month": month, "year": year}, headers=auth_headers)
+        assert response.status_code == 422, response.text
+
+        filas = db_session.query(models.Budget).filter(models.Budget.user_id == test_user["id"]).all()
+        assert [(f.month, f.year) for f in filas] == [(1, 2030)]  # solo la plantilla, intacta
+
+    def test_fila_heredada_fuera_de_rango_no_rompe_el_listado(
+        self, client, auth_headers, make_category, db_session, test_user
+    ):
+        """La otra mitad de QA-023: una fila imposible YA existente no puede tumbar el listado.
+
+        `BudgetResponse` dejó de heredar de `BudgetBase` justamente para esto: los `ge/le`
+        del período son validación de request, y en response convertían cualquier fila
+        heredada (de una versión que no validaba el query param) en un 500 permanente. La
+        fila se inserta a mano, imitando la basura que dejó esa versión.
+        """
+        categoria = make_category(auth_headers, name="Ocio", type="expense")
+
+        db_session.add(
+            models.Budget(
+                amount_limit=Decimal("123456.00"),
+                currency="COP",
+                month=13,
+                year=99999,
+                user_id=test_user["id"],
+                category_id=categoria["id"],
+            )
+        )
+        db_session.commit()
+
+        response = client.get("/api/v1/budgets/", headers=auth_headers)
+        assert response.status_code == 200, response.text
+
+        basura = [b for b in response.json() if b["category_id"] == categoria["id"]]
+        assert len(basura) == 1
+        assert basura[0]["month"] == 13
+        assert basura[0]["year"] == 99999
+        assert Decimal(str(basura[0]["amount_limit"])) == Decimal("123456.00")
+
+
+class TestBudgetCurrencyPattern:
+    """QA-025: `Budget.currency` es `String(3)` en `models.py` y no lo validaba nadie.
+
+    Un `"zzzzzz"` llegaba al INSERT y volvía como un 500 en texto plano
+    (`StringDataRightTruncation` es un `DataError`), no como un 422 — el mismo modo de fallo
+    que el rango de los campos de dinero (QA-015). `CURRENCY_PATTERN` va solo en los schemas
+    de request; los de response se quedan sin validar a propósito (ver `schemas/common.py`).
+    """
+
+    def _payload(self, categoria, currency):
+        month, year = _now_month_year()
+        return {
+            "amount_limit": "50000.00",
+            "currency": currency,
+            "month": month,
+            "year": year,
+            "category_id": categoria["id"],
+        }
+
+    @pytest.mark.parametrize("currency", ["zzzzzz", "", "cop"], ids=["larga", "vacia", "minusculas"])
+    def test_currency_invalida_devuelve_422(self, client, auth_headers, make_category, currency):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+
+        response = client.post("/api/v1/budgets/", json=self._payload(categoria, currency), headers=auth_headers)
+        assert response.status_code == 422, response.text
+        assert response.status_code != 500
+
+    @pytest.mark.parametrize("currency", ["USD", "EUR"], ids=["usd", "eur"])
+    def test_currency_valida_seguida_de_aceptarse(self, client, auth_headers, make_category, currency):
+        """Contracara del patrón: una ISO de 3 letras en mayúsculas entra normal."""
+        categoria = make_category(auth_headers, name="Ocio", type="expense")
+
+        response = client.post("/api/v1/budgets/", json=self._payload(categoria, currency), headers=auth_headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["currency"] == currency
+
+    def test_put_con_currency_invalida_devuelve_422(self, client, auth_headers, make_category):
+        """El `PUT /budgets/{id}` toma `BudgetBase` directo, así que comparte la validación."""
+        categoria = make_category(auth_headers, name="Suscripciones", type="expense")
+        creado = client.post("/api/v1/budgets/", json=self._payload(categoria, "COP"), headers=auth_headers)
+        assert creado.status_code == 200, creado.text
+
+        edicion = client.put(
+            f"/api/v1/budgets/{creado.json()['id']}",
+            json={**self._payload(categoria, "zzzzzz"), "amount_limit": "60000.00"},
+            headers=auth_headers,
+        )
+        assert edicion.status_code == 422, edicion.text
+        assert edicion.status_code != 500
 
 
 class TestBudgetMultiCurrency:
