@@ -138,6 +138,30 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_sqlite)
 
 
+def pytest_report_header(config) -> list[str]:
+    """User Story 11: "quiero saber con qué motor corrió la suite, para no confundir un verde de
+    SQLite con uno de Postgres".
+
+    Sin esto los dos modos son idénticos en la salida — mismo verde, mismos conteos de una línea
+    — y la fricción que la fase ataca (Q1: correr la suite en el motor de producción no puede
+    depender de acordarse) se pierde justo en el mensaje que el dueño lee al terminar. Es un
+    agregado deliberado a la spec, que enunció la User Story pero no dejó decisión implementable.
+
+    Solo dialecto y nombre de la base: nunca usuario, contraseña ni la URL completa — el header
+    se imprime en logs y capturas de pantalla, y `TEST_DATABASE_URL` puede venir de un entorno
+    compartido. Para el ramo del contenedor alcanza con la imagen (el puerto todavía no existe
+    cuando corre este hook, y no hace falta para responder la pregunta).
+
+    El modo se deduce del entorno con `_motor_activo_es_sqlite()` y NO se levanta el contenedor
+    para averiguarlo: `pytest_report_header` corre antes que cualquier fixture, y hacerlo
+    cobraría los ~9 s de arranque también en `pytest --collect-only` (User Story 10, B1)."""
+    if _motor_activo_es_sqlite():
+        return ["motor de la suite: SQLite (opt-in TEST_DATABASE_URL=sqlite://)"]
+    if TEST_DATABASE_URL:
+        return [f"motor de la suite: PostgreSQL del operador — base {urlparse(TEST_DATABASE_URL).path.lstrip('/')}"]
+    return [f"motor de la suite: PostgreSQL {IMAGEN_TEST} (contenedor desechable de la sesión)"]
+
+
 @pytest.fixture(scope="session")
 def postgres_ephemeral():
     """Postgres 16 desechable de la sesión (I1, Q1). `None` cuando hay `TEST_DATABASE_URL`: en
