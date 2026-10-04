@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func
@@ -7,12 +8,14 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.exceptions import BadRequestError, NotFoundError
-from app.core.periods import rango_mes_utc
+from app.core.periods import rango_mes
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
 
 router = APIRouter()
+
+_TZ_PROVISIONAL = ZoneInfo("UTC")  # paso 4 la reemplaza por la zona del usuario
 
 
 @router.post("/", response_model=schemas.AccountResponse)
@@ -128,7 +131,7 @@ def obtener_resumen_mensual_cuenta(
     current_user: models.User = Depends(get_current_user),
 ):
     """Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
-    Actualizado Fase 30 B2: usa `core.periods.rango_mes_utc` para el techo del mes en
+    Actualizado Fase 30 B2: usa `core.periods.rango_mes` para el techo del mes en
     curso = "ahora", igual que `dashboard/summary`. Fase 31 (B9): mismo criterio que
     `DashboardSummary.monthly_flow_balance` desde esta fase — tampoco depende de
     ningún valor declarado por el usuario, y el balance nunca es `null`.
@@ -146,7 +149,7 @@ def obtener_resumen_mensual_cuenta(
         raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
     hoy = datetime.now(UTC)
-    primer_dia, limite = rango_mes_utc(hoy.year, hoy.month, hoy)
+    primer_dia, limite = rango_mes(hoy.year, hoy.month, hoy, _TZ_PROVISIONAL)
 
     def _total(tipo: str) -> Decimal:
         """Suma del mes de las transacciones de un tipo, ignorando borradas (mismo

@@ -9,13 +9,14 @@ no reintroducir el bug de mezclar monedas que ya se corrigió una vez ahí.
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.notification_dispatch import crear_y_enviar_notificacion
-from app.core.periods import rango_mes_utc
+from app.core.periods import rango_mes
 from app.models import models
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,8 @@ THRESHOLDS = [
     (80, "budget_threshold_80", "Vas en el 80% de tu presupuesto de {category}"),
 ]
 
+_TZ_PROVISIONAL = ZoneInfo("UTC")  # paso 4 la reemplaza por la zona del usuario
+
 
 def spent_por_categoria_y_moneda(
     db: Session, user_id: int, category_ids: list[int], month: int, year: int
@@ -39,7 +42,7 @@ def spent_por_categoria_y_moneda(
     `evaluate_budget_thresholds_for_category` (escritura de avisos). El motor de
     alertas NO recalcula el gasto de otra forma para no divergir del dashboard.
     """
-    # El rango lo acota `core/periods.rango_mes_utc` (Fase 31, B6): techo "ahora" en el
+    # El rango lo acota `core/periods.rango_mes` (Fase 31, B6): techo "ahora" en el
     # mes en curso (para que una transacción con fecha futura del mismo mes no cuente
     # como "ya gastado" acá, mientras category-distribution/cashflow-series sí la
     # acotan a `hoy` — Fase 11 §11.4/Fase 17 §17.1.3) y mes completo (límite superior
@@ -47,8 +50,8 @@ def spent_por_categoria_y_moneda(
     # un mes FUTURO: los presupuestos anticipados (creados para el próximo período, ver
     # test_two_budgets_same_category_different_currencies_evaluate_own_spent_by_currency)
     # se evalúan completos desde que existen. Esa semántica de mes futuro es
-    # obligatoria y es la razón por la que `rango_mes_utc` no valida nada.
-    primer_dia, limite = rango_mes_utc(year, month, datetime.now(UTC))
+    # obligatoria y es la razón por la que `rango_mes` no valida nada.
+    primer_dia, limite = rango_mes(year, month, datetime.now(UTC), _TZ_PROVISIONAL)
 
     spent_rows = (
         db.query(

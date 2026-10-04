@@ -1,6 +1,7 @@
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func
@@ -10,13 +11,15 @@ from app.core.budget_alerts import spent_por_categoria_y_moneda
 from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.database import get_db
 from app.core.exceptions import InternalServerError, NotFoundError
-from app.core.periods import rango_mes_utc, resolver_mes
+from app.core.periods import rango_mes, resolver_mes
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+_TZ_PROVISIONAL = ZoneInfo("UTC")  # paso 4 la reemplaza por la zona del usuario
 
 
 def _first_transaction_month(db: Session, user_id: int) -> str | None:
@@ -75,7 +78,7 @@ def obtener_resumen(
     # cambia (User Story 47). Cualquier período inválido o futuro es un 422 de
     # `core/periods.resolver_mes`, no una respuesta silenciosa.
     ahora = datetime.now(UTC)
-    year, month, es_mes_actual = resolver_mes(year, month, ahora)
+    year, month, es_mes_actual = resolver_mes(year, month, ahora, _TZ_PROVISIONAL)
     preferred_currency = current_user.preferred_currency or "COP"
 
     # Contar cuentas destacadas
@@ -106,7 +109,7 @@ def obtener_resumen(
         .all()
     )
 
-    # El rango del mes lo acota `core/periods.rango_mes_utc` (Fase 31, B6): el límite
+    # El rango del mes lo acota `core/periods.rango_mes` (Fase 31, B6): el límite
     # superior real de "este mes" es hoy, no el fin de calendario — de lo contrario una
     # transacción con fecha futura (mismo mes) cuenta como "ya gastado/recibido" aquí
     # pero queda afuera de category-distribution/cashflow-series, que sí acotan a `hoy`
@@ -114,7 +117,7 @@ def obtener_resumen(
     # EXCLUSIVO: el primer día del mes siguiente — por eso las comparaciones de abajo
     # son `<`, no `<=` (QA-019: un `<=` contra "el último día a las 23:59:59" perdía
     # cualquier instante con fracción de segundo después de esa marca).
-    primer_dia, limite_gasto = rango_mes_utc(year, month, ahora)
+    primer_dia, limite_gasto = rango_mes(year, month, ahora, _TZ_PROVISIONAL)
 
     # Transacciones del mes solo de cuentas destacadas (o todas si no hay)
     tx_account_ids = db.query(models.Account.id).filter(*account_filter).subquery()
@@ -209,7 +212,7 @@ def obtener_progreso_presupuestos(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    year, month, es_mes_actual = resolver_mes(year, month, datetime.now(UTC))
+    year, month, es_mes_actual = resolver_mes(year, month, datetime.now(UTC), _TZ_PROVISIONAL)
 
     # El dashboard es la página de aterrizaje: genera aquí los presupuestos recurrentes
     # del mes en curso antes de consultarlos (Fase 8 §3, Decisión 3.1). Fase 29 (B3) lo
