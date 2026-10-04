@@ -98,6 +98,9 @@ punta incluso con `EMAIL_PROVIDER=console`.
 Entrada (JSON):
 
 - `id_token`: el credencial (JWT firmado) que devuelve Google Identity Services al usuario.
+- `timezone` (opcional, Fase 34 §B5): zona IANA detectada del navegador. Solo se aplica cuando
+  este login **crea** el usuario; un usuario existente no la sobrescribe. Ausente o inválida →
+  `America/Bogota`, sin error.
 
 Salida — idéntica a `POST /api/v1/auth/login` (`TokenResponse`), para que el frontend
 reutilice el mismo manejo de tokens sin bifurcar lógica:
@@ -327,6 +330,9 @@ Entrada:
 - `password` — política de contraseñas (Fase 7, §2.3): mínimo 10 caracteres, máximo 128, no
   puede ser solo dígitos ni solo letras, y no puede estar en una lista corta de contraseñas
   comunes. La misma política aplica a `new_password` en `password-reset/confirm`.
+- `timezone` (opcional, Fase 34 §B5): zona IANA detectada del navegador
+  (`Intl.DateTimeFormat().resolvedOptions().timeZone`). Ausente o inválida → `America/Bogota` y el
+  registro **no falla** (a propósito distinto del `422` de `PATCH /me/preferences`).
 
 Salida:
 
@@ -336,6 +342,7 @@ Salida:
 - `preferred_currency` (default: `"COP"`)
 - `preferred_locale` (default: `"es-CO"`)
 - `preferred_theme` (default: `"dark"`)
+- `timezone` (default: `"America/Bogota"`, Fase 34)
 - `monthly_income` (`null` hasta que se defina vía `PATCH /api/v1/users/me`)
 
 Errores esperados:
@@ -356,6 +363,8 @@ Salida:
 - `preferred_currency`
 - `preferred_locale`
 - `preferred_theme`
+- `timezone` (Fase 34 §B3): zona IANA del usuario (default `"America/Bogota"`). Es la única
+  fuente de día/semana/mes de todo cálculo del backend.
 - `monthly_income` (`null` hasta que se defina vía `PATCH /api/v1/users/me`)
 - `has_transaction_history` (`boolean`, Fase 19 §19.1) — `true` si el usuario tiene 2 o más
   transacciones ("usuario recurrente"); se calcula con una query `LIMIT 2`, no `COUNT(*)`.
@@ -420,6 +429,7 @@ Salida:
 - `preferred_theme`: string (default `"dark"`)
 - `weekly_summary_enabled`: bool (default `true`, Fase 14) — si el usuario recibe el
   resumen semanal automático
+- `timezone`: string (default `"America/Bogota"`, Fase 34 §B4) — zona IANA
 
 ### `PATCH /api/v1/users/me/preferences`
 
@@ -432,6 +442,10 @@ Entrada (campos opcionales):
 - `preferred_locale`: string
 - `preferred_theme`: string
 - `weekly_summary_enabled`: bool (Fase 14)
+- `timezone`: string (Fase 34 §B4) — nombre de zona IANA válido (`America/Bogota`, `Asia/Tokyo`…,
+  validado contra `zoneinfo.available_timezones()`). Inexistente → `422` de dominio con `detail`
+  string. Cambiarla **no recalcula ni modifica ningún movimiento guardado**: solo reagrupa los
+  períodos (día/semana/mes) en que se cuentan.
 - `apply_to_default_account`: bool, default `false` (Fase 22 §22.1, Decisión A5) —
   instrucción por-request, NO se persiste. Cuando viene en `true` junto con
   `preferred_currency`, el handler además actualiza la moneda de la cuenta por defecto
@@ -543,7 +557,7 @@ Errores esperados:
 
 Balance del mes en curso de una sola cuenta (Decisión 17.1.4): `ingreso_del_mes −
 gasto_del_mes` calculado con las transacciones reales de **esa cuenta** en el mes actual
-(no eliminadas). **Actualizado Fase 30 B2**: usa `core.periods.rango_mes_utc` (Fase 31: el
+(no eliminadas). **Actualizado Fase 30 B2**: usa `core.periods.rango_mes` (zona del usuario desde la Fase 34; Fase 31: el
 límite superior de un mes cerrado es exclusivo, aunque este endpoint solo consulta el mes en
 curso y no le afecta) para que el techo del mes en curso sea "ahora" (igual que
 `dashboard/summary`), en vez del fin de mes calendario. Vive en `accounts.py` porque usa la
@@ -665,7 +679,13 @@ Entrada:
   (`monthly_income`) y `POST`/`PUT /budgets` (`amount_limit`).
 - `type`: `income | expense`
 - `description`: opcional.
-- `date`: fecha de la transación (formato ISO, default: ahora).
+- `date` (Fase 34 §B9): opcional, default ahora. Acepta **`YYYY-MM-DD` o un datetime ISO completo**:
+  - solo-día igual a **hoy** en la zona del usuario → se guarda con la hora real (`now()`);
+  - solo-día de **otro día** → se guarda a las **12:00 locales** de ese día (el día no se corre
+    aunque el usuario cambie de zona ±12 h);
+  - datetime con zona → se guarda tal cual; un datetime **sin zona** se lee como UTC (como antes).
+  `2026-10-04` y `2026-10-04T00:00:00` son cosas distintas. Los avisos de presupuesto usan el mes de
+  esta fecha en la zona del usuario.
 - `account_id` **opcional** (Fase 16 §16.2): si se omite, se usa la única cuenta del usuario.
   Con más de una cuenta y sin `account_id` → `400` (no se adivina cuál).
 - `category_id` **o** `category`: exactamente uno de los dos (Fase 16 §16.2).
@@ -712,8 +732,15 @@ Filtros opcionales:
 - `limit` (default: 100, validado `ge=1, le=1000`; `limit=0` o negativo → `422`; `limit>1000` → `422`)
 - `account_id`
 - `category_id`
-- `start_date`
-- `end_date`
+- `start_date`, `end_date` (Fase 34, B7): cada extremo acepta **dos formatos con el mismo nombre**:
+  - **solo-día** `YYYY-MM-DD` → se interpreta en la **zona horaria del usuario** (`User.timezone`):
+    `start_date` = 00:00 local de ese día; `end_date` incluye **todo** ese día (hasta las 00:00
+    local del día siguiente, exclusivo). Es el formato que debe usar el frontend.
+  - **datetime ISO 8601 completo** (`2026-03-10T05:00:00Z`) → instante tal cual; un `end_date`
+    datetime es **inclusivo** (`<=`), igual que antes de la Fase 34 (clientes curl / API key). Un
+    datetime sin zona se lee como UTC.
+  Un valor ilegible → `422` de dominio con `detail` string. En `GET /transactions/`, un inicio
+  posterior al fin → `400` ("La fecha inicial no puede ser mayor que la fecha final.").
 
 Salida paginada:
 
@@ -734,6 +761,8 @@ para distinguir "ausente" de "null explícito":
 - `description` ausente → conserva; `description: null` → limpia.
 - `payment_method` ausente → conserva; `payment_method: null` → limpia.
 - `date`: ausente → conserva; `null` no se acepta (el response exige `datetime` no opcional).
+  Mismos dos formatos y la misma conversión que en `POST` (Fase 34 §B9). El cliente web manda
+  `date` **solo si el usuario la cambió**: así editar el monto no re-estampa la hora.
 
 `amount` respeta el mismo rango de `POST` (arriba), y el mismo `422` de dominio si el
 recálculo desborda el saldo de alguna cuenta involucrada (la única, o la vieja/nueva si la
@@ -853,7 +882,9 @@ Parámetros (Fase 29, ambos o ninguno):
 Sin ninguno de los dos el período es el mes actual y los valores de los campos preexistentes
 son los mismos que antes de la Fase 29 (lo único nuevo son los tres campos agregados más
 abajo). La resolución del período y el acotado del rango viven en `app/core/periods.py`
-(`resolver_mes` y `rango_mes_utc`) y son **UTC**, no la hora local del usuario: el rango es
+(`resolver_mes` y `rango_mes`) y desde la Fase 34 son en la **zona horaria del usuario**
+(`User.timezone`), no UTC: el "mes actual", el "mes futuro" que se rechaza y los límites del mes
+son los de esa zona. El rango es
 semiabierto `[inicio, fin)` — el límite superior es "ahora" en el mes en curso y el primer
 instante del mes siguiente, **exclusivo**, en uno ya cerrado (Fase 31, Decisión B6 — antes era
 "hasta el último día a las 23:59:59", y un movimiento del último segundo del mes, con fracción,
@@ -896,7 +927,7 @@ Devuelve (`DashboardSummary`):
   `"actual"` en uno cerrado) y el cliente lo usaba para rotular de cuál se trataba; ya no hace
   falta, pero el campo se conserva sin default (un cliente que lo siga leyendo ve siempre
   `"actual"`, nunca un campo ausente).
-- `first_transaction_month` (Fase 29): mes UTC `"YYYY-MM"` de la transacción más antigua del
+- `first_transaction_month` (Fase 29): mes `"YYYY-MM"` (en la zona del usuario, Fase 34) de la transacción más antigua del
   usuario, o `null` si no tiene ninguna. Va sobre **todas** las cuentas (no solo las
   destacadas) porque gobierna la página entera del dashboard, y respeta el borrado lógico. Es
   el límite inferior de la navegación por mes del frontend.
@@ -981,8 +1012,14 @@ del período calculados por el backend**. El frontend ya no suma en cliente (Q6)
 
 Parámetros:
 
-- `start_date`
-- `end_date`
+- `start_date`, `end_date` (Fase 34, B7): cada extremo acepta **dos formatos con el mismo nombre**:
+  - **solo-día** `YYYY-MM-DD` → se interpreta en la **zona horaria del usuario** (`User.timezone`):
+    `start_date` = 00:00 local de ese día; `end_date` incluye **todo** ese día (hasta las 00:00
+    local del día siguiente, exclusivo). Es el formato que debe usar el frontend.
+  - **datetime ISO 8601 completo** (`2026-03-10T05:00:00Z`) → instante tal cual; un `end_date`
+    datetime es **inclusivo** (`<=`), igual que antes de la Fase 34 (clientes curl / API key). Un
+    datetime sin zona se lee como UTC.
+  Un valor ilegible → `422` de dominio con `detail` string.
 - `period`: `day | month`
 - `currency` (opcional): moneda a filtrar; por defecto la preferida del usuario. La serie
   nunca mezcla monedas — se filtra por una sola, no se agrupa (Fase 11 §11.1).
@@ -999,6 +1036,10 @@ Salida (`CashflowSeries`):
 - `total_expense`: suma de `expense` de todos los buckets (Decimal serializado como string).
 - `net`: `total_income - total_expense` (Decimal serializado como string).
 
+**Zona del bucket (Fase 34, B8c):** en Postgres cada `date_label` (`YYYY-MM-DD` o `YYYY-MM`) es el
+día/mes **en la zona del usuario** (`AT TIME ZONE`), así que un gasto de las 22:00 locales no cae
+en el día siguiente. En el modo SQLite offline de desarrollo el bucket sigue siendo **solo UTC**.
+
 Un rango sin transacciones responde `buckets: []` y los tres totales en `"0.00"`, nunca `null`.
 
 ### `GET /api/v1/dashboard/category-distribution`
@@ -1007,8 +1048,14 @@ Devuelve la distribución por categoría en un rango de fechas.
 
 Parámetros:
 
-- `start_date`
-- `end_date`
+- `start_date`, `end_date` (Fase 34, B7): cada extremo acepta **dos formatos con el mismo nombre**:
+  - **solo-día** `YYYY-MM-DD` → se interpreta en la **zona horaria del usuario** (`User.timezone`):
+    `start_date` = 00:00 local de ese día; `end_date` incluye **todo** ese día (hasta las 00:00
+    local del día siguiente, exclusivo). Es el formato que debe usar el frontend.
+  - **datetime ISO 8601 completo** (`2026-03-10T05:00:00Z`) → instante tal cual; un `end_date`
+    datetime es **inclusivo** (`<=`), igual que antes de la Fase 34 (clientes curl / API key). Un
+    datetime sin zona se lee como UTC.
+  Un valor ilegible → `422` de dominio con `detail` string.
 - `type` (opcional, default `"expense"`): `income | expense`
 - `neto` (opcional, default `false`): si es `true`, calcula gasto neto (`SUM(expense) - SUM(income)`) por categoría. Ignora el parámetro `type`. Solo devuelve categorías con neto positivo.
 - `currency` (opcional): moneda a filtrar; por defecto la preferida del usuario. Se aplica
