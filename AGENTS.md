@@ -30,7 +30,7 @@ mes y cuánto me queda?"*). Ambos conviven — los saldos de cuentas siguen visi
 secundaria — pero la cifra principal del dashboard es el flujo mensual
 (`monthly_income − gastos del mes`).
 
-**Las Fases 0–32 están completas** (2026-07-06 a 2026-10-02) — ver `docs/CHANGELOG.md` para la
+**Las Fases 0–34 están completas** (2026-07-06 a 2026-10-04) — ver `docs/CHANGELOG.md` para la
 historia completa y `docs/specs/fase_NN_spec.md` para el detalle de implementación de cada
 fase. En producción, no solo planeado: el dashboard de flujo, alertas de presupuesto + push
 notifications, el resumen semanal, el onboarding de 3 minutos, atajos móviles con API keys,
@@ -55,10 +55,31 @@ queda aislado de producción. La Fase 32 (2026-10-02) movió el default de la su
 backend a Postgres 16 desechable vía `testcontainers` (SQLite quedó como opt-in explícito), hizo
 que el marker `postgres` pasara a ser de aislamiento (`concurrencia`) y agregó una guardia que
 corre `alembic check`: editar `models.py` sin migración ahora falla en la suite, no en el `CMD`
-de Docker.
+de Docker. La Fase 33 (2026-10-04) cerró la tercera pasada de QA (QA-034 a QA-042: resumen semanal
+de la semana que cerró, `QueryErrorState` con "Reintentar", confirm de borrado accesible). La
+**Fase 34 (2026-10-04) dio a cada usuario una zona horaria guardada**: `User.timezone` (IANA,
+default `America/Bogota`, detectada del navegador en el registro por email y Google, editable en
+Ajustes con `PATCH /users/me/preferences`, `422` si es inválida) es la única fuente de día, semana
+y mes del backend. Toda la aritmética de calendario vive en `app/core/periods.py` (funciones
+puras con `ahora` y la zona inyectados, límites aware en UTC y **superior exclusivo**; prohibido
+construir `datetime(...)` naive o resolver "actual" desde UTC fuera de ahí) y la validación en
+`app/core/timezones.py`. El dashboard, las cuentas, los presupuestos y alertas, Analítica,
+`/transactions` y el resumen semanal (se eliminó `SUMMARY_TIMEZONE`; el cron sigue único, lunes
+07:00 Bogotá) usan la zona del usuario, así que los totales de un mismo período coinciden. Las
+fechas `start_date`/`end_date` aceptan solo-día `YYYY-MM-DD` (en la zona del usuario) o datetime, y
+el `date` de una transacción solo-día de hoy conserva la hora real y el de otro día queda a las
+12:00 locales. El frontend manda días (nunca instantes UTC de límite), formatea con `Intl` en la
+zona (`useTimezone`, `lib/dates.ts`) y el cambio de zona en Ajustes invalida todo lo que depende de
+fechas. Una migración de datos (`c7d3e9a4b1f6`) movió las fechas históricas `00:00Z` a `17:00Z`
+(= 12:00 Bogotá). La Fase 35 (recurrentes) sigue como siguiente fase probable.
 
 Algunos hechos operativos de esa historia siguen vigentes hoy, no son solo registro:
 
+- **La Fase 34 requiere pasos del dueño al desplegar:** `pg_dump`/respaldo previo; correr
+  `scripts/fase34_reporte_x1.py --confirmo-copia` sobre una copia real y revisar el reporte (la
+  migración de datos `c7d3e9a4b1f6` corre sola en el `CMD` de Docker y mueve filas `00:00Z`→`17:00Z`,
+  algunas cruzan de mes); y **reconstruir la imagen** (`tzdata` entró a `backend/requirements.txt`
+  para aceptar los alias IANA que lista Chrome; reinstalar requirements en venvs locales).
 - **El login con Google está caído en producción** — Google Cloud deshabilitó el cliente OAuth
   (`disabled_client`, 2026-09-19), probablemente un falso positivo antifraude automático sobre un
   proyecto personal nuevo; hay una apelación pendiente. Es un bug real que afecta el uso

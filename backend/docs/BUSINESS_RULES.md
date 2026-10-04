@@ -282,13 +282,52 @@
 - No se puede borrar una cuenta o categoría ajena al usuario autenticado.
 - No se puede borrar ni editar una categoría base del sistema.
 
+## Zona horaria (Fase 34)
+
+Spec: `docs/specs/fase_34_spec.md`. Contratos de API en `API_REFERENCE.md`.
+
+- **`User.timezone`** (`String(64)`, `NOT NULL`, default `America/Bogota`) es la única fuente de
+  "día", "semana" y "mes" del backend. Se valida contra `zoneinfo.available_timezones()` en un único
+  helper (`core/timezones.py`). Por `PATCH /users/me/preferences` una zona inválida da `422` de
+  dominio; en el **registro** (email o Google) una zona ausente o inválida cae al default y **no
+  falla**, y en Google solo se aplica cuando el login **crea** al usuario.
+- **Cambiar la zona no recalcula ni toca nada guardado**: los instantes de las transacciones no se
+  modifican, solo cambia cómo se agrupan en días, semanas y meses.
+- **Todo límite de período sale de `core/periods.py`** (`resolver_mes`, `rango_mes`,
+  `limites_semana`, `rango_dias`, `dia_local`, `instante_de_dia`, `resolver_rango`): funciones puras
+  con `ahora` inyectado que devuelven datetimes **aware en UTC**. Prohibido construir `datetime(...)`
+  naive o resolver "mes/semana actual" desde UTC fuera de ese módulo (verificado con `grep`).
+- **El límite superior es siempre exclusivo** (`< fin`, nunca `<=`; Fase 31 B6). Un `end_date`
+  solo-día cubre todo ese día hasta las 00:00 local del día siguiente.
+- **Dashboard, `monthly-summary` de cuenta, presupuestos, alertas y presupuestos recurrentes** usan el
+  mes de la zona del usuario: el "mes actual", el "mes futuro" rechazado y el guard de generación
+  recurrente se evalúan en esa zona. Los presupuestos anticipados (mes futuro) se siguen evaluando
+  completos. Los totales de un mismo período coinciden entre dashboard, Analítica, `/transactions`,
+  presupuestos, alertas y resumen semanal.
+- **Fecha de la transacción** (`POST`/`PUT /transactions`): un solo-día `YYYY-MM-DD` igual a **hoy en
+  la zona del usuario** se guarda con la hora real (`now()`); de **otro día**, a las **12:00 locales**
+  de ese día (robusto a un cambio de zona de ±12 h). Un datetime con zona se guarda tal cual y uno
+  naive se lee como UTC. Sin `date` se usa `now()`.
+- **Rangos `start_date`/`end_date`** de `/transactions`, `cashflow-series` y `category-distribution`
+  aceptan solo-día (en la zona del usuario) o datetime completo (instante tal cual; un `end_date`
+  datetime es inclusivo, para no romper clientes curl/API key). El `400` de "inicio mayor que fin"
+  existe solo en `/transactions`.
+- **SQLite es solo UTC:** el bucket por día/mes de `cashflow-series` agrupa con `AT TIME ZONE` en
+  Postgres; la rama `strftime` de SQLite (opt-in offline) sigue en UTC y no ejercita zonas. La sesión
+  Postgres sigue forzada a UTC (QA-022).
+- **Datos históricos (migración `c7d3e9a4b1f6`):** las filas de `transactions` (incluidas las
+  borradas lógicamente) con hora exactamente `00:00:00.000Z` se movieron a las `17:00:00Z` del mismo
+  día UTC (= 12:00 Bogotá), conservando el día que tecleó el usuario. Algunas filas del primer día de
+  un mes pasan al mes que les corresponde: es un efecto aceptado. Los saldos no cambian. El
+  `downgrade` es simétrico (`17:00:00.000Z` → `00:00:00Z`).
+
 ## Dashboard
 
 - El resumen usa datos agregados del backend.
 - El progreso de presupuestos ya sale calculado para uso directo del Frontend.
 - El dashboard expone además serie temporal de flujo de caja y distribución por categoría.
-- El período consultado (`?year=&month=`, ambos o ninguno) es un mes calendario **UTC**: sin
-  parámetros es el mes actual. El rango es semiabierto `[día 1 00:00, fin)` — el mes en curso
+- El período consultado (`?year=&month=`, ambos o ninguno) es un mes calendario **en la zona del
+  usuario** (`User.timezone`, Fase 34; antes UTC): sin parámetros es el mes actual de su zona. El rango es semiabierto `[día 1 00:00, fin)` — el mes en curso
   tiene techo "ahora" (una transacción con fecha futura del mismo mes no cuenta como gasto del
   mes) y un mes ya cerrado tiene como techo el primer instante del mes siguiente, **exclusivo**
   (Fase 31, Decisión B6 — antes era "hasta el último día a las 23:59:59", y un `<=` contra ese
@@ -307,7 +346,7 @@
 - El filtro de cuentas destacadas y el resto de las cuentas usan universos distintos **dentro
   del mismo dashboard** (ver la sección "Cuentas"). Es una inconsistencia conocida, no una
   decisión redondeada, y está registrada en `docs/TODO.md`.
-- `first_transaction_month` (mes UTC de la transacción más antigua, sobre todas las cuentas) e
+- `first_transaction_month` (mes, en la zona del usuario, de la transacción más antigua, sobre todas las cuentas) e
   `expense_currencies` (monedas con gasto en el mes, sobre todas las cuentas) existen para que
   el frontend navegue el mes y ofrezca el selector de moneda sin recalcular nada; ninguno de
   los dos está restringido a las cuentas destacadas.
@@ -329,10 +368,11 @@
   el aviso ya quedó en la bandeja. Sin VAPID configurado, el push se omite en silencio
   (con log) y solo queda la bandeja.
 - El resumen semanal es opt-out (`User.weekly_summary_enabled`, default `true`); se
-  calcula cada lunes en `America/Bogota` sobre la moneda preferida del usuario.
+  calcula cada lunes 07:00 `America/Bogota` (cron único) sobre la moneda preferida del usuario; la
+  semana que resume es lunes–domingo **en la zona del usuario** (Fase 34, B10; ver "Zona horaria").
 - **El resumen del lunes es de la semana anterior (Fase 33, QA-037/038):** el job pasa
   `ahora − 7 días` como referencia, así que describe la semana lunes–domingo que acaba de cerrar y
-  su `period_key` es el de esa semana. Los límites de la semana son aware (`America/Bogota`) y
+  su `period_key` es el de esa semana. Los límites de la semana son aware (en la zona del usuario desde la Fase 34; `SUMMARY_TIMEZONE` ya no existe) y
   `build_weekly_summary` rechaza con `ValueError` una referencia naive. El texto habla de "la semana
   pasada".
 

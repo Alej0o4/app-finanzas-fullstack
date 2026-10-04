@@ -11,7 +11,7 @@
 >
 > **No implementa nada.** Solo se agrega este archivo.
 
-**Estado:** spec escrita el 2026-10-04. Sin marcadores `[NEEDS CLARIFICATION]` vivos. El dueño
+**Estado:** **implementada y cerrada el 2026-10-04** (pasos 1–14 del flujo; 484 tests en Postgres 16, Playwright en dev con Tokyo y Bogotá; pendientes del dueño antes de desplegar en `docs/TODO.md`). Desvíos: `resolver_rango` recibe `str`; el `400` de inicio>fin solo existe en `/transactions`; commits del frontend no estrictamente atómicos; `tzdata` agregado a `requirements.txt` (commit `bcf48c5`). Spec escrita el 2026-10-04. Sin marcadores `[NEEDS CLARIFICATION]` vivos. El dueño
 confirmó ese mismo día los **seams de testing** y el ajuste del criterio 4 (H9). `/analyze-spec`
 (pre-implementación) corrido el 2026-10-04: un hallazgo ALTO (H13) y cuatro MEDIO, todos aplicados a
 esta spec; queda lista para implementar en la rama `feat/fase-34-zona-horaria`.

@@ -9,6 +9,32 @@
 
 ---
 
+## Fase 34 — Zona horaria por usuario (2026-10-04)
+
+Spec: `docs/specs/fase_34_spec.md`. Cierra QA-032 y la deuda de mes/semana en UTC de las Fases 29–31.
+
+**Backend:** `User.timezone` (migración `a34c0de1b7f2`, default `America/Bogota`), validada en
+`core/timezones.py`, detectada en el registro (email y Google) y editable en `PATCH
+/users/me/preferences`. `core/periods.py` pasó a ser el módulo único de límites con zona (aware en
+UTC, superior exclusivo): dashboard, cuentas, presupuestos, alertas, Analítica, `/transactions` y
+resumen semanal lo usan (se eliminó `SUMMARY_TIMEZONE`). `start_date`/`end_date` aceptan solo-día o
+datetime; `date` solo-día de hoy conserva la hora real y el de otro día queda a las 12:00 locales.
+Migración de datos `c7d3e9a4b1f6`: fechas históricas `00:00Z` → `17:00Z`, con `downgrade` simétrico y
+`scripts/fase34_reporte_x1.py` para el reporte antes/después. `tzdata` en `requirements.txt` (alias
+IANA de Chrome; hallado en la verificación, commit `bcf48c5`). 484 tests en Postgres 16.
+
+**Frontend:** `useTimezone`, `lib/dates.ts` con `Intl` y rangos de días `YYYY-MM-DD` (nunca instantes
+UTC); modales, registro, Ajustes (selector de zona que invalida todo lo que depende de fechas) y
+formateo en la zona del usuario. Verificado con Playwright en dev (Tokyo y Bogotá).
+
+**Operativa (dueño), antes de desplegar:** `pg_dump`; correr `scripts/fase34_reporte_x1.py
+--confirmo-copia` sobre una copia real y revisar el reporte (algunas filas cruzan de mes);
+reconstruir la imagen de producción (`tzdata`); probar a mano el borde de las 19:00 Bogotá y las
+notificaciones en otra zona. **Desvíos de la spec:** `resolver_rango` recibe `str`; el `400` de
+inicio>fin solo existe en `/transactions`; los commits del frontend no son estrictamente atómicos.
+
+---
+
 ## Fase 33 — Corrección de la tercera pasada de QA (2026-10-04)
 
 Fix de QA-034 a QA-042. Spec: `docs/specs/fase_33_spec.md`. Sin migración ni cambio de contrato de API.

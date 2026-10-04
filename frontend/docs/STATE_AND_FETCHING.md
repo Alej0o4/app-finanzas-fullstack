@@ -220,6 +220,27 @@ actualizado Fase 30 F4):
 `currentUser.preferred_currency` que ya se invalida arriba. Al cambiar la moneda preferida la
 key cambia y TanStack pide la nueva sola. No agregar aquí "por las dudas".
 
+### Cambiar la zona horaria (Settings, Fase 34 F6)
+
+Cuando el `PATCH /users/me/preferences` lleva `timezone`, `useUserPreferences.ts` invalida todo lo
+que depende de fechas (la zona reagrupa períodos; no modifica movimientos guardados). Todas las
+llamadas van sin argumento, así que matchean por prefijo todos los meses/rangos cacheados:
+
+- `currentUser` (fuente de `useTimezone()`)
+- `dashboardSummary`, `dashboard-category-breakdown`
+- `budgets-progress` y `budgets` (`budgets.all()`)
+- `transactions` (`transactions.all()`)
+- `accounts` (`accounts.all()`) y `accounts.summary()`
+- `account-monthly-summary`, `account-category-breakdown`, `account-budgets-progress`
+- `analytics-cashflow`, `analytics-categories`
+
+**Gating `enabled: ready`:** `useTimezone()` devuelve `ready = false` hasta que `/users/me` cargó, y
+las queries cuyo rango depende de la zona (dashboard, Analítica, `/transactions`, detalle de cuenta)
+esperan con `enabled: ready` para no pedir ni cachear un período calculado con la zona
+equivocada. El display puro usa `displayTimezone` (zona del dispositivo como respaldo). **Limitación
+conocida:** los `queryKeys` no llevan la zona como segmento; dependen de que este cambio invalide por
+prefijo.
+
 ## Estado local
 
 ### React
