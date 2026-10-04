@@ -1,12 +1,14 @@
 import calendar
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import or_
 
 from app.core.database import SessionLocal
 from app.core.default_categories import ensure_default_categories
+from app.core.periods import dia_local, instante_de_dia
 from app.core.security import get_password_hash
+from app.core.timezones import DEFAULT_TIMEZONE, get_zoneinfo
 from app.core.user_deletion import delete_user_cascade
 from app.models import models
 from app.services.ledger import registrar_impacto
@@ -25,9 +27,13 @@ def _shift_months(base_year: int, base_month: int, delta: int) -> tuple[int, int
 
 
 def _seed_date(today: datetime, months_ago: int, day: int) -> datetime:
-    year, month = _shift_months(today.year, today.month, months_ago)
+    """Instante de una transacción de seed, coherente con B9 (Fase 34): las 12:00 locales del
+    día en la zona del usuario seed (Bogotá); si el día es hoy, la hora real."""
+    tz = get_zoneinfo(DEFAULT_TIMEZONE)
+    hoy = dia_local(today, tz)
+    year, month = _shift_months(hoy.year, hoy.month, months_ago)
     last_day_of_month = calendar.monthrange(year, month)[1]
-    return datetime(year, month, min(day, last_day_of_month))
+    return instante_de_dia(date(year, month, min(day, last_day_of_month)), today, tz)
 
 
 def _make_tx(db, user, account, category_name, category_type, amount, description, date):
@@ -99,7 +105,8 @@ def _build_transactions_data(cuenta, ahorros, tarjeta, today: datetime) -> list[
 
     # El mes en curso no debe tener fechas futuras: descarta cualquier fila cuyo día caiga
     # después de hoy (equivale a "solo lo que ya pasó este mes").
-    return [row for row in tx_data if row[-1].date() <= today.date()]
+    tz = get_zoneinfo(DEFAULT_TIMEZONE)
+    return [row for row in tx_data if dia_local(row[-1], tz) <= dia_local(today, tz)]
 
 
 def run_seed():
@@ -119,6 +126,7 @@ def run_seed():
             preferred_currency="COP",
             preferred_locale="es-CO",
             monthly_income=Decimal("3500000"),
+            timezone=DEFAULT_TIMEZONE,
             # Login exige email_verified desde el gate agregado en auth.py — sin esto, el
             # usuario de seed quedaría bloqueado para iniciar sesión.
             email_verified=True,
@@ -213,8 +221,8 @@ def run_seed():
             budget = models.Budget(
                 amount_limit=amount_limit,
                 currency="COP",
-                month=today.month,
-                year=today.year,
+                month=dia_local(today, get_zoneinfo(DEFAULT_TIMEZONE)).month,
+                year=dia_local(today, get_zoneinfo(DEFAULT_TIMEZONE)).year,
                 is_recurring=True,
                 user_id=user.id,
                 category_id=category.id,
