@@ -1,7 +1,7 @@
 import hashlib
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy import desc, func, or_, update
@@ -19,7 +19,7 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
-from app.core.periods import RANGO_DESC, resolver_rango
+from app.core.periods import RANGO_DESC, instante_de_dia, resolver_rango
 from app.core.rate_limit import key_func_por_usuario_o_ip, limiter
 
 # 🔒 Importamos a nuestro Guardia de Seguridad
@@ -119,6 +119,19 @@ def _resolver_transaccion_idempotente(
     return transaccion_previa
 
 
+def _resolver_fecha(valor: date | datetime | None, tz) -> datetime | None:
+    """Fase 34 B9: convierte la `date` del payload en el instante a guardar.
+
+    Solo-día (`date`) → hoy en la zona del usuario: hora real (`now()`); otro día: las 12:00
+    locales de ese día. Datetime completo → tal cual (un naive conserva el comportamiento de
+    siempre: UTC). Sin `date` → `None` (el caller conserva `now()` o la fecha previa)."""
+    if valor is None:
+        return None
+    if isinstance(valor, datetime):
+        return valor
+    return instante_de_dia(valor, datetime.now(UTC), tz)
+
+
 # --- RUTA PROTEGIDA ---
 @router.post("/", response_model=schemas.TransactionResponse)
 @limiter.limit("60/minute", key_func=key_func_por_usuario_o_ip)
@@ -183,6 +196,10 @@ def crear_transaccion(
 
     if not categoria:
         raise CategoryNotFoundError()  # 🔁 antes: raise HTTPException(404, "...")
+
+    # Fase 34 B9: solo-día → instante según la zona del usuario (el hash de idempotencia ya
+    # se calculó sobre el payload tal cual llegó).
+    transaccion.date = _resolver_fecha(transaccion.date, get_zoneinfo(current_user.timezone))
 
     # 2. Ensamblar la transacción
     nueva_transaccion = models.Transaction(**transaccion.model_dump(exclude_none=True), user_id=current_user.id)
@@ -506,7 +523,7 @@ def actualizar_transaccion(
         # (`ResponseValidationError`), así que acá sigue la regla anterior: ausente o null
         # → conserva la fecha actual.
         if transaccion_actualizada.date is not None:
-            transaccion_db.date = transaccion_actualizada.date
+            transaccion_db.date = _resolver_fecha(transaccion_actualizada.date, get_zoneinfo(current_user.timezone))
 
         db.commit()
         db.refresh(transaccion_db)
