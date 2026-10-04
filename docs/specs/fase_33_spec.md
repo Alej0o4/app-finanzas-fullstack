@@ -1,18 +1,21 @@
-# Spec — Fase 33: corrección de la tercera pasada de QA (QA-034 a QA-041)
+# Spec — Fase 33: corrección de la tercera pasada de QA (QA-034 a QA-042)
 
 > Sintetiza el `/grilling` del 2026-10-04 (decisiones **Q1–Q13**, todas aceptadas por el dueño) y el
 > reporte `.scratch/qa-2026-10-03/REPORTE_QA_3.md`. Esas decisiones no se reabren aquí: se citan por su
 > número y se bajan a decisiones implementables **B** (backend), **F** (frontend), **X** (operativa),
 > **T** (testing) y **D** (docs).
 >
-> Antes de escribirla se leyó el código afectado (ver "Hallazgos de exploración"); dos de esos
-> hallazgos corrigen premisas del grilling y se marcan abajo.
+> Antes de escribirla se leyó el código afectado (ver "Hallazgos de exploración"); varios de esos
+> hallazgos corrigen premisas del grilling (el conteo de voseo, `?onboarding=1`, el selector de
+> cuenta de la captura rápida) y quedan registrados abajo.
 >
 > **No implementa nada.** Solo se agrega este archivo y los cambios de ROADMAP ya hechos.
 
-**Estado:** spec escrita el 2026-10-04 con **1 marcador `[NEEDS CLARIFICATION]` vivo (F12)** y una
-confirmación de seams pendiente (ver "Testing Decisions"). No está lista para implementar hasta
-resolverlos (`docs/WORKFLOW.md` paso 4: `/analyze-spec` antes de implementar).
+**Estado:** spec escrita el 2026-10-04. El único marcador (F12) y la confirmación de seams se
+resolvieron con el dueño ese mismo día, y el `/analyze-spec` pre-implementación (1 CRÍTICO, 2 ALTO,
+3 MEDIO, 3 BAJO) se aplicó en esta versión. Sin marcadores vivos: **lista para implementar**
+(`docs/WORKFLOW.md` paso 4), pendiente de una segunda corrida de `/analyze-spec` si el dueño la pide.
+**QA-042** (el email del Sidebar mayusculizado) se agregó al alcance en esa corrida.
 
 ---
 
@@ -32,8 +35,8 @@ verificar) encontró ocho problemas que el dueño sí nota en el uso diario:
   (QA-034) y el panel de notificaciones se sale de la pantalla (QA-036).
 - **Fricción y accesibilidad en la captura:** el modal de transacción no valida la cuenta y manda
   `account_id: 0` (QA-035); el confirm de borrado no es un diálogo accesible (QA-039).
-- **Copy y detalles visuales inconsistentes** (QA-041): voseo en medio de una app que tutea y fechas
-  con "De"/"P. M." mayusculizados.
+- **Copy y detalles visuales inconsistentes** (QA-041, QA-042): voseo en medio de una app que
+  tutea, fechas con "De"/"P. M." mayusculizados y el email del Sidebar mostrado como `Qa3@Test.com`.
 
 ## Solution
 
@@ -46,7 +49,8 @@ verificar) encontró ocho problemas que el dueño sí nota en el uso diario:
   de notificaciones es una hoja que cabe en pantalla.
 - El modal de transacción pide la cuenta con un error claro (y la preselecciona si solo hay una); el
   confirm de borrado cumple el mismo estándar de accesibilidad que los demás modales.
-- Toda la copy tutea y las fechas se ven como "03 de oct de 2026, 10:55 p. m.".
+- Toda la copy tutea, las fechas se ven como "03 de oct de 2026, 10:55 p. m." y el email aparece
+  tal como se escribió.
 
 ## User Stories
 
@@ -99,8 +103,8 @@ verificar) encontró ocho problemas que el dueño sí nota en el uso diario:
     390 px, para leer los títulos sin que se corten.
 21. Como dueño, quiero que en pantallas anchas el panel siga siendo el popover de siempre, para no
     cambiar lo que ya funciona en desktop.
-22. Como dueño, quiero poder cerrar el panel de notificaciones con el mismo gesto en móvil y en
-    desktop, para no aprender dos interacciones.
+22. Como dueño, quiero poder cerrar el panel de notificaciones con un clic fuera de él o con
+    Escape, tanto en móvil como en desktop, para no aprender dos interacciones.
 
 **Captura y accesibilidad (QA-035, QA-039)**
 
@@ -123,12 +127,14 @@ verificar) encontró ocho problemas que el dueño sí nota en el uso diario:
 31. Como usuario de teclado, quiero poder cerrar el confirm con Escape, para cancelar rápido (ya
     funciona; no debe romperse).
 
-**Copy y detalles (QA-041)**
+**Copy y detalles (QA-041, QA-042)**
 
 32. Como dueño, quiero que toda la app me hable de "tú", para que el tono sea el mismo en onboarding,
     Ajustes y Analítica.
 33. Como dueño, quiero leer las fechas como "03 de oct de 2026, 10:55 p. m.", para que se lean como
     español natural.
+34. Como dueño, quiero ver mi email en el Sidebar exactamente como lo escribí (`test@test.com`), no
+    con cada tramo en mayúscula, para reconocerlo y poder copiarlo bien.
 
 ## Implementation Decisions
 
@@ -141,8 +147,9 @@ verificar) encontró ocho problemas que el dueño sí nota en el uso diario:
 - **B2 (Q2/Q10, QA-038).** `_limites_semana` devuelve límites **con zona horaria**
   (`America/Bogota`, la constante `SUMMARY_TIMEZONE` que ya existe). Se comparan contra
   `Transaction.date` (`timestamptz`) sin conversión implícita. Sin otros cambios de zona en la fase.
-  La referencia que llega sin zona horaria no se interpreta como hora del servidor: la función exige
-  fecha aware (o la trata como UTC, a decidir en la implementación y fijar con test).
+  La referencia **debe ser aware**: una fecha naive se rechaza con `ValueError` (el job siempre pasa
+  `datetime.now(UTC)`; solo los tests usaban naive), para que nunca se interprete en silencio como
+  hora del servidor. Un test fija ese rechazo (T4).
 - **B3 (Q12).** El texto del resumen pasa a la semana pasada:
   - sin gasto: `La semana pasada no registraste gastos — ¿todo tranquilo?`
   - con gasto: `La semana pasada gastaste {total} {moneda} — el mayor gasto fue en {categoría}`
@@ -157,11 +164,23 @@ verificar) encontró ocho problemas que el dueño sí nota en el uso diario:
   `weekly_summary` existentes: todos describen la semana equivocada (casi siempre "no registraste
   gastos") y la clave de la semana 40 chocaría con el primer resumen correcto (el índice único se
   traga el `IntegrityError` en silencio y ese resumen no llegaría nunca).
-  - La spec entrega el `SELECT` previo y el `DELETE` exactos para dev y prod.
-  - **Dev:** la corre el agente con `-p oikos-dev`. **Prod:** la corre el dueño a mano.
+  - El SQL exacto (tabla `notifications`; mismo script para dev y prod):
+
+    ```sql
+    -- 1) Qué se va a borrar (revisar antes):
+    SELECT id, user_id, period_key, created_at, left(body, 60) AS body
+      FROM notifications WHERE type = 'weekly_summary' ORDER BY created_at;
+    -- 2) Limpieza:
+    DELETE FROM notifications WHERE type = 'weekly_summary';
+    ```
+
+  - **Dev:** lo corre el agente (`docker compose -p oikos-dev exec postgres psql …`). **Prod:** lo
+    corre el dueño a mano, con el `SELECT` previo a la vista.
   - **Cuándo:** después de desplegar el código corregido y antes del siguiente lunes 07:00 Bogotá.
     Si el cron del lunes ya corrió con el código viejo, se vuelve a ejecutar el `DELETE` tras
     desplegar (borra también ese aviso).
+  - **Cómo se prueba (T5):** el stack dev no tiene avisos `weekly_summary`, así que la limpieza se
+    prueba sembrando uno con la clave que choca.
 
 ### Frontend — estados de error (Q4, QA-040)
 
@@ -191,7 +210,8 @@ verificar) encontró ocho problemas que el dueño sí nota en el uso diario:
   lógica de elegibilidad del banner (visitas, descartado, standalone) no cambia.
 - **F7 (Q5, QA-036).** En pantallas menores a `sm`, el panel de notificaciones es una hoja fija
   (`fixed`, con márgenes laterales) que cabe entera en el viewport, incluidos los 390 px; desde `sm`
-  sigue siendo el popover absoluto actual. Mismo contenido, mismo cierre.
+  sigue siendo el popover absoluto actual. Mismo contenido; se cierra con un clic fuera de él o con
+  Escape en ambos formatos.
 - **F8 (Q6, QA-039).** El confirm de borrado cumple el estándar de QA-014: `role="alertdialog"`,
   `aria-modal`, mensaje asociado como descripción, foco inicial en **"Cancelar"**, trampa de foco,
   restauración del foco al cerrar y Escape. La lógica de foco de `ModalShell` se **extrae a un hook
@@ -204,30 +224,38 @@ verificar) encontró ocho problemas que el dueño sí nota en el uso diario:
   cuenta.`) con el foco al campo, igual que Valor y Categoría, y **nunca** envía una cuenta no
   elegida. Si el usuario tiene exactamente una cuenta, el modal la trae preseleccionada; con varias,
   sigue en "Selecciona…". El modal de edición ya parte de la cuenta del movimiento.
+  - **Alcance:** solo `TransactionModal`. El gasto rápido y `/capture` usan `TransactionCaptureForm`,
+    que ya parte de la primera cuenta cuando no se elige ninguna y solo muestra selector con más de
+    una; ese comportamiento (3 toques) **no cambia**, también con varias cuentas. Único ajuste ahí:
+    si el usuario no tiene cuentas, el formulario no debe enviar `account_id: 0` (hoy
+    `Number('')`), sino bloquear el guardado.
 
-### Frontend — copy y detalles (Q8, QA-041)
+### Frontend — copy y detalles (Q8, QA-041, QA-042)
 
-- **F10.** Tuteo en todo texto visible al usuario: hoy hay 24 apariciones de voseo en 9 archivos del
-  frontend (onboarding, Ajustes, dashboard, Analítica, gráficos, detalle de cuenta, captura,
-  layout). Criterio: verbos en segunda persona singular de "tú" (`manejas`, `puedes`, `usas`,
-  `elige`, `registra`) y `aquí` en vez de `acá`. Se cierra con un grep sin restos. El backend no
-  tiene texto de usuario en voseo (solo comentarios, que no se tocan).
-- **F11.** Las fechas de los feeds se muestran con solo la primera letra en mayúscula en lugar del
-  `capitalize` de CSS (que mayusculiza "De" y "P. M."). Un helper de formato compartido; se aplica a
-  los seis lugares que hoy usan `capitalize` sobre una fecha. Los `capitalize` que no son fechas (por
-  ejemplo en el sidebar) se revisan y se dejan si son correctos.
-- **F12.** `[NEEDS CLARIFICATION: quitar ?onboarding=1 de la URL del dashboard tras el onboarding]` —
-  el grilling (Q8) aceptó quitarlo, pero ese parámetro **no es una fuga**: es el mecanismo de la
-  Fase 15 (Decisión 15.5.1) que hace aparecer el aviso "Has gastado US$ 50 de tus US$ 2.000 de
-  ingreso mensual" en el dashboard, sin estado extra, y desaparece solo al navegar. Quitarlo exigiría
-  guardar ese estado y limpiar la URL con un reemplazo. Opciones: (a) **dejarlo como está** y retirar
-  este ítem de QA-041 (recomendado: es inofensivo y es la decisión 15.5.1); (b) guardar la bandera
-  en estado local y limpiar la URL con `router.replace`, con el costo de que recargar la página
-  oculta el aviso.
+- **F10.** Tuteo en todo texto **visible al usuario**. Hoy son **8 textos en 3 archivos**: Ajustes
+  (`Ingresá un nombre…`, `La moneda que usás…`, `Todavía no tenés API keys`, `Si la perdés…`,
+  `Elegí un nombre…`), el paso de moneda del onboarding (`manejás`, `Podés`) y el gráfico de flujo
+  (`aparecerán acá`). Los comentarios de código con "acá" **no se tocan**. Criterio: verbos en
+  segunda persona singular de "tú" (`manejas`, `puedes`, `usas`, `tienes`, `Elige`, `pierdes`) y
+  `aquí` en vez de `acá`. El cierre usa un grep más amplio que el de este análisis (también formas
+  en `-ás/-és/-ís` e imperativos en `-á/-é`) sobre `app`, `components` y `lib`, descontando
+  comentarios, y debe dar cero. El backend no tiene texto de usuario en voseo.
+- **F11.** Las fechas de transacciones se muestran con solo la primera letra en mayúscula en lugar del
+  `capitalize` de CSS (que mayusculiza "De" y "P. M."). Un helper de formato compartido, aplicado a
+  los **cuatro** feeds que hoy usan `capitalize` sobre la fecha de un movimiento (detalle de cuenta,
+  detalle de categoría, lista de transacciones y últimas transacciones). La etiqueta de mes de
+  Presupuestos (`getMonthName`) se revisa: si ya viene bien formada, se deja con `capitalize`.
+- **F13 (QA-042).** El email del usuario en el Sidebar deja de pasar por `capitalize` (hoy `qa3@test.com`
+  se ve `Qa3@Test.com`). No es una fecha: se quita la clase y no se reemplaza por nada.
+- **F12 (resuelta con el dueño, 2026-10-04).** `?onboarding=1` en la URL del dashboard **se deja como
+  está** y sale del alcance de QA-041. No es una fuga: es el mecanismo de la Fase 15 (Decisión
+  15.5.1) que hace aparecer el aviso "Has gastado US$ 50 de tus US$ 2.000 de ingreso mensual" sin
+  estado extra y que desaparece solo al navegar. La premisa de Q8 ("se arrastra a la URL") era un
+  error de clasificación del reporte de QA.
 
 ### Docs
 
-- **D1.** Al implementar: entradas `QA-034` a `QA-041` en `docs/TODO.md` (resueltas con fecha), línea
+- **D1.** Al implementar: entradas `QA-034` a `QA-042` en `docs/TODO.md` (resueltas con fecha), línea
   de la Fase 33 en `docs/CHANGELOG.md`, y actualizar `docs/ROADMAP.md` (la fase pasa a completada).
 - **D2.** Documentar el componente de error y el hook de diálogos en
   `frontend/docs/COMPONENTS_GUIDE.md`, y la regla "el resumen del lunes es de la semana anterior" en
@@ -262,9 +290,14 @@ que el dueño ve o recibe, no cómo está armado el código. En backend, el resu
 - **T3.** Ejecutar el job dos veces en la misma semana deja un solo aviso (el `IntegrityError` se
   traga).
 - **T4.** Se actualizan los tests existentes: la referencia `REFERENCE` deja de ser un `datetime`
-  naive (con zona aware para no depender de la hora del sistema) y los asserts de texto cambian a la
-  copy nueva. Prior art para el job: `test_weekly_summary.py` (`freeze_time`), y para un entry point
-  que abre su propia sesión, `test_seed.py` (monkeypatch del `SessionLocal` del módulo con la
+  naive (pasa a aware para no depender de la hora del sistema), los asserts de texto cambian a la
+  copy nueva y un test nuevo comprueba que una fecha naive lanza `ValueError` (B2).
+- **T5 (X1).** Prueba de la limpieza contra dev: sembrar un `weekly_summary` con la clave de la
+  semana que cierra, correr el job (debe omitirse sin error), correr el `DELETE` de X1, correr el
+  job otra vez (ahora debe crear el aviso) y comprobar que no queda ningún `weekly_summary` falso.
+  Es un script de verificación, no un test de la suite.
+- **Prior art (T1–T3).** Para el job: `test_weekly_summary.py` (`freeze_time`). Para un entry point
+  que abre su propia sesión: `test_seed.py` (monkeypatch del `SessionLocal` del módulo con la
   `real_session_factory` / `db_session` de `conftest`). El job hace `close()` y `commit()`; el test
   debe neutralizar el cierre de la sesión de test o usar una factory propia, a resolver al implementar.
 
@@ -278,13 +311,16 @@ corregirlo y se vuelve a comprobar después, en 390×844 y 1280×800:
 - **QA-034:** con el banner activo (instalación elegible), el botón "Guardar" del modal responde al
   clic; el banner no está en el DOM con un modal o confirm abierto y vuelve al cerrarlo.
 - **QA-036:** a 390 px el panel completo queda dentro del viewport (`right ≤ 390`); a 1280 px sigue
-  siendo popover.
+  siendo popover; en ambos, un clic fuera y Escape lo cierran.
+- **F6 (borde):** con el drawer del Sidebar abierto en móvil y el banner de instalación activo, se
+  comprueba si se superponen; si es así, se decide si el drawer también registra el contador.
 - **QA-039:** el confirm tiene `role="alertdialog"` y `aria-modal`, el foco inicial está en
   "Cancelar", Tab no sale, Escape cierra y el foco vuelve al botón de borrar.
 - **QA-035:** guardar sin cuenta muestra "Elige una cuenta." y **no** hay `POST`; con una sola cuenta
   viene preseleccionada; con varias no.
-- **QA-041:** `grep` de voseo sin resultados en `frontend/app` y `frontend/components`, y las fechas
-  del feed muestran "de" y "p. m." en minúscula.
+- **QA-041:** el `grep` ampliado de F10 da cero textos de usuario en voseo en `frontend/app`,
+  `frontend/components` y `frontend/lib`, y las fechas del feed muestran "de" y "p. m." en minúscula.
+- **QA-042:** el email del Sidebar se ve en minúsculas, tal como está guardado.
 - **Regresión:** `ModalShell` sigue con su trampa de foco (QA-014), Escape y restauración de foco.
 - `/run-tests` (pytest, ruff, eslint, prettier) en verde.
 
@@ -304,9 +340,10 @@ corregirlo y se vuelve a comprobar después, en 390×844 y 1280×800:
 
 ## Further Notes
 
-- **Corrección de una premisa del grilling (F12).** `?onboarding=1` en el dashboard no es una fuga
-  de URL sino un mecanismo deliberado de la Fase 15. El reporte de QA lo clasificó mal como
-  cosmético y el grilling lo aceptó sobre esa base; por eso queda como marcador y no como decisión.
+- **Premisas del grilling corregidas durante la spec.** (1) `?onboarding=1` en el dashboard es un
+  mecanismo deliberado de la Fase 15, no una fuga (F12, resuelta). (2) El voseo visible son 8
+  textos en 3 archivos, no "24 en 9" (la mayoría eran comentarios de código; F10). (3) `account_id: 0`
+  es del `TransactionModal`; la captura rápida ya parte de la primera cuenta (F9).
 - **Plazo operativo.** El próximo cron es el **lunes 2026-10-05 07:00 Bogotá**. Si el código
   corregido no está desplegado para entonces, ese lunes llegará otra vez el resumen falso y habrá
   que repetir la limpieza X1 al desplegar. Mientras tanto, desactivar el resumen semanal en Ajustes
@@ -339,8 +376,18 @@ Verificados contra el código el 2026-10-04:
 9. En Cuentas, el `else` final de las tarjetas de saldo renderiza `$ 0` tanto cuando el resumen vino
    vacío como cuando falló. Categorías no lee `isError`. Los gráficos de Analítica sí reciben
    `isError`, pero los KPIs no.
-10. `QuickTransactionModal` no tiene selector de cuenta (el paso de cuenta se resuelve por otro
-    camino); a confirmar al implementar F9 si requiere el mismo guardado.
+10. `QuickTransactionModal` delega en `TransactionCaptureForm` (el mismo que usa `/capture`), que
+    parte de la primera cuenta si no se elige ninguna y solo muestra selector con más de una. El
+    `account_id: 0` de QA-035 es exclusivo de `TransactionModal` (F9). Único hueco: sin cuentas,
+    `Number('')` da 0.
+11. Voseo visible: 8 textos en `settings/page.tsx` (5), `OnboardingCurrencyStep.tsx` (2) y
+    `CashflowChart.tsx` (1). Los demás "acá" del repo son comentarios.
+12. `capitalize` sobre fechas: 4 feeds (detalle de cuenta, detalle de categoría, lista de
+    transacciones, últimas transacciones). Además el mes de Presupuestos (`getMonthName`) y **el
+    email del Sidebar**, que se ve `Qa3@Test.com` (QA-042).
+13. `ModalShell` lo usan los ocho modales/pantallas con diálogo y `ConfirmDialog` se monta una sola
+    vez, en el layout del dashboard: el contador de F6 cubre todos los diálogos, salvo el drawer del
+    Sidebar en móvil (`fixed inset-0`).
 
 ## Decisiones resueltas con el usuario (2026-10-04)
 
@@ -352,7 +399,9 @@ Verificados contra el código el 2026-10-04:
 | Q5 | Móvil | Banner se oculta con un modal abierto; panel como hoja fija en móvil |
 | Q6 | QA-039 | Estándar de QA-014, foco inicial en "Cancelar", lógica compartida con `ModalShell` |
 | Q7 | QA-035 | Validación + preselección con una sola cuenta |
-| Q8 | QA-041 | Tuteo, mayúsculas solo en la primera letra; `?onboarding=1` queda en **F12** |
+| Q8 | QA-041 | Tuteo (8 textos en 3 archivos) y mayúsculas solo en la primera letra. `?onboarding=1` **se deja como está** (F12, resuelta el 2026-10-04) |
+| — | Seams de test | Confirmados: `run_weekly_summary_job` en backend, Playwright en frontend |
+| — | `/analyze-spec` | Aplicado: corrige F10 y F11, agrega el SQL de X1 y la decisión de B2, acota F9 y registra QA-042 (F13) |
 | Q9 | Estructura | Una PR, backend primero, frontend `[P]`, cuarta pasada de verificación |
 | Q10 | QA-038 en la 33 | Sí, con la zona fija de Bogotá |
 | Q11 | Avisos existentes | SQL puntual, sin migración |
@@ -370,7 +419,8 @@ Verificados contra el código el 2026-10-04:
 3. **[backend]** `backend/app/core/weekly_summary.py`: B1 (referencia del job), B2 (límites aware) y
    B3 (texto), hasta que T1–T4 pasen — Decisiones B1–B4.
    Depende de: 2
-4. **[backend]** `docs`/SQL: preparar y probar X1 contra dev (`-p oikos-dev`) — Decisión X1.
+4. **[infra]** Probar la limpieza X1 contra dev (`-p oikos-dev`) con el aviso sembrado y dejar el SQL
+   en el cierre del PR para que el dueño lo corra en prod — Decisión X1, prueba T5.
    Depende de: 3
 5. **[frontend]** [P] Componente `QueryErrorState` y reemplazo de los cinco bloques inline —
    Decisión F1.
@@ -387,10 +437,11 @@ Verificados contra el código el 2026-10-04:
    Depende de: —
 10. **[frontend]** [P] Validación y preselección de cuenta en `TransactionModal` — Decisión F9.
     Depende de: —
-11. **[frontend]** Tuteo en los 9 archivos y helper de fecha con primera letra en mayúscula —
-    Decisiones F10, F11 (F12 según su resolución). No es `[P]`: comparte archivos con los pasos 5
-    y 6 (dashboard, detalle de cuenta, Analítica) y con el 10 si el modal tiene copy en voseo.
-    Depende de: 5, 6, 10
+11. **[frontend]** Tuteo en los 3 archivos con voseo visible, helper de fecha con primera letra en
+    mayúscula en los 4 feeds y quitar `capitalize` del email del Sidebar — Decisiones F10, F11, F13
+    (F12 no requiere trabajo). No es `[P]`: comparte archivos con los pasos 5 y 6 (Ajustes, gráfico
+    de flujo, detalle de cuenta y de categoría, lista de transacciones).
+    Depende de: 5, 6
 12. **[docs]** TODO, CHANGELOG, ROADMAP, `COMPONENTS_GUIDE.md` y `BUSINESS_RULES.md` — Decisiones
     D1–D2.
     Depende de: 3, 6, 8, 9, 10, 11

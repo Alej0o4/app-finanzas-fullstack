@@ -66,7 +66,7 @@ zonas horarias queda como **Fase 34 probable** y recurrentes como **Fase 35 prob
 
 La tercera pasada (stack dev aislado + Playwright con Chromium, cubriendo lo que la segunda dejó
 pendiente: escritura en la UI, onboarding, modales, estados de error, push/alertas de punta a
-punta y el borde domingo/lunes del resumen semanal) encontró **QA-034 a QA-041**. Reporte con
+punta y el borde domingo/lunes del resumen semanal) encontró **QA-034 a QA-041**; el `/analyze-spec` de la spec sumó **QA-042**. Reporte con
 pasos, causas y capturas: `.scratch/qa-2026-10-03/REPORTE_QA_3.md`. Lo que sí quedó verificado en
 verde: saldos tras crear/editar/borrar desde la UI, onboarding con cuenta nueva, alertas 80 %/100 %
 sin duplicados y push real con FCM.
@@ -84,7 +84,8 @@ backend primero y frontend en paralelo.
 | **QA-035** 🟡 | "Nueva transacción" no valida la cuenta: manda `account_id: 0`, el backend responde 404 y el toast dice "no existe o no te pertenece". | frontend |
 | **QA-036** 🟡 | En móvil el panel de notificaciones (`absolute left-0 w-80` anclado a la campana del sidebar) se sale 68 px de la pantalla y corta los textos. | frontend |
 | **QA-039** 🟡 | El confirm de borrado (`useConfirmStore`) no tiene `role="dialog"`/`alertdialog` ni `aria-modal` y el foco no entra; la corrección de QA-014 solo cubrió `ModalShell`. | frontend |
-| **QA-041** 🟢 | Voseo en onboarding/Ajustes frente al tuteo del resto, `?onboarding=1` que se arrastra a la URL del dashboard, mayúsculas CSS en "De"/"P. M.". | frontend |
+| **QA-041** 🟢 | Voseo visible (8 textos en 3 archivos: Ajustes, paso de moneda del onboarding, gráfico de flujo) frente al tuteo del resto y mayúsculas CSS en "De"/"P. M." de las fechas de 4 feeds. `?onboarding=1` **se deja**: es el mecanismo de la Fase 15 (Decisión 15.5.1), no una fuga. | frontend |
+| **QA-042** 🟢 | El email del usuario en el Sidebar se ve `Qa3@Test.com` por un `capitalize` de CSS. Hallado al analizar la spec de la Fase 33. | frontend |
 
 **Decisiones del `/grilling` (2026-10-04):**
 
@@ -101,7 +102,7 @@ backend primero y frontend en paralelo.
 - **QA-039:** estándar de QA-014 (`alertdialog`, `aria-modal`, foco inicial en "Cancelar", trampa
   de foco, restaurar foco), reutilizando la lógica de `ModalShell`.
 - **QA-035:** error en línea "Elige una cuenta." y preselección con una sola cuenta.
-- **QA-041:** todo a tuteo, sin `?onboarding=1` residual, mayúsculas solo en la primera letra.
+- **QA-041:** todo a tuteo (8 textos visibles, no los comentarios), mayúsculas solo en la primera letra de las fechas; `?onboarding=1` se deja como está (resuelto al redactar la spec). **QA-042:** quitar `capitalize` del email del Sidebar.
 
 **Fuera de la fase, a propósito:** la unificación de zonas horarias (ver Fase 34 abajo).
 
