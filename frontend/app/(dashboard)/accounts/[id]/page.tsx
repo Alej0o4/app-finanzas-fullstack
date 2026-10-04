@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { monthOfDay, monthRange } from '@/lib/dateRanges';
-import { todayInZone } from '@/lib/dates';
+import { dayInZone, todayInZone } from '@/lib/dates';
 import { useTimezone } from '@/lib/hooks/useTimezone';
 import { formatCurrency, formatDateLabel, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
@@ -69,7 +69,7 @@ export default function AccountDetailPage() {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [type, setType] = useState('expense');
-  const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [transactionDate, setTransactionDate] = useState('');
   const [accountId, setAccountId] = useState(String(id));
   const [categoryId, setCategoryId] = useState('');
 
@@ -254,7 +254,8 @@ export default function AccountDetailPage() {
     setDescription(tx.description || '');
     setAmount(String(tx.amount));
     setType(tx.type);
-    setTransactionDate(tx.date ? tx.date.split('T')[0] : new Date().toISOString().split('T')[0]);
+    // Fase 34 F4: el día del instante en la zona del usuario (`Intl`), no el día UTC.
+    setTransactionDate(dayInZone(tx.date, displayTimezone) || todayInZone(displayTimezone));
     setAccountId(String(tx.account_id));
     setCategoryId(String(tx.category_id));
     setIsModalOpen(true);
@@ -269,7 +270,11 @@ export default function AccountDetailPage() {
       description: description.trim() || null,
       amount: Number(amount),
       type: type as 'income' | 'expense',
-      date: transactionDate,
+      // Fase 34 B9: solo si el usuario cambió la fecha (no re-estampar la hora al editar el monto).
+      date:
+        transactionDate !== dayInZone(selectedTransaction.date, displayTimezone)
+          ? transactionDate
+          : undefined,
       account_id: Number(accountId),
       category_id: Number(categoryId),
     });
@@ -475,7 +480,7 @@ export default function AccountDetailPage() {
                           {formatCurrency(tx.amount, tx.currency)}
                         </p>
                         <p className="text-text-muted text-[11px]">
-                          {formatDateLabel(tx.date, config.locale)}
+                          {formatDateLabel(tx.date, config.locale, displayTimezone)}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">

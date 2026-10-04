@@ -83,6 +83,26 @@ export function useUserPreferences() {
         // y `TransactionCaptureForm`, que la leen del mismo cache.
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
       }
+      if (body.timezone) {
+        // Fase 34 F6 (Q9): la zona define qué día/semana/mes es cada movimiento al agrupar, así
+        // que cambiarla reagrupa TODO lo que depende de fechas (no modifica ningún movimiento
+        // guardado). `currentUser()` es la fuente de `useTimezone()`; el resto son las raíces de
+        // dashboard, presupuestos, analítica, transacciones y las vistas por cuenta — llamadas sin
+        // argumento, que matchean por prefijo todos los meses/rangos cacheados.
+        queryClient.invalidateQueries({ queryKey: queryKeys.currentUser() });
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() });
+        queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() });
+        queryClient.invalidateQueries({ queryKey: queryKeys.budgets.all() });
+        queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() });
+        queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
+        queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() });
+        queryClient.invalidateQueries({ queryKey: ['account-monthly-summary'] });
+        queryClient.invalidateQueries({ queryKey: ['account-category-breakdown'] });
+        queryClient.invalidateQueries({ queryKey: ['account-budgets-progress'] });
+        queryClient.invalidateQueries({ queryKey: ['analytics-cashflow'] });
+        queryClient.invalidateQueries({ queryKey: ['analytics-categories'] });
+      }
       if (body.preferred_theme) {
         updateConfig({ theme: body.preferred_theme });
       }

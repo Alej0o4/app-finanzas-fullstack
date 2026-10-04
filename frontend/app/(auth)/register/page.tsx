@@ -1,5 +1,6 @@
 'use client';
 
+import { deviceTimezone } from '@/lib/dates';
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -52,6 +53,9 @@ export default function RegisterPage() {
         full_name: fullName,
         email,
         password,
+        // Fase 34 F5/B5: zona detectada del dispositivo; el backend valida y, si es inválida,
+        // usa el default sin fallar el registro. Editable luego en Ajustes.
+        timezone: deviceTimezone(),
       });
 
       // Decisión 15.0.3: login automático reusando /auth/login (mismo patrón que ya

@@ -190,7 +190,9 @@ export interface UpdateTransactionPayload {
   description: string | null;
   amount: number;
   type: 'income' | 'expense';
-  date: string;
+  /** Fase 34 §B9: `YYYY-MM-DD` del `<input type="date">`, sin convertir. Se manda **solo si el
+   *  usuario cambió la fecha** (así editar el monto no re-estampa la hora de un gasto de hoy). */
+  date?: string;
   account_id: number;
   category_id: number;
   payment_method?: 'cash' | 'card' | 'transfer' | null;

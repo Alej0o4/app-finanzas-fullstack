@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -18,6 +18,8 @@ import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useSetMonthlyIncome } from '@/lib/hooks/useSetMonthlyIncome';
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@/lib/hooks/useApiKeys';
 import { useAccounts } from '@/lib/hooks/useAccounts';
+import { useTimezone } from '@/lib/hooks/useTimezone';
+import { deviceTimezone } from '@/lib/dates';
 import QueryErrorState from '@/components/ui/QueryErrorState';
 import { api } from '@/lib/api';
 import { getApiError } from '@/lib/utils';
@@ -62,6 +64,20 @@ export default function SettingsPage() {
       }
     );
   };
+
+  // Fase 34 F6: zona horaria. La lista sale de `Intl.supportedValuesOf('timeZone')` (con la
+  // guardada y `UTC` siempre incluidas, por si el motor no las lista) y se guarda con el mismo
+  // PATCH de preferencias; el hook invalida todo lo que depende de fechas.
+  const { timezone } = useTimezone();
+  const timezoneOptions = useMemo(() => {
+    const supported =
+      (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.(
+        'timeZone'
+      ) ?? [];
+    return [
+      ...new Set([...(timezone ? [timezone] : []), deviceTimezone(), 'UTC', ...supported]),
+    ].sort();
+  }, [timezone]);
 
   // Fase 21 §21.1 (Decisión 21.1.1): monedas del selector derivadas de las cuentas
   // reales del usuario (misma queryKey que accounts/, ya en cache si visitó /accounts
@@ -291,6 +307,42 @@ export default function SettingsPage() {
               </option>
             ))}
           </Select>
+        )}
+      </section>
+
+      {/* Fase 34 F6 (Q9): zona horaria. Cambiarla no recalcula ni modifica movimientos. */}
+      <section className="bg-surface border-border/70 rounded-2xl border p-4 sm:p-5">
+        <div className="mb-4">
+          <h2 className="text-text font-sans text-base font-semibold">Zona horaria</h2>
+          <p className="text-text-muted mt-0.5 text-xs sm:text-sm">
+            Define qué día, semana y mes es cada movimiento. Cambiar la zona reagrupa tus períodos;
+            no modifica tus movimientos.
+          </p>
+        </div>
+        {timezone ? (
+          <Select
+            label="Zona horaria"
+            value={timezone}
+            onChange={(e) =>
+              updatePreferences.mutate(
+                { timezone: e.target.value },
+                {
+                  onSuccess: () => toast.success('Zona horaria actualizada'),
+                  onError: (err) => toast.error(getApiError(err)),
+                }
+              )
+            }
+            disabled={updatePreferences.isPending}
+            className="bg-background"
+          >
+            {timezoneOptions.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <Skeleton className="h-12 w-full" />
         )}
       </section>
 

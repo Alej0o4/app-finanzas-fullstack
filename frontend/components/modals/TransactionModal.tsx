@@ -8,6 +8,8 @@ import { queryKeys } from '@/lib/queryKeys';
 import { useAccounts } from '@/lib/hooks/useAccounts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { getApiError } from '@/lib/utils';
+import { todayInZone } from '@/lib/dates';
+import { useTimezone } from '@/lib/hooks/useTimezone';
 import { validateAmountText } from '@/lib/validateAmount';
 import { getVisibleCategories } from '@/lib/categoryVisibility';
 import ModalShell from '@/components/ui/ModalShell';
@@ -24,8 +26,6 @@ interface TransactionModalProps {
   title?: string;
 }
 
-const todayAsInputValue = () => new Date().toISOString().split('T')[0];
-
 export default function TransactionModal({
   isOpen,
   onClose,
@@ -38,7 +38,13 @@ export default function TransactionModal({
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<'income' | 'expense'>(defaultType);
-  const [date, setDate] = useState(todayAsInputValue());
+  // Fase 34 F4: la fecha inicial es "hoy" en la zona del usuario. `null` = "sin tocar": se deriva
+  // en cada render, así el modal (montado todo el tiempo por `FabManager`) no queda con el "hoy"
+  // del dispositivo capturado antes de que cargue `/users/me` ni con el de ayer pasada la
+  // medianoche. Se manda el string del `<input type="date">` sin convertir (B9).
+  const { displayTimezone } = useTimezone();
+  const [dateOverride, setDate] = useState<string | null>(null);
+  const date = dateOverride ?? todayInZone(displayTimezone);
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [showAllCategories, setShowAllCategories] = useState(false);
