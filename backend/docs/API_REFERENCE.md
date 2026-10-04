@@ -969,7 +969,8 @@ La generación perezosa de filas a partir de la plantilla `is_recurring` (Fase 8
   presupuestos que **sí** existían en ese mes siguen evaluándose: el guard envuelve solo la
   generación, no el chequeo de umbrales.
 - `GET /api/v1/budgets/?month=&year=` — genera para el período pedido sin restricción de mes:
-  sigue creando filas recurrentes también en meses ya cerrados. Queda fuera del guard de la
+  sigue creando filas recurrentes también en meses ya cerrados (solo a partir de filas de
+  períodos anteriores: un mes previo al inicio de la serie no genera nada). Queda fuera del guard de la
   Fase 29 a propósito (deuda registrada en `docs/TODO.md`); el frontend no lo llama con
   período.
 

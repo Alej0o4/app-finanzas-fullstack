@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.models import models
@@ -735,20 +736,81 @@ class TestApagarRecurrencia:
 
         assert self._fila(client, auth_headers, categoria, 2, 2030)["currency"] == "COP"
 
-    def test_cambiar_moneda_al_desmarcar_corta_la_serie_resultante(self, client, auth_headers, make_category):
+    def test_cambiar_categoria_al_desmarcar_corta_la_serie_resultante_y_no_la_de_origen(
+        self, client, auth_headers, make_category
+    ):
+        origen = make_category(auth_headers, name="Origen", type="expense")
+        destino = make_category(auth_headers, name="Destino", type="expense")
+        self._post(client, auth_headers, origen, 1, 2030)
+        self._post(client, auth_headers, destino, 2, 2030)
+        assert self._fila(client, auth_headers, origen, 3, 2030)
+        assert self._fila(client, auth_headers, destino, 3, 2030)
+        enero_origen = self._fila(client, auth_headers, origen, 1, 2030)
+
+        self._put(client, auth_headers, enero_origen, category_id=destino["id"], is_recurring=False)
+
+        assert self._fila(client, auth_headers, destino, 3, 2030)["is_recurring"] is False
+        assert self._fila(client, auth_headers, origen, 3, 2030)["is_recurring"] is True
+
+    def test_cambiar_moneda_al_desmarcar_corta_la_serie_resultante_y_no_la_de_origen(
+        self, client, auth_headers, make_category
+    ):
         categoria = make_category(auth_headers, name="Mercado", type="expense")
         self._post(client, auth_headers, categoria, 1, 2030)
-        self._post(client, auth_headers, categoria, 1, 2030, currency="USD", amount="50.00")
-        assert self._fila(client, auth_headers, categoria, 3, 2030, currency="USD")
+        self._post(client, auth_headers, categoria, 2, 2030, currency="USD", amount="50.00")
         assert self._fila(client, auth_headers, categoria, 3, 2030)
-        usd_enero = self._fila(client, auth_headers, categoria, 1, 2030, currency="USD")
-        cop_enero = self._fila(client, auth_headers, categoria, 1, 2030)
-        # Sacar la de COP de enero hacia otra categoría y moneda no corta la serie de origen.
-        otra = make_category(auth_headers, name="Otra", type="expense")
-        self._put(client, auth_headers, cop_enero, category_id=otra["id"], is_recurring=False)
+        assert self._fila(client, auth_headers, categoria, 3, 2030, currency="USD")
+        enero_cop = self._fila(client, auth_headers, categoria, 1, 2030)
+
+        self._put(client, auth_headers, enero_cop, currency="USD", month=1, year=2030, is_recurring=False)
+
+        assert self._fila(client, auth_headers, categoria, 3, 2030, currency="USD")["is_recurring"] is False
         assert self._fila(client, auth_headers, categoria, 3, 2030)["is_recurring"] is True
-        assert self._fila(client, auth_headers, categoria, 3, 2030, currency="USD")["is_recurring"] is True
-        assert usd_enero["is_recurring"] is True
+
+    def test_borrar_el_mes_y_recrearlo_sin_casilla_corta_la_serie(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._serie_de_tres(client, auth_headers, categoria)
+        marzo = self._fila(client, auth_headers, categoria, 3, 2030)
+        assert client.delete(f"/api/v1/budgets/{marzo['id']}", headers=auth_headers).status_code == 200
+
+        self._post(client, auth_headers, categoria, 3, 2030, recurring=False)
+
+        assert self._fila(client, auth_headers, categoria, 4, 2030) is None
+
+    def test_el_corte_no_toca_lapidas_y_actualiza_updated_at(self, client, auth_headers, make_category, db_session):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._serie_de_tres(client, auth_headers, categoria)
+        abril = self._fila(client, auth_headers, categoria, 4, 2030)
+        marzo = self._fila(client, auth_headers, categoria, 3, 2030)
+        assert client.delete(f"/api/v1/budgets/{abril['id']}", headers=auth_headers).status_code == 200
+        db_session.expire_all()
+        updated_antes = db_session.get(models.Budget, marzo["id"]).updated_at
+
+        self._put(client, auth_headers, self._fila(client, auth_headers, categoria, 2, 2030), is_recurring=False)
+
+        db_session.expire_all()
+        assert db_session.get(models.Budget, marzo["id"]).updated_at > updated_antes
+        lapida = (
+            db_session.connection()
+            .execute(
+                select(models.Budget.is_recurring, models.Budget.deleted_at).where(models.Budget.id == abril["id"])
+            )
+            .one()
+        )
+        assert lapida.is_recurring is True
+        assert lapida.deleted_at is not None
+
+    def test_dashboard_del_mes_actual_no_regenera_si_el_mes_anterior_no_es_recurrente(
+        self, client, auth_headers, make_category
+    ):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        prev_month, prev_year = _previous_month_year()
+        self._post(client, auth_headers, categoria, prev_month, prev_year, recurring=False)
+
+        progreso = client.get("/api/v1/dashboard/budgets-progress", headers=auth_headers)
+
+        assert progreso.status_code == 200, progreso.text
+        assert [p for p in progreso.json() if p["category_name"] == categoria["name"]] == []
 
     def test_no_toca_presupuestos_de_otro_usuario(self, client, auth_headers, make_category, other_user):
         categoria = make_category(auth_headers, name="Mercado", type="expense")

@@ -114,6 +114,7 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
   idempotente).
 
 **Validaciones de entrada (QA-028):**
+
 - `name`: obligatorio, 1–100 caracteres. `strip` + no vacío — `"   "` → `422`.
 - `type`: `income | expense`
 
@@ -202,6 +203,7 @@ ignoran.
 - `DELETE /api/v1/budgets/{budget_id}`
 
 **Validaciones de entrada (QA-023/QA-025):**
+
 - `month`: 1–12 (`Query(ge=1, le=12)`); `year`: 2020–2100 (`Query(ge=2020, le=2100)`).
 - `currency`: código ISO 4217 de 3 letras mayúsculas (`^[A-Z]{3}$`) — `"zzzzzz"`, `""`, `"cop"`, `"XX"` → `422`.
 
@@ -294,6 +296,7 @@ Todos requieren `Bearer` y devuelven los timestamps en ISO 8601.
   Devuelve `PaginatedResponse<AppNotification>`.
 
 **Validación de paginación (QA-025):**
+
 - `skip` (default: 0, validado `ge=0`)
 - `limit` (default: 50, validado `ge=1, le=1000`; `limit=0` o negativo → `422`; `limit>1000` → `422`)
 - `GET /api/v1/notifications/unread-count` — `{ "count": number }` para el badge de la
@@ -482,7 +485,7 @@ El frontend asume:
 
 Reglas:
 
-- Con `is_recurring: true`, el backend genera automáticamente la fila del siguiente período la primera vez que ese período se consulta; desde Fase 29 el frontend solo llega a ese caso por `GET /api/v1/dashboard/budgets-progress` **con el mes actual** (sin params): un mes pasado devuelve los presupuestos que existían, sin crear filas nuevas a partir de la plantilla, así que la lista vacía de un mes sin presupuestos es real y se puede explicar en pantalla. `GET /api/v1/budgets/?month=&year=` sigue generando para cualquier período, incluidos los ya cerrados, pero el frontend **no** lo llama con período (y sin filtros devuelve el historial completo sin generar nada).
+- Con `is_recurring: true`, el backend genera automáticamente la fila del siguiente período la primera vez que ese período se consulta; desde Fase 29 el frontend solo llega a ese caso por `GET /api/v1/dashboard/budgets-progress` **con el mes actual** (sin params): un mes pasado devuelve los presupuestos que existían, sin crear filas nuevas a partir de la plantilla, así que la lista vacía de un mes sin presupuestos es real y se puede explicar en pantalla. `GET /api/v1/budgets/?month=&year=` sigue generando para cualquier período, incluidos los ya cerrados (pero solo a partir de filas de períodos anteriores), pero el frontend **no** lo llama con período (y sin filtros devuelve el historial completo sin generar nada).
 - Editar el monto de una fila recurrente lo convierte en la plantilla de los meses futuros.
 - `PUT` con `is_recurring: false` sobre una fila recurrente corta la serie (categoría + moneda) desde ese mes: las filas posteriores ya generadas pasan a no recurrentes conservando su monto, y los meses anteriores no cambian. Volver a marcarla reinicia la serie. Un mes anterior al inicio de la serie no genera filas.
 

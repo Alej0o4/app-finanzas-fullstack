@@ -698,5 +698,5 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 - [x] **Apagar la recurrencia de un presupuesto** *(2026-10-03, flujo corto)* — desmarcar
   "Repetir cada mes" corta la serie (categoría + moneda) hacia adelante; spec en
-  `docs/specs/corto_recurrencia_presupuestos_spec.md`. Pendiente solo la prueba manual en el
-  navegador (stack `-p oikos-dev`).
+  `docs/specs/corto_recurrencia_presupuestos_spec.md`. Verificado a mano con Playwright contra
+  `oikos-dev` el 2026-10-03.
