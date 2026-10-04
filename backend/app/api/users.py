@@ -13,6 +13,7 @@ from app.core.email import render_email_html, send_email
 from app.core.exceptions import BadRequestError, ForbiddenError, InternalServerError
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user, get_password_hash
+from app.core.timezones import zona_o_default
 from app.core.user_deletion import delete_user_cascade
 from app.models import models
 from app.schemas import schemas
@@ -86,7 +87,12 @@ def crear_usuario(request: Request, usuario: schemas.UserCreate, db: Session = D
 
     hashed_password = get_password_hash(usuario.password)
 
-    nuevo_usuario = models.User(email=normalized_email, full_name=usuario.full_name, password_hash=hashed_password)
+    nuevo_usuario = models.User(
+        email=normalized_email,
+        full_name=usuario.full_name,
+        password_hash=hashed_password,
+        timezone=zona_o_default(usuario.timezone),
+    )
     db.add(nuevo_usuario)
     db.flush()  # asigna nuevo_usuario.id sin cerrar la transacción todavía
     inicializar_datos_usuario_nuevo(nuevo_usuario, db)

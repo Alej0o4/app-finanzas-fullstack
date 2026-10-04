@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.exceptions import ValidationError
 from app.core.security import get_current_user
+from app.core.timezones import es_zona_valida
 from app.models import models
 from app.schemas import schemas
 
@@ -16,6 +18,7 @@ def get_preferences(current_user: models.User = Depends(get_current_user)):
         "preferred_locale": current_user.preferred_locale,
         "preferred_theme": current_user.preferred_theme,
         "weekly_summary_enabled": current_user.weekly_summary_enabled,
+        "timezone": current_user.timezone,
     }
 
 
@@ -25,6 +28,11 @@ def update_preferences(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Fase 34 §B4: zona inexistente → 422 de dominio (a diferencia del registro, que cae al
+    # default). Cambiar la zona no toca ni recalcula ningún movimiento guardado (Q9).
+    if prefs.timezone is not None and not es_zona_valida(prefs.timezone):
+        raise ValidationError("`timezone` debe ser una zona horaria IANA válida (p. ej. America/Bogota).")
+
     # `apply_to_default_account` se excluye del dump: es una instrucción de cascada
     # (Decisión A5), no un campo de User — `setattr` le crearía un atributo fantasma al
     # ORM sin ningún efecto.
@@ -63,4 +71,5 @@ def update_preferences(
         "preferred_locale": current_user.preferred_locale,
         "preferred_theme": current_user.preferred_theme,
         "weekly_summary_enabled": current_user.weekly_summary_enabled,
+        "timezone": current_user.timezone,
     }
