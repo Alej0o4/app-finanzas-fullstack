@@ -40,6 +40,9 @@ export const queryKeys = {
   },
   budgets: {
     all: () => ['budgets'] as const,
+    /** Listado de `/budgets` de un mes (`'YYYY-MM'`). Cuelga del prefijo `['budgets']`, así que
+     *  `invalidateQueries(budgets.all())` lo cubre. */
+    byMonth: (month: string) => ['budgets', month] as const,
     /** Fase 29: `month` es el mes consultado del progreso del dashboard (`'YYYY-MM'`, o
      *  ausente en el mes actual). Lo que No depende del mes — `/budgets` — usa `all`. */
     progress: (month?: string) =>

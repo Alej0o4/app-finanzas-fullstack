@@ -91,6 +91,7 @@ array cuando no se pasa, nunca queda como `undefined`**:
 | Factory                                          | Sin argumentos                     | Con argumentos                                                   |
 | ------------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------- |
 | `dashboard.summary(month?)`                      | `['dashboardSummary']`             | `['dashboardSummary', 'YYYY-MM']`                                |
+| `budgets.byMonth(month)`                         | —                                  | `['budgets', 'YYYY-MM']`                                         |
 | `budgets.progress(month?)`                       | `['budgets-progress']`             | `['budgets-progress', 'YYYY-MM']`                                |
 | `dashboard.categoryBreakdown(month?, currency?)` | `['dashboard-category-breakdown']` | `['dashboard-category-breakdown', month \| undefined, currency]` |
 

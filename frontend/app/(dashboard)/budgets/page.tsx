@@ -18,7 +18,10 @@ import EmptyState from '@/components/ui/EmptyState';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import Label from '@/components/ui/Label';
+import PeriodNavigator from '@/components/PeriodNavigator';
 import { currentMonthInZone } from '@/lib/dates';
+import { compareMonth, formatMonthLabel, formatMonthParam, shiftMonth } from '@/lib/dateRanges';
+import type { CalendarMonth } from '@/lib/dateRanges';
 import { useTimezone } from '@/lib/hooks/useTimezone';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import type { Budget, BudgetPayload } from '@/types/api';
@@ -54,6 +57,18 @@ export default function BudgetsPage() {
     return `${year}-${String(month).padStart(2, '0')}`;
   };
   const [monthYear, setMonthYear] = useState(getCurrentMonthYear);
+  // Mes que muestra el listado. `null` = el mes en curso (se resuelve en render, así sigue la
+  // zona del usuario una vez que `/users/me` carga y no queda fijado a un mes viejo).
+  const [viewedMonth, setViewedMonth] = useState<CalendarMonth | null>(null);
+  const currentMonth = currentMonthInZone(displayTimezone);
+  const selectedMonth = viewedMonth ?? currentMonth;
+  const isCurrentMonth = compareMonth(selectedMonth, currentMonth) === 0;
+  const selectedMonthParam = formatMonthParam(selectedMonth);
+  // Se puede planear el mes siguiente, no más allá: el backend genera filas recurrentes para
+  // cualquier período que se pida (ver `docs/TODO.md`), así que no se anima a navegar al futuro.
+  const nextMonthLimit = shiftMonth(currentMonth, 1);
+  // El backend valida `year` 2020–2100.
+  const prevDisabled = selectedMonth.year <= 2020 && selectedMonth.month <= 1;
   // Fase 12 §12.8: errores por campo (no globo nativo del navegador) + foco en el primero.
   const [fieldErrors, setFieldErrors] = useState<{
     categoryId?: string;
@@ -70,8 +85,13 @@ export default function BudgetsPage() {
     isError: budgetsError,
     refetch: refetchBudgets,
   } = useQuery<Budget[]>({
-    queryKey: queryKeys.budgets.all(),
-    queryFn: async () => (await api.get('budgets/')).data,
+    queryKey: queryKeys.budgets.byMonth(selectedMonthParam),
+    queryFn: async () =>
+      (
+        await api.get('budgets/', {
+          params: { month: selectedMonth.month, year: selectedMonth.year },
+        })
+      ).data,
   });
 
   // QA-023: la carga inicial falló y no hay presupuestos en pantalla — la app no sabe si hay o
@@ -172,7 +192,8 @@ export default function BudgetsPage() {
     // no cargaron) — nunca una lista fija de monedas.
     setCurrency(availableCurrencies[0] ?? 'COP');
     setIsRecurring(false);
-    setMonthYear(getCurrentMonthYear());
+    // El presupuesto nuevo cae por defecto en el mes que se está viendo.
+    setMonthYear(selectedMonthParam);
     setFieldErrors({});
     setIsModalOpen(true);
   };
@@ -213,6 +234,15 @@ export default function BudgetsPage() {
         </Button>
       </div>
 
+      <PeriodNavigator
+        label={formatMonthLabel(selectedMonth.year, selectedMonth.month)}
+        onPrev={() => setViewedMonth(shiftMonth(selectedMonth, -1))}
+        onNext={() => setViewedMonth(shiftMonth(selectedMonth, 1))}
+        prevDisabled={prevDisabled}
+        nextDisabled={compareMonth(selectedMonth, nextMonthLimit) >= 0}
+        onReset={isCurrentMonth ? undefined : () => setViewedMonth(null)}
+      />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {loadingInitial ? (
           <>
@@ -234,7 +264,11 @@ export default function BudgetsPage() {
           <div className="col-span-full">
             <EmptyState
               icon={<PieChart size={48} className="opacity-20" />}
-              message="No has definido ningún límite para este mes."
+              message={
+                isCurrentMonth
+                  ? 'No has definido ningún límite para este mes.'
+                  : 'No hay presupuestos en este mes.'
+              }
             />
           </div>
         ) : (
