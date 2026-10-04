@@ -148,7 +148,23 @@ def actualizar_presupuesto(
     # Fase 17 §17.2.5: `currency` se asignaba en silencio desde Fase 11 pero el handler
     # nunca la aplicaba — mismo patrón de bug que AccountUpdate.currency (TODO.md).
     presupuesto_db.currency = presupuesto_actualizado.currency
+    era_recurrente = presupuesto_db.is_recurring
     presupuesto_db.is_recurring = presupuesto_actualizado.is_recurring
+
+    # Desmarcar "Repetir cada mes" (True → False) significa "de aquí en adelante no repitas":
+    # las filas activas posteriores de la misma serie (categoría y moneda resultantes) dejan
+    # de ser recurrentes, sin tocar montos. `deleted_at IS NULL` explícito: el filtro global
+    # no aplica a `update()` en bloque (mismo criterio que `services/ledger.py`).
+    if era_recurrente and not presupuesto_db.is_recurring:
+        db.query(models.Budget).filter(
+            models.Budget.user_id == current_user.id,
+            models.Budget.category_id == presupuesto_db.category_id,
+            models.Budget.currency == presupuesto_db.currency,
+            models.Budget.deleted_at.is_(None),
+            models.Budget.is_recurring.is_(True),
+            (models.Budget.year > presupuesto_db.year)
+            | ((models.Budget.year == presupuesto_db.year) & (models.Budget.month > presupuesto_db.month)),
+        ).update({"is_recurring": False, "updated_at": datetime.now(UTC)}, synchronize_session=False)
 
     # Editar la moneda puede chocar con el índice único ensanchado (otro presupuesto
     # activo para la misma categoría/período en la moneda nueva) — sin este try/except

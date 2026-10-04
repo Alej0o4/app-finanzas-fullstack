@@ -484,6 +484,7 @@ Reglas:
 
 - Con `is_recurring: true`, el backend genera automáticamente la fila del siguiente período la primera vez que ese período se consulta; desde Fase 29 el frontend solo llega a ese caso por `GET /api/v1/dashboard/budgets-progress` **con el mes actual** (sin params): un mes pasado devuelve los presupuestos que existían, sin crear filas nuevas a partir de la plantilla, así que la lista vacía de un mes sin presupuestos es real y se puede explicar en pantalla. `GET /api/v1/budgets/?month=&year=` sigue generando para cualquier período, incluidos los ya cerrados, pero el frontend **no** lo llama con período (y sin filtros devuelve el historial completo sin generar nada).
 - Editar el monto de una fila recurrente lo convierte en la plantilla de los meses futuros.
+- `PUT` con `is_recurring: false` sobre una fila recurrente corta la serie (categoría + moneda) desde ese mes: las filas posteriores ya generadas pasan a no recurrentes conservando su monto, y los meses anteriores no cambian. Volver a marcarla reinicia la serie. Un mes anterior al inicio de la serie no genera filas.
 
 En el dashboard, el progreso de presupuesto llega ya calculado desde el backend, para el período consultado.
 

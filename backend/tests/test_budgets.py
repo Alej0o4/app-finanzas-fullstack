@@ -596,3 +596,166 @@ class TestBudgetMultiCurrency:
         assert edicion.status_code == 200, edicion.text
         assert edicion.json()["currency"] == "COP"
         assert Decimal(str(edicion.json()["amount_limit"])) == Decimal("60000.00")
+
+
+class TestApagarRecurrencia:
+    """Flujo corto (spec `corto_recurrencia_presupuestos_spec.md`): desmarcar "Repetir cada
+    mes" corta la serie (categoría + moneda) hacia adelante, sin tocar meses anteriores."""
+
+    def _post(self, client, headers, categoria, month, year, amount="800.00", currency="COP", recurring=True):
+        response = client.post(
+            "/api/v1/budgets/",
+            json={
+                "amount_limit": amount,
+                "currency": currency,
+                "month": month,
+                "year": year,
+                "category_id": categoria["id"],
+                "is_recurring": recurring,
+            },
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    def _put(self, client, headers, fila, **cambios):
+        cuerpo = {
+            "amount_limit": fila["amount_limit"],
+            "currency": fila["currency"],
+            "month": fila["month"],
+            "year": fila["year"],
+            "category_id": fila["category_id"],
+            "is_recurring": fila["is_recurring"],
+        } | cambios
+        response = client.put(f"/api/v1/budgets/{fila['id']}", json=cuerpo, headers=headers)
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    def _fila(self, client, headers, categoria, month, year, currency="COP"):
+        listado = client.get("/api/v1/budgets/", params={"month": month, "year": year}, headers=headers).json()
+        return next(
+            (b for b in listado if b["category_id"] == categoria["id"] and b["currency"] == currency),
+            None,
+        )
+
+    def _serie_de_tres(self, client, headers, categoria):
+        self._post(client, headers, categoria, 1, 2030)
+        for mes in (2, 3):
+            assert self._fila(client, headers, categoria, mes, 2030)
+
+    def test_desmarcar_corta_el_mes_siguiente_y_conserva_pasado_y_actual(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._serie_de_tres(client, auth_headers, categoria)
+        marzo = self._fila(client, auth_headers, categoria, 3, 2030)
+
+        editada = self._put(client, auth_headers, marzo, is_recurring=False)
+
+        assert editada["is_recurring"] is False
+        assert Decimal(str(editada["amount_limit"])) == Decimal("800.00")
+        assert self._fila(client, auth_headers, categoria, 4, 2030) is None
+        assert self._fila(client, auth_headers, categoria, 1, 2030)["is_recurring"] is True
+        assert self._fila(client, auth_headers, categoria, 2, 2030)["is_recurring"] is True
+
+    def test_mes_futuro_ya_generado_pasa_a_no_recurrente_con_su_monto(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._serie_de_tres(client, auth_headers, categoria)
+        febrero = self._fila(client, auth_headers, categoria, 2, 2030)
+
+        self._put(client, auth_headers, febrero, is_recurring=False)
+
+        marzo = self._fila(client, auth_headers, categoria, 3, 2030)
+        assert marzo["is_recurring"] is False
+        assert Decimal(str(marzo["amount_limit"])) == Decimal("800.00")
+        assert self._fila(client, auth_headers, categoria, 4, 2030) is None
+
+    def test_no_toca_otra_categoria_ni_otra_moneda(self, client, auth_headers, make_category):
+        cat_a = make_category(auth_headers, name="A", type="expense")
+        cat_b = make_category(auth_headers, name="B", type="expense")
+        self._post(client, auth_headers, cat_a, 1, 2030)
+        self._post(client, auth_headers, cat_b, 1, 2030)
+        self._post(client, auth_headers, cat_a, 1, 2030, currency="USD", amount="50.00")
+        febrero_cop = self._fila(client, auth_headers, cat_a, 2, 2030)
+        assert self._fila(client, auth_headers, cat_a, 2, 2030, currency="USD")
+
+        self._put(client, auth_headers, febrero_cop, is_recurring=False)
+
+        assert self._fila(client, auth_headers, cat_a, 3, 2030) is None
+        assert self._fila(client, auth_headers, cat_a, 3, 2030, currency="USD")["is_recurring"] is True
+        assert self._fila(client, auth_headers, cat_b, 3, 2030)["is_recurring"] is True
+
+    def test_remarcar_reinicia_la_serie(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._serie_de_tres(client, auth_headers, categoria)
+        self._put(client, auth_headers, self._fila(client, auth_headers, categoria, 2, 2030), is_recurring=False)
+        marzo = self._fila(client, auth_headers, categoria, 3, 2030)
+
+        self._put(client, auth_headers, marzo, is_recurring=True)
+        assert self._fila(client, auth_headers, categoria, 4, 2030)["is_recurring"] is True
+
+        self._post(client, auth_headers, categoria, 8, 2030)
+        assert self._fila(client, auth_headers, categoria, 9, 2030)["is_recurring"] is True
+
+    def test_put_ya_no_recurrente_no_toca_filas_posteriores(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._post(client, auth_headers, categoria, 1, 2030, recurring=False)
+        posterior = self._post(client, auth_headers, categoria, 3, 2030, recurring=True)
+        enero = self._fila(client, auth_headers, categoria, 1, 2030)
+
+        self._put(client, auth_headers, enero, amount_limit="900.00")
+
+        assert self._fila(client, auth_headers, categoria, 3, 2030)["id"] == posterior["id"]
+        assert self._fila(client, auth_headers, categoria, 3, 2030)["is_recurring"] is True
+
+    def test_borrar_sigue_saltando_solo_ese_mes(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._serie_de_tres(client, auth_headers, categoria)
+        marzo = self._fila(client, auth_headers, categoria, 3, 2030)
+        assert client.delete(f"/api/v1/budgets/{marzo['id']}", headers=auth_headers).status_code == 200
+
+        assert self._fila(client, auth_headers, categoria, 3, 2030) is None
+        assert self._fila(client, auth_headers, categoria, 4, 2030)["is_recurring"] is True
+
+    def test_pedir_mes_anterior_al_inicio_de_la_serie_no_genera(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._post(client, auth_headers, categoria, 5, 2030)
+
+        assert self._fila(client, auth_headers, categoria, 3, 2030) is None
+
+    def test_fila_manual_no_recurrente_posterior_corta_la_serie(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._post(client, auth_headers, categoria, 1, 2030)
+        self._post(client, auth_headers, categoria, 4, 2030, recurring=False)
+
+        assert self._fila(client, auth_headers, categoria, 5, 2030) is None
+
+    def test_fila_de_otra_moneda_no_bloquea_la_serie(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._post(client, auth_headers, categoria, 1, 2030)
+        self._post(client, auth_headers, categoria, 2, 2030, currency="USD", amount="50.00", recurring=False)
+
+        assert self._fila(client, auth_headers, categoria, 2, 2030)["currency"] == "COP"
+
+    def test_cambiar_moneda_al_desmarcar_corta_la_serie_resultante(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._post(client, auth_headers, categoria, 1, 2030)
+        self._post(client, auth_headers, categoria, 1, 2030, currency="USD", amount="50.00")
+        assert self._fila(client, auth_headers, categoria, 3, 2030, currency="USD")
+        assert self._fila(client, auth_headers, categoria, 3, 2030)
+        usd_enero = self._fila(client, auth_headers, categoria, 1, 2030, currency="USD")
+        cop_enero = self._fila(client, auth_headers, categoria, 1, 2030)
+        # Sacar la de COP de enero hacia otra categoría y moneda no corta la serie de origen.
+        otra = make_category(auth_headers, name="Otra", type="expense")
+        self._put(client, auth_headers, cop_enero, category_id=otra["id"], is_recurring=False)
+        assert self._fila(client, auth_headers, categoria, 3, 2030)["is_recurring"] is True
+        assert self._fila(client, auth_headers, categoria, 3, 2030, currency="USD")["is_recurring"] is True
+        assert usd_enero["is_recurring"] is True
+
+    def test_no_toca_presupuestos_de_otro_usuario(self, client, auth_headers, make_category, other_user):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        self._post(client, auth_headers, categoria, 1, 2030)
+        febrero = self._fila(client, auth_headers, categoria, 2, 2030)
+        self._put(client, auth_headers, febrero, is_recurring=False)
+
+        ajeno = client.get("/api/v1/budgets/", params={"month": 3, "year": 2030}, headers=other_user["headers"])
+        assert ajeno.status_code == 200
+        assert ajeno.json() == []
