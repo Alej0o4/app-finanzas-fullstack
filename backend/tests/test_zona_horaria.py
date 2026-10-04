@@ -501,3 +501,13 @@ class TestAlertasDePresupuestoEnZona:
         abril = client.get("/api/v1/dashboard/budgets-progress", params={"year": 2026, "month": 4}, headers=h).json()
         assert Decimal(marzo[0]["spent"]) == Decimal(90)
         assert Decimal(abril[0]["spent"]) == Decimal(0)
+
+
+def test_zonas_alias_que_lista_chrome_son_validas():
+    """El selector de Ajustes sale de `Intl.supportedValuesOf('timeZone')`, que en Chrome lista
+    alias IANA "backward" (`Asia/Calcutta`, `Europe/Kiev`...). El backend los tiene que aceptar:
+    si no, guardar esa zona da 422 y el registro cae en silencio al default (Bogotá)."""
+    from app.core.timezones import es_zona_valida
+
+    for zona in ("Asia/Calcutta", "Europe/Kiev", "Asia/Katmandu", "America/Buenos_Aires", "Asia/Saigon"):
+        assert es_zona_valida(zona), zona
