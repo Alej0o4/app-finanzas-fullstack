@@ -1317,7 +1317,8 @@ class TestMonthBoundaryExclusiveUpperBound:
             type="income",
             account_id=cuenta["id"],
             category_id=categoria["id"],
-            date="2026-01-01T00:00:00",
+            # Fase 34: la medianoche de enero es la de la zona del usuario (Bogotá, UTC-5).
+            date="2026-01-01T00:00:00-05:00",
         )
 
         resumen = _get_summary(client, auth_headers, year=2025, month=12)

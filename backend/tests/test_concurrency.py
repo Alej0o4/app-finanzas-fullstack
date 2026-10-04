@@ -309,6 +309,12 @@ class TestSessionTimezoneIsAlwaysUtc:
                 conn.execute(text(f"ALTER DATABASE \"{db_name}\" SET timezone TO 'America/Bogota'"))
 
             user = real_register_and_login(email="concurrencia-tz@example.com")
+            # Fase 34: el bucket se agrupa en la zona del usuario; con UTC explícito el caso
+            # sigue probando que la zona de la SESIÓN de la base no corre el bucket.
+            ajuste = real_client.patch(
+                "/api/v1/users/me/preferences", json={"timezone": "UTC"}, headers=user["headers"]
+            )
+            assert ajuste.status_code == 200, ajuste.text
             cuenta = real_make_account(user["headers"], currency="COP", balance="1000.00")
             categoria = real_make_category(user["headers"], name="Salario", type="income")
             _crear_transaccion(

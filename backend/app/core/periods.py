@@ -16,6 +16,7 @@ compara con `< fin`, nunca `<=`.
 valida y jamás lanza por un mes futuro, solo acota el rango (ver su docstring).
 """
 
+import re
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -128,3 +129,44 @@ def rango_mes(year: int, month: int, ahora: datetime, tz: ZoneInfo) -> tuple[dat
     if (year, month) == (hoy.year, hoy.month):
         return inicio, _a_utc(ahora)
     return inicio, _medianoche_local(siguiente, tz)
+
+
+RANGO_DESC = (
+    "Día `YYYY-MM-DD` (interpretado en la zona horaria del usuario; `end_date` incluye todo ese día) "
+    "o datetime ISO 8601 completo (instante; `end_date` inclusivo)."
+)
+
+_SOLO_DIA = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _parsear_limite(valor: str, nombre: str) -> date | datetime:
+    try:
+        if _SOLO_DIA.match(valor):
+            return date.fromisoformat(valor)
+        return datetime.fromisoformat(valor)
+    except ValueError:
+        raise DomainValidationError(f"`{nombre}` debe ser un día `YYYY-MM-DD` o un datetime ISO 8601 válido.") from None
+
+
+def resolver_rango(
+    start_date: str | None, end_date: str | None, tz: ZoneInfo
+) -> tuple[datetime | None, datetime | None]:
+    """Resuelve los parámetros `start_date`/`end_date` de los endpoints de rango a
+    `[inicio, fin)` en UTC aware, `fin` EXCLUSIVO (Fase 34, B7). Cada extremo acepta:
+
+    - solo-día `YYYY-MM-DD` → se interpreta en la zona del usuario: inicio = 00:00 local del
+      día, fin = 00:00 local del día SIGUIENTE (incluye todo el último día);
+    - datetime completo → instante tal cual (un datetime naive se lee como UTC, igual que
+      siempre); como `end_date` es inclusivo (`fin = end + 1 µs`, o sea `<= end`) para no
+      cambiar el contrato de los clientes curl / API key.
+
+    Un extremo ausente devuelve `None`. Todo consumidor compara `>= inicio` y `< fin`.
+    Un valor ilegible es un 422 de dominio con `detail` string."""
+    inicio = fin = None
+    if start_date is not None:
+        v = _parsear_limite(start_date, "start_date")
+        inicio = _medianoche_local(v, tz) if type(v) is date else _a_utc(v)
+    if end_date is not None:
+        v = _parsear_limite(end_date, "end_date")
+        fin = _medianoche_local(v + timedelta(days=1), tz) if type(v) is date else _a_utc(v) + timedelta(microseconds=1)
+    return inicio, fin

@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func
@@ -8,14 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.exceptions import BadRequestError, NotFoundError
-from app.core.periods import rango_mes
+from app.core.periods import rango_mes, resolver_mes
 from app.core.security import get_current_user
+from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.schemas import schemas
 
 router = APIRouter()
-
-_TZ_PROVISIONAL = ZoneInfo("UTC")  # paso 4 la reemplaza por la zona del usuario
 
 
 @router.post("/", response_model=schemas.AccountResponse)
@@ -148,8 +146,11 @@ def obtener_resumen_mensual_cuenta(
     if not cuenta:
         raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
-    hoy = datetime.now(UTC)
-    primer_dia, limite = rango_mes(hoy.year, hoy.month, hoy, _TZ_PROVISIONAL)
+    # Fase 34 B8: "este mes" es el de la zona del usuario (el mismo que el dashboard).
+    tz = get_zoneinfo(current_user.timezone)
+    ahora = datetime.now(UTC)
+    year, month, _ = resolver_mes(None, None, ahora, tz)
+    primer_dia, limite = rango_mes(year, month, ahora, tz)
 
     def _total(tipo: str) -> Decimal:
         """Suma del mes de las transacciones de un tipo, ignorando borradas (mismo

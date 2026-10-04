@@ -19,11 +19,13 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.core.periods import RANGO_DESC, resolver_rango
 from app.core.rate_limit import key_func_por_usuario_o_ip, limiter
 
 # 🔒 Importamos a nuestro Guardia de Seguridad
 from app.core.security import get_current_user
 from app.core.text import normalizar_nombre
+from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.schemas import schemas
 from app.services import ledger
@@ -248,6 +250,7 @@ def crear_transaccion(
             nueva_transaccion.category_id,
             fecha,
             f"crear transacción {nueva_transaccion.id} del usuario {current_user.id}",
+            get_zoneinfo(current_user.timezone),
         )
 
     return nueva_transaccion
@@ -263,12 +266,15 @@ def obtener_transacciones(
     limit: int = Query(100, ge=1, le=1000),
     account_id: int | None = None,
     category_id: int | None = None,
-    start_date: datetime | None = None,
-    end_date: datetime | None = None,
+    start_date: str | None = Query(None, description=RANGO_DESC),
+    end_date: str | None = Query(None, description=RANGO_DESC),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    if start_date and end_date and start_date > end_date:
+    # Fase 34 B7: cada extremo es un día `YYYY-MM-DD` (zona del usuario, fin exclusivo al
+    # día siguiente) o un datetime completo (instante; `end_date` inclusivo).
+    inicio, fin = resolver_rango(start_date, end_date, get_zoneinfo(current_user.timezone))
+    if inicio is not None and fin is not None and inicio >= fin:
         raise BadRequestError("La fecha inicial no puede ser mayor que la fecha final.")
 
     # Fase 31 (Decisión B5, QA-006): `deleted_at IS NULL` explícito, aunque el filtro
@@ -289,11 +295,11 @@ def obtener_transacciones(
     if category_id is not None:
         query = query.filter(models.Transaction.category_id == category_id)
 
-    if start_date is not None:
-        query = query.filter(models.Transaction.date >= start_date)
+    if inicio is not None:
+        query = query.filter(models.Transaction.date >= inicio)
 
-    if end_date is not None:
-        query = query.filter(models.Transaction.date <= end_date)
+    if fin is not None:
+        query = query.filter(models.Transaction.date < fin)
 
     total = query.with_entities(func.count()).scalar()
 
@@ -527,6 +533,7 @@ def actualizar_transaccion(
             transaccion_db.category_id,
             fecha_nueva,
             f"actualizar transacción {transaction_id} del usuario {current_user.id} (categoría nueva)",
+            get_zoneinfo(current_user.timezone),
         )
         # Si cambió de categoría, también se evalúa la de origen — contra el período al
         # que pertenecía la transacción ANTES del cambio (fecha_vieja_original), no el de
@@ -540,6 +547,7 @@ def actualizar_transaccion(
                 categoria_vieja_id,
                 fecha_vieja,
                 f"actualizar transacción {transaction_id} del usuario {current_user.id} (categoría anterior)",
+                get_zoneinfo(current_user.timezone),
             )
 
     return transaccion_db

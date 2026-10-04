@@ -11,19 +11,18 @@ from app.core.budget_alerts import spent_por_categoria_y_moneda
 from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.database import get_db
 from app.core.exceptions import InternalServerError, NotFoundError
-from app.core.periods import rango_mes, resolver_mes
+from app.core.periods import RANGO_DESC, dia_local, rango_mes, resolver_mes, resolver_rango
 from app.core.security import get_current_user
+from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.schemas import schemas
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-_TZ_PROVISIONAL = ZoneInfo("UTC")  # paso 4 la reemplaza por la zona del usuario
 
-
-def _first_transaction_month(db: Session, user_id: int) -> str | None:
-    """Mes UTC `"YYYY-MM"` de la transacción más antigua del usuario, o `None`.
+def _first_transaction_month(db: Session, user_id: int, tz: ZoneInfo) -> str | None:
+    """Mes (en la zona `tz` del usuario, Fase 34 B8) `"YYYY-MM"` de la transacción más antigua del usuario, o `None`.
 
     Es el límite inferior del `◀` del dashboard, que gobierna la página entera, así que
     va sobre **todas** las cuentas y no solo las destacadas (las barras, los presupuestos
@@ -34,11 +33,9 @@ def _first_transaction_month(db: Session, user_id: int) -> str | None:
     min_date = db.query(func.min(models.Transaction.date)).filter(models.Transaction.user_id == user_id).scalar()
     if min_date is None:
         return None
-    # `func.min` devuelve tz-aware en Postgres (columna `timestamptz`) y naive en SQLite
-    # (los tests). `astimezone()` sobre un naive asumiría la zona local del proceso y
-    # desplazaría el mes en el borde — solo se convierte cuando viene con tz.
-    if min_date.tzinfo is not None:
-        min_date = min_date.astimezone(UTC)
+    # `func.min` devuelve tz-aware en Postgres y naive (UTC) en SQLite; `dia_local` lee el
+    # naive como UTC y convierte a la zona del usuario.
+    min_date = dia_local(min_date, tz)
     return f"{min_date.year:04d}-{min_date.month:02d}"
 
 
@@ -69,16 +66,21 @@ def _monedas_con_gasto(db: Session, user_id: int, inicio: datetime, limite: date
 
 @router.get("/summary", response_model=schemas.DashboardSummary)
 def obtener_resumen(
-    year: int | None = Query(None, description="Año del mes a consultar (UTC); enviar junto a `month`, o ninguno"),
-    month: int | None = Query(None, description="Mes a consultar entre 1 y 12 (UTC); enviar junto a `year`, o ninguno"),
+    year: int | None = Query(
+        None, description="Año del mes a consultar (zona del usuario); enviar junto a `month`, o ninguno"
+    ),
+    month: int | None = Query(
+        None, description="Mes a consultar entre 1 y 12 (zona del usuario); enviar junto a `year`, o ninguno"
+    ),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     # Sin `year`/`month` el período es el mes actual UTC: el dashboard de siempre no
     # cambia (User Story 47). Cualquier período inválido o futuro es un 422 de
     # `core/periods.resolver_mes`, no una respuesta silenciosa.
+    tz = get_zoneinfo(current_user.timezone)
     ahora = datetime.now(UTC)
-    year, month, es_mes_actual = resolver_mes(year, month, ahora, _TZ_PROVISIONAL)
+    year, month, es_mes_actual = resolver_mes(year, month, ahora, tz)
     preferred_currency = current_user.preferred_currency or "COP"
 
     # Contar cuentas destacadas
@@ -117,7 +119,7 @@ def obtener_resumen(
     # EXCLUSIVO: el primer día del mes siguiente — por eso las comparaciones de abajo
     # son `<`, no `<=` (QA-019: un `<=` contra "el último día a las 23:59:59" perdía
     # cualquier instante con fracción de segundo después de esa marca).
-    primer_dia, limite_gasto = rango_mes(year, month, ahora, _TZ_PROVISIONAL)
+    primer_dia, limite_gasto = rango_mes(year, month, ahora, tz)
 
     # Transacciones del mes solo de cuentas destacadas (o todas si no hay)
     tx_account_ids = db.query(models.Account.id).filter(*account_filter).subquery()
@@ -199,20 +201,25 @@ def obtener_resumen(
         "monthly_expense_by_currency": expense,
         "monthly_flow_balance": monthly_flow_balance,
         "monthly_flow_basis": "actual",
-        "first_transaction_month": _first_transaction_month(db, current_user.id),
+        "first_transaction_month": _first_transaction_month(db, current_user.id, tz),
         "expense_currencies": expense_currencies,
     }
 
 
 @router.get("/budgets-progress", response_model=list[schemas.BudgetProgress])
 def obtener_progreso_presupuestos(
-    year: int | None = Query(None, description="Año del mes a consultar (UTC); enviar junto a `month`, o ninguno"),
-    month: int | None = Query(None, description="Mes a consultar entre 1 y 12 (UTC); enviar junto a `year`, o ninguno"),
+    year: int | None = Query(
+        None, description="Año del mes a consultar (zona del usuario); enviar junto a `month`, o ninguno"
+    ),
+    month: int | None = Query(
+        None, description="Mes a consultar entre 1 y 12 (zona del usuario); enviar junto a `year`, o ninguno"
+    ),
     currency: str | None = Query(None, description="Si se pasa, solo devuelve presupuestos en esa moneda"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    year, month, es_mes_actual = resolver_mes(year, month, datetime.now(UTC), _TZ_PROVISIONAL)
+    tz = get_zoneinfo(current_user.timezone)
+    year, month, es_mes_actual = resolver_mes(year, month, datetime.now(UTC), tz)
 
     # El dashboard es la página de aterrizaje: genera aquí los presupuestos recurrentes
     # del mes en curso antes de consultarlos (Fase 8 §3, Decisión 3.1). Fase 29 (B3) lo
@@ -239,7 +246,7 @@ def obtener_progreso_presupuestos(
     # "cuánto gasté" no puede divergir entre la vista y el aviso (Fase 11 §11.1). Usa el
     # período RESUELTO, no el mes en curso: en un mes cerrado el gasto de ese mes es
     # completo, sin el techo de `hoy` que sí aplica al mes actual.
-    spent_map = spent_por_categoria_y_moneda(db, current_user.id, category_ids, month, year)
+    spent_map = spent_por_categoria_y_moneda(db, current_user.id, category_ids, month, year, tz)
 
     categorias = db.query(models.Category).filter(models.Category.id.in_(category_ids)).all()
     cat_info_map: dict[int, tuple[str, str | None]] = {c.id: (c.name, c.icon) for c in categorias}
@@ -271,8 +278,8 @@ def obtener_progreso_presupuestos(
 
 @router.get("/cashflow-series", response_model=schemas.CashflowSeries)
 def obtener_serie_flujo_caja(
-    start_date: datetime,
-    end_date: datetime,
+    start_date: str = Query(..., description=RANGO_DESC),
+    end_date: str = Query(..., description=RANGO_DESC),
     period: str = Query("day", pattern="^(day|month)$", description="Agrupar por 'day' o 'month'"),
     currency: str | None = Query(None, description="Moneda a filtrar; por defecto la preferida del usuario"),
     account_id: int | None = Query(None, description="Filtra a las transacciones de una sola cuenta"),
@@ -291,20 +298,27 @@ def obtener_serie_flujo_caja(
             raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
     filtro_moneda = currency or current_user.preferred_currency or "COP"
+    tz = get_zoneinfo(current_user.timezone)
+    inicio, fin = resolver_rango(start_date, end_date, tz)
     try:
         dialect = db.bind.dialect.name
         if dialect == "postgresql":
+            # Fase 34 B8c/H6: agrupar por el día/mes LOCAL del usuario. `to_char(timestamptz)`
+            # usa la zona de la sesión (forzada a UTC, QA-022), así que la zona va explícita
+            # con `timezone(<tz>, col)` (= `col AT TIME ZONE <tz>`).
             pg_fmt = "YYYY-MM" if period == "month" else "YYYY-MM-DD"
-            date_label = func.to_char(models.Transaction.date, pg_fmt).label("date_label")
+            fecha_local = func.timezone(tz.key, models.Transaction.date)
+            date_label = func.to_char(fecha_local, pg_fmt).label("date_label")
         else:
+            # SQLite (opt-in offline): `strftime` no tiene zonas, el bucket es SOLO UTC.
             fmt = "%Y-%m" if period == "month" else "%Y-%m-%d"
             date_label = func.strftime(fmt, models.Transaction.date).label("date_label")
 
         filtros = [
             models.Transaction.user_id == current_user.id,
             models.Transaction.currency == filtro_moneda,
-            models.Transaction.date >= start_date,
-            models.Transaction.date <= end_date,
+            models.Transaction.date >= inicio,
+            models.Transaction.date < fin,
         ]
         if account_id is not None:
             filtros.append(models.Transaction.account_id == account_id)
@@ -351,8 +365,8 @@ def obtener_serie_flujo_caja(
 
 @router.get("/category-distribution", response_model=list[schemas.CategoryDistributionData])
 def obtener_distribucion_categorias(
-    start_date: datetime,
-    end_date: datetime,
+    start_date: str = Query(..., description=RANGO_DESC),
+    end_date: str = Query(..., description=RANGO_DESC),
     type: str = Query("expense", pattern="^(income|expense)$", description="Filtrar por tipo de transacción"),
     neto: bool = Query(False, description="Si es True, calcula gasto neto (expense - income) por categoría"),
     currency: str | None = Query(None, description="Moneda a filtrar; por defecto la preferida del usuario"),
@@ -372,11 +386,12 @@ def obtener_distribucion_categorias(
             raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
     filtro_moneda = currency or current_user.preferred_currency or "COP"
+    inicio, fin = resolver_rango(start_date, end_date, get_zoneinfo(current_user.timezone))
     filtros = [
         models.Transaction.user_id == current_user.id,
         models.Transaction.currency == filtro_moneda,
-        models.Transaction.date >= start_date,
-        models.Transaction.date <= end_date,
+        models.Transaction.date >= inicio,
+        models.Transaction.date < fin,
     ]
     if account_id is not None:
         # `currency` y `account_id` son ortogonales: filtrar por cuenta NO deriva su

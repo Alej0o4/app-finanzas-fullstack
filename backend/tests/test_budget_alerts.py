@@ -7,24 +7,28 @@ spec (líneas 414-421) se cubren vía el flujo real: el hook post-commit de
 verifica el resultado en la bandeja (`GET /api/v1/notifications/`).
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from app.models import models
 
+# Fase 34: el mes de un usuario lo define su zona (default America/Bogota), no UTC.
+BOGOTA = ZoneInfo("America/Bogota")
+
 
 def _now_month_year() -> tuple[int, int]:
-    now = datetime.now(UTC)
+    now = datetime.now(BOGOTA)
     return now.month, now.year
 
 
 def _next_month_year() -> tuple[int, int]:
-    next_month = datetime.now(UTC) + timedelta(days=32)
+    next_month = datetime.now(BOGOTA) + timedelta(days=32)
     return next_month.month, next_month.year
 
 
 def _previous_month_year() -> tuple[int, int]:
-    now = datetime.now(UTC)
+    now = datetime.now(BOGOTA)
     if now.month == 1:
         return 12, now.year - 1
     return now.month - 1, now.year
@@ -171,7 +175,7 @@ class TestBudgetAlertsEngine:
         _crear_gasto(client, auth_headers, cuenta_cop["id"], categoria["id"], "850.00")
 
         # Gasto TRAMPA: 5000 COP en el mes del presupuesto USD (no debe contar)
-        fecha_usd = datetime(next_year, next_month, 1).isoformat()
+        fecha_usd = datetime(next_year, next_month, 1, 12).isoformat()
         _crear_gasto(client, auth_headers, cuenta_cop["id"], categoria["id"], "5000.00", date=fecha_usd)
         # USD 900/1000 = 90% → umbral 80
         _crear_gasto(client, auth_headers, cuenta_usd["id"], categoria["id"], "900.00", date=fecha_usd)
@@ -231,7 +235,7 @@ class TestBudgetAlertsEngine:
 
         mes_actual, anio_actual = _now_month_year()
         mes_siguiente, anio_siguiente = _next_month_year()
-        fecha_siguiente = datetime(anio_siguiente, mes_siguiente, 1).isoformat()
+        fecha_siguiente = datetime(anio_siguiente, mes_siguiente, 1, 12).isoformat()
 
         _crear_presupuesto(client, auth_headers, categoria_a["id"], "1000.00", "COP", mes_actual, anio_actual)
 
@@ -364,7 +368,7 @@ class TestClosedMonthDoesNotGenerateRecurringBudgets:
             cuenta["id"],
             categoria["id"],
             "900.00",
-            date=datetime(anio_siguiente, mes_siguiente, 1).isoformat(),
+            date=datetime(anio_siguiente, mes_siguiente, 1, 12).isoformat(),
         )
 
         filas_mes_siguiente = (
