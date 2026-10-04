@@ -1,7 +1,7 @@
 import hashlib
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy import desc, func, or_, update
@@ -19,11 +19,13 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.core.periods import RANGO_DESC, instante_de_dia, resolver_rango
 from app.core.rate_limit import key_func_por_usuario_o_ip, limiter
 
 # 🔒 Importamos a nuestro Guardia de Seguridad
 from app.core.security import get_current_user
 from app.core.text import normalizar_nombre
+from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.schemas import schemas
 from app.services import ledger
@@ -117,6 +119,19 @@ def _resolver_transaccion_idempotente(
     return transaccion_previa
 
 
+def _resolver_fecha(valor: date | datetime | None, tz) -> datetime | None:
+    """Fase 34 B9: convierte la `date` del payload en el instante a guardar.
+
+    Solo-día (`date`) → hoy en la zona del usuario: hora real (`now()`); otro día: las 12:00
+    locales de ese día. Datetime completo → tal cual (un naive conserva el comportamiento de
+    siempre: UTC). Sin `date` → `None` (el caller conserva `now()` o la fecha previa)."""
+    if valor is None:
+        return None
+    if isinstance(valor, datetime):
+        return valor
+    return instante_de_dia(valor, datetime.now(UTC), tz)
+
+
 # --- RUTA PROTEGIDA ---
 @router.post("/", response_model=schemas.TransactionResponse)
 @limiter.limit("60/minute", key_func=key_func_por_usuario_o_ip)
@@ -181,6 +196,10 @@ def crear_transaccion(
 
     if not categoria:
         raise CategoryNotFoundError()  # 🔁 antes: raise HTTPException(404, "...")
+
+    # Fase 34 B9: solo-día → instante según la zona del usuario (el hash de idempotencia ya
+    # se calculó sobre el payload tal cual llegó).
+    transaccion.date = _resolver_fecha(transaccion.date, get_zoneinfo(current_user.timezone))
 
     # 2. Ensamblar la transacción
     nueva_transaccion = models.Transaction(**transaccion.model_dump(exclude_none=True), user_id=current_user.id)
@@ -248,6 +267,7 @@ def crear_transaccion(
             nueva_transaccion.category_id,
             fecha,
             f"crear transacción {nueva_transaccion.id} del usuario {current_user.id}",
+            get_zoneinfo(current_user.timezone),
         )
 
     return nueva_transaccion
@@ -263,12 +283,15 @@ def obtener_transacciones(
     limit: int = Query(100, ge=1, le=1000),
     account_id: int | None = None,
     category_id: int | None = None,
-    start_date: datetime | None = None,
-    end_date: datetime | None = None,
+    start_date: str | None = Query(None, description=RANGO_DESC),
+    end_date: str | None = Query(None, description=RANGO_DESC),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    if start_date and end_date and start_date > end_date:
+    # Fase 34 B7: cada extremo es un día `YYYY-MM-DD` (zona del usuario, fin exclusivo al
+    # día siguiente) o un datetime completo (instante; `end_date` inclusivo).
+    inicio, fin = resolver_rango(start_date, end_date, get_zoneinfo(current_user.timezone))
+    if inicio is not None and fin is not None and inicio >= fin:
         raise BadRequestError("La fecha inicial no puede ser mayor que la fecha final.")
 
     # Fase 31 (Decisión B5, QA-006): `deleted_at IS NULL` explícito, aunque el filtro
@@ -289,11 +312,11 @@ def obtener_transacciones(
     if category_id is not None:
         query = query.filter(models.Transaction.category_id == category_id)
 
-    if start_date is not None:
-        query = query.filter(models.Transaction.date >= start_date)
+    if inicio is not None:
+        query = query.filter(models.Transaction.date >= inicio)
 
-    if end_date is not None:
-        query = query.filter(models.Transaction.date <= end_date)
+    if fin is not None:
+        query = query.filter(models.Transaction.date < fin)
 
     total = query.with_entities(func.count()).scalar()
 
@@ -500,7 +523,7 @@ def actualizar_transaccion(
         # (`ResponseValidationError`), así que acá sigue la regla anterior: ausente o null
         # → conserva la fecha actual.
         if transaccion_actualizada.date is not None:
-            transaccion_db.date = transaccion_actualizada.date
+            transaccion_db.date = _resolver_fecha(transaccion_actualizada.date, get_zoneinfo(current_user.timezone))
 
         db.commit()
         db.refresh(transaccion_db)
@@ -527,6 +550,7 @@ def actualizar_transaccion(
             transaccion_db.category_id,
             fecha_nueva,
             f"actualizar transacción {transaction_id} del usuario {current_user.id} (categoría nueva)",
+            get_zoneinfo(current_user.timezone),
         )
         # Si cambió de categoría, también se evalúa la de origen — contra el período al
         # que pertenecía la transacción ANTES del cambio (fecha_vieja_original), no el de
@@ -540,6 +564,7 @@ def actualizar_transaccion(
                 categoria_vieja_id,
                 fecha_vieja,
                 f"actualizar transacción {transaction_id} del usuario {current_user.id} (categoría anterior)",
+                get_zoneinfo(current_user.timezone),
             )
 
     return transaccion_db

@@ -25,15 +25,18 @@ import { useQueryParamState } from '@/hooks/useQueryParamState';
 import { queryKeys } from '@/lib/queryKeys';
 import {
   compareMonth,
-  currentUtcMonth,
+  monthOfDay,
   formatMonthLabel,
   formatMonthName,
   formatMonthParam,
   monthTransactionsHref,
   parseMonthParam,
   shiftMonth,
-  utcMonthRange,
+  monthRange as buildMonthRange,
 } from '@/lib/dateRanges';
+import { hourInZone, todayInZone } from '@/lib/dates';
+import { useTimezone } from '@/lib/hooks/useTimezone';
+import type { CalendarMonth } from '@/lib/dateRanges';
 import type { BudgetProgress, DashboardSummary } from '@/types/api';
 
 /**
@@ -43,8 +46,7 @@ import type { BudgetProgress, DashboardSummary } from '@/types/api';
  * (User Story 8); la URL no se reescribe con el valor corregido, el re-normalizado por render
  * alcanza. Cubre los 422 de `core/periods.resolver_mes` (H13) antes de pedirle el mes al server.
  */
-const validateMonthParam = (raw: string): string => {
-  const current = currentUtcMonth(new Date());
+const validateMonthParam = (raw: string, current: CalendarMonth): string => {
   const parsed = parseMonthParam(raw);
   if (!parsed || compareMonth(parsed, current) > 0) {
     return formatMonthParam(current);
@@ -52,7 +54,7 @@ const validateMonthParam = (raw: string): string => {
   return raw;
 };
 
-/** Determina el saludo según la hora LOCAL del dispositivo (Fase 30 F6, Q5/Q9). */
+/** Determina el saludo según la hora en la zona del usuario (Fase 30 F6, Fase 34 F7). */
 const getGreeting = (hours: number): string => {
   if (hours >= 5 && hours < 12) return 'Buenos días';
   if (hours >= 12 && hours < 19) return 'Buenas tardes';
@@ -84,17 +86,21 @@ function DashboardScreen() {
   // Fase 29 §F5.1 (Q6): el mes visible vive en `?month=YYYY-MM` (User Story 6) y el default
   // nunca se escribe — `setMonthParam('')` borra la clave y deja la URL del mes en curso limpia
   // (User Story 7).
-  const [monthParam, setMonthParam] = useQueryParamState('month', '', validateMonthParam);
+  // Fase 34 F1/F2: "hoy" y el mes en curso se resuelven en la zona del usuario. `today` es un
+  // string `YYYY-MM-DD` (estable durante el día): sirve de dep de memo y de techo del rango. Hasta
+  // que `/users/me` carga (`ready`) las queries que dependen del mes no se disparan.
+  const { displayTimezone, ready } = useTimezone();
+  const today = todayInZone(displayTimezone);
+  const { year: currentYear, month: currentMonth } = monthOfDay(today);
+
+  const [monthParam, setMonthParam] = useQueryParamState('month', '', (raw) =>
+    validateMonthParam(raw, { year: currentYear, month: currentMonth })
+  );
 
   // Fase 30 F6 (Q5/Q9): detecta si ya se montó en el cliente para evitar hydration mismatch
   // en el saludo dinámico. SSR renderiza 'Hola'; cliente tras montaje muestra el saludo por hora.
   const isMounted = useIsMounted();
 
-  const now = new Date();
-  // Primitivos, no el objeto de `currentUtcMonth(now)`: dentro de las deps de un `useMemo` o de
-  // una query, un objeto nuevo por render produce una dependencia distinta en cada render y
-  // con ella un refetch constante.
-  const { year: currentYear, month: currentMonth } = currentUtcMonth(now);
   // `?? { year: currentYear, month: currentMonth }` es defensivo: `validateMonthParam` ya
   // garantiza un valor parseable, pero un `null` aquí dejaría el mes sin año ni número.
   const selectedMonth = parseMonthParam(monthParam) ?? { year: currentYear, month: currentMonth };
@@ -108,16 +114,9 @@ function DashboardScreen() {
   const apiMonth = isCurrentMonth ? undefined : monthParam;
   const periodParams = isCurrentMonth ? undefined : { year, month };
 
-  // `now` es un objeto nuevo en cada render: ponerlo en las deps generaría una key distinta por
-  // render y un refetch constante. Se memoiza sobre el inicio del día UTC, que solo cambia una
-  // vez al día; `utcMonthRange` techa el mes en curso al FIN de ese día (`endOfUtcDay`), así
-  // que lo capturado hoy con hora real (`/capture`, atajos por API key) entra en las barras y
-  // en "Últimas 5" igual que en la tarjeta del summary.
-  const todayUtcStart = Date.UTC(currentYear, currentMonth - 1, now.getUTCDate());
-  const monthRange = useMemo(
-    () => utcMonthRange(year, month, new Date(todayUtcStart)),
-    [year, month, todayUtcStart]
-  );
+  // Rango del mes visible como días `YYYY-MM-DD` (Fase 34 F3): el backend los interpreta en la
+  // zona del usuario. El techo del mes en curso es `today`.
+  const monthRange = useMemo(() => buildMonthRange(year, month, today), [year, month, today]);
   const monthLabel = formatMonthLabel(year, month);
   const monthNameLower = formatMonthName(year, month);
 
@@ -132,6 +131,7 @@ function DashboardScreen() {
     refetch: refetchSummary,
   } = useQuery<DashboardSummary>({
     queryKey: queryKeys.dashboard.summary(apiMonth),
+    enabled: ready,
     queryFn: async () => (await api.get('dashboard/summary', { params: periodParams })).data,
     // Fase 29 §F5.1 (User Story 9): `◀ ▶` no devuelven la página a sus skeletons, muestran el
     // mes anterior mientras llega el nuevo.
@@ -145,6 +145,7 @@ function DashboardScreen() {
     refetch: refetchBudgets,
   } = useQuery<BudgetProgress[]>({
     queryKey: queryKeys.budgets.progress(apiMonth),
+    enabled: ready,
     queryFn: async () =>
       (await api.get('dashboard/budgets-progress', { params: periodParams })).data,
     placeholderData: keepPreviousData,
@@ -162,7 +163,7 @@ function DashboardScreen() {
   // salir del dashboard (el flujo guiado completo llega con el onboarding de Fase 15).
   const setMonthlyIncomeMutation = useSetMonthlyIncome();
 
-  const isLoading = loadingSummary || loadingBudgets;
+  const isLoading = loadingSummary || loadingBudgets || !ready;
 
   // Balance del mes calculado POR EL BACKEND (summary.monthly_flow_balance). Nunca se resta
   // en el cliente.
@@ -382,7 +383,7 @@ function DashboardScreen() {
           <h1 className="font-sans text-2xl font-bold tracking-tight sm:text-3xl">
             {(() => {
               if (!isMounted) return 'Hola'; // SSR: mismo contenido que cliente inicial
-              const hours = new Date().getHours();
+              const hours = hourInZone(displayTimezone);
               const greeting = getGreeting(hours);
               const name = user?.full_name?.split(' ')[0];
               return name ? `${greeting}, ${name}` : greeting;
@@ -501,6 +502,7 @@ function DashboardScreen() {
       <CategoryBreakdownSection
         monthKey={apiMonth}
         range={monthRange}
+        enabled={ready}
         currencyOptions={currencyOptions}
         preferredCurrency={preferredCurrency}
         emptyMessage={
@@ -511,6 +513,7 @@ function DashboardScreen() {
       {/* Últimas 5 del mes visible (Fase 29 §F5.5) */}
       <RecentTransactionsSection
         range={monthRange}
+        enabled={ready}
         monthName={monthNameLower}
         viewAllHref={monthTransactionsHref(year, month)}
       />

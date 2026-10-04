@@ -3,6 +3,7 @@
 import { ArrowRightLeft, ArrowDownRight, ArrowUpRight, Trash2, Pencil, Circle } from 'lucide-react';
 import { formatCurrency, formatDateLabel } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
+import { useTimezone } from '@/lib/hooks/useTimezone';
 import EmptyState from '@/components/ui/EmptyState';
 import QueryErrorState from '@/components/ui/QueryErrorState';
 import { useConfirmStore } from '@/store/useConfirmStore';
@@ -41,6 +42,7 @@ export default function TransactionList({
   onRetry,
 }: TransactionListProps) {
   const { config } = useAppConfig();
+  const { displayTimezone } = useTimezone();
 
   return (
     <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
@@ -98,7 +100,7 @@ export default function TransactionList({
                         {formatCurrency(tx.amount, tx.currency)}
                       </p>
                       <p className="text-text-muted text-[11px]">
-                        {formatDateLabel(tx.date, config.locale)}
+                        {formatDateLabel(tx.date, config.locale, displayTimezone)}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">

@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.email import render_email_html, send_email
 from app.core.exceptions import BadRequestError, ForbiddenError, ServiceUnavailableError, UnauthorizedError
 from app.core.rate_limit import limiter
+from app.core.timezones import zona_o_default
 from app.models import models
 from app.schemas import schemas
 
@@ -127,6 +128,7 @@ def login_google(
             password_hash=None,
             google_id=idinfo["sub"],
             email_verified=True,
+            timezone=zona_o_default(body.timezone),  # Fase 34 §B5: solo al crear
         )
         db.add(user)
         db.flush()  # asigna user.id sin cerrar la transacción

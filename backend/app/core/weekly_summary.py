@@ -27,7 +27,6 @@ Decisiones clave:
 import logging
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -35,19 +34,17 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.core.notification_dispatch import crear_y_enviar_notificacion
+from app.core.periods import dia_local, limites_semana
+from app.core.timezones import get_zoneinfo
 from app.models import models
 
 logger = logging.getLogger(__name__)
-
-# Zona horaria fija de despliegue para el resumen semanal (Decisión 14.3.1) — coherente
-# con los defaults actuales del producto (User.preferred_currency="COP", locale es-CO).
-SUMMARY_TIMEZONE = ZoneInfo("America/Bogota")
 
 
 def spent_por_categoria_y_moneda_en_rango(
     db: Session, user_id: int, start: datetime, end: datetime
 ) -> list[tuple[int, str, Decimal]]:
-    """(category_id, currency, spent) para todo el gasto del usuario en [start, end].
+    """(category_id, currency, spent) para todo el gasto del usuario en `[start, end)` (fin EXCLUSIVO, Fase 34 B6b).
 
     Mismo idioma de query que `budget_alerts.spent_por_categoria_y_moneda` (agrupar por
     category_id + currency, filtrar type == "expense") pero sin restringir category_ids
@@ -64,7 +61,7 @@ def spent_por_categoria_y_moneda_en_rango(
             models.Transaction.user_id == user_id,
             models.Transaction.type == "expense",
             models.Transaction.date >= start,
-            models.Transaction.date <= end,
+            models.Transaction.date < end,
         )
         .group_by(models.Transaction.category_id, models.Transaction.currency)
         .all()
@@ -72,43 +69,24 @@ def spent_por_categoria_y_moneda_en_rango(
     return [(r.category_id, r.currency, r.spent) for r in rows]
 
 
-def _limites_semana(reference_date: datetime, tz) -> tuple[datetime, datetime]:
-    """Lunes 00:00 a domingo 23:59:59 de la semana ISO que contiene `reference_date`.
+def build_weekly_summary(db: Session, user: models.User, reference_date: datetime) -> dict:
+    """Calcula el resumen de la semana ISO que contiene `reference_date` (lunes-domingo, en
+    la zona horaria del usuario — Fase 34 B10, antes `America/Bogota` fija). Pura función
+    de cálculo, sin efectos secundarios — `run_weekly_summary_for_user` (más abajo) es quien
+    persiste y envía.
 
-    `reference_date` se convierte a la zona de despliegue y se trunca al día; a partir
-    del `isocalendar()` (la semana lunes-domingo) se resta `weekday` días para llegar al
-    lunes. El resultado lleva `tzinfo` (Fase 33 §B2): `Transaction.date` es `timestamptz`,
-    así que comparar contra un límite naive deja que el driver lo lea en la zona de la
-    sesión (UTC) y la ventana queda corrida 5 h — QA-038, el gasto del domingo por la
-    noche caía en la semana equivocada por los dos bordes.
-
-    `reference_date` DEBE venir con `tzinfo`: sin ella el `.astimezone()` de abajo
-    interpretaría la fecha en la zona del servidor, en silencio. Se rechaza con
-    `ValueError` en vez de adivinar — el job siempre pasa `datetime.now(UTC)`.
-    """
+    `reference_date` tiene que llegar con `tzinfo` (Fase 33 §B2): un naive se interpretaría
+    en silencio como hora del servidor y la ventana saldría corrida (QA-038), así que se
+    rechaza con `ValueError`."""
     if reference_date.utcoffset() is None:
         raise ValueError(
             f"reference_date debe ser un datetime con tzinfo (llegó naive: {reference_date!r}) — la ventana "
-            f"de la semana se calcula en {tz} y un datetime naive se interpretaría en silencio como "
-            "hora del servidor (QA-038)"
+            "de la semana se calcula en la zona del usuario y un datetime naive se interpretaría en silencio "
+            "como hora del servidor (QA-038)"
         )
-    ref = reference_date.astimezone(tz)
-    weekday = ref.weekday()  # lunes = 0 ... domingo = 6
-    lunes = datetime(ref.year, ref.month, ref.day, tzinfo=tz) - timedelta(days=weekday)
-    domingo = lunes + timedelta(days=6, hours=23, minutes=59, seconds=59)
-    return lunes, domingo
-
-
-def build_weekly_summary(db: Session, user: models.User, reference_date: datetime) -> dict:
-    """Calcula el resumen de la semana ISO que contiene `reference_date` (lunes-domingo,
-    America/Bogota — Decisión 14.3.1). Pura función de cálculo, sin efectos secundarios —
-    `run_weekly_summary_for_user` (más abajo) es quien persiste y envía.
-
-    `reference_date` tiene que llegar con `tzinfo` (Fase 33 §B2): es lo que ancla la ventana
-    a la zona de Bogotá. Naive levanta `ValueError` — ver `_limites_semana`."""
-    tz = SUMMARY_TIMEZONE
-    start, end = _limites_semana(reference_date, tz)  # lunes 00:00 - domingo 23:59:59
-    start_prev, end_prev = _limites_semana(reference_date - timedelta(days=7), tz)
+    tz = get_zoneinfo(user.timezone)
+    start, end = limites_semana(reference_date, tz)  # [lunes 00:00 local, lunes siguiente 00:00 local)
+    start_prev, end_prev = limites_semana(start - timedelta(days=1), tz)
 
     moneda = user.preferred_currency or "COP"
     filas = spent_por_categoria_y_moneda_en_rango(db, user.id, start, end)
@@ -122,7 +100,7 @@ def build_weekly_summary(db: Session, user: models.User, reference_date: datetim
     )[0]
 
     return {
-        "period_key": start.strftime("%G-W%V"),  # semana ISO, p. ej. "2026-W37"
+        "period_key": dia_local(start, tz).strftime("%G-W%V"),  # semana ISO, p. ej. "2026-W37"
         "total": total,
         "currency": moneda,
         "categoria_principal_id": categoria_principal_id,
@@ -189,8 +167,12 @@ def run_weekly_summary_job() -> None:
     resultante es el de la semana cerrada. `build_weekly_summary` no cambia de contrato
     ("la semana ISO que contiene la fecha dada").
 
+    La zona del usuario define QUÉ semana se resume, no CUÁNDO llega: el cron es único
+    (Fase 34 B10/H8); para una zona muy detrás de Bogotá `ahora - 7 días` puede caer en la
+    semana anterior a la recién cerrada de ese usuario (consecuencia aceptada).
+
     Ojo con el `except Exception` de abajo: se traga cualquier fallo —incluido un
-    `ValueError` de la guarda de `_limites_semana` (B2), que solo loguea y sigue. Un error
+    `ValueError` de la guarda de `build_weekly_summary` (B2), que solo loguea y sigue. Un error
     de contrato en esa llamada se manifiesta como "no llegó ningún aviso", sin error
     visible para el usuario. No se cambia acá (fuera de alcance de la fase), pero conviene
     saberlo antes de tocar este loop.

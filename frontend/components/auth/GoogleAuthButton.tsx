@@ -1,5 +1,6 @@
 'use client';
 
+import { deviceTimezone } from '@/lib/dates';
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -44,7 +45,11 @@ export default function GoogleAuthButton() {
       try {
         // Fase 26 (Decisión F3): ya no se guardan tokens en localStorage — el Set-Cookie
         // de la respuesta de /auth/google deja la sesión lista, igual que en el login.
-        await api.post('auth/google', { id_token: response.credential });
+        await api.post('auth/google', {
+          id_token: response.credential,
+          // Fase 34 F5/B5: zona detectada; solo aplica si esto crea la cuenta.
+          timezone: deviceTimezone(),
+        });
 
         // Fase 31 F5: mismo helper de destino que login/page.tsx — funciona igual para un
         // registro nuevo (has_transaction_history=false → /capture?onboarding=1) y para una

@@ -54,6 +54,10 @@ propcache==0.5.2
 py-vapid==1.9.4
 pywebpush==2.5.0
 requests==2.34.2
+# Fase 34: la imagen slim de Docker no trae los alias "backward" de la base IANA
+# (Asia/Calcutta, Europe/Kiev...) que `Intl.supportedValuesOf('timeZone')` de Chrome sí lista;
+# sin esto el selector de Ajustes ofrece zonas que el backend rechaza con 422.
+tzdata==2026.5
 urllib3==2.7.0
 yarl==1.24.5
 

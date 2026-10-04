@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.exceptions import BadRequestError, NotFoundError
-from app.core.periods import rango_mes_utc
+from app.core.periods import rango_mes, resolver_mes
 from app.core.security import get_current_user
+from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.schemas import schemas
 
@@ -128,7 +129,7 @@ def obtener_resumen_mensual_cuenta(
     current_user: models.User = Depends(get_current_user),
 ):
     """Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
-    Actualizado Fase 30 B2: usa `core.periods.rango_mes_utc` para el techo del mes en
+    Actualizado Fase 30 B2: usa `core.periods.rango_mes` para el techo del mes en
     curso = "ahora", igual que `dashboard/summary`. Fase 31 (B9): mismo criterio que
     `DashboardSummary.monthly_flow_balance` desde esta fase — tampoco depende de
     ningún valor declarado por el usuario, y el balance nunca es `null`.
@@ -145,8 +146,11 @@ def obtener_resumen_mensual_cuenta(
     if not cuenta:
         raise NotFoundError("La cuenta no existe o no tienes permisos.")
 
-    hoy = datetime.now(UTC)
-    primer_dia, limite = rango_mes_utc(hoy.year, hoy.month, hoy)
+    # Fase 34 B8: "este mes" es el de la zona del usuario (el mismo que el dashboard).
+    tz = get_zoneinfo(current_user.timezone)
+    ahora = datetime.now(UTC)
+    year, month, _ = resolver_mes(None, None, ahora, tz)
+    primer_dia, limite = rango_mes(year, month, ahora, tz)
 
     def _total(tipo: str) -> Decimal:
         """Suma del mes de las transacciones de un tipo, ignorando borradas (mismo

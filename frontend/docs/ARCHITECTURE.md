@@ -119,6 +119,16 @@ Convención:
 - Centraliza la lectura del perfil actual para no repetir la misma lógica en múltiples páginas.
 - Debe usarse solo dentro de la experiencia autenticada.
 
+### `lib/hooks/useTimezone.ts` y `lib/dates.ts` (Fase 34)
+
+- `useTimezone()` es el acceso único a la zona del usuario (`user.timezone` de `useCurrentUser`):
+  devuelve `timezone` (`undefined` hasta que carga `/users/me`), `ready` y `displayTimezone` (cae a
+  la zona del dispositivo; solo para formatear en pantalla).
+- `lib/dates.ts` es el módulo de fechas basado solo en `Intl` (sin librería): "hoy", mes y día de un
+  instante, y hora en la zona. `lib/dateRanges.ts` construye **días `YYYY-MM-DD`**, nunca instantes
+  UTC de límite: la resolución de rangos la hace el backend. `Date.UTC` queda solo como aritmética de
+  calendario puro sobre `y/m/d`. `formatDate`/`formatDateLabel` reciben `timeZone`.
+
 ### `lib/hooks/useRequireAuth.ts`
 
 - Guard de autenticación compartido: usa `haySesionActiva()` de `lib/authSession.ts`

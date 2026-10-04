@@ -34,7 +34,9 @@ El backend expone además `POST /api/v1/auth/password-reset/request`, `POST /api
   clientes no-browser, pero el frontend **ya no los lee** (Fase 26, Decisión F3): el `Set-Cookie`
   de la respuesta deja la sesión lista.
 - `POST /api/v1/auth/google` (Fase 20 §20.3) → login/registro con Google Identity Services.
-  Body `{ id_token: string }` (el `credential` del callback de GIS). Respuesta con **la misma
+  Body `{ id_token: string, timezone?: string }` (el `credential` del callback de GIS; `timezone`
+  = zona IANA del navegador, Fase 34 §B5: solo se aplica si este login **crea** el usuario;
+  ausente/inválida → `America/Bogota`, sin error). Respuesta con **la misma
   forma exacta** que `POST /auth/login`: `{ access_token, refresh_token, token_type }` + los
   tres cookies de sesión (Decisión B6). El backend resuelve internamente si es registro nuevo
   (crea el `User` con `email_verified=True` + cuenta por defecto + categorías ocultas) o
@@ -140,8 +142,11 @@ Filtros soportados por el feed:
 - `limit` (default: 100, usado internamente: 50; validado `ge=1, le=1000`; `limit=0` o negativo → `422`; `limit>1000` → `422`)
 - `account_id`
 - `category_id`
-- `start_date`
-- `end_date`
+- `start_date`, `end_date` (Fase 34, B7) — cada uno acepta **solo-día `YYYY-MM-DD`** (interpretado en
+  la zona horaria del usuario; `end_date` incluye todo ese día) **o datetime ISO completo**
+  (instante; `end_date` inclusivo). **El frontend manda días `YYYY-MM-DD`**, nunca instantes UTC
+  de límite. Valor ilegible → `422` con `detail` string; inicio > fin → `400`. Ídem para
+  `cashflow-series` y `category-distribution`.
 
 El endpoint devuelve una respuesta paginada:
 
@@ -160,6 +165,13 @@ ya borró (también en simultáneo) recibe `404` y no vuelve a mover el saldo.
 "ausente" de `null` explícito — ausente conserva, `null` limpia. Aplica a `description` y
 `payment_method` (la web siempre manda `description`; `payment_method` ausente conserva,
 `null` limpia). `date` no acepta `null` explícito (el response exige `datetime` no opcional).
+
+**`date` de la transacción (Fase 34, B9)** — en `POST` y `PUT` acepta `YYYY-MM-DD` **o** datetime
+ISO completo. Solo-día igual a hoy (zona del usuario) → hora real del registro; solo-día de otro
+día → 12:00 locales de ese día; datetime con zona → tal cual (sin zona = UTC). El frontend manda
+el string del `<input type="date">` sin convertir, y en `PUT` solo cuando el usuario cambió la
+fecha (así editar el monto no re-estampa la hora). `TransactionResponse.date` sigue siendo un
+datetime (instante); el día que se muestra es el de ese instante **en la zona del usuario**.
 
 Body de creación (`POST`) desde Fase 16 §16.2:
 
@@ -252,19 +264,18 @@ en el frontend dice: "Se borra el de este mes. Si venía de meses anteriores, el
 **Navegación por mes del dashboard (Fase 29):**
 
 - `summary` y `budgets-progress` aceptan `year` y `month` **ambos o ninguno**. Sin ninguno, el
-  backend responde por el **mes actual UTC** y los valores de los campos que ya existían son los
+  backend responde por el **mes actual en la zona del usuario** y los valores de los campos que ya existían son los
   de siempre (solo se agregan los nuevos), así que el dashboard de siempre no se rompe.
 - El frontend **solo manda `year`/`month` en meses ya cerrados**. En el mes actual la petición
   va sin params (y el mes no se escribe en la URL): el backend valida "no se puede consultar un
   mes futuro" con **su** reloj, así que mandar el mes actual calculado con el reloj del
   navegador daría un `422` espurio en el cambio de mes.
-- El período es **UTC** en el backend y en el front (`lib/dateRanges.ts` ancla los límites con
-  `Date.UTC`): un mes va del día 1 a las 00:00 UTC al último día a las 23:59:59 UTC. En el mes
-  en curso el techo es "ahora", de modo que una transacción con fecha futura del mismo mes no
-  cuenta como gasto del mes en `summary` (sí contaría en un rango mal armado en hora local). Los
-  rangos que arma el front para el mes/período en curso (`utcMonthRange`, `buildDateRange`)
-  terminan en cambio al fin del día UTC de hoy: así incluyen lo capturado hoy con hora real y
-  no cambian en cada render (van en query keys).
+- El período es en la **zona horaria del usuario** (`User.timezone`, Fase 34), resuelto por el
+  backend: un mes va de las 00:00 locales del día 1 a las 00:00 locales del día 1 siguiente
+  (exclusivo). En el mes en curso el techo es "ahora", de modo que una transacción con fecha
+  futura del mismo mes no cuenta como gasto del mes en `summary`. Los rangos que arma el front
+  son **días `YYYY-MM-DD`** (el backend los interpreta en la zona del usuario): el front no
+  calcula instantes de límite; extrae año/mes/día con `Intl` en la zona del usuario.
 - Un `?month=` inválido o futuro no debe romper la vista: el front lo valida antes de pedirlo
   (`parseMonthParam`) y cae al mes actual. Si aun así llega un `422`, **hay dos formas** y no
   son intercambiables: `detail` como **string** — "Se deben enviar `year` y `month`, o
@@ -374,6 +385,7 @@ Reglas de consumo:
 - `preferred_currency` (default `"COP"`)
 - `preferred_locale` (default `"es-CO"`)
 - `preferred_theme` (default `"dark"`)
+- `timezone` (`string`, Fase 34 §B3, default `"America/Bogota"`) — zona IANA del usuario; única fuente de día/semana/mes del backend. Se lee de `GET /users/me` (`useCurrentUser`).
 - `monthly_income` (`number | null`) — dato financiero del perfil, editable vía `PATCH /api/v1/users/me`. Desde Fase 31 (Decisión B9, Q14) es puramente una **referencia visual**: ya no alimenta `monthly_flow_balance` de `/dashboard/summary` ni ningún otro cálculo del backend — el dashboard lo muestra junto a los ingresos reales del mes ("· esperado $X"), sin restarlo de nada.
 - `has_transaction_history` (`boolean`, Fase 19 §19.1) — `true` si el usuario tiene 2+ transacciones. El login (`login/page.tsx`) lo lee para condicionar el redirect: `/dashboard` si es `true`, `/capture` si no (resuelve la Decisión 10.1.4 de Fase 10). Solo se calcula en `GET /users/me`; en `PATCH /me` llega como `false` fijo sin consultar — ningún call site de ese endpoint lee el campo (Decisión 19.1.3).
 - `has_password` (`boolean`, Fase 22 §22.4, Decisión D4) — `true` si la cuenta tiene contraseña, `false` = cuenta creada solo con Google. Se computa en los tres endpoints de `UserResponse` via `model_validator` del schema (no hay que asignarlo por handler). El modal de "Eliminar mi cuenta" en `/settings` lo usa para no pedir contraseña a una cuenta Google-only (`requiresPassword = currentUser?.has_password !== false`).
@@ -386,8 +398,9 @@ Reglas de consumo:
 - `preferred_locale`: string
 - `preferred_theme`: string
 - `weekly_summary_enabled`: boolean (Fase 14 §14.6.1; opt-out, default `true`)
+- `timezone`: string (Fase 34 §B4, default `"America/Bogota"`)
 
-`PATCH /api/v1/users/me/preferences` acepta campos opcionales: `preferred_currency`, `preferred_locale`, `preferred_theme`, `weekly_summary_enabled`.
+`PATCH /api/v1/users/me/preferences` acepta campos opcionales: `preferred_currency`, `preferred_locale`, `preferred_theme`, `weekly_summary_enabled`, `timezone` (nombre IANA válido; inexistente → `422` con `detail` string; cambiarla no modifica ningún movimiento guardado, solo reagrupa períodos — al guardar hay que invalidar todas las queries que dependen de fechas).
 
 Además acepta `apply_to_default_account?: boolean` (Fase 22 §22.1, Decisión A5) — instrucción
 por-request, no se persiste: cuando es `true` junto con `preferred_currency`, el backend
@@ -508,7 +521,7 @@ El frontend asume:
   tenía dos bases (`'declared' | 'actual'`) y el rótulo de la tarjeta salía de acá; ya no hace
   falta (el rótulo es siempre "Balance de \<mes\>"), pero el campo se conserva sin default —
   un cliente que lo siga leyendo ve siempre `'actual'`, nunca un campo ausente.
-- `first_transaction_month` (`string | null`, Fase 29) — mes UTC `"YYYY-MM"` de la transacción más antigua del usuario, sobre todas las cuentas. Es el límite inferior del `◀`; `null` = usuario sin transacciones, la navegación no tiene hacia dónde ir.
+- `first_transaction_month` (`string | null`, Fase 29) — mes `"YYYY-MM"` (en la zona del usuario, Fase 34) de la transacción más antigua del usuario, sobre todas las cuentas. Es el límite inferior del `◀`; `null` = usuario sin transacciones, la navegación no tiene hacia dónde ir.
 - `expense_currencies` (`string[]`, Fase 29) — monedas con gasto en el mes consultado, sobre **todas** las cuentas (no solo las destacadas), con la preferida primero. Alimenta los chips de moneda de "Gastos por categoría": las barras que el chip filtra cuentan todas las cuentas, así que el universo tiene que ser ese. La moneda preferida solo aparece si tiene gasto en el mes, y el frontend la suma igual a las opciones para que el chip nunca quede sin nada que mostrar.
 
 Para el progreso de presupuestos, el backend devuelve valores listos para pintar:

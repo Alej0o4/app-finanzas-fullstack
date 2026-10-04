@@ -200,8 +200,7 @@ class TestBuildWeeklySummary:
 
         Sin ella la ventana se interpretaría en la zona del servidor (o, contra `timestamptz`,
         como UTC) y el resumen saldría corrido en silencio — el modo de fallo que produjo
-        QA-038. `build_weekly_summary` llama `_limites_semana` con la referencia y con la
-        referencia menos 7 días (para el delta), así que este assert cubre las dos."""
+        QA-038. `build_weekly_summary` rechaza la referencia naive antes de calcular ninguna ventana."""
         user = _crear_usuario(db_session, "naive@test.com")
 
         with pytest.raises(ValueError, match="tzinfo"):

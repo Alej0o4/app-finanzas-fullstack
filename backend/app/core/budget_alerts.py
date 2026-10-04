@@ -9,13 +9,14 @@ no reintroducir el bug de mezclar monedas que ya se corrigió una vez ahí.
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.budget_recurrence import ensure_recurring_budgets_for_period
 from app.core.notification_dispatch import crear_y_enviar_notificacion
-from app.core.periods import rango_mes_utc
+from app.core.periods import dia_local, rango_mes
 from app.models import models
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ THRESHOLDS = [
 
 
 def spent_por_categoria_y_moneda(
-    db: Session, user_id: int, category_ids: list[int], month: int, year: int
+    db: Session, user_id: int, category_ids: list[int], month: int, year: int, tz: ZoneInfo
 ) -> dict[tuple[int, str], Decimal]:
     """Gasto del período agrupado por `(category_id, currency)` — Fase 11 §11.1.
 
@@ -39,7 +40,7 @@ def spent_por_categoria_y_moneda(
     `evaluate_budget_thresholds_for_category` (escritura de avisos). El motor de
     alertas NO recalcula el gasto de otra forma para no divergir del dashboard.
     """
-    # El rango lo acota `core/periods.rango_mes_utc` (Fase 31, B6): techo "ahora" en el
+    # El rango lo acota `core/periods.rango_mes` (Fase 31, B6): techo "ahora" en el
     # mes en curso (para que una transacción con fecha futura del mismo mes no cuente
     # como "ya gastado" acá, mientras category-distribution/cashflow-series sí la
     # acotan a `hoy` — Fase 11 §11.4/Fase 17 §17.1.3) y mes completo (límite superior
@@ -47,8 +48,8 @@ def spent_por_categoria_y_moneda(
     # un mes FUTURO: los presupuestos anticipados (creados para el próximo período, ver
     # test_two_budgets_same_category_different_currencies_evaluate_own_spent_by_currency)
     # se evalúan completos desde que existen. Esa semántica de mes futuro es
-    # obligatoria y es la razón por la que `rango_mes_utc` no valida nada.
-    primer_dia, limite = rango_mes_utc(year, month, datetime.now(UTC))
+    # obligatoria y es la razón por la que `rango_mes` no valida nada.
+    primer_dia, limite = rango_mes(year, month, datetime.now(UTC), tz)
 
     spent_rows = (
         db.query(
@@ -70,7 +71,7 @@ def spent_por_categoria_y_moneda(
     return {(r.category_id, r.currency): r.spent for r in spent_rows}
 
 
-def _spent_for_budget(db: Session, presupuesto: models.Budget) -> Decimal:
+def _spent_for_budget(db: Session, presupuesto: models.Budget, tz: ZoneInfo) -> Decimal:
     """`spent` del presupuesto filtrado por su propia moneda (hallazgo 5 del spec).
 
     Dos presupuestos de la misma categoría en monedas distintas evalúan cada uno con
@@ -79,13 +80,13 @@ def _spent_for_budget(db: Session, presupuesto: models.Budget) -> Decimal:
     corresponde al presupuesto.
     """
     spent_map = spent_por_categoria_y_moneda(
-        db, presupuesto.user_id, [presupuesto.category_id], presupuesto.month, presupuesto.year
+        db, presupuesto.user_id, [presupuesto.category_id], presupuesto.month, presupuesto.year, tz
     )
     return spent_map.get((presupuesto.category_id, presupuesto.currency), Decimal("0.00"))
 
 
 def evaluate_budget_thresholds_safely(
-    db: Session, user_id: int, category_id: int, fecha: datetime, contexto: str
+    db: Session, user_id: int, category_id: int, fecha: datetime, contexto: str, tz: ZoneInfo
 ) -> None:
     """Envuelve `evaluate_budget_thresholds_for_category` en su propio try/except + rollback
     (Decisión 13.3.4): un fallo del motor nunca debe tumbar el request que ya confirmó el
@@ -96,13 +97,17 @@ def evaluate_budget_thresholds_safely(
     Único punto de llamada al motor desde los routers — evita que crear/actualizar
     transacción diverjan en cómo manejan sus propios fallos."""
     try:
-        evaluate_budget_thresholds_for_category(db, user_id, category_id, fecha.month, fecha.year)
+        # Fase 34 B8b/B9b: el período es el mes de `fecha` EN LA ZONA del usuario.
+        dia = dia_local(fecha, tz)
+        evaluate_budget_thresholds_for_category(db, user_id, category_id, dia.month, dia.year, tz)
     except Exception:
         db.rollback()
         logger.exception("Error al evaluar umbrales de presupuesto (%s)", contexto)
 
 
-def evaluate_budget_thresholds_for_category(db: Session, user_id: int, category_id: int, month: int, year: int) -> None:
+def evaluate_budget_thresholds_for_category(
+    db: Session, user_id: int, category_id: int, month: int, year: int, tz: ZoneInfo
+) -> None:
     """Evalúa si el gasto de (usuario, categoría, período) cruzó un umbral y, de ser así,
     persiste el aviso en `notifications` (una sola vez por umbral y período — Decisión
     13.3.2: unicidad garantizada por índice único parcial, no solo por este chequeo)."""
@@ -110,7 +115,7 @@ def evaluate_budget_thresholds_for_category(db: Session, user_id: int, category_
     # mes nuevo antes de abrir el dashboard, la fila recurrente de ese mes no existe —
     # sin este paso el aviso de ese mes nunca se dispararía hasta visitar el dashboard.
     #
-    # Fase 29 (Decisión B5, hallazgo H2) acota el paso a períodos >= mes actual UTC. Antes
+    # Fase 29 (Decisión B5, hallazgo H2) acota el paso a períodos >= mes actual (en la zona del usuario, Fase 34). Antes
     # se llamaba siempre, y como esta función se dispara con la fecha de la transacción,
     # un gasto cargado con fecha atrasada clonaba la plantilla recurrente en un mes ya
     # cerrado (incluso tomando una plantilla de un mes posterior) y podía disparar avisos
@@ -119,8 +124,8 @@ def evaluate_budget_thresholds_for_category(db: Session, user_id: int, category_
     # atrasada en un mes cerrado ya no crea el presupuesto recurrente de ese mes ni avisa
     # sus umbrales; los presupuestos que YA existían en ese mes siguen evaluándose igual
     # (el `if` solo envuelve la generación, no el chequeo de filas de abajo).
-    ahora = datetime.now(UTC)
-    if (year, month) >= (ahora.year, ahora.month):
+    hoy = dia_local(datetime.now(UTC), tz)
+    if (year, month) >= (hoy.year, hoy.month):
         ensure_recurring_budgets_for_period(db, user_id, month, year)
 
     presupuestos = (
@@ -139,7 +144,7 @@ def evaluate_budget_thresholds_for_category(db: Session, user_id: int, category_
         if presupuesto.amount_limit <= 0:
             continue  # sin presupuesto válido para esta categoría/período, nada que evaluar
 
-        gastado = _spent_for_budget(db, presupuesto)  # mismo query pattern que dashboard.py
+        gastado = _spent_for_budget(db, presupuesto, tz)  # mismo query pattern que dashboard.py
         porcentaje = float(gastado / presupuesto.amount_limit) * 100
 
         for umbral, tipo, plantilla_titulo in THRESHOLDS:

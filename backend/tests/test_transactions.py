@@ -1307,3 +1307,33 @@ class TestCapturaRapidaPorNombre:
         )
         assert response.status_code == 422
         assert "Especificar exactamente uno" in response.text
+
+
+class TestFechaSoloDiaFase34:
+    """Fase 34 (B9): `date` como `YYYY-MM-DD` se convierte en la zona del usuario (Bogotá por
+    defecto): día pasado → 12:00 locales (17:00Z); datetime completo → tal cual. Los casos de
+    otras zonas (Tokyo/New York) los agrega el paso de tests de integración."""
+
+    def _crear(self, client, headers, make_account, make_category, **extra):
+        cuenta = make_account(headers, balance="1000.00")
+        categoria = make_category(headers, name="Comida", type="expense")
+        return _create_transaction(client, headers, account_id=cuenta["id"], category_id=categoria["id"], **extra)
+
+    def test_solo_dia_pasado_se_guarda_a_las_12_locales(self, client, auth_headers, make_account, make_category):
+        response = self._crear(client, auth_headers, make_account, make_category, date="2026-03-10")
+        assert response.status_code == 200, response.text
+        assert response.json()["date"].startswith("2026-03-10T17:00:00")
+
+    def test_datetime_completo_se_guarda_tal_cual(self, client, auth_headers, make_account, make_category):
+        response = self._crear(client, auth_headers, make_account, make_category, date="2026-03-10T00:00:00-05:00")
+        assert response.status_code == 200, response.text
+        assert response.json()["date"].startswith("2026-03-10T05:00:00")
+
+    def test_solo_dia_de_hoy_conserva_la_hora_real(self, client, auth_headers, make_account, make_category):
+        from zoneinfo import ZoneInfo
+
+        hoy = datetime.now(ZoneInfo("America/Bogota")).date().isoformat()
+        response = self._crear(client, auth_headers, make_account, make_category, date=hoy)
+        assert response.status_code == 200, response.text
+        guardada = datetime.fromisoformat(response.json()["date"]).replace(tzinfo=UTC)
+        assert abs((datetime.now(UTC) - guardada).total_seconds()) < 60

@@ -415,7 +415,7 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     vacío sin mensaje; ~7 s en blanco ante un 404 de recurso ajeno; descripción obligatoria
     solo en el modal (no en `/capture`); "Último uso: Nunca" desactualizado en API keys.
 
-- [ ] **Deuda nueva consciente de la Fase 31 (2026-09-27).**
+- [ ] **Deuda nueva consciente de la Fase 31 (2026-09-27).** *(H11 quedó cerrado por la Fase 34 B7: `end_date` solo-día incluye todo el día.)*
   - Resuelto en la Fase 32 (2026-10-02): el insumo de T10, marcado `[x]` abajo. Siguen abiertos
     H11, el modal de edición propio de `/accounts/[id]` y `/categories/[id]`, y el de
     `decimal_places`.
@@ -455,6 +455,19 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 - [x] **QA-041** 🟢 — Voseo visible y mayúsculas CSS en fechas. **Resuelto (2026-10-04, Fase 33 F10/F11):** 8 textos a tuteo en 3 archivos; `formatDateLabel`/`capitalizeFirst` en los 4 feeds. `?onboarding=1` se deja (Fase 15, Decisión 15.5.1).
 - [x] **QA-042** 🟢 — El email del Sidebar se veía `Qa3@Test.com`. **Resuelto (2026-10-04, Fase 33 F13):** se quitó `capitalize`.
 
+- [ ] **Deuda nueva consciente de la Fase 34 (2026-10-04).**
+  - **Pendientes del dueño antes de desplegar:** `pg_dump`/respaldo; correr
+    `scripts/fase34_reporte_x1.py --confirmo-copia` sobre una copia real y revisar el reporte (la
+    migración de datos `c7d3e9a4b1f6` corre sola en el `CMD` de Docker y mueve filas `00:00Z`→`17:00Z`,
+    algunas cruzan de mes); rebuild de la imagen de producción (`tzdata`) y reinstalar requirements en
+    venvs locales; probar a mano el borde de las 19:00 Bogotá y las notificaciones en otra zona.
+  - 🟢 Con `/users/me` caído, la sección de zona de Ajustes queda en skeleton.
+  - 🟢 Los `queryKeys` no llevan la zona como segmento: dependen de que el cambio de zona invalide
+    por prefijo (`useUserPreferences`). Si aparece una query nueva que dependa de fechas, agregarla ahí.
+  - 🟢 El frontend no tiene runner de tests; la lógica de `lib/dates.ts` y `lib/dateRanges.ts` solo se
+    verificó con Playwright (Tokyo y Bogotá).
+  - 🟢 `cashflow-series` en SQLite (opt-in offline) agrupa en UTC; solo Postgres respeta la zona.
+
 - [ ] **El filtro de cuentas destacadas no es el mismo en todo el dashboard (Fase 29,
   aceptado).**
   - `GET /dashboard/summary` filtra `balances`, `monthly_income_by_currency` y
@@ -468,15 +481,10 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     `backend/docs/BUSINESS_RULES.md`. Unificarlo es una decisión de producto: qué hacer con las
     cuentas no destacadas (agregarlas al filtro, o sacarlas del filtro y sumar todo).
 
-- [ ] **Mes UTC contra hora Bogotá, y la semana del resumen semanal contra la de Analítica
-  (Fase 29, aceptado).**
-  - El "mes actual" se resuelve en UTC (Decisión B1), así que desde las 19:00 hora Bogotá del
-    último día el backend ya está en el mes siguiente. Es preexistente y la fase no lo empeora;
-    el desfase se acepta como supuesto 1 de la spec, documentado en
-    `backend/docs/API_REFERENCE.md`.
-  - `core/weekly_summary.py` calcula la semana en `America/Bogota` mientras que la semana
-    calendario de Analítica (lunes–domingo) es UTC: los totales de ambos pueden diferir en el
-    borde del domingo noche / lunes.
+- [x] **Mes UTC contra hora Bogotá, y la semana del resumen semanal contra la de Analítica
+  (Fase 29, aceptado) — resuelto.** *(2026-10-04, Fase 34, `docs/specs/fase_34_spec.md`)*
+  - `User.timezone` es ahora la única fuente de día/semana/mes (`core/periods.py`): dashboard,
+    presupuestos, alertas, Analítica, `/transactions` y resumen semanal usan la misma zona.
 
 - [x] **Techo inconsistente en `GET /accounts/{id}/monthly-summary` (Fase 29, aceptado)
   — resuelto.** *(2026-09-26, Fase 30 B2, `docs/specs/fase_30_spec.md`)*

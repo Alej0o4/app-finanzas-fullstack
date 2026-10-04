@@ -7,6 +7,8 @@ import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import { validateAmountText } from '@/lib/validateAmount';
 import { getVisibleCategories } from '@/lib/categoryVisibility';
+import { dayInZone, todayInZone } from '@/lib/dates';
+import { useTimezone } from '@/lib/hooks/useTimezone';
 import type { Account, Category, Transaction, UpdateTransactionPayload } from '@/types/api';
 
 interface EditTransactionModalProps {
@@ -31,9 +33,16 @@ export default function EditTransactionModal({
   const [editDescription, setEditDescription] = useState(transaction.description || '');
   const [editAmount, setEditAmount] = useState(String(transaction.amount));
   const [editType, setEditType] = useState(transaction.type);
-  const [editDate, setEditDate] = useState(
-    transaction.date ? transaction.date.split('T')[0] : new Date().toISOString().split('T')[0]
+  // Fase 34 F4: el campo muestra el día del instante **en la zona del usuario** (`Intl`, nunca
+  // `split('T')[0]`, que daría el día UTC). `initialDate` queda fijo para detectar si el usuario
+  // cambió la fecha: solo entonces se manda (B9).
+  const { displayTimezone } = useTimezone();
+  const [initialDate] = useState(
+    () =>
+      (transaction.date && dayInZone(transaction.date, displayTimezone)) ||
+      todayInZone(displayTimezone)
   );
+  const [editDate, setEditDate] = useState(initialDate);
   const [editAccountId, setEditAccountId] = useState(String(transaction.account_id));
   const [editCategoryId, setEditCategoryId] = useState(String(transaction.category_id));
   // Fase 31 F3 (Q10, QA-009, H13): el toggle arranca activado si la categoría original de
@@ -111,7 +120,7 @@ export default function EditTransactionModal({
       description: editDescription.trim() || null,
       amount: Number(editAmount),
       type: editType as 'income' | 'expense',
-      date: editDate,
+      date: editDate !== initialDate ? editDate : undefined,
       account_id: Number(editAccountId),
       category_id: Number(editCategoryId),
     });

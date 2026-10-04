@@ -13,8 +13,10 @@ import SegmentedControl from '@/components/ui/SegmentedControl';
 interface CategoryBreakdownSectionProps {
   /** Segmento de mes de la key de caché. `undefined` en el mes en curso (Fase 29 H7/H10). */
   monthKey?: string;
-  /** Rango ISO del mes visible, ya anclado en UTC por `utcMonthRange` (Fase 29 §F1). */
+  /** Rango del mes visible como días `YYYY-MM-DD`, de `monthRange` (Fase 34 F3). */
   range: Pick<DateRange, 'start_date' | 'end_date'>;
+  /** Fase 34 F1: `false` hasta que se conoce la zona del usuario (el rango depende de ella). */
+  enabled?: boolean;
   /** Monedas con gasto en el mes + la preferida, ya deduplicadas y con la preferida primera. */
   currencyOptions: string[];
   preferredCurrency: string;
@@ -34,6 +36,7 @@ interface CategoryBreakdownSectionProps {
 export default function CategoryBreakdownSection({
   monthKey,
   range,
+  enabled = true,
   currencyOptions,
   preferredCurrency,
   emptyMessage,
@@ -64,6 +67,7 @@ export default function CategoryBreakdownSection({
 
   const { data, isLoading, isError, refetch } = useQuery<CategoryDistributionItem[]>({
     queryKey: queryKeys.dashboard.categoryBreakdown(monthKey, currency),
+    enabled,
     queryFn: async () => (await api.get('dashboard/category-distribution', { params })).data,
     // Fase 29 §F5.1 (User Story 9): al cambiar de mes las barras no vuelven al skeleton,
     // muestran las del mes anterior hasta que llegan las del nuevo.
@@ -94,7 +98,7 @@ export default function CategoryBreakdownSection({
 
       <CategoryBreakdownBars
         data={data}
-        isLoading={isLoading}
+        isLoading={isLoading || !enabled}
         isError={isError}
         onRetry={() => refetch()}
         currency={currency}

@@ -37,6 +37,8 @@ class GoogleLoginRequest(BaseModel):
     """
 
     id_token: str
+    # Fase 34 §B5: solo se aplica cuando este login CREA al usuario; inválida o ausente → default.
+    timezone: str | None = None
 
 
 class PasswordResetConfirm(BaseModel):

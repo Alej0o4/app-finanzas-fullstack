@@ -18,6 +18,8 @@ import EmptyState from '@/components/ui/EmptyState';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import Label from '@/components/ui/Label';
+import { currentMonthInZone } from '@/lib/dates';
+import { useTimezone } from '@/lib/hooks/useTimezone';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import type { Budget, BudgetPayload } from '@/types/api';
 
@@ -45,9 +47,11 @@ export default function BudgetsPage() {
   // cuentas no cargaron.
   const [currency, setCurrency] = useState('COP');
   const [isRecurring, setIsRecurring] = useState(false);
+  // Fase 34 F7: el mes en curso es el de la zona del usuario, no el del dispositivo.
+  const { displayTimezone } = useTimezone();
   const getCurrentMonthYear = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const { year, month } = currentMonthInZone(displayTimezone);
+    return `${year}-${String(month).padStart(2, '0')}`;
   };
   const [monthYear, setMonthYear] = useState(getCurrentMonthYear);
   // Fase 12 §12.8: errores por campo (no globo nativo del navegador) + foco en el primero.

@@ -15,6 +15,9 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=10, max_length=128)
+    # Fase 34 §B5: zona detectada del navegador. Sin validar a propósito: si falta o es
+    # inválida el handler usa el default y el registro NO falla (distinto del 422 de B4).
+    timezone: str | None = None
 
     @field_validator("password")
     @classmethod
@@ -27,6 +30,7 @@ class UserResponse(UserBase):
     preferred_currency: str = "COP"
     preferred_locale: str = "es-CO"
     preferred_theme: str = "dark"
+    timezone: str = "America/Bogota"  # Fase 34 §B3
     monthly_income: Decimal | None = None
     has_transaction_history: bool = False  # Fase 19 §19.1 — solo se calcula en GET /users/me
     has_password: bool = False  # 🆕 Fase 22 §22.4 (Decisión D4)
@@ -59,6 +63,8 @@ class PreferencesUpdate(BaseModel):
     preferred_locale: str | None = None
     preferred_theme: str | None = None
     weekly_summary_enabled: bool | None = None  # Fase 14
+    # Fase 34 §B4: zona IANA; el handler la valida con `core.timezones` (422 si es inválida).
+    timezone: str | None = None
     # Fase 22 §22.1 (Decisión A5): instrucción de "además, cascadeá" para esta request
     # puntual — no se persiste (ni en User ni en Account), solo orquesta la cascada de
     # `update_preferences`. Se excluye de `model_dump(exclude_none=True)` en el handler

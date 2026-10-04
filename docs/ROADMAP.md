@@ -62,7 +62,7 @@ abajo) **hasta cerrar todo lo relacionado con QA.** Son suficientes hallazgos co
 una fase con el **workflow completo** de `docs/WORKFLOW.md` (`/grilling` → `/to-spec` →
 `/analyze-spec` → implementar → `/run-tests` → `/code-review` → `/analyze-spec` de cierre → docs
 de cierre → PR), no un flujo corto. La numeración pasa: esta es la **Fase 33**; la unificación de
-zonas horarias queda como **Fase 34 probable** y recurrentes como **Fase 35 probable**.
+zonas horarias quedó como Fase 34 (completada, ver abajo) y recurrentes como **Fase 35 probable**.
 
 La tercera pasada (stack dev aislado + Playwright con Chromium, cubriendo lo que la segunda dejó
 pendiente: escritura en la UI, onboarding, modales, estados de error, push/alertas de punta a
@@ -155,26 +155,22 @@ stack por defecto de Docker, que es producción.
 
 ---
 
-## Siguiente fase probable — Fase 34: zona horaria por usuario
+## Completada — Fase 34: zona horaria por usuario (2026-10-04)
 
-Sale del `/grilling` de la Fase 33 (2026-10-04): el dueño quiere que las horas queden unificadas y
-no sean un problema, idealmente en la hora local del dispositivo y, mientras tanto, en Bogotá.
-Mostrar fechas en la hora del dispositivo es fácil; lo difícil es que el backend agrega por día,
-semana y mes (dashboard, Analítica, períodos de presupuesto, alertas) y el resumen semanal corre en
-un cron sin dispositivo, así que todo necesita una zona horaria **guardada**. Diseño base a
-confirmar en su `/grilling`: `User.timezone` (detectada del navegador al registrarse o en Ajustes,
-`America/Bogota` por defecto) usada por todos los cálculos; la constante `SUMMARY_TIMEZONE` de la
-Fase 33 se reemplaza por la del usuario. Cubre **QA-032** (desfase visible), la fecha por defecto
-del modal (propone el día siguiente después de las 19:00; un gasto con fecha solo-día se lista como
-el día anterior a las 19:00 y el modal de edición muestra la fecha UTC), la discrepancia entre el
-resumen semanal (Bogotá) y Analítica / `/transactions` (semanas UTC) y la deuda de mes/semana en UTC
-de las Fases 29–31. Necesita `/grilling` → `/to-spec` → `/analyze-spec` antes de implementar.
+Spec: `docs/specs/fase_34_spec.md`; resumen en `docs/CHANGELOG.md`. `User.timezone` (default
+`America/Bogota`, detectada en el registro, editable en Ajustes) es la única fuente de día, semana
+y mes; `core/periods.py` concentra los límites con zona y el frontend manda días, no instantes UTC.
+Cerró QA-032, la discrepancia entre el resumen semanal y Analítica / `/transactions`, y la deuda de
+mes/semana UTC de las Fases 29–31. Los datos históricos `00:00Z` se movieron a `17:00Z` con una
+migración de datos. **Pendientes del dueño antes de desplegar:** respaldo, reporte
+`scripts/fase34_reporte_x1.py --confirmo-copia` sobre una copia real, rebuild de la imagen
+(`tzdata`) y prueba manual del borde de las 19:00 Bogotá.
 
 ---
 
 ## Siguiente fase probable — Fase 35: ingresos y gastos recurrentes
 
-**Aplazada (2026-10-04) hasta cerrar la Fase 33 (QA) y la 34 (zonas horarias).** Era la Fase 33; se
+**Aplazada (2026-10-04) hasta cerrar la Fase 33 (QA) y la 34 (zonas horarias), ya completadas.** Era la Fase 33; se
 renumera, el contenido no cambia. Primera fila de prioridad Alta del backlog (abajo). El scheduler ya existe desde la Fase 14. Antes
 de implementar toca `/grilling` → `/to-spec` → `/analyze-spec`. Preguntas abiertas: ¿la regla
 genera la transacción sola o propone una para confirmar?; qué hacer con los días en que el
@@ -231,7 +227,7 @@ la QA y la infraestructura de tests) y no consumieron filas de esta tabla, salvo
 
 | Prioridad | Feature | Nota |
 |---|---|---|
-| Alta | **Automatización de ingresos/gastos recurrentes** | **Fase 35 probable** (aplazada tras las Fases 33 de QA y 34 de zonas horarias). El scheduler ya existe desde Fase 14. Reduce fricción de captura, que es tiempo que se puede invertir en mirar los datos en vez de cargarlos. |
+| Alta | **Automatización de ingresos/gastos recurrentes** | **Fase 35 probable** (aplazada tras las Fases 33 de QA y 34 de zonas horarias, ya cerradas). El scheduler ya existe desde Fase 14. Reduce fricción de captura, que es tiempo que se puede invertir en mirar los datos en vez de cargarlos. |
 | Alta | **Sinking funds** (gastos distribuidos en cuotas mensuales virtuales) | Validado por YNAB para presupuesto personal serio. Encaja directo con "cuánto me queda" del dashboard de flujo. |
 | Media | **Filtro por categoría** (dashboard/Analítica) | Separado de la Fase 29 el 2026-09-26 — el dueño quiere revisarlo más a fondo antes de decidir alcance (¿una o varias categorías? ¿qué gráficos filtra? interacción con "ocultar categoría" de la dona). `GET /transactions/` ya soporta `category_id`; `category-distribution`/`cashflow-series` todavía no. |
 | Media | **Reembolsos como gasto negativo en toda la app** | Sale de la Q15 del grilling de la Fase 31. Hoy un ingreso en una categoría de gasto (p. ej. los amigos devuelven su parte del restaurante) solo se netea en la dona de Analítica (`?neto=true`): la tarjeta del dashboard y los KPIs lo cuentan como ingreso, y los presupuestos y sus alertas cuentan el gasto completo. Tratarlo como gasto negativo toca 5–6 cálculos del backend y varios contratos — a definir en su propio `/grilling`. |

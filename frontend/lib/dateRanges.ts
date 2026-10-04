@@ -1,16 +1,17 @@
 /**
- * Fase 29 §F1 — criterio de bordes de período en UTC, compartido por el dashboard, Analítica y
- * la vista por cuenta.
+ * Fase 34 §F2/F3 (reemplaza el criterio UTC de la Fase 29 §F1) — límites de período como **días
+ * `YYYY-MM-DD`**, compartidos por el dashboard, Analítica, `/transactions` y la vista por cuenta.
  *
- * Todos los límites de este módulo se anclan con `Date.UTC` (o con setters UTC), nunca con getters
- * locales (`getFullYear()`/`getMonth()`/`getDate()`). El backend guarda y compara las fechas en UTC
- * (sesión de Postgres en UTC), así que un límite armado con la hora local del navegador llega
- * desplazado por el offset de la zona (UTC-5 en Bogotá) y deja afuera las transacciones del
- * borde del período. Ese era el bug que hacía que el dashboard perdiera **toda** transacción
- * fechada el día 1 del mes (H4): el `TransactionModal` manda la fecha como `YYYY-MM-DD` y el
- * backend la guarda a las 00:00 UTC, así que el día 1 caía fuera del rango local desplazado.
+ * El frontend ya no arma instantes UTC de límite (H9): manda días y el backend los interpreta en
+ * la zona horaria del usuario (`User.timezone`, B7). "Hoy" llega **inyectado** como `today`
+ * (`YYYY-MM-DD` en la zona del usuario, de `todayInZone`/`useTimezone`), así este módulo sigue
+ * siendo puro y testeable, y `today` es un string estable durante todo el día (sirve en query
+ * keys y deps de memo).
  *
- * Módulo puro (sin React ni hooks) para poder usarse desde páginas, componentes y tests.
+ * Aritmética de calendario puro (sumar días, primer/último día de mes, lunes de la semana): usa
+ * `Date.UTC`/setters UTC **solo como motor de calendario** sobre `y/m/d` — un `Date` aquí
+ * representa "ese día del calendario", no un instante del usuario, así que el offset de zona no
+ * entra nunca (H9).
  */
 
 export type AnalyticsPeriod = 'week' | 'month' | 'year' | 'custom';
@@ -18,9 +19,9 @@ export type AnalyticsPeriod = 'week' | 'month' | 'year' | 'custom';
 /** Agrupación que el backend de `cashflow-series` acepta ('week' no está soportada). */
 export type DateRangeGranularity = 'day' | 'month';
 
-export interface UtcMonth {
+export interface CalendarMonth {
   year: number;
-  /** 1..12, igual que `Date#getUTCMonth() + 1`. */
+  /** 1..12. */
   month: number;
 }
 
@@ -42,9 +43,11 @@ const LOCALE = 'es-CO';
 const MONTH_PARAM_PATTERN = /^(\d{4})-(\d{2})$/;
 const DATE_PARAM_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-const toDateParam = (date: Date): string => date.toISOString().slice(0, 10);
+/** Día de calendario de un `Date` "de calendario" (ver cabecera) → `YYYY-MM-DD`. */
+const toDateParam = (date: Date): string =>
+  `${String(date.getUTCFullYear()).padStart(4, '0')}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 
-/** `YYYY-MM-DD` → instante UTC de las 00:00, o `null` si no existe en el calendario. */
+/** `YYYY-MM-DD` → `Date` de calendario (00:00Z), o `null` si no existe en el calendario. */
 const parseDateParam = (raw: string): Date | null => {
   if (!DATE_PARAM_PATTERN.test(raw)) return null;
   const date = new Date(`${raw}T00:00:00Z`);
@@ -53,7 +56,7 @@ const parseDateParam = (raw: string): Date | null => {
   return toDateParam(date) === raw ? date : null;
 };
 
-/** Inicio del período de calendario (00:00:00.000Z) que contiene `date`. */
+/** Inicio del período de calendario que contiene el día `date` (calendario puro, ver cabecera). */
 const periodStartUtc = (period: CalendarPeriod, date: Date): Date => {
   const start = new Date(date);
   if (period === 'week') {
@@ -78,15 +81,20 @@ const periodEndUtc = (period: CalendarPeriod, start: Date): Date => {
   return end;
 };
 
-export const currentUtcMonth = (now: Date): UtcMonth => ({
-  year: now.getUTCFullYear(),
-  month: now.getUTCMonth() + 1,
-});
+/** `{ year, month }` del día `today` (`YYYY-MM-DD`, ya en la zona del usuario). */
+export const monthOfDay = (today: string): CalendarMonth => {
+  const date = dayToDate(today);
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
+};
+
+/** `today` (`YYYY-MM-DD`) como `Date` de calendario; si no parsea (no debería), el día UTC de hoy. */
+const dayToDate = (today: string): Date =>
+  parseDateParam(today) ?? parseDateParam(toDateParam(new Date()))!;
 
 /** Lee el query param `?month=YYYY-MM`. Devuelve `null` si no matchea el formato, si el mes está
  *  fuera de 1..12 o si el año es `< 1` — los 422 que responde el backend (H13), decididos acá
  *  para no pedir un mes que el servidor va a rechazar. */
-export const parseMonthParam = (raw: string): UtcMonth | null => {
+export const parseMonthParam = (raw: string): CalendarMonth | null => {
   const match = MONTH_PARAM_PATTERN.exec(raw);
   if (!match) return null;
   const year = Number(match[1]);
@@ -96,7 +104,7 @@ export const parseMonthParam = (raw: string): UtcMonth | null => {
 };
 
 /** Meses relativos con desborde de año (enero − 1 → diciembre del año anterior). */
-export const shiftMonth = ({ year, month }: UtcMonth, delta: number): UtcMonth => {
+export const shiftMonth = ({ year, month }: CalendarMonth, delta: number): CalendarMonth => {
   // Aritmética de índice absoluto de mes en vez de `Date.UTC`: `Date.UTC` mapea los años de dos
   // dígitos a 1900+año, así que un delta negativo sobre un año chico saldría del siglo XX.
   const absolute = year * 12 + (month - 1) + delta;
@@ -104,73 +112,48 @@ export const shiftMonth = ({ year, month }: UtcMonth, delta: number): UtcMonth =
 };
 
 /** Orden de períodos: negativo si `a` es anterior a `b`. */
-export const compareMonth = (a: UtcMonth, b: UtcMonth): number =>
+export const compareMonth = (a: CalendarMonth, b: CalendarMonth): number =>
   a.year !== b.year ? a.year - b.year : a.month - b.month;
 
 /**
- * Fin del día UTC que contiene `now` (23:59:59.999Z) — el techo del período en curso.
+ * Bordes del período de calendario en curso (semana/mes/año), como días `YYYY-MM-DD`, para
+ * `/transactions` (Fase 30 F1, Fase 34 F3).
  *
- * No es "ahora" a propósito: las transacciones creadas sin `date` (el `/capture` de
- * `TransactionCaptureForm`, los atajos por API key) se guardan con el `now()` real del servidor,
- * no a las 00:00 UTC como las del `TransactionModal`. Un techo en el inicio del día las dejaba
- * afuera de las barras y de "Últimas 5" aunque la tarjeta del summary sí las contara, y un techo
- * en "ahora" congelado al montar las perdía después de un refetch. El fin del día las incluye y,
- * además, es estable durante todo el día: puede ir en una query key sin generar una key nueva
- * por render.
- */
-export const endOfUtcDay = (now: Date): Date =>
-  new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
-
-/** `YYYY-MM-DD` del día UTC que contiene `date`. Estable dentro del día: sirve de dependencia de
- *  memo para derivar un `now` que avanza al cambiar de día sin cambiar en cada render. */
-export const utcDayKey = (date: Date): string => toDateParam(date);
-
-/**
- * Bordes del período de calendario en curso (semana/mes/año) en UTC, para F1 (Fase 30).
- *
- * Devuelve las fechas `YYYY-MM-DD` del inicio (lunes 00:00 o día 1 00:00 o 1 ene 00:00)
- * y el fin (hoy a 23:59:59) del período que contiene `now`. Encapsula el criterio en
- * este módulo en vez de exportar `periodStartUtc` suelto, para que `/transactions`
- * no arme fechas por su cuenta.
- *
- * El fin es hoy, no el domingo ni el último día del mes: mismo corte que el período
- * en curso de Analítica (Q1, supuesto 1 del grilling de la Fase 30).
+ * Devuelve el inicio (lunes, día 1 o 1 de enero) y el fin (`today`) del período que contiene
+ * `today`. Encapsula el criterio en este módulo en vez de exportar `periodStartUtc` suelto, para
+ * que `/transactions` no arme fechas por su cuenta. El fin es hoy, no el domingo ni el último día
+ * del mes: mismo corte que el período en curso de Analítica (Q1, supuesto 1 de la Fase 30). El
+ * backend interpreta `end_date` como inclusivo de todo ese día en la zona del usuario.
  */
 export const currentCalendarPeriodRange = (
   period: CalendarPeriod,
-  now: Date
+  today: string
 ): { start_date: string; end_date: string } => {
-  const start = periodStartUtc(period, now);
-  const end = endOfUtcDay(now);
-  return { start_date: toDateParam(start), end_date: toDateParam(end) };
+  const start = periodStartUtc(period, dayToDate(today));
+  return { start_date: toDateParam(start), end_date: today };
 };
 
 /**
- * Rango ISO del mes pedido. El techo es el fin del día UTC de hoy (`endOfUtcDay`) en el mes en
- * curso y el último día del mes a las 23:59:59.999Z en un mes pasado. El backend corta el mes en
- * curso en "ahora" (`limites_mes_utc`, B1); la diferencia es solo lo fechado más tarde hoy, y a
- * cambio el rango no cambia en cada render ni deja afuera lo capturado hoy con hora real.
+ * Rango del mes pedido, como días. El techo es `today` en el mes en curso y el último día del mes
+ * en un mes pasado. El backend corta el mes en curso en "ahora" (B7); la diferencia es solo lo
+ * fechado más tarde hoy, y a cambio el rango no cambia en cada render. Un mes futuro (no debería
+ * pasar: los consumidores lo validan) se devuelve completo.
  */
-export const utcMonthRange = (
+export const monthRange = (
   year: number,
   month: number,
-  now: Date
+  today: string
 ): { start_date: string; end_date: string } => {
-  // `Date.UTC` (no el constructor local `new Date(y, m, 1)`): un límite de calendario como
-  // "inicio de mes" debe anclarse en UTC porque el backend guarda y compara fechas en UTC
-  // (sesión de Postgres en UTC) — construirlo con getters locales lo desplaza por el offset de
-  // la zona horaria del navegador y excluye transacciones del borde del período (H4).
   const start = new Date(Date.UTC(year, month - 1, 1));
-  const isCurrentMonth = year === now.getUTCFullYear() && month === now.getUTCMonth() + 1;
+  const current = monthOfDay(today);
+  const isCurrentMonth = year === current.year && month === current.month;
   // `Date.UTC(y, month, 0)` es el día 0 del mes siguiente, o sea el último del pedido.
-  const end = isCurrentMonth
-    ? endOfUtcDay(now)
-    : new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-  return { start_date: start.toISOString(), end_date: end.toISOString() };
+  const end = isCurrentMonth ? dayToDate(today) : new Date(Date.UTC(year, month, 0));
+  return { start_date: toDateParam(start), end_date: toDateParam(end) };
 };
 
 /** `{ year, month }` → query param `YYYY-MM` (inverso de `parseMonthParam`). */
-export const formatMonthParam = ({ year, month }: UtcMonth): string =>
+export const formatMonthParam = ({ year, month }: CalendarMonth): string =>
   `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
 
 /**
@@ -244,11 +227,11 @@ const formatDayLabel = (date: Date, referenceYear: number): string => {
  * período contra período, y un `ref` inválido o futuro devuelve el inicio del período actual en
  * vez de romper la vista. `custom` no tiene período que normalizar: se devuelve tal cual.
  */
-export const normalizeRef = (period: AnalyticsPeriod, ref: string, now: Date): string => {
+export const normalizeRef = (period: AnalyticsPeriod, ref: string, today: string): string => {
   if (period === 'custom') return ref;
   const date = parseDateParam(ref);
-  if (!date || date.getTime() > now.getTime()) {
-    return toDateParam(periodStartUtc(period, now));
+  if (!date || toDateParam(date) > today) {
+    return toDateParam(periodStartUtc(period, dayToDate(today)));
   }
   return toDateParam(periodStartUtc(period, date));
 };
@@ -259,30 +242,29 @@ export const normalizeRef = (period: AnalyticsPeriod, ref: string, now: Date): s
  * de arriba, lo cual era confuso: Fase de discusión UX, 2026-09-06).
  *
  * `week` es la semana calendario lunes–domingo (Q13) y `month`/`year` arrancan en su límite de
- * calendario; los períodos pasados llegan completos y el actual termina hoy (Q34) — al final del
- * día UTC (`endOfUtcDay`), no en "ahora", por lo mismo que `utcMonthRange`. `ref` se
- * normaliza acá (y no en el caller) para que el rango nunca se construya sobre una fecha a mitad
- * de período ni futura.
+ * calendario; los períodos pasados llegan completos y el actual termina hoy (Q34). Todo son días
+ * `YYYY-MM-DD` (Fase 34 F3): el backend los resuelve en la zona del usuario. `ref` se normaliza
+ * acá (y no en el caller) para que el rango nunca se construya sobre una fecha a mitad de período
+ * ni futura.
  */
 export const buildDateRange = (
   period: AnalyticsPeriod,
   ref: string,
   customStart: string,
   customEnd: string,
-  now: Date
+  today: string
 ): DateRange => {
   if (period === 'custom' && customStart && customEnd) {
-    // 'Z' explícito: el input type=date entrega "YYYY-MM-DD" sin zona horaria — sin el
-    // sufijo, `new Date(...)` lo interpreta en hora local y desplaza el límite (mismo
-    // problema que el de los límites de calendario).
-    const start = new Date(`${customStart}T00:00:00Z`);
-    const end = new Date(`${customEnd}T23:59:59Z`);
-    const spanDays = (end.getTime() - start.getTime()) / MS_PER_DAY;
+    // Los inputs `type=date` ya entregan `YYYY-MM-DD`: pasan tal cual, sin convertir a instante.
+    const spanDays =
+      ((parseDateParam(customEnd)?.getTime() ?? 0) -
+        (parseDateParam(customStart)?.getTime() ?? 0)) /
+      MS_PER_DAY;
     // El backend de cashflow-series solo agrupa por 'day' o 'month' (sin 'week') — un rango
     // personalizado largo usa 'month' para no devolver cientos de barras diarias.
     return {
-      start_date: start.toISOString(),
-      end_date: end.toISOString(),
+      start_date: customStart,
+      end_date: customEnd,
       granularity: spanDays > 60 ? 'month' : 'day',
     };
   }
@@ -290,25 +272,26 @@ export const buildDateRange = (
   // Fallback de 'custom' mientras el usuario no completa el rango: el mes en curso, igual que
   // antes de la Fase 29.
   const preset: CalendarPeriod = period === 'custom' ? 'month' : period;
-  const anchor = parseDateParam(normalizeRef(preset, ref, now)) ?? now;
+  const anchor = parseDateParam(normalizeRef(preset, ref, today)) ?? dayToDate(today);
 
   if (preset === 'month') {
-    // El mes delega en `utcMonthRange` para no duplicar el criterio de techo (mismo helper que
-    // el dashboard y que `limites_mes_utc` del backend).
-    const range = utcMonthRange(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, now);
+    // El mes delega en `monthRange` para no duplicar el criterio de techo (mismo helper que el
+    // dashboard y la vista por cuenta).
+    const range = monthRange(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, today);
     return { ...range, granularity: 'day' };
   }
 
   const start = periodStartUtc(preset, anchor);
-  const isCurrentPeriod = start.getTime() === periodStartUtc(preset, now).getTime();
-  const end = isCurrentPeriod
-    ? endOfUtcDay(now)
-    : // Los períodos pasados van completos: fin de período menos 1 ms (23:59:59.999Z).
-      new Date(periodEndUtc(preset, start).getTime() - 1);
+  const isCurrentPeriod =
+    toDateParam(start) === toDateParam(periodStartUtc(preset, dayToDate(today)));
+  // Los períodos pasados van completos: último día del período (inicio del siguiente − 1 día).
+  const lastDay = periodEndUtc(preset, start);
+  lastDay.setUTCDate(lastDay.getUTCDate() - 1);
+  const end = isCurrentPeriod ? today : toDateParam(lastDay);
 
   return {
-    start_date: start.toISOString(),
-    end_date: end.toISOString(),
+    start_date: toDateParam(start),
+    end_date: end,
     // El año se agrupa por mes: un rango de 365 días con granularidad 'day' son 365 barras.
     granularity: preset === 'year' ? 'month' : 'day',
   };
@@ -320,19 +303,17 @@ export const buildDateRange = (
  *
  * El resultado es siempre el **inicio** del período destino, así que el link sigue apuntando al
  * mismo período mañana (Q36) y `buildDateRange` no lo tiene que volver a normalizar. La aritmética
- * es con setters UTC (no getters locales) por el mismo motivo que el resto del módulo: un
- * desplazamiento de zona aquí movería el período un día y metería o sacaría las transacciones del
- * borde.
+ * es con setters UTC sobre días de calendario (ver cabecera): ningún offset de zona entra aquí.
  */
 export const shiftPeriodRef = (
   period: CalendarPeriod,
   ref: string,
   delta: -1 | 1,
-  now: Date
+  today: string
 ): string => {
   // `periodStartUtc` primero y el desplazamiento después: así `◀`/`▶` saltan de período en
   // período aunque `ref` venga a mitad de uno (misma normalización que `normalizeRef`).
-  const start = periodStartUtc(period, parseDateParam(ref) ?? now);
+  const start = periodStartUtc(period, parseDateParam(ref) ?? dayToDate(today));
   if (period === 'week') start.setUTCDate(start.getUTCDate() + delta * 7);
   else if (period === 'month') start.setUTCMonth(start.getUTCMonth() + delta);
   else start.setUTCFullYear(start.getUTCFullYear() + delta);
@@ -353,17 +334,17 @@ export const formatPeriodLabel = (
   ref: string,
   customStart: string,
   customEnd: string,
-  now: Date
+  today: string
 ): string => {
-  const range = buildDateRange(period, ref, customStart, customEnd, now);
-  const start = new Date(range.start_date);
+  const range = buildDateRange(period, ref, customStart, customEnd, today);
+  const start = dayToDate(range.start_date);
   const startYear = start.getUTCFullYear();
 
   if (period === 'custom') {
     // Rango personalizado a medio llenar: `buildDateRange` cae al mes en curso y el rótulo también,
     // en vez de prometer un rango que no se está viendo.
     if (!customStart || !customEnd) return formatMonthLabel(startYear, start.getUTCMonth() + 1);
-    const end = new Date(range.end_date);
+    const end = dayToDate(range.end_date);
     return `Desde el ${formatDayLabel(start, startYear)} hasta el ${formatDayLabel(end, startYear)}`;
   }
 
@@ -373,7 +354,8 @@ export const formatPeriodLabel = (
   // Semana: siempre el lunes–domingo completo, incluso en la semana en curso, cuyos datos cortan
   // hoy (Q34). Tomar `end_date` diría "del 22 al 26" y parecería una semana recortada; con el
   // domingo, el rótulo no cambia al cruzar el `◀`/`▶`.
-  const sunday = new Date(periodEndUtc('week', start).getTime() - 1);
+  const sunday = periodEndUtc('week', start);
+  sunday.setUTCDate(sunday.getUTCDate() - 1);
   const sameMonth =
     start.getUTCMonth() === sunday.getUTCMonth() && startYear === sunday.getUTCFullYear();
   // "Semana del 18 al 24 de agosto" (Q40): el mes va una sola vez mientras no cambie; si la semana

@@ -33,7 +33,15 @@ La aplicación sigue una arquitectura simple por capas:
 - Los montos se modelan como `Decimal` en contratos y `Numeric(14, 2)` en persistencia para evitar precisión flotante.
 - Las categorías base del sistema se siembran al arrancar la aplicación.
 - Cada cuenta, transacción y presupuesto almacena su moneda (`currency` column, default "COP").
-- Preferencias de usuario: `preferred_currency`, `preferred_locale`, `preferred_theme` (exponen en `GET/PATCH /api/users/me/preferences`).
+- Preferencias de usuario: `preferred_currency`, `preferred_locale`, `preferred_theme`, `weekly_summary_enabled` y `timezone` (exponen en `GET/PATCH /api/users/me/preferences`).
+
+## Zona horaria (Fase 34)
+
+- `User.timezone` (migración `a34c0de1b7f2`) es la zona IANA del usuario; `app/core/timezones.py` es el único punto de validación (`es_zona_valida`, `zona_o_default`, `get_zoneinfo`).
+- `app/core/periods.py` es el módulo único de aritmética de calendario con zona: funciones puras con `ahora` y la zona inyectados (`resolver_mes`, `rango_mes`, `limites_semana`, `rango_dias`, `dia_local`, `instante_de_dia`, `resolver_rango`). Devuelve datetimes aware en UTC con límite superior exclusivo. Lo consumen `api/dashboard.py`, `api/accounts.py`, `api/transactions.py`, `core/budget_alerts.py` y `core/weekly_summary.py`; ningún otro módulo construye `datetime(...)` naive ni resuelve "actual" desde UTC.
+- `core/weekly_summary.py` calcula la semana en la zona de cada usuario (la constante `SUMMARY_TIMEZONE` se eliminó); el cron sigue siendo único (lunes 07:00 `America/Bogota`, `main.py`).
+- `tzdata` está en `requirements.txt`: la imagen slim de Docker no trae los alias IANA que lista Chrome (`Asia/Calcutta`, `Europe/Kiev`…); sin él el selector de Ajustes ofrecería zonas que el backend rechaza con `422`. Tras traer este cambio hay que reconstruir la imagen y reinstalar requirements en los venvs locales.
+- La migración de datos `c7d3e9a4b1f6` (separada de la del esquema) mueve las fechas históricas `00:00Z` a `17:00Z`; corre sola en el `CMD` de Docker con `alembic upgrade head`. `scripts/fase34_reporte_x1.py` genera el reporte de totales antes/después sobre una copia.
 
 ## Migraciones en runtime (sin Alembic)
 
