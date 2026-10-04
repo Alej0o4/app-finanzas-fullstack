@@ -50,3 +50,26 @@ export function formatDate(
     }
   ).format(date);
 }
+
+/**
+ * Fase 33 F11 (QA-041): mayúscula solo en la primera letra. El `text-transform: capitalize` de
+ * CSS que usaban los rótulos de fecha mayusculiza **cada palabra** — "03 De Oct De 2026, 05:55 P. M."
+ * — así que el problema no era el CSS sino que no distingue "inicio de rótulo" de "palabra".
+ */
+export function capitalizeFirst(value: string): string {
+  if (!value) return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+/**
+ * Fase 33 F11 (QA-041): `formatDate` + `capitalizeFirst`, para los rótulos que van en posición
+ * de título. Es un helper aparte y no un `capitalize` dentro de `formatDate` a propósito: `formatDate`
+ * es un formateador genérico de `Intl` con `options` opcional, y meterle una capitalización en el
+ * default lo haría inconsistente (con `options` no se capitalizaría, sin ellos sí) y rompería la
+ * expectativa de quien solo quiere la fecha cruda.
+ */
+export function formatDateLabel(isoString: string, locale = 'es-CO'): string {
+  return capitalizeFirst(formatDate(isoString, locale));
+}

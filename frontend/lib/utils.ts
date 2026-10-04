@@ -1,4 +1,4 @@
-export { formatCurrency, formatDate } from './formatters';
+export { formatCurrency, formatDate, capitalizeFirst, formatDateLabel } from './formatters';
 
 interface PydanticErrorDetail {
   msg: string;

@@ -2,6 +2,7 @@
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import ChartControlsPopover from '@/components/ChartControlsPopover';
@@ -57,6 +58,8 @@ interface CategoryDonutChartProps {
    *  preferida, así que elegir una cuenta USD mostraba los totales en formato COP. Si se omite,
    *  cae a la preferida global. */
   currency?: string;
+  /** QA-040 (Fase 33): "Reintentar" vuelve a pedir solo la distribución por categoría. */
+  onRetry?: () => void;
 }
 
 export default function CategoryDonutChart({
@@ -73,6 +76,7 @@ export default function CategoryDonutChart({
   onReferenceModeChange,
   totalIncomeForPeriod,
   currency,
+  onRetry,
 }: CategoryDonutChartProps) {
   const { config } = useAppConfig();
   const activeCurrency = currency ?? config.currency;
@@ -218,8 +222,8 @@ export default function CategoryDonutChart({
         </div>
       </div>
       {isError ? (
-        <div className="border-border text-text-muted flex h-72 items-center justify-center rounded-xl border border-dashed text-sm">
-          No se pudieron cargar las categorías.
+        <div className="border-border flex h-72 items-center justify-center rounded-xl border border-dashed">
+          <QueryErrorState message="No se pudieron cargar las categorías." onRetry={onRetry} />
         </div>
       ) : isFetching && originalCategoryData.length === 0 ? (
         <div className="flex h-72 items-center justify-center">

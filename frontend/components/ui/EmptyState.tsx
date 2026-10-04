@@ -6,11 +6,20 @@ interface EmptyStateProps {
   description?: string;
   /** Fase 24 §24.1 — slot opcional para una acción (ej. botón "Reintentar"). */
   action?: ReactNode;
+  className?: string;
 }
 
-export default function EmptyState({ icon, message, description, action }: EmptyStateProps) {
+export default function EmptyState({
+  icon,
+  message,
+  description,
+  action,
+  className,
+}: EmptyStateProps) {
   return (
-    <div className="text-text-muted flex flex-col items-center p-12 text-center">
+    <div
+      className={`text-text-muted flex flex-col items-center p-12 text-center ${className ?? ''}`}
+    >
       <div className="mb-3">{icon}</div>
       <p className="text-sm font-medium">{message}</p>
       {description && <p className="text-text-muted/70 mt-1 text-xs">{description}</p>}

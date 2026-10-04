@@ -55,7 +55,65 @@ a "fuera de scope" con este cambio; los demás se resolvieron en las Fases 23–
 
 ---
 
-## En curso — Flujo corto: bugs de la segunda pasada de QA (2026-10-03)
+## Completada — Fase 33: corrección de la tercera pasada de QA (2026-10-04)
+
+**Decisión del dueño (2026-10-04): se aplaza la fase de ingresos y gastos recurrentes** (ver más
+abajo) **hasta cerrar todo lo relacionado con QA.** Son suficientes hallazgos como para dedicarles
+una fase con el **workflow completo** de `docs/WORKFLOW.md` (`/grilling` → `/to-spec` →
+`/analyze-spec` → implementar → `/run-tests` → `/code-review` → `/analyze-spec` de cierre → docs
+de cierre → PR), no un flujo corto. La numeración pasa: esta es la **Fase 33**; la unificación de
+zonas horarias queda como **Fase 34 probable** y recurrentes como **Fase 35 probable**.
+
+La tercera pasada (stack dev aislado + Playwright con Chromium, cubriendo lo que la segunda dejó
+pendiente: escritura en la UI, onboarding, modales, estados de error, push/alertas de punta a
+punta y el borde domingo/lunes del resumen semanal) encontró **QA-034 a QA-041**; el `/analyze-spec` de la spec sumó **QA-042**. Reporte con
+pasos, causas y capturas: `.scratch/qa-2026-10-03/REPORTE_QA_3.md`. Lo que sí quedó verificado en
+verde: saldos tras crear/editar/borrar desde la UI, onboarding con cuenta nueva, alertas 80 %/100 %
+sin duplicados y push real con FCM.
+
+**Estado: implementada (2026-10-04), spec en `docs/specs/fase_33_spec.md`.** Los hallazgos
+están en `docs/TODO.md` como `QA-034` a `QA-042`, resueltos. Una sola PR (rama `fix/qa-tercera-pasada`),
+backend primero y frontend en paralelo.
+
+| Ítem | Qué pasa | Lado |
+|---|---|---|
+| **QA-037** 🔴 | El job del lunes 07:00 (Bogotá) resume la semana que *acaba de empezar* (`weekly_summary.py:160-163`, cron en `main.py:162`): llega "no registraste gastos" aunque la semana cerrada tuviera gasto (W41 = 0 vs W40 = 1.850.000 en dev). Los tests no lo cazan porque llaman a la función con la fecha ya elegida. | backend |
+| **QA-038** 🟠 | `_limites_semana` devuelve límites *naive* en hora de Bogotá y se comparan contra `Transaction.date` (`timestamptz`, UTC): ventana corrida 5 h. Caso reproducido: total 57 en vez de 60 (entra un gasto de la semana anterior, se pierde uno propio). Se corrige junto con QA-037, mismo archivo. | backend |
+| **QA-040** 🟠 | Con el backend caído, `/accounts`, `/categories` y `/analytics` muestran datos vacíos sin error ni "Reintentar"; Cuentas enseña "Balance Total $ 0" como si fuera real. Mismo patrón que QA-004/QA-010. | frontend |
+| **QA-034** 🟡 | En móvil (390 px) el aviso "Instalar" (PWA, `fixed z-50`) tapa el botón "Guardar" del modal de transacción. | frontend |
+| **QA-035** 🟡 | "Nueva transacción" no valida la cuenta: manda `account_id: 0`, el backend responde 404 y el toast dice "no existe o no te pertenece". | frontend |
+| **QA-036** 🟡 | En móvil el panel de notificaciones (`absolute left-0 w-80` anclado a la campana del sidebar) se sale 68 px de la pantalla y corta los textos. | frontend |
+| **QA-039** 🟡 | El confirm de borrado (`useConfirmStore`) no tiene `role="dialog"`/`alertdialog` ni `aria-modal` y el foco no entra; la corrección de QA-014 solo cubrió `ModalShell`. | frontend |
+| **QA-041** 🟢 | Voseo visible (8 textos en 3 archivos: Ajustes, paso de moneda del onboarding, gráfico de flujo) frente al tuteo del resto y mayúsculas CSS en "De"/"P. M." de las fechas de 4 feeds. `?onboarding=1` **se deja**: es el mecanismo de la Fase 15 (Decisión 15.5.1), no una fuga. | frontend |
+| **QA-042** 🟢 | El email del usuario en el Sidebar se ve `Qa3@Test.com` por un `capitalize` de CSS. Hallado al analizar la spec de la Fase 33. | frontend |
+
+**Decisiones del `/grilling` (2026-10-04):**
+
+- **QA-037:** el job pasa `ahora − 7 días`; `build_weekly_summary` no cambia. El texto del resumen
+  pasa a hablar de "la semana pasada".
+- **QA-038:** límites aware en la constante `America/Bogota`; sin más cambios de zona en esta fase.
+- **Choque de `period_key`** (el cron del 28-sep guardó `2026-W40` con contenido falso y el primer
+  resumen correcto lo reutilizaría): SQL puntual que borra los `weekly_summary` existentes, sin
+  migración; dev lo corre el agente, prod el dueño antes del lunes 5-oct 07:00 Bogotá.
+- **QA-040:** componente de error compartido, reemplaza los usos inline; Cuentas no muestra el
+  total mientras falle la query; se auditan también `accounts/[id]`, `categories/[id]` y `/settings`.
+- **QA-034:** el banner "Instalar" se oculta con un modal o confirm abierto. **QA-036:** hoja fija
+  en móvil, popover absoluto desde `sm`.
+- **QA-039:** estándar de QA-014 (`alertdialog`, `aria-modal`, foco inicial en "Cancelar", trampa
+  de foco, restaurar foco), reutilizando la lógica de `ModalShell`.
+- **QA-035:** error en línea "Elige una cuenta." y preselección con una sola cuenta.
+- **QA-041:** todo a tuteo (8 textos visibles, no los comentarios), mayúsculas solo en la primera letra de las fechas; `?onboarding=1` se deja como está (resuelto al redactar la spec). **QA-042:** quitar `capitalize` del email del Sidebar.
+
+**Fuera de la fase, a propósito:** la unificación de zonas horarias (ver Fase 34 abajo).
+
+**Cierre esperado de la fase:** reproducir cada hallazgo con un test o un paso de Playwright antes
+de corregirlo; para QA-037/QA-038, un test del *job* con `freeze_time` en lunes 12:00Z y los dos
+casos de borde de domingo; y una cuarta pasada corta de verificación en el stack dev aislado.
+Nunca verificar contra el stack por defecto de Docker, que es producción.
+
+---
+
+## Completado — Flujo corto: bugs de la segunda pasada de QA (2026-10-03)
 
 El flujo corto de QA-014/016/017/018 ya está mergeado. La segunda pasada del `qa-engineer`
 (352 tests en verde, lint limpio, saldos de las 65 cuentas dev cuadrados) encontró QA-023 a
@@ -76,11 +134,9 @@ QA-033. Todo lo corregible sin decisión de producto se agrupa en **un solo fluj
 
 Decisiones tomadas al implementar: **QA-024 → lápida** (la fila borrada es tombstone); **QA-028 → unicidad por (usuario, type)**; **moneda minúsculas → 422** (no normalizar). Aprobadas en el flujo corto, sin `/grilling` adicional.
 
-**Pendiente de verificar (la segunda pasada no lo cubrió):** escritura en la UI (crear/editar
-transacciones, onboarding con cuenta nueva, modales, estados de error y carga), push y alertas de
-presupuesto de punta a punta, y el borde domingo/lunes del resumen semanal. El MCP de Playwright no
-tiene Chromium instalado; el agente usó `playwright-core` de la caché de npx. Instalar el browser
-antes de la siguiente pasada, o verificar esos flujos a mano al cerrar este flujo corto.
+**Lo que la segunda pasada no cubrió** (escritura en la UI, onboarding, modales, estados de error y
+carga, push y alertas de punta a punta, borde domingo/lunes del resumen semanal) **se verificó en
+la tercera pasada (2026-10-04)** con Playwright ya con Chromium — ver la Fase 33 arriba.
 
 **Decisiones de producto separadas (no entran al flujo corto):**
 
@@ -99,9 +155,27 @@ stack por defecto de Docker, que es producción.
 
 ---
 
-## Siguiente fase probable — Fase 33: ingresos y gastos recurrentes
+## Siguiente fase probable — Fase 34: zona horaria por usuario
 
-Primera fila de prioridad Alta del backlog (abajo). El scheduler ya existe desde la Fase 14. Antes
+Sale del `/grilling` de la Fase 33 (2026-10-04): el dueño quiere que las horas queden unificadas y
+no sean un problema, idealmente en la hora local del dispositivo y, mientras tanto, en Bogotá.
+Mostrar fechas en la hora del dispositivo es fácil; lo difícil es que el backend agrega por día,
+semana y mes (dashboard, Analítica, períodos de presupuesto, alertas) y el resumen semanal corre en
+un cron sin dispositivo, así que todo necesita una zona horaria **guardada**. Diseño base a
+confirmar en su `/grilling`: `User.timezone` (detectada del navegador al registrarse o en Ajustes,
+`America/Bogota` por defecto) usada por todos los cálculos; la constante `SUMMARY_TIMEZONE` de la
+Fase 33 se reemplaza por la del usuario. Cubre **QA-032** (desfase visible), la fecha por defecto
+del modal (propone el día siguiente después de las 19:00; un gasto con fecha solo-día se lista como
+el día anterior a las 19:00 y el modal de edición muestra la fecha UTC), la discrepancia entre el
+resumen semanal (Bogotá) y Analítica / `/transactions` (semanas UTC) y la deuda de mes/semana en UTC
+de las Fases 29–31. Necesita `/grilling` → `/to-spec` → `/analyze-spec` antes de implementar.
+
+---
+
+## Siguiente fase probable — Fase 35: ingresos y gastos recurrentes
+
+**Aplazada (2026-10-04) hasta cerrar la Fase 33 (QA) y la 34 (zonas horarias).** Era la Fase 33; se
+renumera, el contenido no cambia. Primera fila de prioridad Alta del backlog (abajo). El scheduler ya existe desde la Fase 14. Antes
 de implementar toca `/grilling` → `/to-spec` → `/analyze-spec`. Preguntas abiertas: ¿la regla
 genera la transacción sola o propone una para confirmar?; qué hacer con los días en que el
 scheduler no corrió; frecuencia (mensual, semanal, día 31); cómo se edita o se salta una
@@ -157,7 +231,7 @@ la QA y la infraestructura de tests) y no consumieron filas de esta tabla, salvo
 
 | Prioridad | Feature | Nota |
 |---|---|---|
-| Alta | **Automatización de ingresos/gastos recurrentes** | **Fase 33 probable.** El scheduler ya existe desde Fase 14. Reduce fricción de captura, que es tiempo que se puede invertir en mirar los datos en vez de cargarlos. |
+| Alta | **Automatización de ingresos/gastos recurrentes** | **Fase 35 probable** (aplazada tras las Fases 33 de QA y 34 de zonas horarias). El scheduler ya existe desde Fase 14. Reduce fricción de captura, que es tiempo que se puede invertir en mirar los datos en vez de cargarlos. |
 | Alta | **Sinking funds** (gastos distribuidos en cuotas mensuales virtuales) | Validado por YNAB para presupuesto personal serio. Encaja directo con "cuánto me queda" del dashboard de flujo. |
 | Media | **Filtro por categoría** (dashboard/Analítica) | Separado de la Fase 29 el 2026-09-26 — el dueño quiere revisarlo más a fondo antes de decidir alcance (¿una o varias categorías? ¿qué gráficos filtra? interacción con "ocultar categoría" de la dona). `GET /transactions/` ya soporta `category_id`; `category-distribution`/`cashflow-series` todavía no. |
 | Media | **Reembolsos como gasto negativo en toda la app** | Sale de la Q15 del grilling de la Fase 31. Hoy un ingreso en una categoría de gasto (p. ej. los amigos devuelven su parte del restaurante) solo se netea en la dona de Analítica (`?neto=true`): la tarjeta del dashboard y los KPIs lo cuentan como ingreso, y los presupuestos y sus alertas cuentan el gasto completo. Tratarlo como gasto negativo toca 5–6 cálculos del backend y varios contratos — a definir en su propio `/grilling`. |

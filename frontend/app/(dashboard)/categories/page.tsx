@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { getApiError } from '@/lib/utils';
 import { queryKeys } from '@/lib/queryKeys';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import { useCategories } from '@/lib/hooks/useCategories';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
@@ -167,7 +168,7 @@ export default function CategoriesPage() {
   // el refetch la mueva de sección.
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
 
-  const { data: categories, isLoading } = useCategories();
+  const { data: categories, isPending, isError, refetch } = useCategories();
 
   const createCategoryMutation = useMutation({
     mutationFn: async (newCategory: { name: string; type: string }) => {
@@ -292,11 +293,20 @@ export default function CategoriesPage() {
     setEditingCategory(category);
   };
 
-  if (isLoading)
+  if (isError && !categories) {
+    return (
+      <QueryErrorState
+        message="No se pudieron cargar tus categorías. Intenta de nuevo más tarde."
+        onRetry={() => refetch()}
+        className="col-span-full"
+      />
+    );
+  }
+  if (isPending)
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-32 rounded-2xl" />
+          <Skeleton key={i} className="h-28 rounded-2xl" />
         ))}
       </div>
     );

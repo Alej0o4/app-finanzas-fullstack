@@ -48,9 +48,9 @@ export default function OnboardingCurrencyStep({
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       <h1 className="text-text font-sans text-xl font-bold tracking-tight">
-        ¿En qué moneda manejás tus finanzas?
+        ¿En qué moneda manejas tus finanzas?
       </h1>
-      <p className="text-text-muted text-sm">Podés cambiarla después desde Configuración.</p>
+      <p className="text-text-muted text-sm">Puedes cambiarla después desde Configuración.</p>
       <Select
         label="Moneda principal"
         value={currency}

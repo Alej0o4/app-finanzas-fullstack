@@ -6,10 +6,11 @@ import { ArrowLeft, Tag, ArrowDownRight, ArrowUpRight, Pencil, Trash2 } from 'lu
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
+import { formatCurrency, formatDateLabel, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import { queryKeys } from '@/lib/queryKeys';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import { useAccounts } from '@/lib/hooks/useAccounts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import ModalShell from '@/components/ui/ModalShell';
@@ -41,7 +42,12 @@ export default function CategoryDetailPage() {
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState(String(id));
 
-  const { data: category, isLoading: loadingCategory } = useQuery<Category>({
+  const {
+    data: category,
+    isLoading: loadingCategory,
+    isError: categoryError,
+    refetch: refetchCategory,
+  } = useQuery<Category>({
     queryKey: queryKeys.categories.byId(id as string),
     queryFn: async () => (await api.get(`categories/${id}`)).data,
   });
@@ -49,13 +55,16 @@ export default function CategoryDetailPage() {
   // Fase 31 F10 (Q11, QA-011): últimos 20 movimientos, no todo el histórico sin límite — el
   // endpoint ya ordena por fecha descendente. `transactionsData.total` (sin el `limit`
   // aplicado por el backend) alimenta el link "Ver todos los movimientos (N)" de abajo.
-  const { data: transactionsData, isLoading: loadingTx } = useQuery<PaginatedResponse<Transaction>>(
-    {
-      queryKey: queryKeys.transactions.byCategory(id as string),
-      queryFn: async () =>
-        (await api.get(`transactions/`, { params: { category_id: Number(id), limit: 20 } })).data,
-    }
-  );
+  const {
+    data: transactionsData,
+    isLoading: loadingTx,
+    isError: transactionsError,
+    refetch: refetchTransactions,
+  } = useQuery<PaginatedResponse<Transaction>>({
+    queryKey: queryKeys.transactions.byCategory(id as string),
+    queryFn: async () =>
+      (await api.get(`transactions/`, { params: { category_id: Number(id), limit: 20 } })).data,
+  });
 
   const transactions = transactionsData?.items;
 
@@ -148,6 +157,15 @@ export default function CategoryDetailPage() {
         <Skeleton className="h-96 rounded-3xl" />
       </div>
     );
+  if (categoryError && !category) {
+    return (
+      <QueryErrorState
+        message="No se pudieron cargar tus categorías. Intenta de nuevo más tarde."
+        onRetry={() => refetchCategory()}
+        className="col-span-full"
+      />
+    );
+  }
   if (!category)
     return <div className="text-text-muted p-8">No se encontró la categoría especificada.</div>;
 
@@ -176,9 +194,14 @@ export default function CategoryDetailPage() {
         <h2 className="text-text font-sans text-lg font-bold">Movimientos asociados</h2>
 
         <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
-          {!transactions || transactions.length === 0 ? (
+          {transactionsError ? (
+            <QueryErrorState
+              message="No se pudieron cargar los movimientos."
+              onRetry={() => refetchTransactions()}
+            />
+          ) : !transactions || transactions.length === 0 ? (
             <div className="text-text-muted p-12 text-center text-sm">
-              No hay movimientos clasificados en esta categoría aún.
+              No hay transacciones registradas en esta categoría.
             </div>
           ) : (
             <div className="divide-border/40 divide-y">
@@ -213,8 +236,8 @@ export default function CategoryDetailPage() {
                           {isExpense ? '-' : '+'}
                           {formatCurrency(tx.amount, tx.currency)}
                         </p>
-                        <p className="text-text-muted text-[11px] capitalize">
-                          {formatDate(tx.date, config.locale)}
+                        <p className="text-text-muted text-[11px]">
+                          {formatDateLabel(tx.date, config.locale)}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">

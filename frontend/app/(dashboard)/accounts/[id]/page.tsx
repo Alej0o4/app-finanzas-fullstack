@@ -17,10 +17,11 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { currentUtcMonth, utcMonthRange } from '@/lib/dateRanges';
-import { formatCurrency, formatDate, getApiError } from '@/lib/utils';
+import { formatCurrency, formatDateLabel, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import { queryKeys } from '@/lib/queryKeys';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAccounts } from '@/lib/hooks/useAccounts';
 import Input from '@/components/ui/Input';
@@ -71,7 +72,12 @@ export default function AccountDetailPage() {
   const [accountId, setAccountId] = useState(String(id));
   const [categoryId, setCategoryId] = useState('');
 
-  const { data: account, isLoading: loadingAccount } = useQuery<Account>({
+  const {
+    data: account,
+    isLoading: loadingAccount,
+    isError: accountError,
+    refetch: refetchAccount,
+  } = useQuery<Account>({
     queryKey: queryKeys.accounts.byId(id as string),
     queryFn: async () => (await api.get(`accounts/${id}`)).data,
   });
@@ -79,15 +85,20 @@ export default function AccountDetailPage() {
   // Fase 31 F10 (Q11, QA-011): últimos 20 movimientos, no todo el histórico sin límite — el
   // endpoint ya ordena por fecha descendente. `transactionsData.total` (sin el `limit`
   // aplicado por el backend) alimenta el link "Ver todos los movimientos (N)" de abajo.
-  const { data: transactionsData, isLoading: loadingTx } = useQuery<PaginatedResponse<Transaction>>(
-    {
-      queryKey: queryKeys.transactions.byAccount(id as string),
-      queryFn: async () =>
-        (await api.get(`transactions/`, { params: { account_id: Number(id), limit: 20 } })).data,
-    }
-  );
+  const {
+    data: transactionsData,
+    isLoading: loadingTx,
+    isError: isTransactionsError,
+    refetch: refetchTransactionsData,
+  } = useQuery<PaginatedResponse<Transaction>>({
+    queryKey: queryKeys.transactions.byAccount(id as string),
+    queryFn: async () =>
+      (await api.get(`transactions/`, { params: { account_id: Number(id), limit: 20 } })).data,
+  });
 
   const transactions = transactionsData?.items;
+  const transactionsError = isTransactionsError;
+  const refetchTransactions = refetchTransactionsData;
 
   const { data: categories } = useCategories();
   const { data: allAccounts } = useAccounts();
@@ -104,9 +115,12 @@ export default function AccountDetailPage() {
   // Gastos del mes por categoría restringidos a esta cuenta (Fase 17 §17.1.3). `currency`
   // se pasa EXPLÍCITO junto con `account_id` — el backend no deriva la moneda de la cuenta
   // (son ortogonales); la moneda de una cuenta no tiene por qué coincidir con la preferida.
-  const { data: categoryBreakdown, isLoading: loadingCategoryBreakdown } = useQuery<
-    CategoryDistributionItem[]
-  >({
+  const {
+    data: categoryBreakdown,
+    isLoading: loadingCategoryBreakdown,
+    isError: categoryBreakdownError,
+    refetch: refetchCategoryBreakdown,
+  } = useQuery<CategoryDistributionItem[]>({
     queryKey: queryKeys.accounts.categoryBreakdown(id as string),
     queryFn: async () =>
       (
@@ -270,6 +284,15 @@ export default function AccountDetailPage() {
         <Skeleton className="h-96 rounded-3xl" />
       </div>
     );
+  if (accountError && !account) {
+    return (
+      <QueryErrorState
+        message="No se pudieron cargar tus cuentas. Intenta de nuevo más tarde."
+        onRetry={() => refetchAccount()}
+        className="col-span-full"
+      />
+    );
+  }
   if (!account)
     return <div className="text-text-muted p-8">No se encontró la cuenta especificada.</div>;
 
@@ -390,9 +413,11 @@ export default function AccountDetailPage() {
         </div>
 
         <CategoryBreakdownBars
-          data={categoryBreakdown}
+          data={categoryBreakdown || []}
           isLoading={loadingCategoryBreakdown}
-          currency={account.currency}
+          currency={account?.currency}
+          isError={categoryBreakdownError}
+          onRetry={() => refetchCategoryBreakdown()}
         />
       </div>
 
@@ -400,7 +425,12 @@ export default function AccountDetailPage() {
         <h2 className="text-text font-sans text-lg font-bold">Historial de movimientos</h2>
 
         <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
-          {!transactions || transactions.length === 0 ? (
+          {transactionsError ? (
+            <QueryErrorState
+              message="No se pudieron cargar los movimientos."
+              onRetry={() => refetchTransactions()}
+            />
+          ) : !transactions || transactions.length === 0 ? (
             <div className="text-text-muted p-12 text-center text-sm">
               No hay transacciones registradas con esta cuenta.
             </div>
@@ -443,8 +473,8 @@ export default function AccountDetailPage() {
                           {isExpense ? '-' : '+'}
                           {formatCurrency(tx.amount, tx.currency)}
                         </p>
-                        <p className="text-text-muted text-[11px] capitalize">
-                          {formatDate(tx.date, config.locale)}
+                        <p className="text-text-muted text-[11px]">
+                          {formatDateLabel(tx.date, config.locale)}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">

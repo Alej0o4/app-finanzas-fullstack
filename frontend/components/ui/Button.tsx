@@ -1,7 +1,7 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 type ButtonSize = 'sm' | 'md' | 'lg';
@@ -30,17 +30,23 @@ const sizeStyles: Record<ButtonSize, string> = {
   lg: 'px-6 py-3 text-base',
 };
 
-export default function Button({
-  variant = 'primary',
-  size = 'md',
-  loading = false,
-  disabled,
-  children,
-  className = '',
-  ...rest
-}: ButtonProps) {
+// `forwardRef` como en `Select`: permite que un caller apunte el foco inicial a un botón
+// concreto — el confirm de borrado lo usa para abrir con el foco en "Cancelar" (Fase 33 F8).
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  {
+    variant = 'primary',
+    size = 'md',
+    loading = false,
+    disabled,
+    children,
+    className = '',
+    ...rest
+  },
+  ref
+) {
   return (
     <button
+      ref={ref}
       className={`focus-visible:ring-primary/50 inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl font-medium transition-colors duration-200 focus-visible:ring-2 focus-visible:outline-none ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
       disabled={disabled || loading}
       {...rest}
@@ -49,4 +55,6 @@ export default function Button({
       {children}
     </button>
   );
-}
+});
+
+export default Button;

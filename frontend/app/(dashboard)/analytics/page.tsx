@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import type { CashflowSeries, CategoryDistributionItem } from '@/types/api';
 import { api } from '@/lib/api';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
@@ -85,7 +86,7 @@ const validateAccountParam = (raw: string) => (raw === 'all' || /^\d+$/.test(raw
 function AnalyticsPageContent() {
   // Decisión 11.1.1 (Fase 11): se pasa `currency` explícito a los endpoints de dashboard
   // aunque el backend ya defaultea a la moneda preferida — deja la intención explícita.
-  const { data: user } = useCurrentUser();
+  const { data: user, isError: userError, refetch: refetchUser } = useCurrentUser();
   // Fase 12 §12.1, Decisión 12.1.2: la vista vive en la URL, no en localStorage — se
   // abandona usePersistedState (un link limpio vuelve a defaults; esa es la semántica
   // esperada de un link compartible). hiddenCategories sigue en useState (Decisión 12.1.3).
@@ -121,7 +122,12 @@ function AnalyticsPageContent() {
   const netMode = netoRaw === 'true';
   const accountId = accountFilter !== 'all' ? Number(accountFilter) : undefined;
 
-  const { data: accounts, isPending: accountsPending } = useAccounts();
+  const {
+    data: accounts,
+    isPending: accountsPending,
+    isError: accountsError,
+    refetch: refetchAccounts,
+  } = useAccounts();
 
   // `currency` y `account_id` son ortogonales en el backend (Fase 17 §17.1.3) — al
   // filtrar por una cuenta hay que pasar SU moneda explícita, si no la vista se queda
@@ -236,6 +242,7 @@ function AnalyticsPageContent() {
     data: trendData,
     isLoading: loadingTrends,
     isError: trendError,
+    refetch: refetchTrend,
   } = useQuery({
     queryKey: queryKeys.analytics.cashflow(
       dateRange.start_date,
@@ -264,6 +271,7 @@ function AnalyticsPageContent() {
     isLoading: loadingCategories,
     isFetching: fetchingCategories,
     isError: categoryError,
+    refetch: refetchCategories,
   } = useQuery({
     queryKey: queryKeys.analytics.categories(
       dateRange.start_date,
@@ -316,10 +324,33 @@ function AnalyticsPageContent() {
     net: Number(trendSeries?.net ?? 0),
   };
 
-  // Mientras la moneda del URL (o la de la cuenta elegida) no se puede resolver contra las
-  // cuentas, las queries están apagadas
-  // (`queriesEnabled`) y `isLoading` es false: sin este cierre la página pintaría un frame con los
-  // totales en 0 y los gráficos vacíos antes de llegar a los datos correctos.
+  // QA-040: con el backend caído fallan las DOS precondiciones de esta página — `/users/me` y
+  // `/accounts/`. Sin preferred currency no hay moneda efectiva (`effectiveCurrency` queda `undefined`),
+  // `queriesEnabled` es `false` y las dos queries nunca corren: no hay `isError` que mostrar, solo
+  // `status: 'pending'` con `fetchStatus: 'idle'`, y la página pintaba sus KPIs en `$ 0` y sus
+  // gráficos vacíos como si fueran datos reales. Por eso el error se declara sobre las
+  // precondiciones y no sobre cada query. `queriesEnabled` NO se toca: sigue siendo el guard del
+  // caso "moneda del URL sin resolver" (Fase 29 §F7.4), que es un fallo distinto.
+  if (userError || accountsError) {
+    return (
+      <div className="animate-in fade-in space-y-8 duration-500">
+        <div>
+          <h1 className="text-text text-2xl font-semibold">Analítica Financiera</h1>
+          <p className="text-text-muted mt-1 text-sm">
+            Visualiza el flujo de tu dinero y la distribución de tus finanzas.
+          </p>
+        </div>
+        <QueryErrorState
+          message="No se pudieron cargar tus cuentas. Intenta de nuevo más tarde."
+          onRetry={() => {
+            refetchUser();
+            refetchAccounts();
+          }}
+        />
+      </div>
+    );
+  }
+
   if ((loadingTrends && loadingCategories) || waitingForAccounts) {
     return (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -426,6 +457,8 @@ function AnalyticsPageContent() {
         totalExpense={totals.totalExpense}
         net={totals.net}
         currency={effectiveCurrency}
+        isError={trendError}
+        onRetry={() => refetchTrend()}
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -437,6 +470,7 @@ function AnalyticsPageContent() {
           onSeriesModeChange={setSeriesMode}
           periodType={dateRange.granularity}
           currency={effectiveCurrency}
+          onRetry={() => refetchTrend()}
         />
 
         <CategoryDonutChart
@@ -453,6 +487,7 @@ function AnalyticsPageContent() {
           onReferenceModeChange={setReferenceMode}
           totalIncomeForPeriod={totals.totalIncome}
           currency={effectiveCurrency}
+          onRetry={() => refetchCategories()}
         />
       </div>
     </div>

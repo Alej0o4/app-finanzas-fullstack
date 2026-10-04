@@ -17,6 +17,7 @@ import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import SummaryCard from '@/components/ui/SummaryCard';
 import Skeleton from '@/components/ui/Skeleton';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import Link from 'next/link';
 import type { Account, BalanceByCurrency, CreateAccountPayload } from '@/types/api';
 
@@ -46,12 +47,17 @@ export default function AccountsPage() {
   const createBalanceRef = useRef<HTMLInputElement>(null);
   const editNameRef = useRef<HTMLInputElement>(null);
 
-  const { data: accounts, isLoading } = useAccounts();
+  const { data: accounts, isPending, isError, refetch: refetchAccounts } = useAccounts();
 
   // Saldo total por moneda de TODAS las cuentas (Fase 11 §11.5). A diferencia de
   // /dashboard/summary, este endpoint no filtra por destacadas — así el total mostrado
   // coincide con la suma de las tarjetas listadas debajo.
-  const { data: balancesSummary, isLoading: loadingBalances } = useQuery<BalanceByCurrency[]>({
+  const {
+    data: balancesSummary,
+    isLoading: loadingBalances,
+    isError: balancesError,
+    refetch: refetchBalances,
+  } = useQuery<BalanceByCurrency[]>({
     queryKey: queryKeys.accounts.summary(),
     queryFn: async () => (await api.get('accounts/summary')).data,
   });
@@ -191,7 +197,15 @@ export default function AccountsPage() {
   // request separada desde Fase 11 §11.5) se renderiza con su propio skeleton más abajo
   // en vez de retrasar toda la página — antes esta era la única pantalla que esperaba dos
   // round-trips en serie para mostrar cualquier contenido.
-  if (isLoading)
+  if (isError && !accounts) {
+    return (
+      <QueryErrorState
+        message="No se pudieron cargar tus cuentas. Intenta de nuevo más tarde."
+        onRetry={() => refetchAccounts()}
+      />
+    );
+  }
+  if (isPending)
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
@@ -226,6 +240,12 @@ export default function AccountsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {loadingBalances ? (
           <Skeleton className="h-24 rounded-2xl" />
+        ) : balancesError ? (
+          <QueryErrorState
+            message="No se pudieron cargar los saldos de tus cuentas. Intenta de nuevo más tarde."
+            onRetry={() => refetchBalances()}
+            className="col-span-full"
+          />
         ) : balancesSummary && balancesSummary.length > 0 ? (
           balancesSummary.map((b) => (
             <SummaryCard key={b.currency} label="Balance Total" elevated>

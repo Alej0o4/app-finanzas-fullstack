@@ -251,6 +251,22 @@ Reglas:
 - Pasar `onReset` solo cuando el período visible no es el actual; en el período actual el botón no tiene sentido.
 - Las fechas y rótulos se arman con los helpers de `lib/dateRanges.ts` (`formatMonthLabel`, `formatMonthName`, `formatMonthParam`, `formatPeriodLabel`, `shiftMonth`, `shiftPeriodRef`), no inline en la página.
 
+### `components/ui/QueryErrorState.tsx` (Fase 33)
+
+Estado de error de carga compartido: `EmptyState` con ícono de alerta, mensaje específico por
+pantalla y botón "Reintentar" que recibe el `refetch` de la query que falló. Úsalo en vez de armar
+un bloque inline; una pantalla con datos vacíos **no** debe mostrarse cuando la query falló
+(`isError`), ni un `$ 0` como si fuera dato. Una query con `enabled` dependiente de otra (p. ej.
+Analítica depende de las cuentas) tiene que mostrar el error de la que falla.
+
+### `lib/hooks/useDialogFocus.ts` y `useDialogCounter.ts` (Fase 33)
+
+- `useDialogFocus` es la lógica de foco de los diálogos (foco inicial configurable, trampa de Tab,
+  Escape, restauración del foco al cerrar). La usan `ModalShell` y `ConfirmDialog`
+  (`role="alertdialog"`, foco inicial en "Cancelar").
+- `useDialogCounter` suma/resta un diálogo abierto en `useUiStore`; `InstallPrompt` no se renderiza
+  mientras el contador sea mayor que cero. Todo diálogo nuevo debe usarlo.
+
 ## Componentes por dominio
 
 ### Dashboard

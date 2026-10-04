@@ -1,17 +1,10 @@
 'use client';
 
-import {
-  ArrowRightLeft,
-  ArrowDownRight,
-  ArrowUpRight,
-  Trash2,
-  Pencil,
-  Circle,
-  AlertCircle,
-} from 'lucide-react';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { ArrowRightLeft, ArrowDownRight, ArrowUpRight, Trash2, Pencil, Circle } from 'lucide-react';
+import { formatCurrency, formatDateLabel } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import EmptyState from '@/components/ui/EmptyState';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import CategoryIcon from '@/components/ui/CategoryIcon';
 import Button from '@/components/ui/Button';
@@ -52,15 +45,7 @@ export default function TransactionList({
   return (
     <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
       {isError ? (
-        <EmptyState
-          icon={<AlertCircle size={48} className="opacity-20" />}
-          message="No se pudieron cargar los movimientos."
-          action={
-            <Button variant="secondary" size="sm" onClick={onRetry}>
-              Reintentar
-            </Button>
-          }
-        />
+        <QueryErrorState message="No se pudieron cargar los movimientos." onRetry={onRetry} />
       ) : items.length === 0 ? (
         <EmptyState
           icon={<ArrowRightLeft size={48} className="opacity-20" />}
@@ -112,8 +97,8 @@ export default function TransactionList({
                         {isExpense ? '-' : '+'}
                         {formatCurrency(tx.amount, tx.currency)}
                       </p>
-                      <p className="text-text-muted text-[11px] capitalize">
-                        {formatDate(tx.date, config.locale)}
+                      <p className="text-text-muted text-[11px]">
+                        {formatDateLabel(tx.date, config.locale)}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">

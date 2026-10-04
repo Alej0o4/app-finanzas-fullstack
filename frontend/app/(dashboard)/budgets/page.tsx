@@ -2,12 +2,13 @@
 
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, PieChart, Edit2, Trash2, CalendarDays, Repeat, AlertCircle } from 'lucide-react';
+import { Plus, PieChart, Edit2, Trash2, CalendarDays, Repeat } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { formatCurrency, getApiError } from '@/lib/utils';
+import { capitalizeFirst, formatCurrency, getApiError } from '@/lib/utils';
 import { validateAmountText } from '@/lib/validateAmount';
 import { queryKeys } from '@/lib/queryKeys';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAccounts } from '@/lib/hooks/useAccounts';
 import ModalShell from '@/components/ui/ModalShell';
@@ -20,9 +21,15 @@ import Label from '@/components/ui/Label';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import type { Budget, BudgetPayload } from '@/types/api';
 
+// Fase 33 F11 (QA-041): `Intl` devuelve el rótulo en minúsculas ("septiembre de 2026"), así que
+// sin `capitalizeFirst` queda en minúscula y con el `capitalize` de CSS que tenía se leía
+// "Septiembre De 2026" — el "De" mayúscula es exactamente el defecto que F11 viene a matar.
+// El rótulo va en posición de título, así que la capitalización va en el string, no en CSS.
 const getMonthName = (month: number, year: number) => {
   const date = new Date(year, month - 1);
-  return new Intl.DateTimeFormat('es-CO', { month: 'long', year: 'numeric' }).format(date);
+  return capitalizeFirst(
+    new Intl.DateTimeFormat('es-CO', { month: 'long', year: 'numeric' }).format(date)
+  );
 };
 
 export default function BudgetsPage() {
@@ -214,17 +221,11 @@ export default function BudgetsPage() {
           // y dejaba filas basura que rompían la respuesta. Decimos lo que pasó en vez de
           // afirmar que no hay presupuestos. Mismo bloque que `TransactionList` (QA-010) y que
           // el progreso de presupuestos del dashboard: `EmptyState` + `AlertCircle` + "Reintentar".
-          <div className="col-span-full">
-            <EmptyState
-              icon={<AlertCircle size={48} className="opacity-20" />}
-              message="No se pudieron cargar tus presupuestos. Intenta de nuevo más tarde."
-              action={
-                <Button variant="secondary" size="sm" onClick={() => refetchBudgets()}>
-                  Reintentar
-                </Button>
-              }
-            />
-          </div>
+          <QueryErrorState
+            message="No se pudieron cargar tus presupuestos. Intenta de nuevo más tarde."
+            onRetry={() => refetchBudgets()}
+            className="col-span-full"
+          />
         ) : !budgets || budgets.length === 0 ? (
           <div className="col-span-full">
             <EmptyState
@@ -249,7 +250,7 @@ export default function BudgetsPage() {
                       <h3 className="text-text font-medium">
                         {category?.name || 'Categoría eliminada'}
                       </h3>
-                      <p className="text-text-muted mt-0.5 flex items-center gap-1 text-xs capitalize">
+                      <p className="text-text-muted mt-0.5 flex items-center gap-1 text-xs">
                         <CalendarDays size={12} />
                         {getMonthName(budget.month, budget.year)}
                         {budget.is_recurring && (

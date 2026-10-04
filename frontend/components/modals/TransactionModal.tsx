@@ -44,13 +44,33 @@ export default function TransactionModal({
   const [showAllCategories, setShowAllCategories] = useState(false);
   // Fase 31 F2 (Q6, QA-013/H13): errores de campo — el modal pasa a `noValidate` (antes
   // dependía de los globos nativos del navegador, a diferencia del resto de la app).
-  const [fieldErrors, setFieldErrors] = useState<{ amount?: string; category?: string }>({});
+  // Fase 33 F9 (Q7, QA-035): `account` se agrega porque `Number('') === 0` llegaba al backend
+  // como `account_id: 0` (404 incomprensible) — el mismo bloque de `EditTransactionModal`.
+  const [fieldErrors, setFieldErrors] = useState<{
+    amount?: string;
+    account?: string;
+    category?: string;
+  }>({});
   const amountRef = useRef<HTMLInputElement>(null);
+  const accountRef = useRef<HTMLSelectElement>(null);
   const categoryRef = useRef<HTMLSelectElement>(null);
 
   const { data: accounts } = useAccounts({ enabled: isOpen });
 
   const { data: categories } = useCategories({ enabled: isOpen });
+
+  // Fase 33 F9 (Q7, QA-035, US 24/25): con una sola cuenta el modal la trae elegida (un
+  // toque menos); con varias sigue en "Selecciona…" para no registrar en la cuenta
+  // equivocada. Las cuentas llegan después del primer render (`enabled: isOpen`), así que el
+  // valor se ajusta durante el render con el patrón de `settings/page.tsx`: un `useState` que
+  // recuerda el valor previo hace el ajuste una sola vez, sin el `setState` en efecto que
+  // marca `react-hooks/set-state-in-effect`.
+  const [preselectedAccountId, setPreselectedAccountId] = useState<string | null>(null);
+  const onlyAccountId = accounts?.length === 1 ? String(accounts[0].id) : null;
+  if (onlyAccountId !== preselectedAccountId) {
+    setPreselectedAccountId(onlyAccountId);
+    if (onlyAccountId !== null && accountId === '') setAccountId(onlyAccountId);
+  }
 
   // Fase 31 F3 (Q10, QA-009, H13): lo que se ve en el <select> es lo que se envía — regla
   // compartida con EditTransactionModal.
@@ -113,10 +133,12 @@ export default function TransactionModal({
     const errors: typeof fieldErrors = {};
     const amountError = validateAmountText(amount);
     if (amountError) errors.amount = amountError;
+    if (!accountId) errors.account = 'Elige una cuenta.';
     if (!categoryId) errors.category = 'Elige una categoría.';
     setFieldErrors(errors);
 
     if (errors.amount) return amountRef.current?.focus();
+    if (errors.account) return accountRef.current?.focus();
     if (errors.category) return categoryRef.current?.focus();
 
     createMutation.mutate({
@@ -178,10 +200,12 @@ export default function TransactionModal({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Select
+            ref={accountRef}
             label="Cuenta"
             required
             value={accountId}
             onChange={(event) => setAccountId(event.target.value)}
+            error={fieldErrors.account}
             className="bg-background"
           >
             <option value="" disabled>
