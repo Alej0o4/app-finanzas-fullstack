@@ -779,8 +779,13 @@ Entrada:
 - `is_recurring` (opcional, default `false`): si es `true`, la fila actúa como plantilla —
   el presupuesto se genera automáticamente para los períodos futuros que se consulten
   (Fase 8 §3). Editar el monto del presupuesto de un mes también actualiza el monto de los
-  meses futuros, porque la plantilla siempre es la fila recurrente más reciente. Para
-  "apagar" la recurrencia se edita con `is_recurring: false`; **borrar la fila no corta la
+  meses futuros, porque la plantilla es la fila más reciente de la serie (categoría +
+  moneda) en un período anterior, y solo se clona si es recurrente. Para "apagar" la
+  recurrencia, `PUT` con `is_recurring: false` (`true → false`): corta la serie **desde ese
+  mes en adelante** — las filas posteriores ya generadas de la misma categoría y moneda
+  pasan a `is_recurring: false` conservando su monto, y los meses anteriores no cambian.
+  Volver a marcar la casilla (o crear una fila recurrente) reinicia la serie. Un `POST`
+  manual no recurrente en un mes posterior también la termina. **Borrar la fila no corta la
   generación de los meses siguientes** — la fila borrada sirve de "lápida" para su período:
   ese mes queda saltado y la recurrencia sigue en los siguientes (QA-024).
 
@@ -800,7 +805,9 @@ Filtros opcionales:
 
 Cuando se pasan `month` y `year`, antes de listar se generan las filas recurrentes
 pendientes de ese período (generación perezosa) — **también si el período ya está
-cerrado**: este endpoint es el único caller de la generación que no acota al mes actual
+cerrado**, aunque solo a partir de filas de períodos anteriores (un mes anterior al inicio
+de la serie no genera nada): este endpoint es el único caller de la generación que no acota
+al mes actual
 (ver "Generación de presupuestos recurrentes" en la sección Dashboard). Sin filtros
 devuelve el historial completo sin generar nada.
 
@@ -962,7 +969,8 @@ La generación perezosa de filas a partir de la plantilla `is_recurring` (Fase 8
   presupuestos que **sí** existían en ese mes siguen evaluándose: el guard envuelve solo la
   generación, no el chequeo de umbrales.
 - `GET /api/v1/budgets/?month=&year=` — genera para el período pedido sin restricción de mes:
-  sigue creando filas recurrentes también en meses ya cerrados. Queda fuera del guard de la
+  sigue creando filas recurrentes también en meses ya cerrados (solo a partir de filas de
+  períodos anteriores: un mes previo al inicio de la serie no genera nada). Queda fuera del guard de la
   Fase 29 a propósito (deuda registrada en `docs/TODO.md`); el frontend no lo llama con
   período.
 

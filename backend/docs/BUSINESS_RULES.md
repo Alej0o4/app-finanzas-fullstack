@@ -261,6 +261,15 @@
   recurrencia sigue en los meses siguientes (la fila borrada ya no es plantilla). Semántica
   explicada en el copy del confirm del frontend: "Se borra solo el de este mes; los meses
   siguientes se siguen generando."
+- **Serie y corte de la recurrencia (flujo corto 2026-10-03):** una serie es el conjunto de
+  presupuestos de un usuario con la misma categoría **y moneda**. La generación perezosa clona
+  la fila activa más reciente de la serie en un período **estrictamente anterior** al pedido,
+  y **solo si es recurrente**: la fila más reciente decide. Desmarcar `is_recurring` en un
+  `PUT` (transición `True → False`) pone en `False`, en la misma transacción, las filas activas
+  posteriores de la serie resultante (montos intactos, lápidas intactas); los meses anteriores
+  no cambian. Volver a marcar (`PUT`) o crear una fila recurrente (`POST`) reinicia la serie.
+  Consecuencia aceptada: un presupuesto manual no recurrente en un mes posterior también
+  termina la serie desde ahí. Pedir un mes anterior al inicio de la serie no genera filas.
 - **Validación de período en `PUT` (QA-023):** `month` 1–12, `year` 2020–2100, `currency`
   `^[A-Z]{3}$` — valores fuera de rango/patrón → `422`.
 

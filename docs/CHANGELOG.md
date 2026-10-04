@@ -9,6 +9,16 @@
 
 ---
 
+## Flujo corto — Apagar la recurrencia de un presupuesto (2026-10-03)
+
+Desmarcar "Repetir cada mes" ahora significa "de aquí en adelante no repitas". La serie es
+categoría + moneda; la plantilla es la fila activa más reciente de un período anterior y solo se
+clona si es recurrente. `PUT /budgets/{id}` (True → False) deja en no recurrentes las filas
+posteriores de la serie, sin tocar montos ni lápidas. Copy nuevo en el modal. Spec:
+`docs/specs/corto_recurrencia_presupuestos_spec.md`. Sin migración ni cambio de contrato.
+
+---
+
 ## Flujo corto — Segunda pasada de QA (2026-10-03)
 
 Fix de los 9 ítems de la segunda pasada de QA (QA-023 a QA-031), todos corregibles sin decisión de producto. Un solo flujo corto (fix → test → `/run-tests` → revisión → PR), 406 tests en verde, lint limpio.

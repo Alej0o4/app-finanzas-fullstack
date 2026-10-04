@@ -130,7 +130,7 @@ en gastos periódicos conocidos, por eso van después.
       inconsistente entre `summary` y el resto (decisión de producto), mes/semana en UTC frente a
       hora Bogotá (incluye la fecha por defecto del modal, que propone el día siguiente después
       de las 19:00) y `GET /budgets/?month=&year=` en meses cerrados (con efecto de escritura; el caso de períodos inválidos es QA-023, en curso).
-- [ ] **Apagar la recurrencia de un presupuesto desde la UI** (hallado al revisar el PR #11,
+- [x] **Apagar la recurrencia de un presupuesto desde la UI** *(resuelto 2026-10-03, flujo corto — `docs/specs/corto_recurrencia_presupuestos_spec.md`)* (hallado al revisar el PR #11,
       relacionado con QA-024; ya existía antes). Desmarcar "Repetir cada mes" en el mes actual
       no detiene la serie: `ensure_recurring_budgets_for_period` clona desde la fila recurrente
       más reciente de *otro* período, así que el mes siguiente se regenera desde una plantilla

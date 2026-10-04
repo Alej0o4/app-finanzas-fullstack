@@ -382,8 +382,8 @@ export default function BudgetsPage() {
             <Label htmlFor="budget-recurring">Repetir cada mes</Label>
           </div>
           <p className="text-text-muted text-xs">
-            Se creará automáticamente cada mes con el mismo monto. Editar el presupuesto de un mes
-            también actualiza el monto de los meses futuros.
+            Se creará automáticamente cada mes con el mismo monto. Si la desmarcas, no se generará
+            en los meses siguientes (los anteriores no cambian).
           </p>
 
           <div className="mt-6 flex gap-3">

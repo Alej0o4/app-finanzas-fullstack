@@ -484,6 +484,9 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
     recurrente habría generado, igual que antes de la fase.
   - Ningún call site del frontend lo usa con período, así que no hay efecto en la app; queda
     anotado para que no se lea como un descuido cuando se toque `budgets.py`.
+  - *(2026-10-03, flujo corto de recurrencia)* parcialmente mitigado: la plantilla ahora solo
+    sale de períodos anteriores, así que pedir un mes anterior al inicio de la serie ya no
+    genera filas hacia atrás. Sigue habiendo escritura al pedir meses posteriores.
 
 - [x] **API keys: TTL opcional y scopes — cerrado como fuera de scope.** *(2026-09-19, pivote a
   uso personal, ver `docs/ROADMAP.md`)*
@@ -692,3 +695,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 | 2026-07-06 | SECRET_KEY regenerada criptográficamente |
 | 2026-07-06 | EmailStr + normalización email |
 | 2026-07-06 | .dict() → model_dump() |
+
+- [x] **Apagar la recurrencia de un presupuesto** *(2026-10-03, flujo corto)* — desmarcar
+  "Repetir cada mes" corta la serie (categoría + moneda) hacia adelante; spec en
+  `docs/specs/corto_recurrencia_presupuestos_spec.md`. Verificado a mano con Playwright contra
+  `oikos-dev` el 2026-10-03.

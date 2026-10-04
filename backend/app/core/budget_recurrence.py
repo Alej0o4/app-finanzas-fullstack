@@ -18,12 +18,12 @@ from app.models import models
 def ensure_recurring_budgets_for_period(db: Session, user_id: int, month: int, year: int) -> None:
     """Genera, bajo demanda, las filas recurrentes pendientes para (month, year).
 
-    Para cada categoría con una plantilla recurrente (`is_recurring=True`) que aún no
-    tenga fila en el período pedido — ni activa ni borrada, ver abajo — clona la plantilla
-    más reciente como nueva fila del período con `is_recurring=True` — así sigue generando
-    los meses siguientes sin intervención. La plantilla siempre es "la fila recurrente más
-    reciente": editar el monto del mes actual se convierte automáticamente en el monto de
-    los futuros.
+    Una serie es (categoría, moneda). Para cada serie cuya fila activa más reciente en un
+    período anterior es recurrente (`is_recurring=True`), y que aún no tiene fila en el
+    período pedido — ni activa ni borrada, ver abajo — clona esa plantilla como nueva fila
+    con `is_recurring=True`. La fila más reciente decide: si no es recurrente (desmarcada o
+    creada a mano sin la casilla), la serie termina ahí. Editar el monto del mes actual se
+    convierte automáticamente en el monto de los futuros.
 
     **La fila soft-deleted del período es una lápida: borrarla saltea ese mes.** Es la
     decisión tomada para QA-024 (un presupuesto recurrente del mes en curso era
@@ -62,25 +62,26 @@ def ensure_recurring_budgets_for_period(db: Session, user_id: int, month: int, y
     if not 1 <= month <= 12 or not 2020 <= year <= 2100:
         raise DomainValidationError("`month` debe estar entre 1 y 12 y `year` entre 2020 y 2100.")
 
-    # `plantillas`: la fila recurrente más reciente por categoría, de cualquier período
-    # MENOS el pedido. Solo activas — el filtro global de borrado lógico de
-    # `app/core/database.py` deja las soft-deleted afuera, que es justo lo que hace que la
-    # lápida de abajo deje de ser plantilla (ver el docstring).
+    # `plantillas`: filas activas de períodos ESTRICTAMENTE anteriores al pedido (B2). La
+    # serie es (categoría, moneda) (B1/D4) y la fila más reciente de cada serie decide: se
+    # clona solo si es recurrente, así que desmarcar "Repetir cada mes" corta la serie. Solo
+    # activas — el filtro global de borrado lógico de `app/core/database.py` deja las
+    # soft-deleted afuera, que es justo lo que hace que la lápida de abajo deje de ser
+    # plantilla (ver el docstring).
     plantillas = (
         db.query(models.Budget)
         .filter(
             models.Budget.user_id == user_id,
-            models.Budget.is_recurring == True,  # noqa: E712
-            (models.Budget.month != month) | (models.Budget.year != year),
+            (models.Budget.year < year) | ((models.Budget.year == year) & (models.Budget.month < month)),
         )
         .all()
     )
     if not plantillas:
         return
 
-    mas_reciente_por_categoria: dict[int, models.Budget] = {}
+    mas_reciente_por_serie: dict[tuple[int, str], models.Budget] = {}
     for presupuesto in sorted(plantillas, key=lambda p: (p.year, p.month), reverse=True):
-        mas_reciente_por_categoria.setdefault(presupuesto.category_id, presupuesto)
+        mas_reciente_por_serie.setdefault((presupuesto.category_id, presupuesto.currency), presupuesto)
 
     # QA-024: el chequeo de "¿esta categoría ya tiene fila en este período?" tiene que
     # contar TAMBIÉN las soft-deleted, y por eso NO puede ser el `db.query(models.Budget.
@@ -98,11 +99,11 @@ def ensure_recurring_budgets_for_period(db: Session, user_id: int, month: int, y
     # evento, que está registrado sobre la clase `Session`. Es el mismo motivo por el que
     # `app/services/ledger.py` lleva su `deleted_at IS NULL` explícito en el `update()`
     # (Decisión 6.1).
-    categorias_con_fila_o_lapida = {
-        fila[0]
+    series_con_fila_o_lapida = {
+        (fila[0], fila[1])
         for fila in db.connection()
         .execute(
-            select(models.Budget.category_id).where(
+            select(models.Budget.category_id, models.Budget.currency).where(
                 models.Budget.user_id == user_id,
                 models.Budget.month == month,
                 models.Budget.year == year,
@@ -119,10 +120,10 @@ def ensure_recurring_budgets_for_period(db: Session, user_id: int, month: int, y
             year=year,
             is_recurring=True,
             user_id=user_id,
-            category_id=category_id,
+            category_id=serie[0],
         )
-        for category_id, plantilla in mas_reciente_por_categoria.items()
-        if category_id not in categorias_con_fila_o_lapida
+        for serie, plantilla in mas_reciente_por_serie.items()
+        if plantilla.is_recurring and serie not in series_con_fila_o_lapida
     ]
     if not nuevos:
         return
