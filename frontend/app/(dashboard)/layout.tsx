@@ -11,7 +11,7 @@ import { useUiStore } from '@/store/useUiStore';
 import { Menu } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isSidebarOpen, toggleSidebar, setSidebarOpen } = useUiStore();
+  const { isSidebarOpen, toggleSidebar, setSidebarOpen, setMobileDrawerOpen } = useUiStore();
 
   useRequireAuth();
 
@@ -25,6 +25,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     mq.addEventListener('change', handleChange);
     return () => mq.removeEventListener('change', handleChange);
   }, [setSidebarOpen]);
+
+  // Fase 33 F6 (QA-034): en `<sm` el sidebar es un drawer `fixed` (z-30/z-40) que queda por
+  // debajo del `z-50` del banner de instalación, así que también lo aparta. Se publica aparte
+  // de `isSidebarOpen` porque el shell lo fuerza en `true` desde `sm`. Es un efecto propio
+  // (no dentro del de `matchMedia`) para que abrir el drawer no vuelva a ejecutar el que
+  // fuerza `setSidebarOpen(false)` en móvil y lo cierre al instante.
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 640px)');
+    const publish = () => setMobileDrawerOpen(!mq.matches && isSidebarOpen);
+    publish();
+    mq.addEventListener('change', publish);
+    return () => mq.removeEventListener('change', publish);
+  }, [setMobileDrawerOpen, isSidebarOpen]);
 
   return (
     <div className="bg-background min-h-screen">

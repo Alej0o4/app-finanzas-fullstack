@@ -1,8 +1,9 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { useEffect, useId, useRef, type ReactNode } from 'react';
-import { useEscapeToClose } from '@/lib/hooks/useEscapeToClose';
+import { useId, useRef, type ReactNode } from 'react';
+import { useDialogCounter } from '@/lib/hooks/useDialogCounter';
+import { useDialogFocus } from '@/lib/hooks/useDialogFocus';
 
 interface ModalShellProps {
   isOpen: boolean;
@@ -11,75 +12,15 @@ interface ModalShellProps {
   children: ReactNode;
 }
 
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 export default function ModalShell({ isOpen, onClose, title, children }: ModalShellProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
-  // El elemento que abrió el modal: se rastrea con `focusin` mientras el foco está FUERA del
-  // diálogo. No se puede leer `document.activeElement` al abrir porque un hijo con `autoFocus`
-  // ya movió el foco para cuando corre el effect.
-  useEffect(() => {
-    const track = (e: FocusEvent) => {
-      const target = e.target as HTMLElement | null;
-      // `closest` y no `dialogRef.contains`: el `autoFocus` de un hijo puede dispararse antes de que
-      // el ref del diálogo esté asignado.
-      if (target && !target.closest('[role="dialog"]')) previouslyFocusedRef.current = target;
-    };
-    document.addEventListener('focusin', track);
-    return () => document.removeEventListener('focusin', track);
-  }, []);
+  // Fase 33 F6 (QA-034): el banner de instalación no se renderiza con un modal abierto.
+  useDialogCounter(isOpen);
 
-  useEscapeToClose(isOpen, onClose);
-
-  // QA-014: foco inicial, trampa de foco y restauración al cerrar.
-  useEffect(() => {
-    if (!isOpen) return;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-
-    // Respeta un `autoFocus` de los hijos (ya aplicado al montar); si no hay, enfoca el primer
-    // campo del contenido (no el botón "Cerrar") o, en su defecto, el propio diálogo.
-    if (!dialog.contains(document.activeElement)) {
-      const firstField = dialog.querySelector<HTMLElement>(
-        'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])'
-      );
-      (firstField ?? dialog).focus();
-    }
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
-      const focusables = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
-      if (focusables.length === 0) {
-        e.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      const active = document.activeElement;
-      if (e.shiftKey && (active === first || active === dialog)) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      } else if (!dialog.contains(active)) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      const previouslyFocused = previouslyFocusedRef.current;
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
-    };
-  }, [isOpen]);
+  // QA-014: foco inicial, trampa de foco, restauración al cerrar y Escape.
+  useDialogFocus({ isOpen, dialogRef, onClose });
 
   if (!isOpen) return null;
 

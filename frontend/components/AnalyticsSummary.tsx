@@ -4,6 +4,8 @@ import SummaryCard from '@/components/ui/SummaryCard';
 import { formatCurrency } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 
+import QueryErrorState from '@/components/ui/QueryErrorState';
+
 interface AnalyticsSummaryProps {
   totalIncome: number;
   totalExpense: number;
@@ -14,6 +16,8 @@ interface AnalyticsSummaryProps {
    *  preferida, así que una cuenta USD se leía como COP. Si se omite, cae a la preferida global
    *  (mismo criterio que `CategoryBreakdownBars`). */
   currency?: string;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
 export default function AnalyticsSummary({
@@ -21,10 +25,22 @@ export default function AnalyticsSummary({
   totalExpense,
   net,
   currency,
+  isError,
+  onRetry,
 }: AnalyticsSummaryProps) {
   const { config } = useAppConfig();
   const activeCurrency = currency ?? config.currency;
   const formatAmount = (amount: number) => formatCurrency(amount, activeCurrency);
+
+  if (isError) {
+    return (
+      <QueryErrorState
+        message="No se pudieron cargar los totales del período. Intenta de nuevo más tarde."
+        onRetry={onRetry}
+        className="col-span-full"
+      />
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

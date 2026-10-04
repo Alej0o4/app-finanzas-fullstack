@@ -1,12 +1,15 @@
 import SummaryCard from '@/components/ui/SummaryCard';
 import Skeleton from '@/components/ui/Skeleton';
 import { formatCurrency } from '@/lib/utils';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 
 interface AccountMonthlyBalanceCardProps {
   label: string;
   balance: number;
   currency: string;
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
 /**
@@ -24,12 +27,23 @@ export default function AccountMonthlyBalanceCard({
   balance,
   currency,
   isLoading,
+  isError,
+  onRetry,
 }: AccountMonthlyBalanceCardProps) {
   // balance ya viene calculado por el backend — sin resta en cliente (Fase 19 §19.2.3,
   // cierra el Hallazgo 7 de docs/specs/fase_19_spec.md).
   const isPositive = balance >= 0;
   const trend = isPositive ? ('up' as const) : ('down' as const);
   const color = isPositive ? 'var(--color-success)' : 'var(--color-danger)';
+
+  if (isError) {
+    return (
+      <QueryErrorState
+        message="No se pudo cargar el balance del mes. Intenta de nuevo más tarde."
+        onRetry={onRetry}
+      />
+    );
+  }
 
   return (
     <SummaryCard label={label} size="lg" elevated trend={trend} color={color}>

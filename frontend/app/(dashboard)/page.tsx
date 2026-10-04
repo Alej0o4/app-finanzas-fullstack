@@ -18,6 +18,7 @@ import PeriodNavigator from '@/components/PeriodNavigator';
 import SummaryCard from '@/components/ui/SummaryCard';
 import Button from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import Input from '@/components/ui/Input';
 import Skeleton from '@/components/ui/Skeleton';
 import { useQueryParamState } from '@/hooks/useQueryParamState';
@@ -457,14 +458,9 @@ function DashboardScreen() {
             ))}
           </div>
         ) : budgetsError ? (
-          <EmptyState
-            icon={<AlertCircle size={48} className="opacity-20" />}
+          <QueryErrorState
             message="No se pudo cargar el progreso de presupuestos."
-            action={
-              <Button variant="secondary" size="sm" onClick={() => refetchBudgets()}>
-                Reintentar
-              </Button>
-            }
+            onRetry={() => refetchBudgets()}
           />
         ) : !budgetsProgress || budgetsProgress.length === 0 ? (
           // Fase 29 §F5.4 (Q7, User Story 17): en un mes cerrado el backend solo devuelve los

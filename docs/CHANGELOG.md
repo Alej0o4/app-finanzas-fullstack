@@ -9,6 +9,29 @@
 
 ---
 
+## Fase 33 — Corrección de la tercera pasada de QA (2026-10-04)
+
+Fix de QA-034 a QA-042. Spec: `docs/specs/fase_33_spec.md`. Sin migración ni cambio de contrato de API.
+
+**Backend:** el resumen semanal del lunes ahora es de la semana que cerró (`ahora − 7 días`, QA-037),
+con límites aware en `America/Bogota` (QA-038; una referencia naive lanza `ValueError`) y texto en
+"la semana pasada". Tests del job de punta a punta (`freeze_time`), bordes de domingo e idempotencia.
+428 tests en verde, ruff limpio.
+
+**Frontend:** `QueryErrorState` con "Reintentar" en todas las pantallas que fallaban en silencio
+(QA-040); contador de diálogos que oculta el banner de instalación (QA-034); hoja fija de
+notificaciones en móvil (QA-036); confirm de borrado accesible con hook de foco compartido
+(QA-039); validación y preselección de cuenta en `TransactionModal` (QA-035); tuteo, fechas con
+solo la primera letra en mayúscula y email sin `capitalize` (QA-041/042). eslint, prettier y tsc
+limpios; verificado con Playwright contra el stack dev (1280×800 y 390 px).
+
+**Operativa (dueño):** antes del próximo lunes 07:00 Bogotá, tras desplegar, correr en prod
+`SELECT id, user_id, period_key, created_at, left(body, 60) AS body FROM notifications WHERE type = 'weekly_summary' ORDER BY created_at;`
+y luego `DELETE FROM notifications WHERE type = 'weekly_summary';` (los avisos viejos describen la
+semana equivocada y el de `2026-W40` bloquearía el primer resumen correcto). Probado en dev (T5).
+
+---
+
 ## Flujo corto — Apagar la recurrencia de un presupuesto (2026-10-03)
 
 Desmarcar "Repetir cada mes" ahora significa "de aquí en adelante no repitas". La serie es

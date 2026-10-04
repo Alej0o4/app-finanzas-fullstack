@@ -13,6 +13,7 @@ import {
 import { formatCurrency } from '@/lib/utils';
 import { BarChart3, Loader2 } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import { useMemo } from 'react';
 import ChartControlsPopover from '@/components/ChartControlsPopover';
 import { useAppConfig } from '@/providers/AppConfigProvider';
@@ -49,6 +50,8 @@ interface CashflowChartProps {
    *  barras). Antes se usaba siempre la preferida, y con una cuenta USD el eje salía con
    *  formato COP. Si se omite, cae a la preferida global. */
   currency?: string;
+  /** QA-040 (Fase 33): "Reintentar" vuelve a pedir solo el flujo, no toda la pantalla. */
+  onRetry?: () => void;
 }
 
 export default function CashflowChart({
@@ -59,6 +62,7 @@ export default function CashflowChart({
   onSeriesModeChange,
   periodType,
   currency,
+  onRetry,
 }: CashflowChartProps) {
   const { config } = useAppConfig();
   const activeCurrency = currency ?? config.currency;
@@ -115,8 +119,8 @@ export default function CashflowChart({
         </div>
       </div>
       {isError ? (
-        <div className="border-border text-text-muted flex h-72 items-center justify-center rounded-xl border border-dashed text-sm">
-          No se pudo cargar el flujo de caja.
+        <div className="border-border flex h-72 items-center justify-center rounded-xl border border-dashed">
+          <QueryErrorState message="No se pudo cargar el flujo de caja." onRetry={onRetry} />
         </div>
       ) : isLoading ? (
         <div className="flex h-72 items-center justify-center">
@@ -127,7 +131,7 @@ export default function CashflowChart({
           <EmptyState
             icon={<BarChart3 size={28} />}
             message="Sin movimientos en este período"
-            description="Cuando registres ingresos o gastos, aparecerán acá."
+            description="Cuando registres ingresos o gastos, aparecerán aquí."
           />
         </div>
       ) : (

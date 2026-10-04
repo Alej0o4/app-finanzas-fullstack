@@ -330,6 +330,11 @@
   (con log) y solo queda la bandeja.
 - El resumen semanal es opt-out (`User.weekly_summary_enabled`, default `true`); se
   calcula cada lunes en `America/Bogota` sobre la moneda preferida del usuario.
+- **El resumen del lunes es de la semana anterior (Fase 33, QA-037/038):** el job pasa
+  `ahora − 7 días` como referencia, así que describe la semana lunes–domingo que acaba de cerrar y
+  su `period_key` es el de esa semana. Los límites de la semana son aware (`America/Bogota`) y
+  `build_weekly_summary` rechaza con `ValueError` una referencia naive. El texto habla de "la semana
+  pasada".
 
 - **Validación de paginación (QA-025):** `GET /notifications` valida `skip` ≥ 0 y `limit`
   1–1000 (default 50). `limit=0`, negativo o `>1000` → `422`.

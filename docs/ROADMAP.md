@@ -55,7 +55,7 @@ a "fuera de scope" con este cambio; los demás se resolvieron en las Fases 23–
 
 ---
 
-## En curso — Fase 33: corrección de la tercera pasada de QA (2026-10-04)
+## Completada — Fase 33: corrección de la tercera pasada de QA (2026-10-04)
 
 **Decisión del dueño (2026-10-04): se aplaza la fase de ingresos y gastos recurrentes** (ver más
 abajo) **hasta cerrar todo lo relacionado con QA.** Son suficientes hallazgos como para dedicarles
@@ -71,8 +71,8 @@ pasos, causas y capturas: `.scratch/qa-2026-10-03/REPORTE_QA_3.md`. Lo que sí q
 verde: saldos tras crear/editar/borrar desde la UI, onboarding con cuenta nueva, alertas 80 %/100 %
 sin duplicados y push real con FCM.
 
-**Estado: `/grilling` cerrado (2026-10-04), spec en `docs/specs/fase_33_spec.md`.** Los hallazgos
-entran a `docs/TODO.md` como `QA-034+` al implementar. Una sola PR (rama `fix/qa-tercera-pasada`),
+**Estado: implementada (2026-10-04), spec en `docs/specs/fase_33_spec.md`.** Los hallazgos
+están en `docs/TODO.md` como `QA-034` a `QA-042`, resueltos. Una sola PR (rama `fix/qa-tercera-pasada`),
 backend primero y frontend en paralelo.
 
 | Ítem | Qué pasa | Lado |

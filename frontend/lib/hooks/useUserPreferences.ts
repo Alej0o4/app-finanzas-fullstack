@@ -95,6 +95,8 @@ export function useUserPreferences() {
     // para no parpadear el contenido por defecto antes de pedir las preferencias.
     isLoading: query.isLoading || !hydrated,
     error: query.error,
+    // QA-040 (Fase 33): "Reintentar" en /settings reintenta solo las preferencias.
+    refetchPreferences: query.refetch,
     updatePreferences: mutation,
   };
 }

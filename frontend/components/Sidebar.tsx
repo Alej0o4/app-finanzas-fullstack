@@ -182,7 +182,7 @@ export default function Sidebar() {
                     <span className="text-text truncate text-xs font-medium">
                       {user?.full_name || 'Usuario'}
                     </span>
-                    <span className="text-text-muted truncate text-[10px] capitalize">
+                    <span className="text-text-muted truncate text-[10px]">
                       {user?.email || ''}
                     </span>
                   </div>

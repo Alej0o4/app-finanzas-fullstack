@@ -2,14 +2,14 @@
 
 import { useMemo } from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
-import { AlertCircle, PieChart } from 'lucide-react';
+import { PieChart } from 'lucide-react';
 import Link from 'next/link';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDateLabel } from '@/lib/utils';
 import { useTransactions } from '@/lib/hooks/useTransactions';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAppConfig } from '@/providers/AppConfigProvider';
-import Button from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import Skeleton from '@/components/ui/Skeleton';
 import type { DateRange } from '@/lib/dateRanges';
 
@@ -91,14 +91,9 @@ export default function RecentTransactionsSection({
             ))}
           </div>
         ) : isError ? (
-          <EmptyState
-            icon={<AlertCircle size={48} className="opacity-20" />}
+          <QueryErrorState
             message={`No se pudieron cargar las transacciones de ${monthName}.`}
-            action={
-              <Button variant="secondary" size="sm" onClick={() => refetch()}>
-                Reintentar
-              </Button>
-            }
+            onRetry={() => refetch()}
           />
         ) : transactions.length === 0 ? (
           <EmptyState
@@ -119,8 +114,8 @@ export default function RecentTransactionsSection({
                     <p className="text-text truncate text-sm font-medium">
                       {tx.description || categoryNames.get(tx.category_id) || 'Sin categoría'}
                     </p>
-                    <p className="text-text-muted mt-0.5 text-xs capitalize">
-                      {formatDate(tx.date, config.locale)}
+                    <p className="text-text-muted mt-0.5 text-xs">
+                      {formatDateLabel(tx.date, config.locale)}
                     </p>
                   </div>
                   <p

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
+import { useUiStore } from '@/store/useUiStore';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -60,6 +61,8 @@ export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [visits, setVisits] = useState(() => Number(readStorage(VISITS_KEY) || '0'));
   const [dismissed, setDismissed] = useState(() => readStorage(DISMISSED_KEY) === '1');
+  const openDialogs = useUiStore((state) => state.openDialogs);
+  const isMobileDrawerOpen = useUiStore((state) => state.isMobileDrawerOpen);
 
   useEffect(() => {
     // Ya instalada (Chrome standalone o iOS agregada a pantalla de inicio): no promocionar.
@@ -90,6 +93,13 @@ export default function InstallPrompt() {
   const showIOS = eligible && deferredPrompt === null && isIOSSafari();
 
   if (!showChrome && !showIOS) return null;
+
+  // Fase 33 F6 (QA-034): el banner comparte `z-50` con los overlays de los diálogos y va
+  // después en el DOM, así que ganaba el pintado y capturaba los clics — tapaba el botón
+  // "Guardar" del modal de transacción en móvil. Se esconde entero mientras haya un
+  // diálogo abierto (o el drawer del sidebar en móvil, que también queda debajo) y vuelve
+  // solo al cerrarse.
+  if (openDialogs > 0 || isMobileDrawerOpen) return null;
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;

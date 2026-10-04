@@ -95,9 +95,9 @@ function LoginForm() {
       const detail = error.response?.data?.detail;
       if (typeof detail === 'object' && detail?.code === 'EMAIL_NOT_VERIFIED') {
         setNeedsVerification(true);
-        setError('Tu correo todavía no está verificado. Revisá tu bandeja de entrada.');
+        setError('Tu correo todavía no está verificado. Revisa tu bandeja de entrada.');
       } else if (error.response?.status === 401 || error.response?.status === 403) {
-        setError('Credenciales inválidas. Por favor verifica tus datos.');
+        setError('Credenciales inválidas. Por favor revisa tus datos.');
       } else {
         setError('Error de conexión. Inténtalo más tarde.');
       }
@@ -127,7 +127,7 @@ function LoginForm() {
           aria-atomic="true"
           className="bg-success/10 border-success/20 text-success mb-6 rounded-xl border p-3 text-center text-sm"
         >
-          Cuenta creada. Revisá tu correo para verificar tu cuenta antes de iniciar sesión.
+          Cuenta creada. Revisa tu correo para verificar tu cuenta antes de iniciar sesión.
         </div>
       )}
 
@@ -160,7 +160,7 @@ function LoginForm() {
               className="text-danger mt-2 font-medium underline underline-offset-2 disabled:opacity-60"
             >
               {resendState === 'sent'
-                ? 'Enlace reenviado, revisá tu correo'
+                ? 'Enlace reenviado, revisa tu correo'
                 : resendState === 'sending'
                   ? 'Enviando...'
                   : 'Reenviar correo de verificación'}

@@ -61,7 +61,7 @@ function VerifyEmailContent() {
           {getApiError(verifyQuery.error, 'El enlace de verificación no es válido o ya expiró.')}
         </p>
         <p className="text-text-muted mt-1 text-center text-sm">
-          Necesitás un correo verificado para iniciar sesión — pedí un enlace nuevo desde la
+          Necesitas un correo verificado para iniciar sesión — pide un enlace nuevo desde la
           pantalla de inicio de sesión.
         </p>
       </div>

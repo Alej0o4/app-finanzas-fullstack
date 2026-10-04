@@ -18,6 +18,7 @@ import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useSetMonthlyIncome } from '@/lib/hooks/useSetMonthlyIncome';
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@/lib/hooks/useApiKeys';
 import { useAccounts } from '@/lib/hooks/useAccounts';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import { api } from '@/lib/api';
 import { getApiError } from '@/lib/utils';
 import { validateAmountText } from '@/lib/validateAmount';
@@ -34,6 +35,7 @@ export default function SettingsPage() {
     preferences,
     isLoading: loadingPreferences,
     error,
+    refetchPreferences,
     updatePreferences,
   } = useUserPreferences();
 
@@ -64,7 +66,11 @@ export default function SettingsPage() {
   // Fase 21 §21.1 (Decisión 21.1.1): monedas del selector derivadas de las cuentas
   // reales del usuario (misma queryKey que accounts/, ya en cache si visitó /accounts
   // o /budgets antes) — nunca una lista fija.
-  const { data: accounts } = useAccounts();
+  // QA-040 (Fase 33 F5): el selector de "Moneda principal" se arma con las monedas de las
+  // cuentas reales, así que sin `isError` un fallo de `/accounts/` lo dejaba sin opciones —
+  // una pérdida silenciosa de opción, peor que un error visible: el dueño no sabe que le
+  // falta una moneda.
+  const { data: accounts, isError: accountsError, refetch: refetchAccounts } = useAccounts();
   const availableCurrencies = Array.from(new Set(accounts?.map((a) => a.currency) ?? []));
 
   // --- Ingreso mensual (Fase 22 §22.3, Decisión 22.3.1) -----------------------------
@@ -186,7 +192,7 @@ export default function SettingsPage() {
     e.preventDefault();
     const name = newKeyName.trim();
     if (!name) {
-      setNameError('Ingresá un nombre para la API key.');
+      setNameError('Ingresa un nombre para la API key.');
       return;
     }
     createApiKey.mutate(name, {
@@ -235,9 +241,10 @@ export default function SettingsPage() {
         {loadingPreferences ? (
           <Skeleton className="h-12 w-full" />
         ) : error ? (
-          <p className="text-text-muted text-sm">
-            No se pudieron cargar las preferencias. Intenta de nuevo más tarde.
-          </p>
+          <QueryErrorState
+            message="No se pudieron cargar las preferencias. Intenta de nuevo más tarde."
+            onRetry={() => refetchPreferences()}
+          />
         ) : (
           <Switch
             label="Resumen semanal"
@@ -253,29 +260,38 @@ export default function SettingsPage() {
         <div className="mb-4">
           <h2 className="text-text font-sans text-base font-semibold">Cuenta</h2>
           <p className="text-text-muted mt-0.5 text-xs sm:text-sm">
-            La moneda que usás para ver tus balances y métricas del dashboard.
+            La moneda que usas para ver tus balances y métricas del dashboard.
           </p>
         </div>
         {/* Fase 21 §21.1 (Decisión 21.1.1): se muestra siempre, aunque haya una sola
-            moneda — mismo criterio que el selector de presupuestos (17.2.4). */}
-        <Select
-          label="Moneda principal"
-          value={preferences?.preferred_currency ?? ''}
-          onChange={(e) =>
-            updatePreferences.mutate(
-              { preferred_currency: e.target.value },
-              { onError: (err) => toast.error(getApiError(err)) }
-            )
-          }
-          disabled={updatePreferences.isPending}
-          className="bg-background"
-        >
-          {availableCurrencies.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </Select>
+            moneda — mismo criterio que el selector de presupuestos (17.2.4). Con `/accounts/`
+            caído no hay currencies que ofrecer, así que se dice en vez de pintar un select
+            vacío (QA-040). */}
+        {accountsError ? (
+          <QueryErrorState
+            message="No se pudieron cargar las monedas de tus cuentas. Intenta de nuevo más tarde."
+            onRetry={() => refetchAccounts()}
+          />
+        ) : (
+          <Select
+            label="Moneda principal"
+            value={preferences?.preferred_currency ?? ''}
+            onChange={(e) =>
+              updatePreferences.mutate(
+                { preferred_currency: e.target.value },
+                { onError: (err) => toast.error(getApiError(err)) }
+              )
+            }
+            disabled={updatePreferences.isPending}
+            className="bg-background"
+          >
+            {availableCurrencies.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
+        )}
       </section>
 
       {/* Fase 22 §22.3 (Decisión 22.3.1): salario editable, contiguo a la moneda — agrupa
@@ -331,9 +347,10 @@ export default function SettingsPage() {
             <Skeleton className="h-14 w-full" />
           </div>
         ) : apiKeysQuery.error ? (
-          <p className="text-text-muted text-sm">
-            No se pudieron cargar las API keys. Intenta de nuevo más tarde.
-          </p>
+          <QueryErrorState
+            message="No se pudieron cargar las API keys. Intenta de nuevo más tarde."
+            onRetry={() => apiKeysQuery.refetch()}
+          />
         ) : apiKeysQuery.data && apiKeysQuery.data.length > 0 ? (
           <ul className="divide-border/40 divide-y">
             {apiKeysQuery.data.map((key) => {
@@ -372,8 +389,8 @@ export default function SettingsPage() {
         ) : (
           <EmptyState
             icon={<KeyRound size={28} />}
-            message="Todavía no tenés API keys"
-            description="Creá una para conectar un Shortcut de iOS o un script a tu cuenta."
+            message="Todavía no tienes API keys"
+            description="Crea una para conectar un Shortcut de iOS o un script a tu cuenta."
           />
         )}
       </section>
@@ -404,8 +421,8 @@ export default function SettingsPage() {
           <div className="space-y-4">
             <div className="bg-surface-elevated/70 border-border/50 rounded-xl border p-3">
               <p className="text-text-muted text-xs leading-relaxed">
-                Copiá la clave ahora:{' '}
-                <strong className="text-text">no se va a volver a mostrar</strong>. Si la perdés,
+                Copia la clave ahora:{' '}
+                <strong className="text-text">no se va a volver a mostrar</strong>. Si la pierdes,
                 vas a tener que revocarla y crear otra.
               </p>
             </div>
@@ -440,7 +457,7 @@ export default function SettingsPage() {
               className="bg-background"
             />
             <p className="text-text-muted text-xs">
-              Elegí un nombre que te ayude a recordar dónde se va a usar la clave.
+              Elige un nombre que te ayude a recordar dónde se va a usar la clave.
             </p>
             <div className="mt-6 flex gap-3">
               <Button type="button" variant="ghost" onClick={closeCreateModal} className="flex-1">
@@ -473,7 +490,7 @@ export default function SettingsPage() {
             <Input
               label="Contraseña"
               type="password"
-              placeholder="Confirmá tu contraseña"
+              placeholder="Confirma tu contraseña"
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);

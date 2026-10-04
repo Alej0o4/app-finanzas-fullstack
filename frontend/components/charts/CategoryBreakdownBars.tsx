@@ -1,11 +1,11 @@
 'use client';
 
-import { AlertCircle, Wallet } from 'lucide-react';
+import { Wallet } from 'lucide-react';
 import type { CategoryDistributionItem } from '@/types/api';
 import CategoryIcon from '@/components/ui/CategoryIcon';
 import EmptyState from '@/components/ui/EmptyState';
+import QueryErrorState from '@/components/ui/QueryErrorState';
 import Skeleton from '@/components/ui/Skeleton';
-import Button from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 
@@ -50,15 +50,7 @@ export default function CategoryBreakdownBars({
   return (
     <div className="bg-surface border-border/70 shadow-background/20 rounded-2xl border p-6 shadow-sm">
       {isError ? (
-        <EmptyState
-          icon={<AlertCircle size={48} className="opacity-20" />}
-          message="No se pudo cargar el desglose por categoría."
-          action={
-            <Button variant="secondary" size="sm" onClick={() => onRetry?.()}>
-              Reintentar
-            </Button>
-          }
-        />
+        <QueryErrorState message="No se pudo cargar el desglose por categoría." onRetry={onRetry} />
       ) : isLoading ? (
         <div className="space-y-5">
           {Array.from({ length: 3 }).map((_, i) => (
