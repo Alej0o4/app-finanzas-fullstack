@@ -70,6 +70,17 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🟠 Bugs confirmados (auditoría 2026-08-22 + 2026-09-15)
 
+- [x] **`/budgets` lista los presupuestos de todos los meses mezclados (2026-10-04)** — 🟠 UX — resuelto 2026-10-04.
+  - Repro: tener presupuestos recurrentes en dos meses (p. ej. septiembre y octubre) y abrir
+    Presupuestos: aparecen todas las tarjetas juntas, con cada recurrente duplicada por mes, y
+    la lista crece con cada mes nuevo.
+  - Causa: `frontend/app/(dashboard)/budgets/page.tsx` llama `GET /budgets/` sin `month`/`year`
+    y no hay selector de mes. El backend ya soporta el filtro.
+  - Plan: `PeriodNavigator` en la página, mes en estado local (default: mes actual en la zona
+    del usuario), `GET /budgets/?month=&year=` y key `budgets.byMonth(month)`.
+  - Resolución: navegador `◀ mes ▶` (no pasa del mes siguiente), "Volver a este mes", y el
+    modal de creación arranca en el mes visto. Verificado en el navegador (dev) y `run-tests`.
+
 - [x] **Condición de carrera en `DELETE`/`PUT /transactions/{id}` descuadra el saldo de la
   cuenta (QA 2026-09-26, QA-003) — 🔴 crítico — resuelto.** *(2026-09-27, Fase 31, `docs/specs/fase_31_spec.md`)*
   - Resolución: `SELECT … FOR UPDATE` sobre la transacción como primera consulta de `PUT` y
