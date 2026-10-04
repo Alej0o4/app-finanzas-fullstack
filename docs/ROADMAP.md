@@ -55,7 +55,53 @@ a "fuera de scope" con este cambio; los demás se resolvieron en las Fases 23–
 
 ---
 
-## En curso — Flujo corto: bugs de la segunda pasada de QA (2026-10-03)
+## En curso — Fase 33: corrección de la tercera pasada de QA (2026-10-04)
+
+**Decisión del dueño (2026-10-04): se aplaza la fase de ingresos y gastos recurrentes** (ver más
+abajo) **hasta cerrar todo lo relacionado con QA.** Son suficientes hallazgos como para dedicarles
+una fase con el **workflow completo** de `docs/WORKFLOW.md` (`/grilling` → `/to-spec` →
+`/analyze-spec` → implementar → `/run-tests` → `/code-review` → `/analyze-spec` de cierre → docs
+de cierre → PR), no un flujo corto. La numeración pasa: esta es la **Fase 33**; recurrentes queda
+como **Fase 34 probable**.
+
+La tercera pasada (stack dev aislado + Playwright con Chromium, cubriendo lo que la segunda dejó
+pendiente: escritura en la UI, onboarding, modales, estados de error, push/alertas de punta a
+punta y el borde domingo/lunes del resumen semanal) encontró **QA-034 a QA-041**. Reporte con
+pasos, causas y capturas: `.scratch/qa-2026-10-03/REPORTE_QA_3.md`. Lo que sí quedó verificado en
+verde: saldos tras crear/editar/borrar desde la UI, onboarding con cuenta nueva, alertas 80 %/100 %
+sin duplicados y push real con FCM.
+
+**Estado: pendiente — arrancar con `/grilling`.** Los hallazgos entran a `docs/TODO.md` como
+`QA-034+` al implementar.
+
+| Ítem | Qué pasa | Lado |
+|---|---|---|
+| **QA-037** 🔴 | El job del lunes 07:00 (Bogotá) resume la semana que *acaba de empezar* (`weekly_summary.py:160-163`, cron en `main.py:162`): llega "no registraste gastos" aunque la semana cerrada tuviera gasto (W41 = 0 vs W40 = 1.850.000 en dev). Los tests no lo cazan porque llaman a la función con la fecha ya elegida. | backend |
+| **QA-038** 🟠 | `_limites_semana` devuelve límites *naive* en hora de Bogotá y se comparan contra `Transaction.date` (`timestamptz`, UTC): ventana corrida 5 h. Caso reproducido: total 57 en vez de 60 (entra un gasto de la semana anterior, se pierde uno propio). Se corrige junto con QA-037, mismo archivo. | backend |
+| **QA-040** 🟠 | Con el backend caído, `/accounts`, `/categories` y `/analytics` muestran datos vacíos sin error ni "Reintentar"; Cuentas enseña "Balance Total $ 0" como si fuera real. Mismo patrón que QA-004/QA-010. | frontend |
+| **QA-034** 🟡 | En móvil (390 px) el aviso "Instalar" (PWA, `fixed z-50`) tapa el botón "Guardar" del modal de transacción. | frontend |
+| **QA-035** 🟡 | "Nueva transacción" no valida la cuenta: manda `account_id: 0`, el backend responde 404 y el toast dice "no existe o no te pertenece". | frontend |
+| **QA-036** 🟡 | En móvil el panel de notificaciones (`absolute left-0 w-80` anclado a la campana del sidebar) se sale 68 px de la pantalla y corta los textos. | frontend |
+| **QA-039** 🟡 | El confirm de borrado (`useConfirmStore`) no tiene `role="dialog"`/`alertdialog` ni `aria-modal` y el foco no entra; la corrección de QA-014 solo cubrió `ModalShell`. | frontend |
+| **QA-041** 🟢 | Voseo en onboarding/Ajustes frente al tuteo del resto, `?onboarding=1` que se arrastra a la URL del dashboard, mayúsculas CSS en "De"/"P. M.". | frontend |
+
+**Para el `/grilling`** (decisiones que el reporte no cierra): ¿QA-037 se arregla pasando
+`ahora − 7 días` en el job o cambiando la semántica de `build_weekly_summary`?; ¿y qué hacer con
+los resúmenes ya enviados con `period_key` de la semana equivocada (idempotencia por
+`(user, type, period_key)`)? ¿Para QA-040 un componente de error compartido o repetir el patrón
+de presupuestos? ¿Para QA-034/QA-036 se ajusta el layout o el banner se oculta con un modal
+abierto? ¿El confirm de QA-039 se unifica con `ModalShell`? ¿La copy de QA-041 se unifica a
+tuteo? El desfase UTC/Bogotá visible en la fecha por defecto del modal sigue siendo deuda
+aceptada (QA-032), salvo que el grilling decida otra cosa.
+
+**Cierre esperado de la fase:** reproducir cada hallazgo con un test o un paso de Playwright antes
+de corregirlo; para QA-037/QA-038, un test del *job* con `freeze_time` en lunes 12:00Z y los dos
+casos de borde de domingo; y una cuarta pasada corta de verificación en el stack dev aislado.
+Nunca verificar contra el stack por defecto de Docker, que es producción.
+
+---
+
+## Completado — Flujo corto: bugs de la segunda pasada de QA (2026-10-03)
 
 El flujo corto de QA-014/016/017/018 ya está mergeado. La segunda pasada del `qa-engineer`
 (352 tests en verde, lint limpio, saldos de las 65 cuentas dev cuadrados) encontró QA-023 a
@@ -76,11 +122,9 @@ QA-033. Todo lo corregible sin decisión de producto se agrupa en **un solo fluj
 
 Decisiones tomadas al implementar: **QA-024 → lápida** (la fila borrada es tombstone); **QA-028 → unicidad por (usuario, type)**; **moneda minúsculas → 422** (no normalizar). Aprobadas en el flujo corto, sin `/grilling` adicional.
 
-**Pendiente de verificar (la segunda pasada no lo cubrió):** escritura en la UI (crear/editar
-transacciones, onboarding con cuenta nueva, modales, estados de error y carga), push y alertas de
-presupuesto de punta a punta, y el borde domingo/lunes del resumen semanal. El MCP de Playwright no
-tiene Chromium instalado; el agente usó `playwright-core` de la caché de npx. Instalar el browser
-antes de la siguiente pasada, o verificar esos flujos a mano al cerrar este flujo corto.
+**Lo que la segunda pasada no cubrió** (escritura en la UI, onboarding, modales, estados de error y
+carga, push y alertas de punta a punta, borde domingo/lunes del resumen semanal) **se verificó en
+la tercera pasada (2026-10-04)** con Playwright ya con Chromium — ver la Fase 33 arriba.
 
 **Decisiones de producto separadas (no entran al flujo corto):**
 
@@ -99,9 +143,10 @@ stack por defecto de Docker, que es producción.
 
 ---
 
-## Siguiente fase probable — Fase 33: ingresos y gastos recurrentes
+## Siguiente fase probable — Fase 34: ingresos y gastos recurrentes
 
-Primera fila de prioridad Alta del backlog (abajo). El scheduler ya existe desde la Fase 14. Antes
+**Aplazada (2026-10-04) hasta cerrar la Fase 33 (QA).** Era la Fase 33; se renumera, el contenido no
+cambia. Primera fila de prioridad Alta del backlog (abajo). El scheduler ya existe desde la Fase 14. Antes
 de implementar toca `/grilling` → `/to-spec` → `/analyze-spec`. Preguntas abiertas: ¿la regla
 genera la transacción sola o propone una para confirmar?; qué hacer con los días en que el
 scheduler no corrió; frecuencia (mensual, semanal, día 31); cómo se edita o se salta una
@@ -157,7 +202,7 @@ la QA y la infraestructura de tests) y no consumieron filas de esta tabla, salvo
 
 | Prioridad | Feature | Nota |
 |---|---|---|
-| Alta | **Automatización de ingresos/gastos recurrentes** | **Fase 33 probable.** El scheduler ya existe desde Fase 14. Reduce fricción de captura, que es tiempo que se puede invertir en mirar los datos en vez de cargarlos. |
+| Alta | **Automatización de ingresos/gastos recurrentes** | **Fase 34 probable** (aplazada tras la Fase 33 de QA). El scheduler ya existe desde Fase 14. Reduce fricción de captura, que es tiempo que se puede invertir en mirar los datos en vez de cargarlos. |
 | Alta | **Sinking funds** (gastos distribuidos en cuotas mensuales virtuales) | Validado por YNAB para presupuesto personal serio. Encaja directo con "cuánto me queda" del dashboard de flujo. |
 | Media | **Filtro por categoría** (dashboard/Analítica) | Separado de la Fase 29 el 2026-09-26 — el dueño quiere revisarlo más a fondo antes de decidir alcance (¿una o varias categorías? ¿qué gráficos filtra? interacción con "ocultar categoría" de la dona). `GET /transactions/` ya soporta `category_id`; `category-distribution`/`cashflow-series` todavía no. |
 | Media | **Reembolsos como gasto negativo en toda la app** | Sale de la Q15 del grilling de la Fase 31. Hoy un ingreso en una categoría de gasto (p. ej. los amigos devuelven su parte del restaurante) solo se netea en la dona de Analítica (`?neto=true`): la tarjeta del dashboard y los KPIs lo cuentan como ingreso, y los presupuestos y sus alertas cuentan el gasto completo. Tratarlo como gasto negativo toca 5–6 cálculos del backend y varios contratos — a definir en su propio `/grilling`. |
