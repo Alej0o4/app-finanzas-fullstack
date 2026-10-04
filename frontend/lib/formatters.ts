@@ -1,3 +1,5 @@
+import { safeTimezone } from './dates';
+
 interface FormatCurrencyOptions {
   /**
    * Fase 31 F7 (Q8, QA-007): fuerza 0 decimales (mínimo y máximo), para ejes/etiquetas
@@ -31,24 +33,30 @@ export function formatCurrency(
   }).format(amount);
 }
 
+/**
+ * Fase 34 F7: `timeZone` (zona IANA del usuario, `useTimezone().displayTimezone`) fija en qué
+ * zona se muestra el instante; sin ella `Intl` usa la del dispositivo. Un nombre inválido cae a
+ * la del dispositivo en vez de lanzar.
+ */
 export function formatDate(
   isoString: string,
   locale = 'es-CO',
+  timeZone?: string,
   options?: Intl.DateTimeFormatOptions
 ): string {
   const date = new Date(isoString);
+  const base: Intl.DateTimeFormatOptions = options ?? {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  };
 
-  return new Intl.DateTimeFormat(
-    locale,
-    options ?? {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    }
-  ).format(date);
+  return new Intl.DateTimeFormat(locale, { ...base, timeZone: safeTimezone(timeZone) }).format(
+    date
+  );
 }
 
 /**
@@ -70,6 +78,6 @@ export function capitalizeFirst(value: string): string {
  * default lo haría inconsistente (con `options` no se capitalizaría, sin ellos sí) y rompería la
  * expectativa de quien solo quiere la fecha cruda.
  */
-export function formatDateLabel(isoString: string, locale = 'es-CO'): string {
-  return capitalizeFirst(formatDate(isoString, locale));
+export function formatDateLabel(isoString: string, locale = 'es-CO', timeZone?: string): string {
+  return capitalizeFirst(formatDate(isoString, locale, timeZone));
 }

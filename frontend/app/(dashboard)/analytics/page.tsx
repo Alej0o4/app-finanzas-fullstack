@@ -7,6 +7,8 @@ import type { CashflowSeries, CategoryDistributionItem } from '@/types/api';
 import { api } from '@/lib/api';
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser';
 import { useAccounts } from '@/lib/hooks/useAccounts';
+import { useTimezone } from '@/lib/hooks/useTimezone';
+import { todayInZone } from '@/lib/dates';
 import { useState, useMemo, Suspense } from 'react';
 import { useQueryParamState, useQueryParamsBatch } from '@/hooks/useQueryParamState';
 import {
@@ -15,7 +17,6 @@ import {
   formatPeriodLabel,
   normalizeRef,
   shiftPeriodRef,
-  utcDayKey,
 } from '@/lib/dateRanges';
 import CashflowChart, { type AnalyticsSeries } from '@/components/CashflowChart';
 import CategoryDonutChart, {
@@ -167,36 +168,31 @@ function AnalyticsPageContent() {
   // El primer término conserva el `enabled` que ya estaba: esperar a que `effectiveCurrency`
   // estuviera resuelto (depende de /users/me y /accounts/, que llegan en paralelo) era el fix
   // del bug de la vista en $0 al seleccionar una cuenta USD.
+  const { displayTimezone, ready: timezoneReady } = useTimezone();
   const waitingForAccounts = (!!currencyParam || accountFilter !== 'all') && accountsPending;
-  const queriesEnabled = !!effectiveCurrency && !waitingForAccounts;
+  const queriesEnabled = !!effectiveCurrency && !waitingForAccounts && timezoneReady;
 
-  // Un solo reloj para toda la vista: `buildDateRange` y `formatPeriodLabel` lo reciben
-  // inyectado (módulo puro, testeable) y, además, el `end_date` del período en curso va dentro de
-  // las query keys — si `now` cambiara en cada render, la key cambiaría también y TanStack
-  // vería una query nueva por render (refetch en loop).
-  //
-  // Por eso `now` es el inicio del día UTC y no el instante: se recalcula en cada render pero
-  // solo cambia de identidad cuando cambia el día (memo sobre `utcDayKey`). El período en curso
-  // termina al FIN de ese día (`endOfUtcDay`, dentro de `buildDateRange`), así que una
-  // transacción capturada por el FAB después de montar —el backend la guarda con `now()` real—
-  // entra en el refetch que dispara su invalidación. Antes `now` quedaba congelado al montar y
-  // el techo del período nunca avanzaba.
-  const todayKey = utcDayKey(new Date());
-  const now = useMemo(() => new Date(`${todayKey}T00:00:00Z`), [todayKey]);
+  // Un solo "hoy" para toda la vista (Fase 34 F2/F3): el día `YYYY-MM-DD` en la zona del usuario,
+  // inyectado en `buildDateRange`/`formatPeriodLabel` (módulo puro, testeable). Es un string, así
+  // que solo cambia de identidad cuando cambia el día y puede ir en query keys y deps de memo sin
+  // generar una key nueva por render. Hasta que `/users/me` carga (`ready`) las queries no se
+  // disparan: un rango calculado con la zona equivocada pediría y cachearía el período errado.
+  const today = todayInZone(displayTimezone);
 
   // Un solo rango de fechas para las 3 secciones (KPIs, barras, dona) — ver `buildDateRange`.
   const dateRange = useMemo(
-    () => buildDateRange(period, ref, customStart, customEnd, now),
-    [period, ref, customStart, customEnd, now]
+    () => buildDateRange(period, ref, customStart, customEnd, today),
+    [period, ref, customStart, customEnd, today]
   );
 
   // El rango personalizado no tiene período de calendario que navegar (User Story 39).
   const navigablePeriod = period === 'custom' ? null : period;
-  const activeRef = navigablePeriod ? normalizeRef(navigablePeriod, ref, now) : '';
-  const isCurrentPeriod = !!navigablePeriod && activeRef === normalizeRef(navigablePeriod, '', now);
+  const activeRef = navigablePeriod ? normalizeRef(navigablePeriod, ref, today) : '';
+  const isCurrentPeriod =
+    !!navigablePeriod && activeRef === normalizeRef(navigablePeriod, '', today);
   const periodLabel = useMemo(
-    () => formatPeriodLabel(period, ref, customStart, customEnd, now),
-    [period, ref, customStart, customEnd, now]
+    () => formatPeriodLabel(period, ref, customStart, customEnd, today),
+    [period, ref, customStart, customEnd, today]
   );
 
   const handlePeriodChange = (next: string) => {
@@ -214,11 +210,11 @@ function AnalyticsPageContent() {
 
   const handleShiftPeriod = (delta: -1 | 1) => {
     if (!navigablePeriod) return;
-    const nextRef = shiftPeriodRef(navigablePeriod, activeRef, delta, now);
+    const nextRef = shiftPeriodRef(navigablePeriod, activeRef, delta, today);
     // El período actual va sin `ref` (default nunca escrito en la URL, Fase 13 §13.6): si `▶`
     // aterriza en él se borra el param, igual que "Volver al período actual". Escribirlo dejaría
     // el link fijado a este período después de que termine.
-    const landsOnCurrent = nextRef === normalizeRef(navigablePeriod, '', now);
+    const landsOnCurrent = nextRef === normalizeRef(navigablePeriod, '', today);
     setPeriodParams({ ref: landsOnCurrent ? null : nextRef });
   };
 

@@ -304,7 +304,7 @@ export interface paths {
     /**
      * Obtener Resumen Mensual Cuenta
      * @description Balance del mes de una sola cuenta (Fase 17 §17.1.4, Decisión 17.1.4).
-     *     Actualizado Fase 30 B2: usa `core.periods.rango_mes_utc` para el techo del mes en
+     *     Actualizado Fase 30 B2: usa `core.periods.rango_mes` para el techo del mes en
      *     curso = "ahora", igual que `dashboard/summary`. Fase 31 (B9): mismo criterio que
      *     `DashboardSummary.monthly_flow_balance` desde esta fase — tampoco depende de
      *     ningún valor declarado por el usuario, y el balance nunca es `null`.
@@ -813,8 +813,8 @@ export interface components {
      *
      *     Igual que `DashboardSummary.monthly_flow_balance` desde Fase 31 (Decisión B9): se
      *     deriva íntegramente de transacciones reales de la cuenta en el mes en curso, sin
-     *     ningún dato declarado de por medio — `monthly_flow_balance` nunca es `None`, mínimo
-     *     0.00. Antes de esa fase la comparación era con un `monthly_flow_balance` que sí
+     *     ningún dato declarado de por medio — `monthly_flow_balance` nunca es `None` (vale
+     *     0.00 sin movimientos y puede ser negativo). Antes de esa fase la comparación era con un `monthly_flow_balance` que sí
      *     podía ser `null`; ya no es el caso.
      */
     AccountMonthlySummary: {
@@ -1029,31 +1029,38 @@ export interface components {
       /** Currency */
       currency: string;
     };
-    /** BudgetResponse */
+    /**
+     * BudgetResponse
+     * @description A propósito NO hereda de `BudgetBase` (QA-023), aunque declare los mismos campos.
+     *
+     *     `BudgetResponse` heredaba los `ge`/`le` de `BudgetBase.month`/`year`, así que una fila
+     *     con un período fuera de rango — basura que dejó entrar una versión anterior del endpoint
+     *     al no validar el query param — no se podía serializar: `ResponseValidationError` en el
+     *     `GET /budgets/`, o sea un **500 permanente** que dejaba la página de presupuestos en
+     *     skeleton para siempre, sin importar cuántas veces se recargara. Un response model que
+     *     valida convierte cualquier fila heredada en una bomba de 500; las restricciones
+     *     (`gt=0`, `decimal_places`/`max_digits`, el patrón de la moneda, el rango del período)
+     *     son de la FRONTERA DE ENTRADA y quedan en `BudgetBase`/`BudgetCreate`, que es lo que
+     *     valida `POST /budgets/` y `PUT /budgets/{id}`.
+     *
+     *     Los campos son los mismos de `BudgetBase` y en el mismo orden (el orden de las claves
+     *     del JSON no cambia), pero SIN validators. `amount_limit` va como `Decimal` pelado: los
+     *     valores salen de `Numeric(14,2)` y no pueden desbordar, mientras que un `gt=0` acá sí
+     *     podría tumbar el listado entero con una fila rara — el mismo criterio de no validar en
+     *     el response que arriba, aplicado también a un campo que hoy es inofensivo.
+     */
     BudgetResponse: {
-      /**
-       * Amount Limit
-       * @description El presupuesto debe ser mayor a cero
-       */
+      /** Amount Limit */
       amount_limit: string;
-      /**
-       * Currency
-       * @default COP
-       */
+      /** Currency */
       currency: string;
-      /**
-       * Month
-       * @description Mes válido entre 1 y 12
-       */
+      /** Month */
       month: number;
       /** Year */
       year: number;
       /** Category Id */
       category_id: number;
-      /**
-       * Is Recurring
-       * @default false
-       */
+      /** Is Recurring */
       is_recurring: boolean;
       /** Id */
       id: number;
@@ -1167,6 +1174,8 @@ export interface components {
     GoogleLoginRequest: {
       /** Id Token */
       id_token: string;
+      /** Timezone */
+      timezone?: string | null;
     };
     /** HTTPValidationError */
     HTTPValidationError: {
@@ -1252,6 +1261,8 @@ export interface components {
       preferred_theme?: string | null;
       /** Weekly Summary Enabled */
       weekly_summary_enabled?: boolean | null;
+      /** Timezone */
+      timezone?: string | null;
       /**
        * Apply To Default Account
        * @default false
@@ -1419,6 +1430,8 @@ export interface components {
       full_name: string;
       /** Password */
       password: string;
+      /** Timezone */
+      timezone?: string | null;
     };
     /**
      * UserDeleteRequest
@@ -1465,6 +1478,11 @@ export interface components {
        * @default dark
        */
       preferred_theme: string;
+      /**
+       * Timezone
+       * @default America/Bogota
+       */
+      timezone: string;
       /** Monthly Income */
       monthly_income?: string | null;
       /**
@@ -1769,7 +1787,9 @@ export interface operations {
         limit?: number;
         account_id?: number | null;
         category_id?: number | null;
+        /** @description Día `YYYY-MM-DD` (interpretado en la zona horaria del usuario; `end_date` incluye todo ese día) o datetime ISO 8601 completo (instante; `end_date` inclusivo). */
         start_date?: string | null;
+        /** @description Día `YYYY-MM-DD` (interpretado en la zona horaria del usuario; `end_date` incluye todo ese día) o datetime ISO 8601 completo (instante; `end_date` inclusivo). */
         end_date?: string | null;
       };
       header?: never;
@@ -2502,7 +2522,9 @@ export interface operations {
   obtener_presupuestos_api_v1_budgets__get: {
     parameters: {
       query?: {
+        /** @description Mes del período a listar, entre 1 y 12 */
         month?: number | null;
+        /** @description Año del período a listar */
         year?: number | null;
       };
       header?: never;
@@ -2633,9 +2655,9 @@ export interface operations {
   obtener_resumen_api_v1_dashboard_summary_get: {
     parameters: {
       query?: {
-        /** @description Año del mes a consultar (UTC); enviar junto a `month`, o ninguno */
+        /** @description Año del mes a consultar (zona del usuario); enviar junto a `month`, o ninguno */
         year?: number | null;
-        /** @description Mes a consultar entre 1 y 12 (UTC); enviar junto a `year`, o ninguno */
+        /** @description Mes a consultar entre 1 y 12 (zona del usuario); enviar junto a `year`, o ninguno */
         month?: number | null;
       };
       header?: never;
@@ -2667,9 +2689,9 @@ export interface operations {
   obtener_progreso_presupuestos_api_v1_dashboard_budgets_progress_get: {
     parameters: {
       query?: {
-        /** @description Año del mes a consultar (UTC); enviar junto a `month`, o ninguno */
+        /** @description Año del mes a consultar (zona del usuario); enviar junto a `month`, o ninguno */
         year?: number | null;
-        /** @description Mes a consultar entre 1 y 12 (UTC); enviar junto a `year`, o ninguno */
+        /** @description Mes a consultar entre 1 y 12 (zona del usuario); enviar junto a `year`, o ninguno */
         month?: number | null;
         /** @description Si se pasa, solo devuelve presupuestos en esa moneda */
         currency?: string | null;
@@ -2703,7 +2725,9 @@ export interface operations {
   obtener_serie_flujo_caja_api_v1_dashboard_cashflow_series_get: {
     parameters: {
       query: {
+        /** @description Día `YYYY-MM-DD` (interpretado en la zona horaria del usuario; `end_date` incluye todo ese día) o datetime ISO 8601 completo (instante; `end_date` inclusivo). */
         start_date: string;
+        /** @description Día `YYYY-MM-DD` (interpretado en la zona horaria del usuario; `end_date` incluye todo ese día) o datetime ISO 8601 completo (instante; `end_date` inclusivo). */
         end_date: string;
         /** @description Agrupar por 'day' o 'month' */
         period?: string;
@@ -2741,7 +2765,9 @@ export interface operations {
   obtener_distribucion_categorias_api_v1_dashboard_category_distribution_get: {
     parameters: {
       query: {
+        /** @description Día `YYYY-MM-DD` (interpretado en la zona horaria del usuario; `end_date` incluye todo ese día) o datetime ISO 8601 completo (instante; `end_date` inclusivo). */
         start_date: string;
+        /** @description Día `YYYY-MM-DD` (interpretado en la zona horaria del usuario; `end_date` incluye todo ese día) o datetime ISO 8601 completo (instante; `end_date` inclusivo). */
         end_date: string;
         /** @description Filtrar por tipo de transacción */
         type?: string;

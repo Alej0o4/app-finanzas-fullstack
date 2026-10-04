@@ -148,6 +148,9 @@ export interface UserResponse {
    *  false para cuentas creadas solo con Google. Computado server-side desde
    *  `password_hash is not None` (Decisión D4), sin migración. */
   has_password: boolean;
+  /** Fase 34 §B3 — zona IANA del usuario (default `America/Bogota`); única fuente de día/semana/
+   *  mes del backend. Leer con `useTimezone()`. */
+  timezone: string;
 }
 
 export interface PreferencesUpdatePayload {
@@ -155,6 +158,8 @@ export interface PreferencesUpdatePayload {
   preferred_locale?: string;
   preferred_theme?: string;
   weekly_summary_enabled?: boolean;
+  /** Fase 34 §B4 — nombre IANA válido; inválida → 422. No toca movimientos, solo reagrupa. */
+  timezone?: string;
   /** Fase 22 §22.1 (Decisiones A2/A5) — instrucción por-request: además de actualizar la
    *  preferencia, cascadear la moneda a la cuenta por defecto si sigue virgen (nombre
    *  "Cuenta principal", balance 0, sin transacciones). No persiste en el usuario. */

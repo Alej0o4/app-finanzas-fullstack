@@ -16,7 +16,9 @@ import {
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { currentUtcMonth, utcMonthRange } from '@/lib/dateRanges';
+import { monthOfDay, monthRange } from '@/lib/dateRanges';
+import { todayInZone } from '@/lib/dates';
+import { useTimezone } from '@/lib/hooks/useTimezone';
 import { formatCurrency, formatDateLabel, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useConfirmStore } from '@/store/useConfirmStore';
@@ -54,14 +56,13 @@ export default function AccountDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  // Fechas del mes en curso (Fase 29 §F1): los límites salen del helper compartido de
-  // `lib/dateRanges.ts`, que ancla todo en UTC con `Date.UTC`. Antes se armaban con getters
-  // locales (`new Date(now.getFullYear(), now.getMonth(), 1)`) y recién ahí se serializaban a
-  // UTC — esa mezcla dejaba el inicio de mes desplazado 5 horas en America/Bogota y afuera las
-  // transacciones del día 1 (H4, el mismo bug de borde de mes que tenía el dashboard).
-  const now = new Date();
-  const { year, month } = currentUtcMonth(now);
-  const { start_date: monthStartISO, end_date: todayISO } = utcMonthRange(year, month, now);
+  // Rango del mes en curso como días `YYYY-MM-DD` (Fase 34 F2/F3): "hoy" en la zona del usuario y
+  // `monthRange` de `lib/dateRanges.ts`; el backend interpreta los días en esa misma zona. Hasta
+  // que `/users/me` carga (`timezoneReady`) la query que depende del rango no se dispara.
+  const { displayTimezone, ready: timezoneReady } = useTimezone();
+  const today = todayInZone(displayTimezone);
+  const { year, month } = monthOfDay(today);
+  const { start_date: monthStartDay, end_date: todayDay } = monthRange(year, month, today);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -126,15 +127,15 @@ export default function AccountDetailPage() {
       (
         await api.get('dashboard/category-distribution', {
           params: {
-            start_date: monthStartISO,
-            end_date: todayISO,
+            start_date: monthStartDay,
+            end_date: todayDay,
             type: 'expense',
             account_id: Number(id),
             currency: account?.currency,
           },
         })
       ).data,
-    enabled: !!account, // necesita account.currency ya cargado
+    enabled: !!account && timezoneReady, // necesita account.currency y la zona del usuario
   });
 
   // Progreso de presupuestos filtrado a la moneda de la cuenta (Decisión 17.1.3/P4: Budget no

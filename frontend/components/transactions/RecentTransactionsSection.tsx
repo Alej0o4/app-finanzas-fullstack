@@ -6,6 +6,7 @@ import { PieChart } from 'lucide-react';
 import Link from 'next/link';
 import { formatCurrency, formatDateLabel } from '@/lib/utils';
 import { useTransactions } from '@/lib/hooks/useTransactions';
+import { useTimezone } from '@/lib/hooks/useTimezone';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import EmptyState from '@/components/ui/EmptyState';
@@ -14,8 +15,10 @@ import Skeleton from '@/components/ui/Skeleton';
 import type { DateRange } from '@/lib/dateRanges';
 
 interface RecentTransactionsSectionProps {
-  /** Rango ISO del mes visible, ya anclado en UTC por `utcMonthRange` (Fase 29 §F1). */
+  /** Rango del mes visible como días `YYYY-MM-DD`, de `monthRange` (Fase 34 F3). */
   range: Pick<DateRange, 'start_date' | 'end_date'>;
+  /** Fase 34 F1: `false` hasta que se conoce la zona del usuario (el rango depende de ella). */
+  enabled?: boolean;
   /** Nombre del mes en minúscula (`"agosto"`): título, subtítulo y mensajes lo nombran. */
   monthName: string;
   /** Link a `/transactions` filtrado al mes completo (trae `preset=custom`, H5). */
@@ -35,10 +38,12 @@ interface RecentTransactionsSectionProps {
  */
 export default function RecentTransactionsSection({
   range,
+  enabled = true,
   monthName,
   viewAllHref,
 }: RecentTransactionsSectionProps) {
   const { config } = useAppConfig();
+  const { displayTimezone } = useTimezone();
 
   // `useMemo` porque `params` entra en la query key: un objeto nuevo en cada render
   // generaría una key distinta y un refetch por render.
@@ -50,6 +55,7 @@ export default function RecentTransactionsSection({
   const { data, isLoading, isError, refetch } = useTransactions(params, {
     // Fase 29 §F5.1 (User Story 9): la lista no vuelve al skeleton al navegar de mes.
     placeholderData: keepPreviousData,
+    enabled,
   });
 
   const transactions = data?.items ?? [];
@@ -75,7 +81,7 @@ export default function RecentTransactionsSection({
       </div>
 
       <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
-        {isLoading ? (
+        {isLoading || !enabled ? (
           <div className="divide-border/40 divide-y">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-center justify-between gap-4 p-4 sm:px-6">
@@ -115,7 +121,7 @@ export default function RecentTransactionsSection({
                       {tx.description || categoryNames.get(tx.category_id) || 'Sin categoría'}
                     </p>
                     <p className="text-text-muted mt-0.5 text-xs">
-                      {formatDateLabel(tx.date, config.locale)}
+                      {formatDateLabel(tx.date, config.locale, displayTimezone)}
                     </p>
                   </div>
                   <p

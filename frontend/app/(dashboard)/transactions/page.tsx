@@ -16,26 +16,19 @@ import EditTransactionModal from '@/components/modals/EditTransactionModal';
 import Skeleton from '@/components/ui/Skeleton';
 import type { Transaction, UpdateTransactionPayload } from '@/types/api';
 import { currentCalendarPeriodRange } from '@/lib/dateRanges';
+import { todayInZone } from '@/lib/dates';
+import { useTimezone } from '@/lib/hooks/useTimezone';
 
 const PAGE_SIZE = 50;
 
-const formatDateBoundaryForBackend = (value: string, boundary: 'start' | 'end') => {
-  if (!value) {
-    return null;
-  }
-
-  return boundary === 'start' ? `${value}T00:00:00` : `${value}T23:59:59`;
-};
-
-const getPresetDates = (preset: Exclude<DatePreset, 'custom'>) => {
+const getPresetDates = (preset: Exclude<DatePreset, 'custom'>, today: string) => {
   if (preset === 'all') {
     return { startDate: '', endDate: '' };
   }
 
   // Usa currentCalendarPeriodRange (F1) para week/month/year — misma lógica que Analítica
-  // y el dashboard. El fin es "hoy" (endOfUtcDay), no el domingo ni fin de mes calendario.
-  const now = new Date();
-  const range = currentCalendarPeriodRange(preset, now);
+  // y el dashboard. El fin es "hoy" en la zona del usuario, no el domingo ni fin de mes calendario.
+  const range = currentCalendarPeriodRange(preset, today);
   return { startDate: range.start_date, endDate: range.end_date };
 };
 
@@ -77,23 +70,32 @@ function TransactionsPageContent() {
   const datePreset: DatePreset =
     rawDatePreset === 'all' && (startDate || endDate) ? 'custom' : rawDatePreset;
   const setFilterParams = useQueryParamsBatch();
+  // Fase 34 F1/F3: "hoy" en la zona del usuario para los presets; la lista no se pide hasta que
+  // se conoce la zona (los días del rango se interpretan en ella).
+  const { displayTimezone, ready: timezoneReady } = useTimezone();
+  const today = todayInZone(displayTimezone);
 
   // Un link compartido puede traer solo `preset` explícito (ej. ?preset=month&category=3):
   // se derivan las fechas del preset una sola vez al montar, para que la vista reproducida
   // sea exactamente la misma que generó el link. Cuando la URL trae start/end, mandan ellos.
+  // Fase 34: se espera a conocer la zona del usuario (`timezoneReady`) para no sembrar "hoy" del
+  // dispositivo, y se siembra una sola vez (`seededRef`).
+  const seededRef = useRef(false);
   useEffect(() => {
+    if (!timezoneReady || seededRef.current) return;
+    seededRef.current = true;
     if (
       !startDate &&
       !endDate &&
       (datePreset === 'week' || datePreset === 'month' || datePreset === 'year')
     ) {
-      const nextDates = getPresetDates(datePreset);
+      const nextDates = getPresetDates(datePreset, today);
       setFilterParams({ start: nextDates.startDate || null, end: nextDates.endDate || null });
     }
     // Seed de montaje: refleja intencionalmente el preset de la URL inicial, no los cambios
     // posteriores de filtros (que ya pasan por applyPreset/inputs y escriben start/end).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [timezoneReady]);
 
   // Edit modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -116,8 +118,10 @@ function TransactionsPageContent() {
     setTotal(0);
   };
 
-  const startDateParam = formatDateBoundaryForBackend(startDate, 'start');
-  const endDateParam = formatDateBoundaryForBackend(endDate, 'end');
+  // Fase 34 F3: los límites viajan como días `YYYY-MM-DD` (el valor del `<input type="date">` /
+  // del preset), sin sufijo de hora ni conversión: el backend los resuelve en la zona del usuario.
+  const startDateParam = startDate || null;
+  const endDateParam = endDate || null;
 
   // Fase 31 F6 (Q7, QA-010): rango invertido — comparación lexicográfica alcanza porque
   // las dos fechas son 'YYYY-MM-DD'. Con el rango invertido la consulta no se ejecuta
@@ -136,7 +140,7 @@ function TransactionsPageContent() {
   }, [skip, startDateParam, endDateParam, categoryFilter, accountFilter]);
 
   const { data, isFetching, isError, error, refetch } = useTransactions(params, {
-    enabled: !dateRangeInverted,
+    enabled: !dateRangeInverted && timezoneReady,
   });
 
   const { data: accounts } = useAccounts();
@@ -186,12 +190,13 @@ function TransactionsPageContent() {
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   const hasMore = total > allItems.length;
-  const loadingInitial = allItems.length === 0 && isFetching && !dateRangeInverted;
+  const loadingInitial =
+    allItems.length === 0 && (isFetching || !timezoneReady) && !dateRangeInverted;
   const loadingMore = isFetching && allItems.length > 0;
   const initialLoadFailed = isError && allItems.length === 0 && !dateRangeInverted;
 
   const applyPreset = (preset: Exclude<DatePreset, 'custom'>) => {
-    const nextDates = getPresetDates(preset);
+    const nextDates = getPresetDates(preset, today);
     resetPagination();
     setFilterParams({
       start: nextDates.startDate || null,
