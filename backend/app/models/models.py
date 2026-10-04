@@ -27,6 +27,8 @@ class User(Base, SoftDeleteMixin):
     preferred_theme = Column(String(10), default="dark")
     # Fase 14 §14.1.1: toggle opt-out (default=True) para el resumen semanal automático.
     weekly_summary_enabled = Column(Boolean, nullable=False, default=True)
+    # Fase 34 §B1: zona IANA del usuario; única fuente para día/semana/mes de todo cálculo.
+    timezone = Column(String(64), nullable=False, default="America/Bogota", server_default="America/Bogota")
     email_verified = Column(Boolean, nullable=False, default=False)
     monthly_income = Column(Numeric(14, 2), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

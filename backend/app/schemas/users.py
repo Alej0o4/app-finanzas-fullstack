@@ -27,6 +27,7 @@ class UserResponse(UserBase):
     preferred_currency: str = "COP"
     preferred_locale: str = "es-CO"
     preferred_theme: str = "dark"
+    timezone: str = "America/Bogota"  # Fase 34 §B3
     monthly_income: Decimal | None = None
     has_transaction_history: bool = False  # Fase 19 §19.1 — solo se calcula en GET /users/me
     has_password: bool = False  # 🆕 Fase 22 §22.4 (Decisión D4)
