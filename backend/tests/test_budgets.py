@@ -759,3 +759,22 @@ class TestApagarRecurrencia:
         ajeno = client.get("/api/v1/budgets/", params={"month": 3, "year": 2030}, headers=other_user["headers"])
         assert ajeno.status_code == 200
         assert ajeno.json() == []
+
+    def test_desmarcar_con_choque_de_indice_unico_devuelve_400(self, client, auth_headers, make_category):
+        categoria = make_category(auth_headers, name="Mercado", type="expense")
+        enero = self._post(client, auth_headers, categoria, 1, 2030)
+        self._post(client, auth_headers, categoria, 1, 2030, currency="USD", amount="50.00")
+
+        response = client.put(
+            f"/api/v1/budgets/{enero['id']}",
+            json={
+                "amount_limit": "800.00",
+                "currency": "USD",
+                "month": 1,
+                "year": 2030,
+                "category_id": categoria["id"],
+                "is_recurring": False,
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 400, response.text
