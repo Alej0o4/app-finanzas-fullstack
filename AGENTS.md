@@ -30,7 +30,7 @@ mes y cuánto me queda?"*). Ambos conviven — los saldos de cuentas siguen visi
 secundaria — pero la cifra principal del dashboard es el flujo mensual
 (`monthly_income − gastos del mes`).
 
-**Las Fases 0–34 están completas** (2026-07-06 a 2026-10-04) — ver `docs/CHANGELOG.md` para la
+**Las Fases 0–35 están completas** (2026-07-06 a 2026-10-17) — ver `docs/CHANGELOG.md` para la
 historia completa y `docs/specs/fase_NN_spec.md` para el detalle de implementación de cada
 fase. En producción, no solo planeado: el dashboard de flujo, alertas de presupuesto + push
 notifications, el resumen semanal, el onboarding de 3 minutos, atajos móviles con API keys,
@@ -86,10 +86,20 @@ lo comprometido en sobres**. El flujo sigue siendo la cifra principal del dashbo
 disponible real, **36** gasto contra sobre, **37** recurrentes + calendario de cargos anuales (era
 la 35), **38** CDT, **39** "págate primero", **40** cierre de mes con puntaje. Regla ya decidida:
 el **fondo de emergencia solo cuenta dinero líquido** y el CDT es un módulo aparte, nunca parte del
-fondo. **Nada de esto está implementado**; cada feature con su justificación, el diseño base y las
+fondo. **La Fase 35 (2026-10-17) está implementada** y lo demás no; cada feature con su justificación, el diseño base y las
 decisiones abiertas están en [docs/VISION_FINANZAS_RESPONSABLES.md](docs/VISION_FINANZAS_RESPONSABLES.md)
 (los nombres de tablas y columnas ahí son propuestas sin verificar contra `models.py`). La Fase 35
 original (recurrentes) pasó a la Fase 37; las menciones anteriores a esta fecha son históricas.
+
+**Fase 35 — sobres y disponible real (hecho operativo vigente):** `Fund`/`FundEntry`
+(`/api/v1/funds`, `app/services/funds.py`, libro append-only: el saldo de un sobre es
+`SUM(fund_entries.amount)`, sin columna `balance`) son una capa de asignación sobre las cuentas —
+aportar o retirar **no** crea transacción ni toca `Account.balance`/`ledger.py`.
+`GET /dashboard/summary` suma `accounts_total`, `committed` y `free_to_spend` (disponible real, por
+moneda, sobre todas las cuentas; puede ser negativo y **no bloquea nada**). El flujo mensual sigue
+siendo la cifra principal. Se hizo **sin `/grilling`**: las decisiones D1–D10 de
+`docs/specs/fase_35_spec.md` las tomó el agente y esperan revisión del dueño. Despliegue: `pg_dump`
+previo; la migración `d5f2a8c1e703` corre sola en el `CMD` de Docker.
 
 Algunos hechos operativos de esa historia siguen vigentes hoy, no son solo registro:
 
@@ -224,7 +234,7 @@ crea 3 cuentas, 76 transacciones y 6 presupuestos bajo `test@test.com` / `testpa
 ### Backend (`backend/app/`)
 
 Estructura en capas delgada con una capa de servicios naciente (`app/services/ledger.py`,
-agregada en la Fase 25 — el único módulo por ahora; la mayoría de la lógica de negocio sigue
+Fase 25, y `app/services/funds.py`, Fase 35; la mayoría de la lógica de negocio sigue
 directamente en los routers, a propósito a esta escala):
 
 - `main.py` — arma la app FastAPI, CORS (ver abajo), logging estructurado + middleware de
@@ -238,14 +248,16 @@ directamente en los routers, a propósito a esta escala):
   `ServiceUnavailableError`, más `AccountNotFoundError`/`CategoryNotFoundError`; empezó como
   piloto en la Fase 25 y se extendió a todos los routers en la Fase 28 — todo router lanza
   subclases de `DomainError`, no `HTTPException` directo), `seed.py`.
-- `models/models.py` — 13 modelos SQLAlchemy en un archivo (User, Account, Category,
-  HiddenCategory, Transaction, Budget, RefreshToken, PasswordResetToken,
+- `models/models.py` — 15 modelos SQLAlchemy en un archivo (User, Account, Category,
+  HiddenCategory, Transaction, Budget, Fund, FundEntry, RefreshToken, PasswordResetToken,
   EmailVerificationToken, IdempotencyKey, Notification, PushSubscription, ApiKey).
 - `schemas/` — schemas Pydantic divididos por dominio desde la Fase 25 (`accounts.py`,
   `api_keys.py`, `auth.py`, `budgets.py`, `categories.py`, `common.py`, `dashboard.py`,
   `notifications.py`, `push.py`, `transactions.py`, `users.py`); `schemas.py` se mantiene como
   shim de re-export para que el `from app.schemas import schemas` de cada router siga
   funcionando sin cambios.
+- `services/funds.py` — sobres y disponible real (Fase 35): funciones puras de ritmo/aporte requerido y
+  casos de uso con row-lock. Ver `backend/docs/ARCHITECTURE.md`.
 - `services/ledger.py` — la lógica compartida de delta de saldo de cuenta que usan
   `crear_transaccion`/`eliminar_transaccion`/`actualizar_transaccion` (Fase 25 §25.1), extraída
   de tres copias pegadas.

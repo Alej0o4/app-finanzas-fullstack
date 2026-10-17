@@ -1,5 +1,6 @@
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -132,6 +133,74 @@ class Budget(Base, SoftDeleteMixin):
             postgresql_where=text("deleted_at IS NULL"),
             sqlite_where=text("deleted_at IS NULL"),
         ),
+    )
+
+
+class Fund(Base):
+    """Sobre virtual (Fase 35 §B1): dinero comprometido pero no gastado, una capa de asignación
+    sobre una cuenta. No es una cuenta ni mueve dinero: el saldo es `SUM(fund_entries.amount)`.
+
+    Sin `SoftDeleteMixin`: "archivar" (`status`) es el borrado, y exige saldo 0 (D4).
+    `target_amount` XOR `target_months` lo garantiza un CHECK; `target_months` solo aplica al
+    fondo de emergencia (lo valida el servicio).
+    """
+
+    __tablename__ = "funds"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    kind = Column(String(20), nullable=False)
+    currency = Column(String(3), nullable=False)
+    target_amount = Column(Numeric(14, 2), nullable=True)
+    target_months = Column(Integer, nullable=True)
+    target_date = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(10), nullable=False, default="active", server_default="active")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now())
+
+    entries = relationship("FundEntry", back_populates="fund")
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('annual_expense', 'emergency', 'goal')", name="ck_funds_kind"),
+        CheckConstraint("status IN ('active', 'archived')", name="ck_funds_status"),
+        CheckConstraint("target_amount IS NULL OR target_amount > 0", name="ck_funds_target_amount_positive"),
+        CheckConstraint(
+            "target_months IS NULL OR (target_months >= 1 AND target_months <= 60)", name="ck_funds_target_months_range"
+        ),
+        CheckConstraint("(target_amount IS NOT NULL) <> (target_months IS NOT NULL)", name="ck_funds_target_xor"),
+        Index("ix_funds_user_id_status", "user_id", "status"),
+    )
+
+
+class FundEntry(Base):
+    """Libro append-only de un sobre (Fase 35 §B2): la API nunca actualiza ni borra filas.
+
+    `amount` con signo (aporte > 0, retiro < 0). `transaction_id` queda siempre NULL en la
+    Fase 35 (lo usa la Fase 36). Sin UNIQUE (fund_id, period): permite aportes extra.
+    """
+
+    __tablename__ = "fund_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    fund_id = Column(Integer, ForeignKey("funds.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    amount = Column(Numeric(14, 2), nullable=False)
+    type = Column(String(12), nullable=False)
+    occurred_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    period = Column(String(7), nullable=False)  # "YYYY-MM" en la zona del usuario
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True)
+    note = Column(String(200), nullable=True)
+
+    fund = relationship("Fund", back_populates="entries")
+
+    __table_args__ = (
+        CheckConstraint("type IN ('contribution', 'withdrawal', 'adjustment')", name="ck_fund_entries_type"),
+        CheckConstraint("amount <> 0", name="ck_fund_entries_amount_nonzero"),
+        CheckConstraint(
+            "(type <> 'contribution' OR amount > 0) AND (type <> 'withdrawal' OR amount < 0)",
+            name="ck_fund_entries_sign",
+        ),
+        Index("ix_fund_entries_fund_id_occurred_at", "fund_id", "occurred_at"),
     )
 
 

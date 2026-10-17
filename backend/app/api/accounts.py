@@ -198,7 +198,8 @@ def actualizar_cuenta(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ) -> models.Account:
-    cuenta = db.query(models.Account).filter(models.Account.id == account_id).first()
+    # Fase 35: FOR UPDATE serializa el cambio de moneda con crear/mover un sobre sobre la cuenta.
+    cuenta = db.query(models.Account).filter(models.Account.id == account_id).with_for_update().first()
     if not cuenta or cuenta.user_id != current_user.id:
         raise NotFoundError("La cuenta a actualizar no existe o no tienes permisos.")
 
@@ -221,6 +222,9 @@ def actualizar_cuenta(
         tiene_transacciones = db.query(models.Transaction).filter(models.Transaction.account_id == account_id).first()
         if tiene_transacciones:
             raise BadRequestError("No se puede cambiar la moneda de una cuenta con transacciones asociadas.")
+        # Fase 35: el sobre hereda la moneda de su cuenta al crearse y no la sigue si cambia.
+        if db.query(models.Fund).filter(models.Fund.account_id == account_id).first():
+            raise BadRequestError("No se puede cambiar la moneda de una cuenta que respalda sobres.")
         cuenta.currency = cuenta_actualizada.currency
 
     db.commit()
@@ -248,13 +252,22 @@ def toggle_destacada(
 def eliminar_cuenta(
     account_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
-    cuenta = db.query(models.Account).filter(models.Account.id == account_id).first()
+    # Fase 35: FOR UPDATE serializa el borrado con crear/mover un sobre sobre esta cuenta
+    # (esos toman el mismo lock), así no queda un sobre activo sobre una cuenta borrada.
+    cuenta = db.query(models.Account).filter(models.Account.id == account_id).with_for_update().first()
     if not cuenta or cuenta.user_id != current_user.id:
         raise NotFoundError("La cuenta a eliminar no existe o no tienes permisos.")
 
     tiene_transacciones = db.query(models.Transaction).filter(models.Transaction.account_id == account_id).first()
     if tiene_transacciones:
         raise BadRequestError("No se puede eliminar la cuenta porque tiene transacciones asociadas.")
+
+    # Fase 35 (D4): una cuenta con sobres activos quedaría sin respaldo para lo apartado.
+    tiene_sobres = (
+        db.query(models.Fund).filter(models.Fund.account_id == account_id, models.Fund.status == "active").first()
+    )
+    if tiene_sobres:
+        raise BadRequestError("No se puede eliminar la cuenta porque respalda sobres activos.")
 
     cuenta.deleted_at = datetime.now(UTC)
     db.commit()

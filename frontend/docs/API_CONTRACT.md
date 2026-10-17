@@ -295,6 +295,18 @@ en el frontend dice: "Se borra el de este mes. Si venía de meses anteriores, el
   `/accounts` vía `GET /accounts/summary`): sigue siendo el saldo **actual** de las cuentas,
   idéntico al de cualquier mes consultado (ver "Contratos de datos > Dashboard").
 
+### Sobres (Fase 35)
+
+Un sobre reserva dinero de una cuenta **sin moverlo**: aportar o retirar no crea transacción ni cambia el saldo de la cuenta. Todo cálculo (progreso, aporte sugerido, ritmo, runway, meta del fondo de emergencia) llega ya hecho; el frontend solo lo presenta. Detalle completo en `backend/docs/API_REFERENCE.md` ("Sobres").
+
+- `GET /api/v1/funds/?include_archived=false` — `Fund[]`.
+- `POST /api/v1/funds/` — body `{ name, kind, account_id, target_amount | target_months, target_date? }` (`target_amount` XOR `target_months`; `target_months` solo para `kind: 'emergency'`; `target_date` es un día `YYYY-MM-DD`). La moneda se hereda de la cuenta.
+- `GET /api/v1/funds/{id}` — `FundDetail` (= `Fund` + `entries`, los 50 movimientos más recientes).
+- `PUT /api/v1/funds/{id}` — parcial: `name`, `account_id` (misma moneda), `target_amount`/`target_months`, `target_date` (`null` la quita).
+- `POST /api/v1/funds/{id}/contributions` y `/withdrawals` — body `{ amount, note? }` (`amount` positivo; el signo lo pone el endpoint). `422` si el retiro excede el saldo; `409` si el sobre está archivado.
+- `POST /api/v1/funds/{id}/archive` (`409` con saldo distinto de 0) y `/unarchive`. No hay `DELETE`.
+- `GET /api/v1/dashboard/summary` suma `accounts_total`, `committed` y `free_to_spend` (ver "Contratos de datos > Dashboard").
+
 ### Notificaciones (Fase 13 §13.5)
 
 Los avisos los escribe el motor de alertas del backend (transacciones de gasto que cruzan
@@ -524,6 +536,8 @@ El frontend asume:
 - `first_transaction_month` (`string | null`, Fase 29) — mes `"YYYY-MM"` (en la zona del usuario, Fase 34) de la transacción más antigua del usuario, sobre todas las cuentas. Es el límite inferior del `◀`; `null` = usuario sin transacciones, la navegación no tiene hacia dónde ir.
 - `expense_currencies` (`string[]`, Fase 29) — monedas con gasto en el mes consultado, sobre **todas** las cuentas (no solo las destacadas), con la preferida primero. Alimenta los chips de moneda de "Gastos por categoría": las barras que el chip filtra cuentan todas las cuentas, así que el universo tiene que ser ese. La moneda preferida solo aparece si tiene gasto en el mes, y el frontend la suma igual a las opciones para que el chip nunca quede sin nada que mostrar.
 
+- `accounts_total`, `committed`, `free_to_spend` (`BalanceByCurrency[]`, Fase 35) — **disponible real**: saldo de **todas** las cuentas, lo apartado en sobres activos y la diferencia, con la misma lista de monedas y la preferida primero. Foto de **hoy** (no depende del mes consultado). `free_to_spend` **puede ser negativo** (estás usando dinero apartado): la UI lo explica, no bloquea nada. El flujo mensual sigue siendo la cifra principal; esto es una cifra secundaria.
+
 Para el progreso de presupuestos, el backend devuelve valores listos para pintar:
 
 - `category_id`
@@ -536,6 +550,10 @@ Para el progreso de presupuestos, el backend devuelve valores listos para pintar
 `spent` es el gasto del **período consultado** (Fase 29), no siempre el del mes actual, y suma transacciones de **todas** las cuentas del usuario en esa moneda (no solo las destacadas) — mismo criterio que el motor de alertas del backend, que no puede divergir del que muestra la vista.
 
 Los endpoints de series (`cashflow-series`, `category-distribution`) devuelven una sola serie filtrada a una moneda (`currency` explícito o `preferred_currency` por defecto) — nunca suman monedas distintas en un mismo punto.
+
+### Sobre (Fase 35)
+
+`Fund`: `id`, `name`, `kind` (`'annual_expense' | 'emergency' | 'goal'`), `status` (`'active' | 'archived'`), `account_id`, `currency`, `balance`, `target_amount` (meta efectiva; `null` en un fondo de emergencia sin historial de gasto), `target_months`, `target_date` (`YYYY-MM-DD` | `null`), `progress_pct` (0-100 | `null`), `remaining`, `months_remaining`, `required_contribution` (monto sugerido para aportar este mes | `null`), `pace` (`'completed' | 'on_track' | 'behind' | null`; `null` = sin fecha o sin meta), `monthly_expense_avg` y `runway_months` (solo emergencia), `backing_shortfall` (`> 0` = "sobre sin respaldo"), `created_at`. `FundEntry`: `id`, `fund_id`, `amount` (con signo), `type` (`'contribution' | 'withdrawal' | 'adjustment'`), `occurred_at`, `period` (`YYYY-MM`), `note`.
 
 ### Notificación
 

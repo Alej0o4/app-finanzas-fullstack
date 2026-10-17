@@ -13,6 +13,7 @@ import {
   Wallet,
   ArrowLeftRight,
   PieChart,
+  Mail,
   Tags,
   Settings,
   ChevronLeft,
@@ -63,6 +64,7 @@ export default function Sidebar() {
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Transacciones', href: '/transactions', icon: ArrowLeftRight },
     { name: 'Presupuestos', href: '/budgets', icon: PieChart },
+    { name: 'Sobres', href: '/funds', icon: Mail },
   ];
 
   const secondaryNavItems = [

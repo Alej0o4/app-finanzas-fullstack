@@ -867,6 +867,59 @@ disponible para crear uno nuevo de inmediato.
 se siguen generando desde la plantilla (la fila borrada sirve de "lápida" para su período
 — QA-024).
 
+## Sobres (Fase 35)
+
+Un **sobre** (*fund*) es dinero comprometido pero no gastado, una capa de asignación sobre una cuenta: no
+es una cuenta ni mueve dinero (aportar **no** crea transacción ni cambia `Account.balance`). Su saldo es
+`SUM(fund_entries.amount)`. Spec: `docs/specs/fase_35_spec.md`. Todo requiere autenticación; un sobre
+ajeno o inexistente responde `404` ("El sobre no existe o no tienes permisos.").
+
+### `FundResponse`
+
+`id`, `name`, `kind` (`annual_expense` | `emergency` | `goal`), `status` (`active` | `archived`),
+`account_id`, `currency` (la de su cuenta), `balance`, `target_amount` (meta **efectiva**: la fija o
+`target_months × monthly_expense_avg`; `null` en un fondo de emergencia sin historial de gasto),
+`target_months`, `target_date` (`YYYY-MM-DD` en la zona del usuario | `null`), `progress_pct` (0-100 |
+`null`), `remaining` (`max(meta − saldo, 0)`), `months_remaining`, `required_contribution` (monto sugerido
+a aportar este mes = `remaining / max(months_remaining, 1)` redondeado hacia arriba al centavo; `null` sin
+fecha o sin nada por aportar), `pace` (`completed` | `on_track` | `behind` | `null` — `null` sin fecha o
+sin meta; ritmo lineal por días desde la creación hasta `target_date`), `monthly_expense_avg` y
+`runway_months` (solo `emergency`), `backing_shortfall` (Σ saldos de sobres activos de la cuenta que
+excede el saldo de la cuenta, `0.00` si está respaldado), `created_at`. `FundDetailResponse` agrega
+`entries` (los 50 movimientos más recientes: `id`, `fund_id`, `amount` con signo, `type`, `occurred_at`,
+`period` `YYYY-MM`, `note`).
+
+### `GET /api/v1/funds/`
+
+`?include_archived=false` (default). Lista los sobres del usuario con sus métricas.
+
+### `POST /api/v1/funds/`
+
+Body: `name` (1-100, recortado), `kind`, `account_id`, `target_amount` (>0, `Numeric(14,2)`) **o**
+`target_months` (1-60; solo `emergency`) — exactamente uno —, `target_date` (opcional, `YYYY-MM-DD`, hoy o
+posterior en la zona del usuario). La moneda se hereda de la cuenta. Errores: `404` cuenta ajena, `422`
+validación.
+
+### `GET /api/v1/funds/{fund_id}` → `FundDetailResponse`
+
+### `PUT /api/v1/funds/{fund_id}`
+
+Parcial (solo lo enviado cambia): `name`, `account_id` (misma moneda, si no `422`), `target_amount` /
+`target_months` (lo enviado reemplaza a la alternativa; `target_months` solo en `emergency`),
+`target_date` (`null` la quita; una fecha nueva no puede ser pasada). No cambia `kind` ni moneda.
+
+### `POST /api/v1/funds/{fund_id}/contributions` y `/withdrawals`
+
+Body `{amount, note?}` (`amount` > 0; `note` ≤ 200). Devuelve la `FundEntryResponse` creada (aporte con
+`amount > 0`, retiro con `amount < 0`). Toman un row-lock sobre el sobre. Errores: `422` si el retiro excede
+el saldo del sobre, `409` si el sobre está archivado. Un aporte **puede** superar la meta o el saldo libre de
+la cuenta (no se bloquea).
+
+### `POST /api/v1/funds/{fund_id}/archive` y `/unarchive`
+
+Archivar exige saldo `0` (`409` "Retira el saldo del sobre antes de archivarlo."). Idempotente. No hay
+`DELETE`: el libro es histórico.
+
 ## Dashboard
 
 ### `GET /api/v1/dashboard/summary`
@@ -937,6 +990,14 @@ Devuelve (`DashboardSummary`):
   las cuentas destacadas): alimenta el selector de moneda del frontend, que filtra las barras
   de `category-distribution`, y esas cuentan todas las cuentas. La preferida **no** se agrega
   si no tiene gasto en el mes.
+
+- `accounts_total`, `committed`, `free_to_spend` (Fase 35, **disponible real**): tres arrays de
+  `{currency, total}` con la **misma lista de monedas** (unión de las monedas de cuentas y de
+  sobres, preferida primero). `accounts_total` = Σ saldo de **todas** las cuentas (no solo las
+  destacadas), `committed` = Σ saldos de los sobres **activos** y `free_to_spend` =
+  `accounts_total − committed`. **Pueden ser negativos** (`free_to_spend < 0` = estás usando
+  dinero apartado; el backend no bloquea nada). Son una foto de **hoy**: no dependen de
+  `year`/`month`. Sin conversión entre monedas. `balances` (cuentas destacadas) no cambia.
 
 Universo de cuentas: `balances`, `monthly_income_by_currency` y `monthly_expense_by_currency`
 solo incluyen cuentas marcadas como destacadas (`highlighted=true`); si no hay destacadas,

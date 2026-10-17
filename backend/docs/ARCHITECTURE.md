@@ -6,7 +6,7 @@ La aplicación sigue una arquitectura simple por capas:
 
 - `app/main.py` ensambla la aplicación FastAPI, CORS y routers.
 - `app/core/` concentra configuración, base de datos, seguridad y rate limiting (`rate_limit.py`).
-- `app/models/` define el modelo relacional con SQLAlchemy (6 modelos: User, Account, Category, Transaction, Budget, RefreshToken).
+- `app/models/` define el modelo relacional con SQLAlchemy (15 modelos desde la Fase 35; ver `models.py` — User, Account, Category, Transaction, Budget, Fund, FundEntry, tokens y demás).
 - `app/schemas/` define contratos de entrada y salida con Pydantic.
 - `app/api/` implementa los endpoints por dominio funcional.
 
@@ -42,6 +42,14 @@ La aplicación sigue una arquitectura simple por capas:
 - `core/weekly_summary.py` calcula la semana en la zona de cada usuario (la constante `SUMMARY_TIMEZONE` se eliminó); el cron sigue siendo único (lunes 07:00 `America/Bogota`, `main.py`).
 - `tzdata` está en `requirements.txt`: la imagen slim de Docker no trae los alias IANA que lista Chrome (`Asia/Calcutta`, `Europe/Kiev`…); sin él el selector de Ajustes ofrecería zonas que el backend rechaza con `422`. Tras traer este cambio hay que reconstruir la imagen y reinstalar requirements en los venvs locales.
 - La migración de datos `c7d3e9a4b1f6` (separada de la del esquema) mueve las fechas históricas `00:00Z` a `17:00Z`; corre sola en el `CMD` de Docker con `alembic upgrade head`. `scripts/fase34_reporte_x1.py` genera el reporte de totales antes/después sobre una copia.
+
+## Sobres y disponible real (Fase 35)
+
+- Tercera capa del producto ("compromiso"): `Fund` y `FundEntry` (migración `d5f2a8c1e703`, aditiva) en `models.py`, que pasa a 15 modelos. No tocan `Transaction`, `Account.balance` ni `services/ledger.py`.
+- `app/services/funds.py` concentra toda la lógica en dos mitades: funciones **puras** (`meses_restantes`, `aporte_requerido`, `ritmo`, `progreso`, `meta_efectiva`, `runway`; reciben fechas ya resueltas en la zona del usuario) y casos de uso con DB (`listar`, `detalle`, `crear`, `actualizar`, `registrar_movimiento`, `archivar`, `desarchivar`, `disponibilidad`, `promedio_gasto_mensual`). `api/funds.py` es un router delgado que solo pasa `ahora`.
+- Aportar/retirar serializan con `SELECT … FOR UPDATE` sobre la fila del sobre (patrón de la Fase 31); verificado con `tests/test_funds_concurrency.py` (`@pytest.mark.concurrencia`).
+- `GET /dashboard/summary` suma `accounts_total`, `committed` y `free_to_spend` llamando a `funds.disponibilidad`.
+- `core/periods.mediodia_local` guarda `Fund.target_date` a las 12:00 locales (misma convención que una transacción de otro día).
 
 ## Migraciones en runtime (sin Alembic)
 

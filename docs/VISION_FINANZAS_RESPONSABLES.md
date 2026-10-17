@@ -4,7 +4,8 @@
 > El orden y el estado de las fases viven en `docs/ROADMAP.md`; el detalle de implementación de
 > cada una irá en `docs/specs/fase_NN_spec.md` cuando le toque su `/grilling`.
 >
-> **Estado: dirección acordada, nada implementado.** Los nombres de tablas y columnas de este
+> **Estado: dirección acordada. La Fase 35 (§2.1 y §2.2: sobres + disponible real) está implementada
+> (2026-10-17, `docs/specs/fase_35_spec.md`); el resto sigue sin implementar.** Los nombres de tablas y columnas de este
 > documento son un punto de partida, **no están verificados contra `models.py`**: la spec de cada
 > fase los fija. Lo marcado como *Pendiente de `/grilling`* no está decidido.
 
@@ -89,7 +90,13 @@ viajes), **fondo de emergencia** y **meta** de mediano plazo (el computador en 1
 - **Fondo de emergencia respaldado solo por una cuenta líquida.** Si el dueño quiere inmovilizar
   parte en un CDT, esa parte deja de contar en el fondo (ver §2.5).
 
-**Pendiente de `/grilling`.**
+**Resuelto en la Fase 35** (sin `/grilling`, decisiones del agente a revisar por el dueño: spec D1–D10): sin
+`UNIQUE (fund_id, period)` y sin idempotencia por header; moneda del sobre = la de su cuenta; no se borra
+una cuenta con sobres activos y la alerta "sin respaldo" es `backing_shortfall`; la meta del fondo de
+emergencia usa el gasto promedio total de 3 meses (el "gasto esencial" quedó como deuda en
+`docs/TODO.md`). El texto de abajo es el original.
+
+**Pendiente de `/grilling` (original).**
 - ¿Una restricción `UNIQUE (fund_id, period)` para aportes? **Se recomienda no ponerla**: impide
   un aporte extra en el mes o dos si se cobra quincenal. La idempotencia se resuelve mejor con la
   clave de idempotencia por request que Oikos ya tiene (`IdempotencyKey`).

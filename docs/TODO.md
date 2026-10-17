@@ -557,6 +557,23 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ---
 
+## 🟡 Deuda de la Fase 35 (sobres + disponible real, 2026-10-17)
+
+Decisiones tomadas por el agente sin `/grilling`; el dueño las revisa (ver `docs/specs/fase_35_spec.md`).
+
+- [ ] **"Gasto esencial" para el fondo de emergencia (D3).** La meta en meses usa el gasto promedio
+  total de los últimos 3 meses completos porque Oikos no clasifica necesidad/deseo. Cuando exista esa
+  clasificación (backlog), el promedio debe excluir lo no esencial.
+- [ ] **Cuentas de crédito en el disponible real (D1, [REVISAR]).** `accounts_total` suma el saldo de
+  todas las cuentas igual que `GET /accounts/summary`. Si el dueño usa cuentas `credit` con saldo de
+  deuda, decidir si restan o se excluyen.
+- [ ] **Idempotencia por request en aportes y retiros (D7).** Hoy se previene en el frontend con el botón
+  deshabilitado; `IdempotencyKey` es de transacciones (`transaction_id NOT NULL`).
+- [ ] **Endpoint de ajustes (`adjustment`, D10).** El tipo existe en el CHECK pero no hay endpoint
+  (reservado para reconciliar un sobre).
+- [ ] **Movimientos del sobre sin paginar.** El detalle devuelve los 50 más recientes; si un sobre
+  acumula muchos, agregar `GET /funds/{id}/entries` con `skip/limit`.
+
 ## 🟢 Modularidad — revisar cuando el código duela al modificarlo
 
 - [x] **Lógica de negocio embebida en routers FastAPI — y la excepción ya existente apuntaba

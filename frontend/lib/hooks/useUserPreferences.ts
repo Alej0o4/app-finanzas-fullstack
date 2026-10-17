@@ -97,6 +97,9 @@ export function useUserPreferences() {
         queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() });
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() });
+        // Fase 35: fechas objetivo, meses restantes y ritmo de los sobres dependen de la zona.
+        queryClient.invalidateQueries({ queryKey: queryKeys.funds.all() });
+        queryClient.invalidateQueries({ queryKey: ['fund'] });
         queryClient.invalidateQueries({ queryKey: ['account-monthly-summary'] });
         queryClient.invalidateQueries({ queryKey: ['account-category-breakdown'] });
         queryClient.invalidateQueries({ queryKey: ['account-budgets-progress'] });

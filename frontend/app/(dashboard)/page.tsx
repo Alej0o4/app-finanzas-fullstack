@@ -14,6 +14,7 @@ import { Suspense, useMemo, useRef, useState, useSyncExternalStore } from 'react
 import BudgetRing from '@/components/charts/BudgetRing';
 import CategoryBreakdownSection from '@/components/charts/CategoryBreakdownSection';
 import RecentTransactionsSection from '@/components/transactions/RecentTransactionsSection';
+import AvailableCard from '@/components/funds/AvailableCard';
 import PeriodNavigator from '@/components/PeriodNavigator';
 import SummaryCard from '@/components/ui/SummaryCard';
 import Button from '@/components/ui/Button';
@@ -408,36 +409,49 @@ function DashboardScreen() {
 
       {/* Summary Cards — la card principal mide flujo mensual (Fase 11 §11.3); el saldo total
           de cuentas vive ahora en /accounts como vista secundaria (§11.5). */}
-      <div className="space-y-6" aria-busy={summaryIsStale}>
+      <div className="grid gap-6 lg:grid-cols-3" aria-busy={summaryIsStale}>
         {/* Fase 24 §24.1 (Decisión A2): bloque de error inline, mismo tono visual que
             CashflowChart.tsx:96-99 — distingue "falló la query" de "sin datos todavía". */}
-        {loadingSummary ? (
-          <Skeleton className="h-44 rounded-2xl" />
-        ) : summaryError ? (
-          <div className="border-border text-text-muted flex h-44 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm">
-            <AlertCircle size={20} />
-            <p>No se pudo cargar el resumen del mes.</p>
-            <Button variant="secondary" size="sm" onClick={() => refetchSummary()}>
-              Reintentar
-            </Button>
-          </div>
+        <div className="min-w-0 lg:col-span-2">
+          {loadingSummary ? (
+            <Skeleton className="h-44 rounded-2xl" />
+          ) : summaryError ? (
+            <div className="border-border text-text-muted flex h-44 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm">
+              <AlertCircle size={20} />
+              <p>No se pudo cargar el resumen del mes.</p>
+              <Button variant="secondary" size="sm" onClick={() => refetchSummary()}>
+                Reintentar
+              </Button>
+            </div>
+          ) : (
+            <SummaryCard
+              label={flowLabel}
+              size="lg"
+              elevated
+              trend={flowTrend}
+              color={flowColor}
+              secondaryStats={secondaryStats}
+            >
+              {summaryIsStale || flowBalanceValue === undefined ? (
+                <Skeleton className="h-9 w-48 sm:h-10" />
+              ) : (
+                <span className={flowIsPositive ? '' : 'text-danger'}>
+                  {formatCurrency(flowBalanceValue, preferredCurrency)}
+                </span>
+              )}
+            </SummaryCard>
+          )}
+        </div>
+
+        {/* Fase 35 F5: "Disponible real" es secundaria; el flujo sigue siendo la cifra principal. */}
+        {summary ? (
+          <AvailableCard
+            summary={summary}
+            preferredCurrency={preferredCurrency}
+            isStale={summaryIsStale}
+          />
         ) : (
-          <SummaryCard
-            label={flowLabel}
-            size="lg"
-            elevated
-            trend={flowTrend}
-            color={flowColor}
-            secondaryStats={secondaryStats}
-          >
-            {summaryIsStale || flowBalanceValue === undefined ? (
-              <Skeleton className="h-9 w-48 sm:h-10" />
-            ) : (
-              <span className={flowIsPositive ? '' : 'text-danger'}>
-                {formatCurrency(flowBalanceValue, preferredCurrency)}
-              </span>
-            )}
-          </SummaryCard>
+          loadingSummary && <Skeleton className="h-44 rounded-2xl" />
         )}
       </div>
 
