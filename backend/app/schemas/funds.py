@@ -5,7 +5,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.common import MAX_DIGITS_MONEY, nombre_sin_espacios
 
@@ -83,8 +83,7 @@ class FundEntryResponse(BaseModel):
     period: str
     note: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FundResponse(BaseModel):

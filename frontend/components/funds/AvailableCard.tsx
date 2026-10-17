@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { useFunds } from '@/lib/hooks/useFunds';
 import { ChevronRight, Mail } from 'lucide-react';
 import Skeleton from '@/components/ui/Skeleton';
 import { formatCurrency } from '@/lib/utils';
@@ -25,7 +28,10 @@ export default function AvailableCard({
   isStale = false,
 }: AvailableCardProps) {
   const { accounts_total, committed, free_to_spend } = summary;
-  const hasFunds = committed.some((b) => Number(b.total) !== 0);
+  // "Tiene sobres" = hay sobres activos, no que haya algo apartado: uno recién creado (o vaciado)
+  // tiene committed 0 y aun así la tarjeta debe mostrar el disponible real.
+  const { data: funds } = useFunds();
+  const hasFunds = (funds?.length ?? 0) > 0 || committed.some((b) => Number(b.total) !== 0);
 
   // Moneda preferida primero (el backend ya ordena así); el resto, como filas secundarias.
   const primary =

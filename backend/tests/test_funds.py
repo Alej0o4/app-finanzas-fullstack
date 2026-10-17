@@ -383,6 +383,35 @@ class TestSinRespaldoCuentaNegativa:
         assert _money(client.get(f"{URL}{fondo['id']}", headers=auth_headers).json()["backing_shortfall"]) == D("50.00")
 
 
+class TestHallazgosDeRevision:
+    def test_no_se_cambia_la_moneda_de_una_cuenta_con_sobres(self, client, auth_headers, make_account, crear_sobre):
+        cuenta = make_account(auth_headers, balance="0.00")
+        crear_sobre(cuenta["id"])
+        resp = client.put(
+            f"/api/v1/accounts/{cuenta['id']}",
+            json={"name": cuenta["name"], "type": cuenta["type"], "currency": "USD"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+        assert client.get(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).json()["currency"] == "COP"
+
+    def test_un_archivado_no_hereda_el_faltante_de_la_cuenta(self, client, auth_headers, make_account, crear_sobre):
+        cuenta = make_account(auth_headers, balance="100.00")
+        activo = crear_sobre(cuenta["id"], name="Activo")
+        viejo = crear_sobre(cuenta["id"], name="Viejo")
+        client.post(f"{URL}{viejo['id']}/archive", headers=auth_headers)
+        _aportar(client, auth_headers, activo["id"], "500.00")
+        lista = client.get(f"{URL}?include_archived=true", headers=auth_headers).json()
+        faltantes = {f["name"]: _money(f["backing_shortfall"]) for f in lista}
+        assert faltantes == {"Activo": D("400.00"), "Viejo": D("0.00")}
+
+    def test_un_archivado_no_se_edita(self, client, auth_headers, cuenta, crear_sobre):
+        fondo = crear_sobre(cuenta["id"])
+        client.post(f"{URL}{fondo['id']}/archive", headers=auth_headers)
+        resp = client.put(f"{URL}{fondo['id']}", json={"name": "otro"}, headers=auth_headers)
+        assert resp.status_code == 409
+
+
 class TestEmergenciaConHistorial:
     def test_meta_en_meses_usa_el_promedio(
         self, client, auth_headers, test_user, cuenta, make_category, crear_sobre, db_session

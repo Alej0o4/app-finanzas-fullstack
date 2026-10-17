@@ -23,6 +23,7 @@ export function useFunds(options?: { includeArchived?: boolean }) {
       const response = await api.get('funds/', { params: { include_archived: includeArchived } });
       return response.data as Fund[];
     },
+    staleTime: 0, // ver useFund: el respaldo depende de cuentas/transacciones
   });
 }
 
@@ -31,6 +32,9 @@ export function useFund(id: string | number) {
   return useQuery({
     queryKey: queryKeys.funds.byId(id),
     queryFn: async () => (await api.get(`funds/${id}`)).data as FundDetail,
+    // El faltante de respaldo depende del saldo de las cuentas, que cambia con transacciones
+    // y cuentas (que no invalidan estas keys): siempre se re-lee al montar.
+    staleTime: 0,
   });
 }
 

@@ -444,12 +444,14 @@ function DashboardScreen() {
         </div>
 
         {/* Fase 35 F5: "Disponible real" es secundaria; el flujo sigue siendo la cifra principal. */}
-        {summary && (
+        {summary ? (
           <AvailableCard
             summary={summary}
             preferredCurrency={preferredCurrency}
             isStale={summaryIsStale}
           />
+        ) : (
+          loadingSummary && <Skeleton className="h-44 rounded-2xl" />
         )}
       </div>
 

@@ -182,13 +182,29 @@ def _construir(db: Session, user: models.User, fondos: list[models.Fund], ahora:
     los sobres activos de cada cuenta, no solo los listados."""
     tz = get_zoneinfo(user.timezone)
     hoy = dia_local(ahora, tz)
-    activos = db.query(models.Fund).filter(models.Fund.user_id == user.id, models.Fund.status == "active").all()
+    cuentas_ids = {f.account_id for f in fondos}
+    activos = (
+        db.query(models.Fund)
+        .filter(models.Fund.user_id == user.id, models.Fund.status == "active", models.Fund.account_id.in_(cuentas_ids))
+        .all()
+        if cuentas_ids
+        else []
+    )
     ids = {f.id for f in fondos} | {f.id for f in activos}
     saldos = _saldos(db, list(ids))
     apartado: dict[int, Decimal] = {}
     for f in activos:
         apartado[f.account_id] = apartado.get(f.account_id, Decimal("0.00")) + saldos.get(f.id, Decimal("0.00"))
-    cuentas = {a.id: a.balance for a in db.query(models.Account).filter(models.Account.user_id == user.id).all()}
+    cuentas = (
+        {
+            a.id: a.balance
+            for a in db.query(models.Account)
+            .filter(models.Account.user_id == user.id, models.Account.id.in_(cuentas_ids))
+            .all()
+        }
+        if cuentas_ids
+        else {}
+    )
     promedios: dict[str, Decimal | None] = {}
     respuestas = []
     for f in fondos:
@@ -198,6 +214,8 @@ def _construir(db: Session, user: models.User, fondos: list[models.Fund], ahora:
         # tarjeta) sin nada apartado en ella no tiene sobres "sin respaldo".
         reservado = apartado.get(f.account_id, Decimal("0.00"))
         faltante = min(reservado, max(reservado - cuentas.get(f.account_id, Decimal("0.00")), 0))
+        if f.status != "active":
+            faltante = Decimal("0.00")  # un archivado no aparta nada: no está "sin respaldo"
         respuestas.append(
             _respuesta(
                 f,
@@ -224,7 +242,14 @@ def _obtener(db: Session, user_id: int, fund_id: int, *, bloquear: bool = False)
 
 
 def _cuenta_del_usuario(db: Session, user_id: int, account_id: int) -> models.Account:
-    cuenta = db.query(models.Account).filter(models.Account.id == account_id, models.Account.user_id == user_id).first()
+    # FOR UPDATE: serializa con `DELETE /accounts/{id}`, que toma el mismo lock (su guard de
+    # sobres activos), para que no quede un sobre activo sobre una cuenta borrada.
+    cuenta = (
+        db.query(models.Account)
+        .filter(models.Account.id == account_id, models.Account.user_id == user_id)
+        .with_for_update()
+        .first()
+    )
     if cuenta is None:
         raise AccountNotFoundError()
     return cuenta
@@ -283,6 +308,8 @@ def crear(db: Session, user: models.User, datos, ahora: datetime) -> dict:
 def actualizar(db: Session, user: models.User, fund_id: int, datos, ahora: datetime) -> dict:
     tz = get_zoneinfo(user.timezone)
     fund = _obtener(db, user.id, fund_id, bloquear=True)
+    if fund.status != "active":
+        raise ConflictError("Desarchiva el sobre para editarlo.")
     enviados = datos.model_fields_set
 
     if "name" in enviados and datos.name is not None:
@@ -372,6 +399,8 @@ def desarchivar(db: Session, user: models.User, fund_id: int, ahora: datetime) -
         cuenta = db.query(models.Account).filter(models.Account.id == fund.account_id).first()
         if cuenta is None:
             raise ConflictError("La cuenta del sobre ya no existe.")
+        if cuenta.currency != fund.currency:
+            raise ConflictError("La moneda de la cuenta cambió; el sobre ya no coincide con ella.")
         fund.status = "active"
         db.commit()
         db.refresh(fund)

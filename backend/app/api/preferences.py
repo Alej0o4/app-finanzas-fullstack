@@ -57,7 +57,9 @@ def update_preferences(
             tiene_transacciones = (
                 db.query(models.Transaction.id).filter(models.Transaction.account_id == cuenta_virgen.id).first()
             )
-            if tiene_transacciones is None:
+            # Fase 35: una cuenta que respalda sobres no cambia de moneda (el sobre hereda la suya).
+            tiene_sobres = db.query(models.Fund.id).filter(models.Fund.account_id == cuenta_virgen.id).first()
+            if tiene_transacciones is None and tiene_sobres is None:
                 cuenta_virgen.currency = prefs.preferred_currency
         # Si el guard no pasa (nombre distinto, saldo != 0, o ya tiene transacciones):
         # no se toca la cuenta y no se informa error — `preferred_currency` del usuario
