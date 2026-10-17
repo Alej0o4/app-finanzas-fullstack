@@ -276,6 +276,7 @@
 ## Eliminaciones
 
 - No se puede borrar una cuenta con transacciones.
+- No se puede borrar una cuenta que respalda sobres activos (Fase 35).
 - No se puede borrar una categoría con transacciones.
 - No se puede borrar una categoría con presupuestos activos.
 - No se pueden borrar categorías base del sistema.
@@ -320,6 +321,38 @@ Spec: `docs/specs/fase_34_spec.md`. Contratos de API en `API_REFERENCE.md`.
   día UTC (= 12:00 Bogotá), conservando el día que tecleó el usuario. Algunas filas del primer día de
   un mes pasan al mes que les corresponde: es un efecto aceptado. Los saldos no cambian. El
   `downgrade` es simétrico (`17:00:00.000Z` → `00:00:00Z`).
+
+## Sobres y disponible real (Fase 35)
+
+Spec: `docs/specs/fase_35_spec.md`; dirección en `docs/VISION_FINANZAS_RESPONSABLES.md`.
+
+- Un **sobre** reserva dinero de una cuenta sin moverlo: aportar o retirar **no** crea transacción ni
+  toca `Account.balance` (`FundEntry.transaction_id` es siempre `NULL` hasta la Fase 36).
+- **Saldo del sobre = `SUM(fund_entries.amount)`**; no existe columna `balance`. `fund_entries` es un
+  libro **append-only**: la API nunca actualiza ni borra filas (aporte `> 0`, retiro `< 0`; lo
+  garantizan CHECK en DB).
+- Aportar y retirar toman `SELECT … FOR UPDATE` sobre el sobre antes de leer el saldo. Un **retiro
+  mayor al saldo** es `422`; el saldo de un sobre nunca es negativo.
+- **Moneda del sobre = moneda de su cuenta**, sin conversión; mover un sobre a otra cuenta exige la
+  misma moneda. Una cuenta puede tener varios sobres. Un sobre ajeno es `404`.
+- Meta: exactamente uno de `target_amount` / `target_months` (CHECK en DB). `target_months` solo en el
+  fondo de emergencia: meta = N × **gasto promedio mensual** de los hasta 3 meses completos anteriores
+  (todas las cuentas, moneda del sobre, desde el mes de la primera transacción); sin historial no hay
+  meta efectiva. "Gasto esencial" no existe todavía (deuda en `docs/TODO.md`).
+- El **fondo de emergencia solo cuenta dinero líquido**: se respalda con una cuenta normal. El CDT, cuando
+  llegue, será un módulo aparte.
+- **Ritmo** (`pace`): `completed` si saldo ≥ meta; sin `target_date` no hay ritmo (`null`); con fecha,
+  `behind` si el saldo está por debajo de lo lineal esperado desde la creación, o si la fecha ya pasó sin
+  cumplir. Meses restantes = diferencia de meses calendario en la zona del usuario (mín. 1 si la fecha no
+  pasó). Todo se calcula en `app/services/funds.py`; el frontend no recalcula.
+- **Archivar** exige saldo `0` (primero se retira, lo que libera el dinero al disponible). No se puede
+  borrar una cuenta con sobres **activos** (`400`). Si el saldo de la cuenta baja de lo apartado (se
+  gastó de ella), los sobres reportan `backing_shortfall > 0` ("sobre sin respaldo"): se avisa, no se
+  bloquea. Los sobres se borran en la cascada de `delete_user_cascade`.
+- **Disponible real** (`GET /dashboard/summary`): `free_to_spend = accounts_total − committed` por moneda,
+  sobre **todas** las cuentas y los sobres activos; foto de hoy, independiente del mes consultado. Puede
+  ser **negativo** y eso **no bloquea nada** (no se impide gastar ni aportar): se informa. El flujo
+  mensual sigue siendo la cifra principal del dashboard.
 
 ## Dashboard
 

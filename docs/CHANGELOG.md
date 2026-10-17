@@ -9,6 +9,33 @@
 
 ---
 
+## Fase 35 — Sobres virtuales + disponible real (2026-10-17)
+
+Spec: `docs/specs/fase_35_spec.md`. Primera fase del enfoque "finanzas responsables"
+(`docs/VISION_FINANZAS_RESPONSABLES.md`): la tercera capa, **compromiso**, junto a stock y flujo.
+
+**Backend:** tablas nuevas `funds` y `fund_entries` (libro append-only; migración aditiva
+`d5f2a8c1e703` con CHECK de meta XOR, signo y kind). `app/services/funds.py` calcula todo en el
+servidor: aporte requerido (`restante / meses`, hacia arriba al centavo), ritmo lineal
+(`completed`/`on_track`/`behind`), meta del fondo de emergencia en meses de gasto promedio (3 meses
+completos), runway y "sobre sin respaldo". Router `/api/v1/funds` (crear, editar, aportar, retirar,
+archivar) con row-lock en aportar/retirar. `GET /dashboard/summary` suma `accounts_total`,
+`committed` y `free_to_spend` (disponible real, por moneda, puede ser negativo sin bloquear nada).
+No toca `Transaction`, `Account.balance` ni `ledger.py`; aportar no crea transacción.
+
+**Frontend:** `/funds` (lista) y `/funds/[id]` (detalle y movimientos), modales de
+crear/editar/aportar (monto sugerido pre-llenado)/retirar, archivar con confirmación, ítem "Sobres" en
+el Sidebar y tarjeta secundaria "Disponible real" en el dashboard (el flujo sigue siendo la cifra
+principal).
+
+**Decisiones del agente a revisar por el dueño** (la fase se hizo sin sesión de `/grilling`; ver la
+spec, "Decisiones tomadas por el agente"): D1 el disponible usa todas las cuentas, no solo las
+destacadas; D4 archivar exige saldo 0 y no se puede borrar una cuenta con sobres activos; D8
+`status` es solo `active`/`archived` (el "cumplido" es derivado); D7 sin idempotencia por header.
+**Operativa (dueño), antes de desplegar:** `pg_dump`; la migración corre sola en el `CMD` de Docker.
+
+---
+
 ## Fase 34 — Zona horaria por usuario (2026-10-04)
 
 Spec: `docs/specs/fase_34_spec.md`. Cierra QA-032 y la deuda de mes/semana en UTC de las Fases 29–31.
