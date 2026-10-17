@@ -41,7 +41,10 @@ export const queryKeys = {
   funds: {
     /** Lista de sobres (Fase 35). La variante con archivados cuelga de este prefijo. */
     all: () => ['funds'] as const,
-    byId: (id: string | number) => ['fund', id] as const,
+    /** El id se normaliza a string: la página lo lee de la URL (string) y las mutaciones lo
+     *  reciben como número; TanStack compara por hash JSON y `'5'` ≠ `5` (la invalidación
+     *  no matcheaba y el detalle quedaba desactualizado tras aportar). */
+    byId: (id: string | number) => ['fund', String(id)] as const,
   },
   budgets: {
     all: () => ['budgets'] as const,

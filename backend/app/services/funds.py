@@ -194,7 +194,10 @@ def _construir(db: Session, user: models.User, fondos: list[models.Fund], ahora:
     for f in fondos:
         if f.kind == "emergency" and f.currency not in promedios:
             promedios[f.currency] = promedio_gasto_mensual(db, user.id, f.currency, ahora, tz)
-        faltante = max(apartado.get(f.account_id, Decimal("0.00")) - cuentas.get(f.account_id, Decimal("0.00")), 0)
+        # El faltante nunca excede lo apartado: una cuenta con saldo negativo (p. ej. una
+        # tarjeta) sin nada apartado en ella no tiene sobres "sin respaldo".
+        reservado = apartado.get(f.account_id, Decimal("0.00"))
+        faltante = min(reservado, max(reservado - cuentas.get(f.account_id, Decimal("0.00")), 0))
         respuestas.append(
             _respuesta(
                 f,

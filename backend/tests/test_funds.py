@@ -365,6 +365,24 @@ class TestSinRespaldo:
             assert _money(detalle["backing_shortfall"]) == D("400.00")
 
 
+class TestSinRespaldoCuentaNegativa:
+    def test_sobre_vacio_en_cuenta_con_saldo_negativo_no_esta_sin_respaldo(
+        self, client, auth_headers, make_account, make_category, crear_sobre
+    ):
+        cuenta = make_account(auth_headers, balance="100.00")
+        cat = make_category(auth_headers)
+        client.post(
+            "/api/v1/transactions/",
+            json={"amount": "300.00", "type": "expense", "account_id": cuenta["id"], "category_id": cat["id"]},
+            headers=auth_headers,
+        )  # saldo -200
+        fondo = crear_sobre(cuenta["id"])
+        assert _money(client.get(f"{URL}{fondo['id']}", headers=auth_headers).json()["backing_shortfall"]) == D("0")
+        _aportar(client, auth_headers, fondo["id"], "50.00")
+        # con 50 apartados y saldo -200, faltan los 50 completos (no 250)
+        assert _money(client.get(f"{URL}{fondo['id']}", headers=auth_headers).json()["backing_shortfall"]) == D("50.00")
+
+
 class TestEmergenciaConHistorial:
     def test_meta_en_meses_usa_el_promedio(
         self, client, auth_headers, test_user, cuenta, make_category, crear_sobre, db_session

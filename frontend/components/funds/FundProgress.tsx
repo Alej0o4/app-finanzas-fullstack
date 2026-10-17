@@ -63,19 +63,21 @@ export default function FundProgress({ fund }: { fund: Fund }) {
         </p>
       )}
 
-      {fund.required_contribution !== null && Number(fund.required_contribution) > 0 && (
-        <p className="text-text-muted text-xs">
-          Aporta{' '}
-          <span className="text-text font-medium tabular-nums">
-            {formatCurrency(Number(fund.required_contribution), fund.currency)}
-          </span>{' '}
-          este mes
-          {fund.months_remaining !== null && fund.months_remaining > 0
-            ? ` (te quedan ${monthsLabel(fund.months_remaining)})`
-            : ''}
-          .
-        </p>
-      )}
+      {fund.status === 'active' &&
+        fund.required_contribution !== null &&
+        Number(fund.required_contribution) > 0 && (
+          <p className="text-text-muted text-xs">
+            Aporta{' '}
+            <span className="text-text font-medium tabular-nums">
+              {formatCurrency(Number(fund.required_contribution), fund.currency)}
+            </span>{' '}
+            este mes
+            {fund.months_remaining !== null && fund.months_remaining > 0
+              ? ` (te quedan ${monthsLabel(fund.months_remaining)})`
+              : ''}
+            .
+          </p>
+        )}
 
       {shortfall > 0 && (
         <p
