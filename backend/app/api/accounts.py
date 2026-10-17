@@ -256,6 +256,13 @@ def eliminar_cuenta(
     if tiene_transacciones:
         raise BadRequestError("No se puede eliminar la cuenta porque tiene transacciones asociadas.")
 
+    # Fase 35 (D4): una cuenta con sobres activos quedaría sin respaldo para lo apartado.
+    tiene_sobres = (
+        db.query(models.Fund).filter(models.Fund.account_id == account_id, models.Fund.status == "active").first()
+    )
+    if tiene_sobres:
+        raise BadRequestError("No se puede eliminar la cuenta porque respalda sobres activos.")
+
     cuenta.deleted_at = datetime.now(UTC)
     db.commit()
     return {"estado": "OK", "mensaje": "Cuenta eliminada exitosamente."}

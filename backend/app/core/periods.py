@@ -43,6 +43,12 @@ def dia_local(instante: datetime, tz: ZoneInfo) -> date:
     return _a_utc(instante).astimezone(tz).date()
 
 
+def mediodia_local(dia: date, tz: ZoneInfo) -> datetime:
+    """Las 12:00 locales de `dia` como instante aware en UTC (Fase 35 D9: `Fund.target_date`).
+    El mediodía hace al día robusto a un cambio de zona de ±12 h."""
+    return _a_utc(datetime.combine(dia, time(12, 0), tzinfo=tz))
+
+
 def instante_de_dia(dia: date, ahora: datetime, tz: ZoneInfo) -> datetime:
     """Instante UTC con el que se guarda una transacción cargada solo con un día (B9).
 
@@ -51,7 +57,7 @@ def instante_de_dia(dia: date, ahora: datetime, tz: ZoneInfo) -> datetime:
     de ±12 h)."""
     if dia == dia_local(ahora, tz):
         return _a_utc(ahora)
-    return _a_utc(datetime.combine(dia, time(12, 0), tzinfo=tz))
+    return mediodia_local(dia, tz)
 
 
 def limites_semana(instante: datetime, tz: ZoneInfo) -> tuple[datetime, datetime]:

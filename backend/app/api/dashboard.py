@@ -16,6 +16,7 @@ from app.core.security import get_current_user
 from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.schemas import schemas
+from app.services import funds as funds_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -195,7 +196,12 @@ def obtener_resumen(
     )
     monthly_flow_balance = ingreso_real - gasto_moneda_preferida
 
+    # Fase 35 (B11, D1): disponible real. Foto de HOY sobre TODAS las cuentas y los sobres
+    # activos; no depende del mes consultado ni de las cuentas destacadas.
+    disponibilidad = funds_service.disponibilidad(db, current_user.id, preferred_currency)
+
     return {
+        **disponibilidad,
         "balances": balances,
         "monthly_income_by_currency": income,
         "monthly_expense_by_currency": expense,

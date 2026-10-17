@@ -36,6 +36,16 @@ from app.schemas.dashboard import (
     CategoryDistributionData,
     DashboardSummary,
 )
+from app.schemas.funds import (
+    FundCreate,
+    FundDetailResponse,
+    FundEntryResponse,
+    FundKind,
+    FundMovement,
+    FundResponse,
+    FundStatus,
+    FundUpdate,
+)
 from app.schemas.notifications import NotificationResponse, NotificationType, UnreadCountResponse
 from app.schemas.push import (
     PushSubscriptionCreate,
@@ -83,6 +93,14 @@ __all__ = [
     "CategoryResponse",
     "CategoryType",
     "DashboardSummary",
+    "FundCreate",
+    "FundDetailResponse",
+    "FundEntryResponse",
+    "FundKind",
+    "FundMovement",
+    "FundResponse",
+    "FundStatus",
+    "FundUpdate",
     "GoogleLoginRequest",
     "LogoutRequest",
     "NotificationResponse",

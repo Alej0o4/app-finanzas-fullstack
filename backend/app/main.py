@@ -20,6 +20,7 @@ from app.api import (
     budgets,
     categories,
     dashboard,
+    funds,
     notifications,
     preferences,
     push,
@@ -146,6 +147,7 @@ app.include_router(accounts.router, prefix="/api/v1/accounts", tags=["Cuentas"])
 app.include_router(categories.router, prefix="/api/v1/categories", tags=["Categorías"])
 app.include_router(budgets.router, prefix="/api/v1/budgets", tags=["Presupuestos"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard"])
+app.include_router(funds.router, prefix="/api/v1/funds", tags=["Sobres"])
 app.include_router(preferences.router, prefix="/api/v1/users", tags=["Preferencias"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notificaciones"])
 app.include_router(push.router, prefix="/api/v1/push", tags=["Push"])

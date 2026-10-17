@@ -36,6 +36,13 @@ class DashboardSummary(BaseModel):
     # gobierna la página entera — por eso se calcula sobre TODAS las cuentas, no solo las
     # destacadas (las barras, los presupuestos y la lista de transacciones usan todas).
     first_transaction_month: str | None = None
+    # 🆕 Fase 35 (B11, D1): disponible real por moneda, preferida primero. Sin default, por la
+    # misma razón que `monthly_flow_basis`: el handler devuelve un dict plano. Son una foto de
+    # HOY (no dependen de `?year=&month=`) sobre TODAS las cuentas, no solo las destacadas:
+    # `free_to_spend = accounts_total - committed` (Σ saldos de sobres activos). Puede ser negativo.
+    accounts_total: list[BalanceByCurrency]
+    committed: list[BalanceByCurrency]
+    free_to_spend: list[BalanceByCurrency]
     # 🆕 Fase 29 (B7): monedas distintas con gasto en el mes pedido, sobre TODAS las
     # cuentas (el mismo universo que las barras que filtra el chip), con la preferida
     # primero. La preferida NO se agrega si no tiene gasto: el front la suma a las
