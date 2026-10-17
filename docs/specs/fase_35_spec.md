@@ -6,7 +6,9 @@
 > leyendo el código y quedan en "Decisiones tomadas por el agente (pendientes de revisión del
 > dueño)". Las marcadas **[REVISAR]** cambian el modelo de datos de forma incómoda de revertir.
 
-**Estado:** spec escrita el 2026-10-17. Sin marcadores `[NEEDS CLARIFICATION]`.
+**Estado:** **implementada y cerrada el 2026-10-17** (575 tests en Postgres 16; ver "Desvíos y
+hallazgos del cierre"). Sin marcadores `[NEEDS CLARIFICATION]`. `/analyze-spec` previo sin
+CRÍTICO/ALTO.
 
 ---
 
@@ -258,6 +260,35 @@ entre monedas, endpoint de ajustes, seguridad/auth.
 
 - Mutaciones de cuentas/transacciones no tocan sobres; el disponible se recalcula al leer.
 - Despliegue: la migración corre sola en el `CMD` de Docker; pedir `pg_dump` previo.
+
+## Desvíos y hallazgos del cierre (2026-10-17)
+
+`/analyze-spec 35 cierre`: sin decisiones faltantes ni parciales; los desvíos de abajo son
+refinamientos hallados en la verificación en navegador y en `/code-review`, todos corregidos y con test.
+
+- **D4 refinada:** `backing_shortfall` nunca excede lo apartado en la cuenta (una cuenta con saldo
+  negativo sin nada apartado no está "sin respaldo") y vale `0` en sobres archivados.
+- **Guards agregados a B12:** no se cambia la moneda de una cuenta con sobres (`PUT /accounts` y
+  `apply_to_default_account` de preferencias); un sobre archivado no se edita (409) y `unarchive`
+  revalida que la moneda de la cuenta coincida; `crear`/mover un sobre y `DELETE /accounts/{id}` toman
+  `FOR UPDATE` de la cuenta para no dejar un sobre activo sobre una cuenta borrada.
+- **Frontend:** la key `funds.byId` normaliza el id a string (la página lo lee de la URL y las
+  mutaciones lo traen numérico: la invalidación no matcheaba y el detalle quedaba viejo); las queries
+  de sobres usan `staleTime: 0` (el respaldo depende de cuentas/transacciones, que no las invalidan);
+  `AvailableCard` decide "tiene sobres" con `useFunds()` (un sobre recién creado tiene `committed = 0`).
+- **D2 refinada (segunda revisión):** `required_contribution` es la cuota de **este mes**: se calcula
+  con el saldo de inicio de mes y se le resta lo ya aportado (neto de aportes y retiros del período
+  `YYYY-MM` en la zona del usuario); llega a `null` al cumplir la cuota. Frontend: Editar no se ofrece en
+  archivados, el cambio de zona invalida las queries de sobres, y el estado vacío de la tarjeta solo se
+  muestra con la lista cargada y vacía.
+- **Hallazgos aceptados por escrito:** (a) un sobre archivado bloquea el cambio de moneda de su cuenta
+  y, si la cuenta se borra teniendo solo archivados, quedan sin reactivar — coherente con la limitación
+  ya existente de cuentas con transacciones; (b) `_construir` hace 4-6 queries por llamada —
+  irrelevante a esta escala.
+- **`core/periods.mediodia_local`** se agregó como helper (D9); `instante_de_dia` lo reutiliza.
+- **Verificación T9:** el MCP de Playwright no conectó; se usó Playwright por node (fuera del repo)
+  contra un stack dev aislado (`-p oikos-dev-f35`, ambos `-f`), en escritorio y 390 px, oscuro/claro.
+- **Migración (T8):** upgrade → downgrade → upgrade → `alembic check` sobre un Postgres desechable.
 
 ## Orden de ejecución
 

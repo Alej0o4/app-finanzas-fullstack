@@ -412,6 +412,24 @@ class TestHallazgosDeRevision:
         assert resp.status_code == 409
 
 
+class TestAporteSugeridoDelMes:
+    def test_lo_aportado_este_mes_descuenta_la_cuota(self, client, auth_headers, cuenta, crear_sobre):
+        """Meta 1000 en ~2 meses: cuota 500. Tras aportar 500 ya no se sugiere nada este mes."""
+        fecha = (datetime.now(UTC) + timedelta(days=75)).date().isoformat()
+        fondo = crear_sobre(cuenta["id"], target_amount="1000.00", target_date=fecha)
+        meses = fondo["months_remaining"]
+        cuota = _money(fondo["required_contribution"])
+        assert cuota == (D("1000.00") / meses).quantize(D("0.01"), rounding="ROUND_CEILING")
+
+        _aportar(client, auth_headers, fondo["id"], str(cuota))
+        tras = client.get(f"{URL}{fondo['id']}", headers=auth_headers).json()
+        assert tras["required_contribution"] is None  # cuota del mes cumplida
+
+        _retirar(client, auth_headers, fondo["id"], "10.00")
+        tras = client.get(f"{URL}{fondo['id']}", headers=auth_headers).json()
+        assert _money(tras["required_contribution"]) == D("10.00")  # repone lo retirado
+
+
 class TestEmergenciaConHistorial:
     def test_meta_en_meses_usa_el_promedio(
         self, client, auth_headers, test_user, cuenta, make_category, crear_sobre, db_session

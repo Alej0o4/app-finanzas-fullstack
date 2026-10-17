@@ -99,10 +99,13 @@ export default function FundDetailPage() {
               </Button>
             </>
           )}
-          <Button variant="secondary" onClick={() => setModal('edit')}>
-            <Pencil size={16} aria-hidden="true" />
-            Editar
-          </Button>
+          {/* El backend rechaza editar un archivado (409): se desarchiva primero. */}
+          {!isArchived && (
+            <Button variant="secondary" onClick={() => setModal('edit')}>
+              <Pencil size={16} aria-hidden="true" />
+              Editar
+            </Button>
+          )}
           {isArchived ? (
             <Button
               variant="ghost"

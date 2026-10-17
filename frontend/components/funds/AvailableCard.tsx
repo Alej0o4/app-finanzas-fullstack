@@ -30,8 +30,10 @@ export default function AvailableCard({
   const { accounts_total, committed, free_to_spend } = summary;
   // "Tiene sobres" = hay sobres activos, no que haya algo apartado: uno recién creado (o vaciado)
   // tiene committed 0 y aun así la tarjeta debe mostrar el disponible real.
-  const { data: funds } = useFunds();
-  const hasFunds = (funds?.length ?? 0) > 0 || committed.some((b) => Number(b.total) !== 0);
+  // El estado vacío solo se muestra cuando la lista cargó y de verdad está vacía: mientras
+  // carga (o si falla) se muestra el disponible real, que ya viene en el summary.
+  const { data: funds, isSuccess } = useFunds();
+  const hasFunds = !isSuccess || funds.length > 0 || committed.some((b) => Number(b.total) !== 0);
 
   // Moneda preferida primero (el backend ya ordena así); el resto, como filas secundarias.
   const primary =

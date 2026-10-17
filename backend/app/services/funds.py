@@ -103,6 +103,19 @@ def _saldos(db: Session, fund_ids: list[int]) -> dict[int, Decimal]:
     return {fund_id: total for fund_id, total in filas}
 
 
+def _netos_del_periodo(db: Session, fund_ids: list[int], periodo: str) -> dict[int, Decimal]:
+    """Neto (aportes - retiros) de cada sobre en el período `YYYY-MM` dado."""
+    if not fund_ids:
+        return {}
+    filas = (
+        db.query(models.FundEntry.fund_id, func.sum(models.FundEntry.amount))
+        .filter(models.FundEntry.fund_id.in_(fund_ids), models.FundEntry.period == periodo)
+        .group_by(models.FundEntry.fund_id)
+        .all()
+    )
+    return {fund_id: total for fund_id, total in filas}
+
+
 def promedio_gasto_mensual(db: Session, user_id: int, moneda: str, ahora: datetime, tz: ZoneInfo) -> Decimal | None:
     """Gasto promedio mensual en `moneda` de los hasta 3 meses completos anteriores al actual
     (zona del usuario), sobre todas las cuentas. Solo cuentan los meses desde el de la primera
@@ -148,11 +161,20 @@ def _respuesta(
     promedio: Decimal | None,
     hoy: date,
     tz: ZoneInfo,
+    neto_mes: Decimal = Decimal("0.00"),
 ) -> dict:
     meta = meta_efectiva(fund.target_amount, fund.target_months, promedio)
     objetivo = dia_local(fund.target_date, tz) if fund.target_date else None
     restante = max(meta - saldo, Decimal("0.00")) if meta is not None else None
     meses = meses_restantes(objetivo, hoy)
+    # Aporte sugerido de ESTE mes: el plan se calcula con el saldo de inicio de mes y se le resta
+    # lo ya aportado (neto) en el mes, así llega a 0 cuando cumples la cuota y no empuja a
+    # sobre-aportar. Si no hay nada que aportar, `None`.
+    restante_inicio = max(meta - (saldo - neto_mes), Decimal("0.00")) if meta is not None else None
+    cuota = aporte_requerido(restante_inicio, meses)
+    sugerido = max(cuota - neto_mes, Decimal("0.00")) if cuota is not None else None
+    if sugerido is not None and sugerido <= 0:
+        sugerido = None
     es_emergencia = fund.kind == "emergency"
     return {
         "id": fund.id,
@@ -168,7 +190,7 @@ def _respuesta(
         "progress_pct": progreso(saldo, meta),
         "remaining": restante,
         "months_remaining": meses,
-        "required_contribution": aporte_requerido(restante, meses),
+        "required_contribution": sugerido if restante else None,
         "pace": ritmo(saldo, meta, dia_local(fund.created_at, tz), objetivo, hoy) if fund.created_at else None,
         "monthly_expense_avg": promedio if es_emergencia else None,
         "runway_months": runway(saldo, promedio) if es_emergencia else None,
@@ -192,6 +214,7 @@ def _construir(db: Session, user: models.User, fondos: list[models.Fund], ahora:
     )
     ids = {f.id for f in fondos} | {f.id for f in activos}
     saldos = _saldos(db, list(ids))
+    netos = _netos_del_periodo(db, [f.id for f in fondos], f"{hoy.year:04d}-{hoy.month:02d}")
     apartado: dict[int, Decimal] = {}
     for f in activos:
         apartado[f.account_id] = apartado.get(f.account_id, Decimal("0.00")) + saldos.get(f.id, Decimal("0.00"))
@@ -224,6 +247,7 @@ def _construir(db: Session, user: models.User, fondos: list[models.Fund], ahora:
                 promedios.get(f.currency),
                 hoy,
                 tz,
+                netos.get(f.id, Decimal("0.00")),
             )
         )
     return respuestas
@@ -348,9 +372,8 @@ def actualizar(db: Session, user: models.User, fund_id: int, datos, ahora: datet
 
 
 def _saldo_bloqueado(db: Session, fund_id: int) -> Decimal:
-    return (
-        db.query(func.sum(models.FundEntry.amount)).filter(models.FundEntry.fund_id == fund_id).scalar()
-    ) or Decimal("0.00")
+    """Saldo leído DESPUÉS de tomar el lock del sobre (misma suma que `_saldos`)."""
+    return _saldos(db, [fund_id]).get(fund_id, Decimal("0.00"))
 
 
 def registrar_movimiento(
@@ -396,9 +419,10 @@ def archivar(db: Session, user: models.User, fund_id: int, ahora: datetime) -> d
 def desarchivar(db: Session, user: models.User, fund_id: int, ahora: datetime) -> dict:
     fund = _obtener(db, user.id, fund_id, bloquear=True)
     if fund.status != "active":
-        cuenta = db.query(models.Account).filter(models.Account.id == fund.account_id).first()
-        if cuenta is None:
-            raise ConflictError("La cuenta del sobre ya no existe.")
+        try:
+            cuenta = _cuenta_del_usuario(db, user.id, fund.account_id)  # toma el lock de la cuenta
+        except AccountNotFoundError:
+            raise ConflictError("La cuenta del sobre ya no existe.") from None
         if cuenta.currency != fund.currency:
             raise ConflictError("La moneda de la cuenta cambió; el sobre ya no coincide con ella.")
         fund.status = "active"

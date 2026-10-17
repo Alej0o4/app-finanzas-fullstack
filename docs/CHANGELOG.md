@@ -21,7 +21,10 @@ servidor: aporte requerido (`restante / meses`, hacia arriba al centavo), ritmo 
 completos), runway y "sobre sin respaldo". Router `/api/v1/funds` (crear, editar, aportar, retirar,
 archivar) con row-lock en aportar/retirar. `GET /dashboard/summary` suma `accounts_total`,
 `committed` y `free_to_spend` (disponible real, por moneda, puede ser negativo sin bloquear nada).
-No toca `Transaction`, `Account.balance` ni `ledger.py`; aportar no crea transacción.
+No toca `Transaction`, `Account.balance` ni `ledger.py`; aportar no crea transacción. 575 tests en
+Postgres 16 (incluida concurrencia real: 8 retiros paralelos). Verificada en navegador (escritorio y
+390 px, oscuro/claro) y con dos pasadas de `/code-review`, cuyos hallazgos reales se corrigieron
+(guards de moneda/archivado, lock de cuenta, key de caché del detalle); ver los desvíos en la spec.
 
 **Frontend:** `/funds` (lista) y `/funds/[id]` (detalle y movimientos), modales de
 crear/editar/aportar (monto sugerido pre-llenado)/retirar, archivar con confirmación, ítem "Sobres" en

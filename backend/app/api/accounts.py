@@ -198,7 +198,8 @@ def actualizar_cuenta(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ) -> models.Account:
-    cuenta = db.query(models.Account).filter(models.Account.id == account_id).first()
+    # Fase 35: FOR UPDATE serializa el cambio de moneda con crear/mover un sobre sobre la cuenta.
+    cuenta = db.query(models.Account).filter(models.Account.id == account_id).with_for_update().first()
     if not cuenta or cuenta.user_id != current_user.id:
         raise NotFoundError("La cuenta a actualizar no existe o no tienes permisos.")
 
