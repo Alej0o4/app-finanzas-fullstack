@@ -7,11 +7,45 @@
 > `/grilling` de las Fases 26–32 (tablas Q1–Qn que las specs citan) se movió sin cambios a
 > `docs/archive/ROADMAP_fases_26-32.md`.
 >
+> Dirección de producto vigente (2026-10-17): `docs/VISION_FINANZAS_RESPONSABLES.md`.
+>
 > Formato: `[ ]` pendiente · `[x]` resuelto (con fecha).
 
 ---
 
-## Cambio de enfoque vigente — 2026-09-19: vuelta a uso personal
+## Cambio de enfoque vigente — 2026-10-17: de "anotar gastos" a "finanzas responsables"
+
+Pausa en el desarrollo para repensar el rumbo. Oikos sigue siendo personal, pero deja de ser solo
+un registro de gastos: pasa a ayudar a **llevar las finanzas de forma responsable y a planear**
+(gastos anuales o periódicos, fondo de emergencia, ahorro, regalos, ropa, metas). La idea central
+es una primitiva nueva, el **dinero comprometido pero no gastado** (el *sobre*), y una cifra que
+sale de ella: **disponible real = saldo de las cuentas − lo comprometido**. Convive con el stock
+(*¿cuánto tengo?*) y el flujo (*¿cuánto gasté este mes?*), no los reemplaza.
+
+**Documento de dirección con cada feature y su justificación:**
+[`docs/VISION_FINANZAS_RESPONSABLES.md`](VISION_FINANZAS_RESPONSABLES.md). Resumen y orden:
+
+| Fase (tentativa) | Feature | Por qué en ese lugar |
+|---|---|---|
+| 35 | **Sobres virtuales** (provisiones, fondo de emergencia, metas) + **disponible real** | Es la primitiva de la que cuelga todo; aditiva, sin tocar `Transaction`. |
+| 36 | **Gasto contra sobre** | Hace reales las provisiones, pero toca el núcleo contable (`ledger.py`): fase propia y `/grilling` previo obligatorio. |
+| 37 | **Recurrentes + calendario de cargos anuales** | Era la Fase 35; base del pronóstico y fuente de sobres sugeridos. |
+| 38 | **CDT** (módulo independiente) | Bajo acoplamiento; cualquier hueco entre fases. **No** se mezcla con el fondo de emergencia, que solo cuenta lo líquido. |
+| 39 | **Págate primero** | Engancha la creación de ingresos; necesita sobres probados. |
+| 40 | **Cierre de mes con puntaje de cumplimiento** | Necesita jobs mensuales por zona del usuario y datos de todo lo anterior. |
+
+**Qué NO cambia:** sigue siendo un solo dueño (nada de esto reabre seguridad/auth), el listón de
+calidad (Alembic, tests, servicios, `DomainError`) y que el backend es la fuente de verdad de todo
+cálculo financiero. **Fuera por ahora:** posiciones en fondos de inversión. **En el backlog:**
+simulador "¿me lo puedo permitir?", clasificación necesidad/deseo/ahorro y pronóstico de caja.
+
+**Estado:** dirección acordada el 2026-10-17, **nada implementado**. Cada fase pasa por el workflow
+completo de `docs/WORKFLOW.md`; las decisiones de diseño que siguen abiertas están en el
+documento de dirección, marcadas *Pendiente de `/grilling`*.
+
+---
+
+## Cambio de enfoque previo — 2026-09-19: vuelta a uso personal
 
 Oikos deja de perseguir el objetivo de "producto que cualquier persona pueda usar" del
 2026-08-22. No hay plan de publicarlo, comercializarlo ni abrirlo a usuarios externos en el
@@ -168,15 +202,26 @@ migración de datos. **Pendientes del dueño antes de desplegar:** respaldo, rep
 
 ---
 
-## Siguiente fase probable — Fase 35: ingresos y gastos recurrentes
+## Siguiente fase probable — Fase 35: sobres virtuales + disponible real
 
-**Aplazada (2026-10-04) hasta cerrar la Fase 33 (QA) y la 34 (zonas horarias), ya completadas.** Era la Fase 33; se
-renumera, el contenido no cambia. Primera fila de prioridad Alta del backlog (abajo). El scheduler ya existe desde la Fase 14. Antes
-de implementar toca `/grilling` → `/to-spec` → `/analyze-spec`. Preguntas abiertas: ¿la regla
-genera la transacción sola o propone una para confirmar?; qué hacer con los días en que el
-scheduler no corrió; frecuencia (mensual, semanal, día 31); cómo se edita o se salta una
-ocurrencia; qué cuenta y moneda usa la regla. Los *sinking funds* (siguiente fila Alta) se apoyan
-en gastos periódicos conocidos, por eso van después.
+**Cambia (2026-10-17):** con el nuevo enfoque de finanzas responsables (ver arriba), la Fase 35 ya
+no es recurrentes sino **sobres virtuales + disponible real**. Los recurrentes pasan a la
+**Fase 37** y el contenido no cambia (ver más abajo). Motivo: los sobres cambian cómo se piensa el
+dinero y no dependen de los recurrentes; los *sinking funds* ya no "se apoyan" en ellos, los
+recurrentes más bien alimentan sugerencias de sobres. Detalle, diseño base y decisiones abiertas:
+`docs/VISION_FINANZAS_RESPONSABLES.md` §2.1 y §2.2. Antes de implementar toca `/grilling` →
+`/to-spec` → `/analyze-spec`.
+
+## Fase 37 (antes 35): ingresos y gastos recurrentes
+
+**Aplazada (2026-10-04) hasta cerrar la Fase 33 (QA) y la 34 (zonas horarias), ya completadas;
+renumerada de nuevo el 2026-10-17** (era la Fase 33, luego la 35). Contenido sin cambios. El
+scheduler ya existe desde la Fase 14. Preguntas abiertas: ¿la regla genera la transacción sola o
+propone una para confirmar?; qué hacer con los días en que el scheduler no corrió; frecuencia
+(mensual, semanal, día 31); cómo se edita o se salta una ocurrencia; qué cuenta y moneda usa la
+regla. Incluye el calendario de compromisos de 12 meses y la detección de cargos anuales (ver
+`docs/VISION_FINANZAS_RESPONSABLES.md` §2.4). Las specs y el changelog anteriores a esta fecha que
+dicen "Fase 35 (recurrentes)" son históricos y no se reescriben.
 
 ---
 
@@ -220,15 +265,22 @@ Ver también `docs/TODO.md` para deuda técnica y bugs confirmados no ligados a 
 
 ## Backlog priorizado — reordenado 2026-09-19 para uso personal
 
-Criterio de prioridad: ¿esto hace que trackear y entender mis propios gastos sea más fácil o más
-claro? Ya no hay criterio de "adquisición", "retención de usuarios" ni "efecto wow" de
-marketing. Las Fases 27–32 salieron de otras fuentes (deuda de modularidad, ajustes post-Fase 29,
-la QA y la infraestructura de tests) y no consumieron filas de esta tabla, salvo la Fase 29.
+Criterio de prioridad: ¿esto hace que trackear, entender **y planear** mis propias finanzas sea más
+fácil o más claro? (Desde el 2026-10-17 el criterio incluye planear, no solo registrar.) Ya no hay
+criterio de "adquisición", "retención de usuarios" ni "efecto wow" de marketing. Las Fases 27–34
+salieron de otras fuentes (deuda de modularidad, ajustes post-Fase 29, la QA, la infraestructura de
+tests y la zona horaria) y no consumieron filas de esta tabla, salvo la Fase 29. Las filas Alta de
+abajo siguen el orden de `docs/VISION_FINANZAS_RESPONSABLES.md` §4.
 
 | Prioridad | Feature | Nota |
 |---|---|---|
-| Alta | **Automatización de ingresos/gastos recurrentes** | **Fase 35 probable** (aplazada tras las Fases 33 de QA y 34 de zonas horarias, ya cerradas). El scheduler ya existe desde Fase 14. Reduce fricción de captura, que es tiempo que se puede invertir en mirar los datos en vez de cargarlos. |
-| Alta | **Sinking funds** (gastos distribuidos en cuotas mensuales virtuales) | Validado por YNAB para presupuesto personal serio. Encaja directo con "cuánto me queda" del dashboard de flujo. |
+| Alta | **Sobres virtuales + disponible real** (provisiones, fondo de emergencia, metas) | **Fase 35 probable.** Absorbe la fila de *sinking funds* (validado por YNAB). Primitiva del enfoque de finanzas responsables: dinero comprometido pero no gastado. Aditiva, sin tocar `Transaction`. |
+| Alta | **Gasto contra sobre** | **Fase 36.** Imputar un gasto planeado al sobre. Toca `ledger.py`; `/grilling` previo sobre cómo cuenta en el flujo del mes. |
+| Alta | **Automatización de ingresos/gastos recurrentes** + calendario de cargos anuales | **Fase 37** (era la 35; aplazada tras QA y zonas horarias, ya cerradas). El scheduler ya existe desde Fase 14. Reduce fricción de captura y es la base del pronóstico. |
+| Media | **CDT** (capital, tasa E.A., vencimiento, interés causado, aviso) | **Fase 38.** Módulo independiente; no se mezcla con el fondo de emergencia. Redención depende de resolver transferencias (QA-030). |
+| Media | **Págate primero** (reparto a sobres al registrar un ingreso) y tasa de ahorro | **Fase 39.** Necesita sobres probados. |
+| Media | **Cierre de mes con puntaje de cumplimiento** | **Fase 40.** Necesita jobs mensuales por zona del usuario. |
+| Media | **Simulador "¿me lo puedo permitir?"**, **clasificación necesidad/deseo/ahorro**, **pronóstico de caja 30/60/90 días** | Backlog del enfoque de finanzas responsables; se evalúan tras sobres y recurrentes. |
 | Media | **Filtro por categoría** (dashboard/Analítica) | Separado de la Fase 29 el 2026-09-26 — el dueño quiere revisarlo más a fondo antes de decidir alcance (¿una o varias categorías? ¿qué gráficos filtra? interacción con "ocultar categoría" de la dona). `GET /transactions/` ya soporta `category_id`; `category-distribution`/`cashflow-series` todavía no. |
 | Media | **Reembolsos como gasto negativo en toda la app** | Sale de la Q15 del grilling de la Fase 31. Hoy un ingreso en una categoría de gasto (p. ej. los amigos devuelven su parte del restaurante) solo se netea en la dona de Analítica (`?neto=true`): la tarjeta del dashboard y los KPIs lo cuentan como ingreso, y los presupuestos y sus alertas cuentan el gasto completo. Tratarlo como gasto negativo toca 5–6 cálculos del backend y varios contratos — a definir en su propio `/grilling`. |
 | Media | **Vistas de tendencia / comparación entre meses** | Encaja con el objetivo explícito de "que me facilite el análisis de mi dinero" — a definir alcance en una próxima sesión de spec. |
@@ -241,7 +293,7 @@ la QA y la infraestructura de tests) y no consumieron filas de esta tabla, salvo
 
 ## Fuera de scope (no hacer)
 
-- ~~**Tracking de inversiones con vinculación de brokers**~~ — Es un producto distinto. Diluye la propuesta de valor. Como mucho, un campo manual de "patrimonio neto" en el futuro.
+- ~~**Tracking de inversiones con vinculación de brokers**~~ — Es un producto distinto. Diluye la propuesta de valor. Como mucho, un campo manual de "patrimonio neto" en el futuro. *(2026-10-17: la única excepción planeada es el **CDT** manual de la Fase 38; las posiciones en fondos de inversión quedan fuera por ahora.)*
 - ~~**Tarjetas de crédito avanzadas** (puntos, millas, intereses de mora, cuotas)~~ — Cada banco calcula distinto y las reglas cambian constantemente. Pesadilla operativa sin equipo dedicado.
 - ~~**Temas visuales dinámicos**~~ — El modo claro/oscuro actual es suficiente. Ya implementado.
 - ~~**Multi-idioma / i18n**~~ — Lanzamiento en español. Ya no aplica: sin plan de usuarios fuera de LATAM ni de usuarios externos en absoluto.

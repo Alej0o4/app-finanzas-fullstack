@@ -2,6 +2,11 @@
 
 App web de finanzas personales con soporte multi-moneda. Backend en FastAPI, frontend en Next.js App Router, base de datos PostgreSQL.
 
+Hoy registra y analiza gastos (dashboard de flujo mensual, presupuestos con alertas, analítica,
+resumen semanal). La dirección desde el 2026-10-17 es ayudar a **planear** con responsabilidad:
+sobres para gastos anuales, fondo de emergencia y metas, y un "disponible real" que descuenta lo ya
+comprometido. Ver [la visión](docs/VISION_FINANZAS_RESPONSABLES.md); aún no está implementado.
+
 ## Stack
 
 | Capa | Tecnología |
@@ -93,5 +98,6 @@ oikos/
 - [Reglas de negocio](backend/docs/BUSINESS_RULES.md)
 - [API Reference](backend/docs/API_REFERENCE.md)
 - [Contrato frontend](frontend/docs/API_CONTRACT.md)
+- [Visión: finanzas responsables](docs/VISION_FINANZAS_RESPONSABLES.md)
 - [Roadmap](docs/ROADMAP.md)
 - [TODO / Deuda técnica](docs/TODO.md)

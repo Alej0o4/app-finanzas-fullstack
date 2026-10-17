@@ -71,7 +71,25 @@ el `date` de una transacción solo-día de hoy conserva la hora real y el de otr
 12:00 locales. El frontend manda días (nunca instantes UTC de límite), formatea con `Intl` en la
 zona (`useTimezone`, `lib/dates.ts`) y el cambio de zona en Ajustes invalida todo lo que depende de
 fechas. Una migración de datos (`c7d3e9a4b1f6`) movió las fechas históricas `00:00Z` a `17:00Z`
-(= 12:00 Bogotá). La Fase 35 (recurrentes) sigue como siguiente fase probable.
+(= 12:00 Bogotá).
+
+**Nuevo enfoque (2026-10-17): de "anotar gastos" a "finanzas responsables".** Tras una pausa de
+desarrollo, Oikos pasa de registrar y analizar gasto a **planear**: gastos anuales o periódicos,
+fondo de emergencia, ahorro, metas, regalos y ropa. Sigue siendo una herramienta personal de un
+solo dueño (nada de esto reabre seguridad/auth). Se agrega una **tercera capa** a las dos
+existentes: stock (*¿cuánto tengo?*), flujo (*¿cuánto gasté este mes?*) y **compromiso**
+(*¿cuánto de lo que tengo ya tiene dueño?*). Su primitiva es el **sobre** (*fund*): dinero
+comprometido pero no gastado, una capa de asignación sobre las cuentas (no una cuenta; no toca
+`Account.balance` ni `ledger.py`), y de ella sale el **disponible real = saldo de las cuentas −
+lo comprometido en sobres**. El flujo sigue siendo la cifra principal del dashboard hasta que un
+`/grilling` decida otra cosa. Orden acordado (numeración tentativa): **Fase 35** sobres +
+disponible real, **36** gasto contra sobre, **37** recurrentes + calendario de cargos anuales (era
+la 35), **38** CDT, **39** "págate primero", **40** cierre de mes con puntaje. Regla ya decidida:
+el **fondo de emergencia solo cuenta dinero líquido** y el CDT es un módulo aparte, nunca parte del
+fondo. **Nada de esto está implementado**; cada feature con su justificación, el diseño base y las
+decisiones abiertas están en [docs/VISION_FINANZAS_RESPONSABLES.md](docs/VISION_FINANZAS_RESPONSABLES.md)
+(los nombres de tablas y columnas ahí son propuestas sin verificar contra `models.py`). La Fase 35
+original (recurrentes) pasó a la Fase 37; las menciones anteriores a esta fecha son históricas.
 
 Algunos hechos operativos de esa historia siguen vigentes hoy, no son solo registro:
 
@@ -334,6 +352,10 @@ solo desde el código:
   desarrollo: cuándo un cambio lleva spec, el flujo completo (`grilling` → `to-spec` →
   `analyze-spec` → implementar → `run-tests` → revisión de código → `analyze-spec cierre` → docs
   de cierre → PR) y el flujo corto para bugs.
+- `docs/VISION_FINANZAS_RESPONSABLES.md` — **leer antes de tocar sobres, provisiones, fondo de
+  emergencia, metas, recurrentes, CDT o cualquier cifra de "disponible".** Dirección de producto
+  desde el 2026-10-17: cada feature planeada, por qué existe, el orden y las decisiones que siguen
+  abiertas.
 - `docs/ROADMAP.md` — **leer primero para cualquier cosa arquitectónica.** Registra los cambios de
   enfoque, los cinco componentes del MVP, qué sigue abierto, el backlog priorizado y qué queda
   fuera de scope (integraciones con brokers, motores de recompensas de tarjetas, temas
