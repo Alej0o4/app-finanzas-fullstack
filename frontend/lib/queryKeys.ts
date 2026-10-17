@@ -38,6 +38,11 @@ export const queryKeys = {
     byCategory: (id: string | number) => ['transactions', 'category', id] as const,
     filtered: (filters: Record<string, unknown>) => ['transactions', filters] as const,
   },
+  funds: {
+    /** Lista de sobres (Fase 35). La variante con archivados cuelga de este prefijo. */
+    all: () => ['funds'] as const,
+    byId: (id: string | number) => ['fund', id] as const,
+  },
   budgets: {
     all: () => ['budgets'] as const,
     /** Listado de `/budgets` de un mes (`'YYYY-MM'`). Cuelga del prefijo `['budgets']`, así que

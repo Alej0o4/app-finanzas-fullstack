@@ -97,6 +97,72 @@ export interface DashboardSummary {
    * suma igual a las opciones.
    */
   expense_currencies: string[];
+  /**
+   * Fase 35 (B11): foto de HOY sobre todas las cuentas (no depende del mes navegado), moneda
+   * preferida primero. `free_to_spend = accounts_total - committed` lo calcula el backend y
+   * puede ser negativo.
+   */
+  accounts_total: BalanceByCurrency[];
+  committed: BalanceByCurrency[];
+  free_to_spend: BalanceByCurrency[];
+}
+
+export type FundKind = 'annual_expense' | 'emergency' | 'goal';
+export type FundPace = 'completed' | 'on_track' | 'behind';
+
+/** Sobre virtual (Fase 35). Los Decimal pueden llegar como string: normalizar con `Number(...)`. */
+export interface Fund {
+  id: number;
+  name: string;
+  kind: FundKind;
+  status: 'active' | 'archived';
+  account_id: number;
+  currency: string;
+  balance: number | string;
+  target_amount: number | string | null;
+  target_months: number | null;
+  target_date: string | null;
+  progress_pct: number | null;
+  remaining: number | string | null;
+  months_remaining: number | null;
+  required_contribution: number | string | null;
+  pace: FundPace | null;
+  monthly_expense_avg: number | string | null;
+  runway_months: number | string | null;
+  backing_shortfall: number | string;
+  created_at: string | null;
+}
+
+export interface FundEntry {
+  id: number;
+  fund_id: number;
+  /** Con signo: aporte > 0, retiro < 0. */
+  amount: number | string;
+  type: 'contribution' | 'withdrawal' | 'adjustment';
+  occurred_at: string;
+  period: string;
+  note: string | null;
+}
+
+export interface FundDetail extends Fund {
+  entries: FundEntry[];
+}
+
+export interface CreateFundPayload {
+  name: string;
+  kind: FundKind;
+  account_id: number;
+  target_amount?: number;
+  target_months?: number;
+  target_date?: string;
+}
+
+export interface UpdateFundPayload {
+  name?: string;
+  account_id?: number;
+  target_amount?: number;
+  target_months?: number;
+  target_date?: string | null;
 }
 
 export interface CashflowItem {
