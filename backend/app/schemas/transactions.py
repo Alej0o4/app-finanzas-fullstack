@@ -67,13 +67,25 @@ class TransactionBase(BaseModel):
 
 
 class TransactionCreate(TransactionBase):
-    pass
+    # Fase 36 (D6): paga el gasto con un sobre. Solo `expense` y de la cuenta que respalda el sobre.
+    fund_id: int | None = None
+
+
+class TransactionUpdate(TransactionBase):
+    """Body del `PUT`. `fund_id` ausente conserva el enlace; `null` explícito lo desvincula
+    (`model_fields_set`, mismo idioma que QA-026)."""
+
+    fund_id: int | None = None
 
 
 class TransactionResponse(TransactionBase):
     id: int
     date: datetime
     user_id: int
+    # Fase 36 (D15): sobre al que está enlazado el gasto y cuánto salió de él (`min(gasto, saldo)`,
+    # D3). `null` si no está enlazado; `fund_applied_amount` nunca excede `amount`.
+    fund_id: int | None = None
+    fund_applied_amount: Decimal | None = None
 
     # 🔓 Un response model NO revalida reglas de input (QA-025): `currency` se REDECLARA
     # para no heredar el patrón de `TransactionBase`. Sin esto, una fila con una moneda

@@ -59,6 +59,7 @@ from app.schemas.transactions import (
     TransactionCreate,
     TransactionResponse,
     TransactionType,
+    TransactionUpdate,
 )
 from app.schemas.users import (
     PreferencesUpdate,
@@ -121,6 +122,7 @@ __all__ = [
     "TransactionCreate",
     "TransactionResponse",
     "TransactionType",
+    "TransactionUpdate",
     "UnreadCountResponse",
     "UserBase",
     "UserCreate",

@@ -85,8 +85,22 @@ class FundEntryResponse(BaseModel):
     occurred_at: datetime
     period: str
     note: str | None = None
+    # Fase 36: gasto al que corresponde el movimiento (retiro/ajuste enlazado); `null` si es manual.
+    transaction_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class LinkedExpense(BaseModel):
+    """Un gasto pagado con el sobre (Fase 36 D9): `amount` es el total de la transacción y
+    `applied_amount` lo que salió del sobre (puede ser menos, D3)."""
+
+    transaction_id: int
+    amount: Decimal
+    applied_amount: Decimal
+    date: datetime | None = None
+    description: str | None = None
+    category_name: str | None = None
 
 
 class FundResponse(BaseModel):
@@ -113,8 +127,12 @@ class FundResponse(BaseModel):
     runway_months: Decimal | None = None
     # Lo apartado en los sobres activos de la cuenta que excede su saldo (D4); 0 si está respaldado.
     backing_shortfall: Decimal
+    # Fase 36 (D12): gastos enlazados (vivos) y su monto total; el diálogo de borrar avisa con esto.
+    linked_expenses_count: int = 0
+    linked_expenses_total: Decimal = Decimal("0.00")
     created_at: datetime | None = None
 
 
 class FundDetailResponse(FundResponse):
     entries: list[FundEntryResponse]
+    linked_expenses: list[LinkedExpense] = []
