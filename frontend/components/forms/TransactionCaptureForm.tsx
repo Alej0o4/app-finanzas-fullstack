@@ -13,8 +13,10 @@ import { validateAmountText } from '@/lib/validateAmount';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
+import PayWithFundSelect from '@/components/funds/PayWithFundSelect';
+import { fundSpendNotice } from '@/lib/fundSpendNotice';
 import CategoryIcon from '@/components/ui/CategoryIcon';
-import type { Account, CreateTransactionPayload } from '@/types/api';
+import type { Account, CreateTransactionPayload, Transaction } from '@/types/api';
 
 type PaymentMethod = 'cash' | 'card' | 'transfer';
 
@@ -44,6 +46,8 @@ export default function TransactionCaptureForm({
   const [type, setType] = useState<'income' | 'expense'>(defaultType);
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  // Fase 36 (D14): sobre con el que se paga el gasto ('' = Ninguno).
+  const [fundId, setFundId] = useState('');
   const [description, setDescription] = useState('');
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
@@ -68,9 +72,11 @@ export default function TransactionCaptureForm({
       const response = await api.post('transactions/', newTx, {
         headers: { 'Idempotency-Key': idempotencyKey },
       });
-      return response.data;
+      return response.data as Transaction;
     },
-    onSuccess: async () => {
+    onSuccess: async (created, variables) => {
+      // Antes de invalidar: el nombre del sobre sale del caché de la lista de sobres.
+      const fundNotice = fundSpendNotice(queryClient, created, variables.fund_id);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() }),
@@ -80,12 +86,18 @@ export default function TransactionCaptureForm({
         queryClient.invalidateQueries({ queryKey: ['analytics-categories'] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() }),
+        // Fase 36: un gasto enlazado cambia el saldo y los gastos enlazados de algún sobre.
+        queryClient.invalidateQueries({ queryKey: queryKeys.funds.all() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.funds.details() }),
       ]);
 
-      toast.success(type === 'expense' ? 'Gasto registrado' : 'Ingreso registrado');
+      toast.success(type === 'expense' ? 'Gasto registrado' : 'Ingreso registrado', {
+        description: fundNotice,
+      });
 
       setAmount('');
       setCategoryId('');
+      setFundId('');
       setDescription('');
       setIdempotencyKey(crypto.randomUUID());
       onSuccess();
@@ -128,12 +140,14 @@ export default function TransactionCaptureForm({
       account_id: Number(effectiveAccountId),
       category_id: Number(categoryId),
       payment_method: paymentMethod,
+      ...(type === 'expense' && fundId ? { fund_id: Number(fundId) } : {}),
     });
   };
 
   const handleTypeChange = (newType: 'income' | 'expense') => {
     setType(newType);
     setCategoryId('');
+    setFundId('');
     setFieldErrors((prev) => ({ ...prev, category: undefined }));
     onTypeChange?.(newType);
   };
@@ -182,7 +196,10 @@ export default function TransactionCaptureForm({
         <Select
           label="Cuenta"
           value={effectiveAccountId}
-          onChange={(event) => setAccountId(event.target.value)}
+          onChange={(event) => {
+            setAccountId(event.target.value);
+            setFundId('');
+          }}
           className="bg-background"
         >
           <option value="" disabled>
@@ -194,6 +211,10 @@ export default function TransactionCaptureForm({
             </option>
           ))}
         </Select>
+      )}
+
+      {type === 'expense' && (
+        <PayWithFundSelect accountId={effectiveAccountId} value={fundId} onChange={setFundId} />
       )}
 
       <fieldset ref={categoryFieldsetRef} tabIndex={-1}>

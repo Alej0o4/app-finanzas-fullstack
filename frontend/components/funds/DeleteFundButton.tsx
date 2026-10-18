@@ -26,10 +26,17 @@ export default function DeleteFundButton({
   const balance = Number(fund.balance);
 
   const askConfirmation = () => {
-    const message =
+    const base =
       balance > 0
         ? `¿Eliminar el sobre "${fund.name}"? Se liberan ${formatCurrency(balance, fund.currency)} al disponible y se borra el historial del sobre.`
         : `¿Eliminar el sobre "${fund.name}"? Se borra el historial del sobre.`;
+    // D12 (Fase 36): N y total vienen del backend; solo se ajusta el número gramatical.
+    const n = fund.linked_expenses_count;
+    const linkedNote =
+      n > 0
+        ? ` Este sobre tiene ${n} ${n === 1 ? 'gasto enlazado' : 'gastos enlazados'} (${formatCurrency(Number(fund.linked_expenses_total), fund.currency)}). Si lo borras, ${n === 1 ? 'queda' : 'quedan'} como gasto normal, sin marca de planeado. Si solo quieres cerrarlo, archívalo.`
+        : '';
+    const message = base + linkedNote;
     useConfirmStore.getState().confirm(
       message,
       () =>

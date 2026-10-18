@@ -7,10 +7,11 @@ import { toast } from 'sonner';
 import { Archive, ArchiveRestore, ArrowLeft, Minus, Pencil, Plus } from 'lucide-react';
 import DeleteFundButton from '@/components/funds/DeleteFundButton';
 import FundEntriesList from '@/components/funds/FundEntriesList';
+import LinkedExpensesList from '@/components/funds/LinkedExpensesList';
 import FundFormModal from '@/components/funds/FundFormModal';
 import FundMovementModal from '@/components/funds/FundMovementModal';
 import FundProgress from '@/components/funds/FundProgress';
-import { KIND_LABELS, PaceChip } from '@/components/funds/fundPresentation';
+import { KIND_LABELS, FundStatusChip } from '@/components/funds/fundPresentation';
 import Button from '@/components/ui/Button';
 import QueryErrorState from '@/components/ui/QueryErrorState';
 import Skeleton from '@/components/ui/Skeleton';
@@ -145,7 +146,7 @@ export default function FundDetailPage() {
       <div className="border-border bg-surface rounded-2xl border p-4 sm:p-6">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-text-muted text-sm font-medium">Resumen</h2>
-          {!isArchived && <PaceChip pace={fund.pace} />}
+          {!isArchived && <FundStatusChip fund={fund} />}
         </div>
         <FundProgress fund={fund} />
       </div>
@@ -158,6 +159,18 @@ export default function FundDetailPage() {
           timezone={displayTimezone}
         />
         {fund.entries.length >= 50 && (
+          <p className="text-text-muted mt-2 text-xs">Se muestran los 50 más recientes.</p>
+        )}
+      </div>
+
+      <div className="border-border bg-surface rounded-2xl border p-4 sm:p-6">
+        <h2 className="text-text mb-2 font-semibold">Gastos de este sobre</h2>
+        <LinkedExpensesList
+          expenses={fund.linked_expenses}
+          currency={fund.currency}
+          timezone={displayTimezone}
+        />
+        {fund.linked_expenses.length >= 50 && (
           <p className="text-text-muted mt-2 text-xs">Se muestran los 50 más recientes.</p>
         )}
       </div>

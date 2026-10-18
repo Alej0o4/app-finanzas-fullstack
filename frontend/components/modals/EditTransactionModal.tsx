@@ -5,6 +5,7 @@ import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
+import PayWithFundSelect from '@/components/funds/PayWithFundSelect';
 import { validateAmountText } from '@/lib/validateAmount';
 import { getVisibleCategories } from '@/lib/categoryVisibility';
 import { dayInZone, todayInZone } from '@/lib/dates';
@@ -45,6 +46,11 @@ export default function EditTransactionModal({
   const [editDate, setEditDate] = useState(initialDate);
   const [editAccountId, setEditAccountId] = useState(String(transaction.account_id));
   const [editCategoryId, setEditCategoryId] = useState(String(transaction.category_id));
+  // Fase 36 (D14): sobre enlazado precargado ('' = Ninguno).
+  const originalFundId = transaction.fund_id ?? null;
+  const [editFundId, setEditFundId] = useState(
+    originalFundId === null ? '' : String(originalFundId)
+  );
   // Fase 31 F3 (Q10, QA-009, H13): el toggle arranca activado si la categoría original de
   // la transacción es de la otra naturaleza que su tipo (un reembolso) — así el selector no
   // arranca en "Selecciona…" perdiendo la categoría real. `categories` puede llegar
@@ -90,6 +96,7 @@ export default function EditTransactionModal({
 
   const handleTypeChange = (newType: 'income' | 'expense') => {
     setEditType(newType);
+    setEditFundId('');
     resetCategoryIfNotVisible(newType, showAllCategories);
   };
 
@@ -115,6 +122,17 @@ export default function EditTransactionModal({
     if (errors.categoryId) return editCategoryRef.current?.focus();
     if (errors.date) return editDateRef.current?.focus();
 
+    // Fase 36 (D6): ausente conserva el enlace, `null` lo quita. Un gasto enlazado que pasa a
+    // ingreso, o al que se le quita el sobre, manda `null` explícito; sin enlace previo y sin
+    // sobre elegido no se manda la clave.
+    const selectedFundId = editType === 'expense' && editFundId ? Number(editFundId) : null;
+    const fundPayload =
+      selectedFundId !== null
+        ? { fund_id: selectedFundId }
+        : originalFundId !== null
+          ? { fund_id: null }
+          : {};
+
     onSave({
       id: transaction.id,
       description: editDescription.trim() || null,
@@ -123,6 +141,7 @@ export default function EditTransactionModal({
       date: editDate !== initialDate ? editDate : undefined,
       account_id: Number(editAccountId),
       category_id: Number(editCategoryId),
+      ...fundPayload,
     });
   };
 
@@ -172,7 +191,10 @@ export default function EditTransactionModal({
             label="Cuenta"
             required
             value={editAccountId}
-            onChange={(e) => setEditAccountId(e.target.value)}
+            onChange={(e) => {
+              setEditAccountId(e.target.value);
+              setEditFundId('');
+            }}
             error={editErrors.accountId}
             className="bg-background appearance-none"
           >
@@ -214,6 +236,15 @@ export default function EditTransactionModal({
             </button>
           </div>
         </div>
+
+        {editType === 'expense' && (
+          <PayWithFundSelect
+            accountId={editAccountId}
+            value={editFundId}
+            onChange={setEditFundId}
+            linkedFundId={originalFundId}
+          />
+        )}
 
         <Input
           ref={editDateRef}

@@ -45,6 +45,9 @@ export const queryKeys = {
      *  reciben como número; TanStack compara por hash JSON y `'5'` ≠ `5` (la invalidación
      *  no matcheaba y el detalle quedaba desactualizado tras aportar). */
     byId: (id: string | number) => ['fund', String(id)] as const,
+    /** Prefijo de TODOS los detalles (`['fund', id]`). Fase 36: crear/editar/borrar un gasto
+     *  cambia saldo y `linked_expenses` de algún sobre, así que se invalida por prefijo. */
+    details: () => ['fund'] as const,
   },
   budgets: {
     all: () => ['budgets'] as const,

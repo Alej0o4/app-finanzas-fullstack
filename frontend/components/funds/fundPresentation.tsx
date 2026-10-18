@@ -13,6 +13,24 @@ const PACE_STYLES: Record<FundPace, { label: string; className: string }> = {
   behind: { label: 'Atrasado', className: 'bg-danger/10 text-danger border-danger/30' },
 };
 
+/** D10 (Fase 36): sobre activo, vaciado por gastos enlazados. Presentación de campos del backend
+ *  (`balance`, `linked_expenses_count`); el servidor ya no lo marca atrasado ni pide aporte. */
+export function isFundPaid(fund: Fund): boolean {
+  return fund.status === 'active' && Number(fund.balance) === 0 && fund.linked_expenses_count > 0;
+}
+
+/** Chip de estado del sobre: "Pagado" (D10) o, si no, el ritmo. */
+export function FundStatusChip({ fund }: { fund: Fund }) {
+  if (isFundPaid(fund)) {
+    return (
+      <span className="bg-success/10 text-success border-success/30 inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium">
+        Pagado
+      </span>
+    );
+  }
+  return <PaceChip pace={fund.pace} />;
+}
+
 export function PaceChip({ pace }: { pace: FundPace | null }) {
   if (!pace) return null;
   const { label, className } = PACE_STYLES[pace];

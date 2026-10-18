@@ -296,9 +296,22 @@ function DashboardScreen() {
             {summaryIsStale ? (
               <Skeleton className="mt-1 h-5 w-28" />
             ) : summary?.monthly_expense_by_currency.length ? (
-              summary.monthly_expense_by_currency.map((b) => (
-                <p key={b.currency}>{formatCurrency(b.total, b.currency)}</p>
-              ))
+              summary.monthly_expense_by_currency.map((b) => {
+                // Fase 36 (D9): desglose del backend; el total de arriba no cambia.
+                const planned = Number(
+                  summary.planned_expense?.find((p) => p.currency === b.currency)?.total ?? 0
+                );
+                return (
+                  <div key={b.currency}>
+                    <p>{formatCurrency(b.total, b.currency)}</p>
+                    {planned > 0 && (
+                      <p className="text-text-muted text-xs font-normal">
+                        de los cuales planeado: {formatCurrency(planned, b.currency)}
+                      </p>
+                    )}
+                  </div>
+                );
+              })
             ) : (
               <p>{formatCurrency(0, preferredCurrency)}</p>
             )}

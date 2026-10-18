@@ -3,7 +3,12 @@
 import { AlertTriangle } from 'lucide-react';
 import { useTimezone } from '@/lib/hooks/useTimezone';
 import { formatCurrency } from '@/lib/utils';
-import { formatTargetDay, hasTarget, monthsLabel } from '@/components/funds/fundPresentation';
+import {
+  formatTargetDay,
+  hasTarget,
+  isFundPaid,
+  monthsLabel,
+} from '@/components/funds/fundPresentation';
 import type { Fund } from '@/types/api';
 
 /** Barra de progreso + saldo/meta + aporte sugerido + runway + alerta de respaldo. Compartido
@@ -15,7 +20,10 @@ export default function FundProgress({ fund }: { fund: Fund }) {
   const isEmergency = fund.kind === 'emergency';
   const { displayTimezone } = useTimezone();
   // A2: la cuota de este mes ya está cubierta (el servidor la dejó en null) pero aún falta meta.
+  // D10: un sobre pagado no pide aporte ni cuota.
+  const paid = isFundPaid(fund);
   const monthDone =
+    !paid &&
     fund.status === 'active' &&
     Number(fund.remaining ?? 0) > 0 &&
     fund.required_contribution === null &&
@@ -78,7 +86,8 @@ export default function FundProgress({ fund }: { fund: Fund }) {
         </p>
       )}
 
-      {fund.status === 'active' &&
+      {!paid &&
+        fund.status === 'active' &&
         fund.required_contribution !== null &&
         Number(fund.required_contribution) > 0 && (
           <p className="text-text-muted text-xs">

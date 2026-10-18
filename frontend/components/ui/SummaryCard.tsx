@@ -13,6 +13,8 @@ interface SummaryCardProps {
   elevated?: boolean;
   /** Fase 19 §19.2.1 — fila compacta bajo la cifra principal. */
   secondaryStats?: ReactNode;
+  /** Línea de apoyo bajo la cifra (Fase 36: "de los cuales planeado"). */
+  caption?: string;
 }
 
 export default function SummaryCard({
@@ -24,6 +26,7 @@ export default function SummaryCard({
   size = 'md',
   elevated = false,
   secondaryStats,
+  caption,
 }: SummaryCardProps) {
   const isLarge = size === 'lg';
 
@@ -62,6 +65,7 @@ export default function SummaryCard({
           <TrendingDown className={`text-danger shrink-0 ${isLarge ? 'h-7 w-7' : 'h-5 w-5'}`} />
         )}
       </div>
+      {caption && <p className="text-text-muted mt-1 text-xs tabular-nums">{caption}</p>}
       {secondaryStats && (
         <div className="border-border/50 mt-4 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:gap-6">
           {secondaryStats}

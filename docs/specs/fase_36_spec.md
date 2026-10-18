@@ -289,7 +289,14 @@ la pantalla de captura; desglose por categoría de lo planeado; seguridad/auth.
   (no se puede devolver a un archivado).
 - **B12:** `linked_expenses_count/total` también van en `FundResponse` (no solo en el detalle) para que
   el diálogo de borrar desde la tarjeta tenga el dato sin otra llamada.
-- **F2:** `TransactionCaptureForm` no recibe selector de sobre (ver Out of Scope).
+- **F2 (revisado en la implementación):** `TransactionCaptureForm` **sí** tiene selector de cuenta propio
+  y `QuickTransactionModal` (el FAB) solo lo envuelve, así que ese es el camino principal de captura. Se
+  le agregó el selector "Pagar con sobre" (`PayWithFundSelect`, compartido con `TransactionModal` y
+  `EditTransactionModal`); queda dentro del alcance, sin cambio de contrato.
+- **Editar y cambiar de cuenta:** el selector se limpia y el modal manda `fund_id: null`, así que un
+  gasto enlazado que cambia de cuenta queda desvinculado a la vista del usuario, en lugar de recibir el
+  `409` (que solo ocurre si un cliente API cambia de cuenta sin mandar `fund_id: null`).
+- **`types/generated/api.ts`** se regenera con `pnpm gen:types` contra el stack dev (paso de verificación).
 
 ## Orden de ejecución
 

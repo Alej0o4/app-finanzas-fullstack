@@ -22,6 +22,12 @@ export interface Transaction {
   category_id: number;
   payment_method?: 'cash' | 'card' | 'transfer' | null;
   user_id: number;
+  /** Fase 36 (D6): sobre al que está enlazado el gasto, o null. Si se pidió un sobre sin saldo
+   *  vuelve null con `fund_applied_amount: "0.00"`. */
+  fund_id?: number | null;
+  /** Fase 36: lo que salió del sobre, `min(gasto, saldo)`, calculado por el backend (decimal
+   *  como string). null si no hay enlace ni se pidió sobre. */
+  fund_applied_amount?: string | null;
 }
 
 export interface Category {
@@ -105,6 +111,9 @@ export interface DashboardSummary {
   accounts_total: BalanceByCurrency[];
   committed: BalanceByCurrency[];
   free_to_spend: BalanceByCurrency[];
+  /** Fase 36 (D9): parte de `monthly_expense_by_currency` que corresponde a gastos enlazados a
+   *  un sobre ("planeado"). Es un desglose: no se resta ni cambia el total. */
+  planned_expense: BalanceByCurrency[];
 }
 
 export type FundKind = 'annual_expense' | 'emergency' | 'goal';
@@ -133,6 +142,9 @@ export interface Fund {
   runway_months: number | string | null;
   backing_shortfall: number | string;
   created_at: string | null;
+  /** Fase 36 (D12): gastos enlazados vivos a este sobre y su monto total (decimal como string). */
+  linked_expenses_count: number;
+  linked_expenses_total: number | string;
 }
 
 export interface FundEntry {
@@ -144,10 +156,24 @@ export interface FundEntry {
   occurred_at: string;
   period: string;
   note: string | null;
+  /** Fase 36: transacción de gasto que originó el movimiento, o null. */
+  transaction_id: number | null;
+}
+
+/** Gasto enlazado a un sobre (Fase 36, los 50 más recientes). */
+export interface FundLinkedExpense {
+  transaction_id: number;
+  amount: number | string;
+  /** Lo que salió del sobre; si es menor que `amount`, el resto fue gasto normal. */
+  applied_amount: number | string;
+  date: string;
+  description: string | null;
+  category_name: string | null;
 }
 
 export interface FundDetail extends Fund {
   entries: FundEntry[];
+  linked_expenses: FundLinkedExpense[];
 }
 
 export interface CreateFundPayload {
@@ -182,6 +208,8 @@ export interface CashflowSeries {
   total_income: number;
   total_expense: number;
   net: number;
+  /** Fase 36 (D9): parte de `total_expense` enlazada a sobres; decimal como string. */
+  planned_expense: number | string;
 }
 
 export interface CategoryDistributionItem {
@@ -251,6 +279,8 @@ export interface CreateTransactionPayload {
   category_id: number;
   payment_method?: 'cash' | 'card' | 'transfer' | null;
   currency?: string;
+  /** Fase 36 (D6): solo gastos, y la cuenta debe ser la del sobre. Se omite si no hay sobre. */
+  fund_id?: number;
 }
 
 export interface UpdateTransactionPayload {
@@ -264,6 +294,8 @@ export interface UpdateTransactionPayload {
   account_id: number;
   category_id: number;
   payment_method?: 'cash' | 'card' | 'transfer' | null;
+  /** Fase 36 (D6): ausente conserva el enlace, `null` lo quita, otro id cambia de sobre. */
+  fund_id?: number | null;
 }
 
 export interface CreateAccountPayload {

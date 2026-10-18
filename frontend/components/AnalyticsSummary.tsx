@@ -12,6 +12,8 @@ interface AnalyticsSummaryProps {
   /** Neto del período (ingresos - gastos), calculado por el backend (Fase 30 F3, H3).
    *  El frontend ya no resta; usa este valor directamente. */
   net: number;
+  /** Fase 36 (D9): parte de `totalExpense` enlazada a sobres, del backend. Solo se muestra si > 0. */
+  plannedExpense?: number;
   /** Fase 29 §F7 (H3): moneda en la que vienen los montos. Antes se formateaban siempre con la
    *  preferida, así que una cuenta USD se leía como COP. Si se omite, cae a la preferida global
    *  (mismo criterio que `CategoryBreakdownBars`). */
@@ -24,6 +26,7 @@ export default function AnalyticsSummary({
   totalIncome,
   totalExpense,
   net,
+  plannedExpense = 0,
   currency,
   isError,
   onRetry,
@@ -53,6 +56,9 @@ export default function AnalyticsSummary({
       <SummaryCard
         label="Gastos"
         value={formatAmount(totalExpense)}
+        caption={
+          plannedExpense > 0 ? `de los cuales planeado: ${formatAmount(plannedExpense)}` : undefined
+        }
         trend="down"
         color="var(--color-danger)"
       />

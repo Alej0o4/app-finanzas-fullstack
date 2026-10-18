@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { getApiError } from '@/lib/utils';
 import { useQueryParamState, useQueryParamsBatch } from '@/hooks/useQueryParamState';
 import { queryKeys } from '@/lib/queryKeys';
+import { fundSpendNotice } from '@/lib/fundSpendNotice';
 import { useTransactions } from '@/lib/hooks/useTransactions';
 import { useAccounts } from '@/lib/hooks/useAccounts';
 import { useCategories } from '@/lib/hooks/useCategories';
@@ -223,6 +224,9 @@ function TransactionsPageContent() {
       queryClient.invalidateQueries({ queryKey: ['analytics-categories'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() });
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() });
+      // Fase 36: un gasto enlazado cambia el saldo y los gastos enlazados de algún sobre.
+      queryClient.invalidateQueries({ queryKey: queryKeys.funds.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.funds.details() });
       toast.success('Transacción eliminada');
     },
     onError: (error: unknown) => {
@@ -233,9 +237,11 @@ function TransactionsPageContent() {
   const updateMutation = useMutation({
     mutationFn: async (payload: UpdateTransactionPayload) => {
       const response = await api.put(`transactions/${payload.id}`, payload);
-      return response.data;
+      return response.data as Transaction;
     },
-    onSuccess: () => {
+    onSuccess: (updated, variables) => {
+      // Antes de invalidar: el nombre del sobre sale del caché de la lista de sobres.
+      const fundNotice = fundSpendNotice(queryClient, updated, variables.fund_id);
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() });
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
@@ -244,7 +250,10 @@ function TransactionsPageContent() {
       queryClient.invalidateQueries({ queryKey: ['analytics-categories'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() });
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() });
-      toast.success('Transacción actualizada');
+      // Fase 36: un gasto enlazado cambia el saldo y los gastos enlazados de algún sobre.
+      queryClient.invalidateQueries({ queryKey: queryKeys.funds.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.funds.details() });
+      toast.success('Transacción actualizada', { description: fundNotice });
       setIsEditModalOpen(false);
       setEditingTransaction(null);
     },

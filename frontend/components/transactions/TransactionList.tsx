@@ -9,6 +9,7 @@ import QueryErrorState from '@/components/ui/QueryErrorState';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import CategoryIcon from '@/components/ui/CategoryIcon';
 import Button from '@/components/ui/Button';
+import PlannedBadge from '@/components/funds/PlannedBadge';
 import type { Account, Category, Transaction } from '@/types/api';
 
 interface TransactionListProps {
@@ -73,9 +74,12 @@ export default function TransactionList({
                       {isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-text truncate text-sm font-medium">
-                        {tx.description || category?.name || 'Sin categoría'}
-                      </p>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <p className="text-text truncate text-sm font-medium">
+                          {tx.description || category?.name || 'Sin categoría'}
+                        </p>
+                        {tx.fund_id != null && <PlannedBadge />}
+                      </div>
                       <div className="text-text-muted mt-0.5 flex space-x-2 text-xs">
                         <span className="truncate">{account?.name || 'Cuenta eliminada'}</span>
                         <span className="hidden sm:inline">•</span>
