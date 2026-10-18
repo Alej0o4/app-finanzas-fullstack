@@ -19,7 +19,7 @@ def _money(valor) -> Decimal:
 @pytest.fixture
 def crear_sobre(client, auth_headers):
     def _factory(account_id: int, headers: dict | None = None, **extra) -> dict:
-        body = {"name": "Seguro", "kind": "annual_expense", "account_id": account_id, "target_amount": "1200.00"}
+        body = {"name": "Seguro", "kind": "goal", "account_id": account_id, "target_amount": "1200.00"}
         body.update(extra)
         resp = client.post(URL, json=body, headers=headers or auth_headers)
         assert resp.status_code == 200, resp.text
@@ -74,7 +74,7 @@ class TestCrear:
         ],
     )
     def test_validaciones_422(self, client, auth_headers, cuenta, extra):
-        body = {"name": "Seguro", "kind": "annual_expense", "account_id": cuenta["id"], "target_amount": "1200.00"}
+        body = {"name": "Seguro", "kind": "goal", "account_id": cuenta["id"], "target_amount": "1200.00"}
         body.update(extra)
         assert client.post(URL, json=body, headers=auth_headers).status_code == 422
 
@@ -512,3 +512,146 @@ class TestCascadaYDB:
             with pytest.raises(sa.exc.IntegrityError):
                 db_session.flush()
             db_session.rollback()
+
+
+class TestGastoAnualExigeFecha:
+    """A4: un gasto anual sin vencimiento no es un gasto anual (sin CHECK ni migración)."""
+
+    def _futura(self) -> str:
+        return (datetime.now(UTC) + timedelta(days=90)).date().isoformat()
+
+    def test_crear_sin_fecha_422(self, client, auth_headers, cuenta):
+        body = {"name": "Seguro", "kind": "annual_expense", "account_id": cuenta["id"], "target_amount": "1200.00"}
+        assert client.post(URL, json=body, headers=auth_headers).status_code == 422
+
+    def test_crear_con_fecha_ok(self, crear_sobre, cuenta):
+        fondo = crear_sobre(cuenta["id"], kind="annual_expense", target_date=self._futura())
+        assert fondo["kind"] == "annual_expense"
+        assert fondo["target_date"] == self._futura()
+
+    @pytest.mark.parametrize("kind", ["goal", "emergency"])
+    def test_goal_y_emergencia_siguen_con_fecha_opcional(self, client, auth_headers, cuenta, kind):
+        body = {"name": "X", "kind": kind, "account_id": cuenta["id"], "target_amount": "500.00"}
+        assert client.post(URL, json=body, headers=auth_headers).status_code == 200
+
+    def test_put_con_fecha_null_en_gasto_anual_422(self, client, auth_headers, cuenta, crear_sobre):
+        fondo = crear_sobre(cuenta["id"], kind="annual_expense", target_date=self._futura())
+        resp = client.put(f"{URL}{fondo['id']}", json={"target_date": None}, headers=auth_headers)
+        assert resp.status_code == 422
+        # la fecha sigue ahí
+        assert client.get(f"{URL}{fondo['id']}", headers=auth_headers).json()["target_date"] == self._futura()
+
+    def test_put_con_fecha_null_en_goal_ok(self, client, auth_headers, cuenta, crear_sobre):
+        fondo = crear_sobre(cuenta["id"], target_date=self._futura())
+        resp = client.put(f"{URL}{fondo['id']}", json={"target_date": None}, headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["target_date"] is None
+
+    def test_put_solo_nombre_en_sobre_legado_sin_fecha_ok(self, client, auth_headers, cuenta, crear_sobre, db_session):
+        fondo = crear_sobre(cuenta["id"], kind="annual_expense", target_date=self._futura())
+        # Fila legada de antes de A4: gasto anual sin fecha.
+        db_session.query(models.Fund).filter(models.Fund.id == fondo["id"]).update({"target_date": None})
+        db_session.commit()
+        resp = client.put(f"{URL}{fondo['id']}", json={"name": "Seguro 2027"}, headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Seguro 2027"
+        assert resp.json()["target_date"] is None
+
+
+class TestProximaCuotaAPI:
+    """A2: `next_month_contribution` convive con `required_contribution` (que no cambia)."""
+
+    def _fecha_en_meses(self, meses: int) -> str:
+        return (datetime.now(UTC) + timedelta(days=30 * meses + 10)).date().isoformat()
+
+    def test_cuota_cumplida_expone_la_proxima(self, client, auth_headers, cuenta, crear_sobre):
+        fondo = crear_sobre(cuenta["id"], target_amount="2000.00", target_date=self._fecha_en_meses(3))
+        meses = fondo["months_remaining"]
+        assert meses >= 3
+        assert fondo["next_month_contribution"] is not None
+        _aportar(client, auth_headers, fondo["id"], "2000.00")
+        _retirar(client, auth_headers, fondo["id"], "1000.00")  # neto del mes 1000, faltan 1000
+        detalle = client.get(f"{URL}{fondo['id']}", headers=auth_headers).json()
+        esperado = (D("1000.00") / (meses - 1)).quantize(D("0.01"), rounding="ROUND_CEILING")
+        assert _money(detalle["next_month_contribution"]) == esperado
+
+    def test_aporte_grande_cumple_la_cuota_y_deja_la_proxima(self, client, auth_headers, cuenta, crear_sobre):
+        fondo = crear_sobre(cuenta["id"], target_amount="2000.00", target_date=self._fecha_en_meses(2))
+        meses = fondo["months_remaining"]
+        _aportar(client, auth_headers, fondo["id"], "1000.00")
+        detalle = client.get(f"{URL}{fondo['id']}", headers=auth_headers).json()
+        assert detalle["required_contribution"] is None  # la de este mes quedó cumplida
+        assert _money(detalle["remaining"]) == D("1000.00")
+        esperado = (D("1000.00") / (meses - 1)).quantize(D("0.01"), rounding="ROUND_CEILING")
+        assert _money(detalle["next_month_contribution"]) == esperado
+
+    def test_sin_fecha_es_null(self, crear_sobre, cuenta):
+        assert crear_sobre(cuenta["id"])["next_month_contribution"] is None
+
+    def test_meta_cumplida_es_null(self, client, auth_headers, cuenta, crear_sobre):
+        fondo = crear_sobre(cuenta["id"], target_amount="100.00", target_date=self._fecha_en_meses(3))
+        _aportar(client, auth_headers, fondo["id"], "100.00")
+        assert client.get(f"{URL}{fondo['id']}", headers=auth_headers).json()["next_month_contribution"] is None
+
+    def test_ultimo_mes_es_null(self, crear_sobre, cuenta):
+        hoy_mas_dos_dias = (datetime.now(UTC) + timedelta(days=1)).date().isoformat()
+        fondo = crear_sobre(cuenta["id"], target_amount="100.00", target_date=hoy_mas_dos_dias)
+        assert fondo["months_remaining"] in (1, 2)
+        if fondo["months_remaining"] == 1:
+            assert fondo["next_month_contribution"] is None
+
+
+class TestBorrarSobre:
+    """A1: DELETE borra el sobre y sus movimientos, en cualquier estado y con cualquier saldo."""
+
+    def test_borrar_con_saldo_libera_el_disponible(self, client, auth_headers, cuenta, crear_sobre, db_session):
+        fondo = crear_sobre(cuenta["id"])
+        _aportar(client, auth_headers, fondo["id"], "300.00")
+        antes = client.get("/api/v1/dashboard/summary", headers=auth_headers).json()
+        assert _money(antes["committed"][0]["total"]) == D("300.00")
+
+        resp = client.delete(f"{URL}{fondo['id']}", headers=auth_headers)
+        assert resp.status_code == 204
+        assert resp.content == b""
+
+        despues = client.get("/api/v1/dashboard/summary", headers=auth_headers).json()
+        assert despues["committed"] == [] or _money(despues["committed"][0]["total"]) == D("0.00")
+        assert _money(despues["free_to_spend"][0]["total"]) == D("5000.00")
+        assert client.get(f"{URL}{fondo['id']}", headers=auth_headers).status_code == 404
+        assert client.get(URL, headers=auth_headers).json() == []
+        # movimientos borrados, sin huérfanos
+        assert db_session.query(models.FundEntry).filter(models.FundEntry.fund_id == fondo["id"]).count() == 0
+
+    def test_la_cuenta_y_las_transacciones_quedan_intactas(self, client, auth_headers, cuenta, crear_sobre, db_session):
+        fondo = crear_sobre(cuenta["id"])
+        _aportar(client, auth_headers, fondo["id"], "300.00")
+        saldo_antes = client.get(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).json()["balance"]
+        assert client.delete(f"{URL}{fondo['id']}", headers=auth_headers).status_code == 204
+        saldo_despues = client.get(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).json()["balance"]
+        assert _money(saldo_antes) == _money(saldo_despues) == D("5000.00")
+
+    def test_borrar_un_archivado(self, client, auth_headers, cuenta, crear_sobre):
+        fondo = crear_sobre(cuenta["id"])
+        assert client.post(f"{URL}{fondo['id']}/archive", headers=auth_headers).status_code == 200
+        assert client.delete(f"{URL}{fondo['id']}", headers=auth_headers).status_code == 204
+        assert client.get(f"{URL}?include_archived=true", headers=auth_headers).json() == []
+
+    def test_sobre_inexistente_404(self, client, auth_headers):
+        assert client.delete(f"{URL}999999", headers=auth_headers).status_code == 404
+
+    def test_sobre_ajeno_404_y_sigue_existiendo(self, client, other_user, auth_headers, cuenta, crear_sobre):
+        fondo = crear_sobre(cuenta["id"])
+        _aportar(client, auth_headers, fondo["id"], "50.00")
+        resp = client.delete(f"{URL}{fondo['id']}", headers=other_user["headers"])
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "El sobre no existe o no tienes permisos."
+        assert _money(client.get(f"{URL}{fondo['id']}", headers=auth_headers).json()["balance"]) == D("50.00")
+
+    def test_requiere_autenticacion(self, client):
+        assert client.delete(f"{URL}1").status_code in (401, 403)
+
+    def test_borrar_la_cuenta_despues_de_borrar_su_sobre(self, client, auth_headers, cuenta, crear_sobre):
+        fondo = crear_sobre(cuenta["id"])
+        assert client.delete(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).status_code == 400
+        assert client.delete(f"{URL}{fondo['id']}", headers=auth_headers).status_code == 204
+        assert client.delete(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).status_code == 200

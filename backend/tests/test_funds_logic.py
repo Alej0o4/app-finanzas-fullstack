@@ -57,6 +57,35 @@ class TestAporteRequerido:
         assert svc.aporte_requerido(None, 4) is None
 
 
+class TestProximaCuota:
+    """A2: cuota del mes siguiente = restante / (meses - 1), hacia arriba al centavo."""
+
+    def test_cuota_cumplida_reparte_lo_que_falta_en_los_meses_que_quedan(self):
+        # Meta 2.000.000, aportado 1.000.000, quedan 3 meses (este incluido): 1.000.000 / 2
+        assert svc.proxima_cuota(D("1000000.00"), 3) == D("500000.00")
+
+    def test_redondea_hacia_arriba_al_centavo(self):
+        assert svc.proxima_cuota(D("1000.00"), 4) == D("333.34")
+
+    def test_ultimo_mes_no_hay_proxima(self):
+        assert svc.proxima_cuota(D("500.00"), 1) is None
+
+    def test_fecha_vencida_no_hay_proxima(self):
+        assert svc.proxima_cuota(D("500.00"), 0) is None
+
+    def test_sin_fecha(self):
+        assert svc.proxima_cuota(D("500.00"), None) is None
+
+    def test_sin_nada_por_aportar(self):
+        assert svc.proxima_cuota(D("0.00"), 5) is None
+        assert svc.proxima_cuota(None, 5) is None
+
+    def test_cruce_de_anio(self):
+        # nov 30 -> 2027-02-01 son 3 meses; la próxima reparte entre 2
+        meses = svc.meses_restantes(date(2027, 2, 1), date(2026, 11, 30))
+        assert svc.proxima_cuota(D("100.00"), meses) == D("50.00")
+
+
 class TestRitmo:
     creado = date(2026, 1, 1)
     objetivo = date(2026, 12, 31)  # 364 días

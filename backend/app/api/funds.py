@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -49,6 +49,12 @@ def actualizar_sobre(
     current_user: models.User = Depends(get_current_user),
 ):
     return servicio.actualizar(db, current_user, fund_id, datos, _ahora())
+
+
+@router.delete("/{fund_id}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_sobre(fund_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    servicio.eliminar(db, current_user, fund_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{fund_id}/contributions", response_model=schemas.FundEntryResponse)

@@ -48,6 +48,15 @@ def aporte_requerido(restante: Decimal | None, meses: int | None) -> Decimal | N
     return (restante / max(meses, 1)).quantize(CENTAVO, rounding=ROUND_CEILING)
 
 
+def proxima_cuota(restante: Decimal | None, meses: int | None) -> Decimal | None:
+    """Cuota del mes siguiente (A2): lo que falta repartido en los meses que quedan después de
+    este, hacia arriba al centavo. `None` sin fecha, sin nada por aportar o en el último mes
+    (o con la fecha vencida), donde no hay "mes siguiente"."""
+    if restante is None or meses is None or restante <= 0 or meses <= 1:
+        return None
+    return aporte_requerido(restante, meses - 1)
+
+
 def ritmo(saldo: Decimal, meta: Decimal | None, creado: date, objetivo: date | None, hoy: date) -> str | None:
     """`completed` / `on_track` / `behind` / `None` (D2). Ritmo lineal por días desde el día de
     creación hasta el objetivo; sin meta o sin fecha no hay ritmo que medir."""
@@ -191,6 +200,7 @@ def _respuesta(
         "remaining": restante,
         "months_remaining": meses,
         "required_contribution": sugerido if restante else None,
+        "next_month_contribution": proxima_cuota(restante, meses),
         "pace": ritmo(saldo, meta, dia_local(fund.created_at, tz), objetivo, hoy) if fund.created_at else None,
         "monthly_expense_avg": promedio if es_emergencia else None,
         "runway_months": runway(saldo, promedio) if es_emergencia else None,
@@ -361,6 +371,8 @@ def actualizar(db: Session, user: models.User, fund_id: int, datos, ahora: datet
 
     if "target_date" in enviados:
         if datos.target_date is None:
+            if fund.kind == "annual_expense":
+                raise ValidationError("Un gasto anual necesita fecha de vencimiento; no se puede quitar.")
             fund.target_date = None
         else:
             _validar_fecha_objetivo(datos.target_date, dia_local(ahora, tz))
@@ -414,6 +426,18 @@ def archivar(db: Session, user: models.User, fund_id: int, ahora: datetime) -> d
         db.commit()
         db.refresh(fund)
     return _construir(db, user, [fund], ahora)[0]
+
+
+def eliminar(db: Session, user: models.User, fund_id: int) -> None:
+    """Borra el sobre y su libro (A1), en cualquier estado y con cualquier saldo. El saldo vuelve
+    al disponible porque el sobre deja de contar; `Account.balance` nunca se tocó. Sin
+    `ON DELETE CASCADE`: se borran las entradas y luego el sobre en la misma transacción. El
+    `FOR UPDATE` serializa contra aportes/retiros: los que esperan el lock ven el sobre borrado
+    y responden 404 en vez de dejar entradas huérfanas."""
+    fund = _obtener(db, user.id, fund_id, bloquear=True)
+    db.query(models.FundEntry).filter(models.FundEntry.fund_id == fund.id).delete(synchronize_session=False)
+    db.delete(fund)
+    db.commit()
 
 
 def desarchivar(db: Session, user: models.User, fund_id: int, ahora: datetime) -> dict:
