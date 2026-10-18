@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Archive } from 'lucide-react';
+import DeleteFundButton from '@/components/funds/DeleteFundButton';
 import FundProgress from '@/components/funds/FundProgress';
 import { KIND_LABELS, PaceChip } from '@/components/funds/fundPresentation';
 import type { Fund } from '@/types/api';
@@ -19,14 +20,17 @@ export default function FundCard({ fund }: { fund: Fund }) {
           </h2>
           <p className="text-text-muted text-xs">{KIND_LABELS[fund.kind]}</p>
         </div>
-        {fund.status === 'archived' ? (
-          <span className="bg-surface-elevated text-text-muted inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs">
-            <Archive size={12} aria-hidden="true" />
-            Archivado
-          </span>
-        ) : (
-          <PaceChip pace={fund.pace} />
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {fund.status === 'archived' ? (
+            <span className="bg-surface-elevated text-text-muted inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs">
+              <Archive size={12} aria-hidden="true" />
+              Archivado
+            </span>
+          ) : (
+            <PaceChip pace={fund.pace} />
+          )}
+          <DeleteFundButton fund={fund} variant="icon" />
+        </div>
       </div>
       <FundProgress fund={fund} />
     </div>

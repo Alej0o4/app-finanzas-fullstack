@@ -79,6 +79,22 @@ export function useFundMovement(id: string | number, kind: 'contributions' | 'wi
   });
 }
 
+/** Borra el sobre y su historial (A1). El detalle ya no existe: se quita del caché en vez de
+ *  invalidarlo (refetchearía un 404); la lista y el "Disponible real" sí se invalidan. */
+export function useDeleteFund(id: string | number) {
+  const queryClient = useQueryClient();
+  const invalidate = useInvalidateFunds();
+  return useMutation({
+    mutationFn: async () => {
+      await api.delete(`funds/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: queryKeys.funds.byId(id) });
+      invalidate();
+    },
+  });
+}
+
 export function useArchiveFund(id: string | number) {
   const invalidate = useInvalidateFunds();
   return useMutation({

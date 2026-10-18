@@ -109,18 +109,37 @@ export default function AvailableCard({
       )}
 
       {others.length > 0 && (
-        <ul className="border-border/50 mt-3 space-y-1 border-t pt-3 text-xs">
-          {others.map((b) => (
-            <li key={b.currency} className="flex justify-between gap-2">
-              <span className="text-text-muted">{b.currency}</span>
-              <span
-                className={`font-medium tabular-nums ${Number(b.total) < 0 ? 'text-danger' : 'text-text'}`}
-              >
-                {formatCurrency(Number(b.total), b.currency)}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="border-border/50 mt-3 space-y-3 border-t pt-3">
+          {others.map((b) => {
+            const negative = Number(b.total) < 0;
+            return (
+              <div key={b.currency} className="space-y-1 text-xs">
+                <div className="flex justify-between gap-2">
+                  <span className="text-text-muted font-medium">{b.currency}</span>
+                  <span
+                    className={`font-medium tabular-nums ${negative ? 'text-danger' : 'text-text'}`}
+                  >
+                    {formatCurrency(Number(b.total), b.currency)}
+                  </span>
+                </div>
+                <dl className="text-text-muted space-y-1">
+                  <div className="flex justify-between gap-2">
+                    <dt>Saldo en cuentas</dt>
+                    <dd className="text-text tabular-nums">
+                      {formatCurrency(totalOf(accounts_total, b.currency), b.currency)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt>− Apartado en sobres</dt>
+                    <dd className="text-text tabular-nums">
+                      {formatCurrency(totalOf(committed, b.currency), b.currency)}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {!isNegative && anyNegative && (

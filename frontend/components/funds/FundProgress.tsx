@@ -1,4 +1,7 @@
+'use client';
+
 import { AlertTriangle } from 'lucide-react';
+import { useTimezone } from '@/lib/hooks/useTimezone';
 import { formatCurrency } from '@/lib/utils';
 import { formatTargetDay, hasTarget, monthsLabel } from '@/components/funds/fundPresentation';
 import type { Fund } from '@/types/api';
@@ -10,6 +13,17 @@ export default function FundProgress({ fund }: { fund: Fund }) {
   const pct = fund.progress_pct === null ? null : Math.min(Math.max(fund.progress_pct, 0), 100);
   const shortfall = Number(fund.backing_shortfall);
   const isEmergency = fund.kind === 'emergency';
+  const { displayTimezone } = useTimezone();
+  // A2: la cuota de este mes ya está cubierta (el servidor la dejó en null) pero aún falta meta.
+  const monthDone =
+    fund.status === 'active' &&
+    Number(fund.remaining ?? 0) > 0 &&
+    fund.required_contribution === null &&
+    fund.next_month_contribution !== null;
+  const monthName = new Intl.DateTimeFormat('es-CO', {
+    month: 'long',
+    timeZone: displayTimezone,
+  }).format(new Date());
 
   return (
     <div className="space-y-3">
@@ -78,6 +92,16 @@ export default function FundProgress({ fund }: { fund: Fund }) {
             .
           </p>
         )}
+
+      {monthDone && (
+        <p className="text-text-muted text-xs">
+          Cuota de {monthName} cumplida ✓ — el mes que viene te sugerimos ~
+          <span className="text-text font-medium tabular-nums">
+            {formatCurrency(Number(fund.next_month_contribution), fund.currency)}
+          </span>
+          .
+        </p>
+      )}
 
       {shortfall > 0 && (
         <p

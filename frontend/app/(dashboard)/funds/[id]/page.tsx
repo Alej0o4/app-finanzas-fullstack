@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Archive, ArchiveRestore, ArrowLeft, Minus, Pencil, Plus } from 'lucide-react';
+import DeleteFundButton from '@/components/funds/DeleteFundButton';
 import FundEntriesList from '@/components/funds/FundEntriesList';
 import FundFormModal from '@/components/funds/FundFormModal';
 import FundMovementModal from '@/components/funds/FundMovementModal';
@@ -23,6 +24,7 @@ type OpenModal = 'contribution' | 'withdrawal' | 'edit' | null;
 
 export default function FundDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { displayTimezone } = useTimezone();
   const { data: fund, isLoading, isError, refetch } = useFund(id);
   const { data: accounts } = useAccounts();
@@ -136,6 +138,7 @@ export default function FundDetailPage() {
               Archivar
             </Button>
           )}
+          <DeleteFundButton fund={fund} onDeleted={() => router.replace('/funds')} />
         </div>
       </div>
 

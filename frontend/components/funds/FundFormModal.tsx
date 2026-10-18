@@ -60,6 +60,8 @@ export default function FundFormModal({ fund, accounts, onClose, onCreated }: Fu
   }>({});
 
   const usesMonths = kind === 'emergency' && goalMode === 'months';
+  // A4: un gasto anual sin vencimiento no es un gasto anual.
+  const dateRequired = kind === 'annual_expense';
   // La moneda del sobre es la de su cuenta y no se elige; al editar solo caben cuentas de la
   // misma moneda (el backend responde 422 si no).
   const selectableAccounts = isEdit
@@ -86,13 +88,19 @@ export default function FundFormModal({ fund, accounts, onClose, onCreated }: Fu
     // El backend solo valida la fecha cuando se envía; al editar un sobre vencido sin tocarla
     // no se manda, así que solo se exige "hoy o después" si cambió.
     const dateChanged = targetDate !== (fund?.target_date ?? '');
+    if (dateRequired && !targetDate) next.date = 'Indica cuándo vence este gasto anual.';
     if (targetDate && dateChanged && targetDate < today) {
       next.date = 'La fecha debe ser hoy o posterior.';
     }
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
-    const onError = (error: unknown) => setErrors({ form: getApiError(error) });
+    const onError = (error: unknown) => {
+      const message = getApiError(error);
+      // El 422 de A4 es del campo fecha: se muestra junto a él, no como error genérico.
+      if (dateRequired && /fecha|target_date/i.test(message)) setErrors({ date: message });
+      else setErrors({ form: message });
+    };
 
     if (isEdit) {
       const payload: UpdateFundPayload = {};
@@ -227,7 +235,7 @@ export default function FundFormModal({ fund, accounts, onClose, onCreated }: Fu
 
         <div>
           <Input
-            label="Fecha objetivo (opcional)"
+            label={dateRequired ? 'Fecha de vencimiento' : 'Fecha objetivo (opcional)'}
             type="date"
             value={targetDate}
             min={isEdit ? undefined : today}
@@ -235,7 +243,7 @@ export default function FundFormModal({ fund, accounts, onClose, onCreated }: Fu
             error={errors.date}
             className="bg-background"
           />
-          {targetDate && (
+          {targetDate && !dateRequired && (
             <button
               type="button"
               onClick={() => setTargetDate('')}
