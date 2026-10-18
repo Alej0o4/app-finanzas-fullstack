@@ -225,6 +225,13 @@ def actualizar_cuenta(
         # Fase 35: el sobre hereda la moneda de su cuenta al crearse y no la sigue si cambia.
         if db.query(models.Fund).filter(models.Fund.account_id == account_id).first():
             raise BadRequestError("No se puede cambiar la moneda de una cuenta que respalda sobres.")
+        # Fase 37: la moneda de una regla recurrente es la de su cuenta (no se guarda en la regla).
+        if (
+            db.query(models.RecurringRule)
+            .filter(models.RecurringRule.account_id == account_id, models.RecurringRule.user_id == current_user.id)
+            .first()
+        ):
+            raise BadRequestError("No se puede cambiar la moneda de una cuenta con reglas recurrentes.")
         cuenta.currency = cuenta_actualizada.currency
 
     db.commit()

@@ -6,7 +6,7 @@
 > (`/api/v1/recurring`). **No modifica** `Transaction`, `ledger.py` ni ninguna cifra existente: una
 > ocurrencia confirmada crea una transacción normal por el camino contable de siempre.
 
-**Estado:** **implementada y cerrada el 2026-10-18** (783 tests en Postgres 16; ver "Desvíos y hallazgos" y "Cierre"). **Sin `/grilling` con el dueño**: las decisiones D1–D20 las tomó el agente contra el código y la visión (precedente: Fase 35) y esperan revisión — ver "Decisiones tomadas por el agente, pendientes de revisión del dueño". Marcadores `[NEEDS CLARIFICATION]` abiertos: ninguno (los puntos más de producto tienen un default conservador).
+**Estado:** **implementada y cerrada el 2026-10-18; decisiones D1–D20 revisadas y confirmadas por el dueño el 2026-10-18** (único cambio: guarda de moneda en `PUT /accounts/{id}`, D7) (783 tests en Postgres 16; ver "Desvíos y hallazgos" y "Cierre"). **Sin `/grilling` previo**: las decisiones D1–D20 las tomó el agente contra el código y la visión (precedente: Fase 35); el dueño las revisó una por una después y las mantuvo — ver "Decisiones tomadas por el agente, pendientes de revisión del dueño". Marcadores `[NEEDS CLARIFICATION]` abiertos: ninguno (los puntos más de producto tienen un default conservador).
 
 ---
 
@@ -355,11 +355,11 @@ Backend en Postgres 16 (testcontainers, default de la Fase 32). T1 y T2 con TDD.
   4. **Cambia D7:** `DELETE /accounts/{id}` y `DELETE /categories/{id}` dan `409` si el usuario tiene reglas recurrentes (activas o pausadas) que las usan, así una regla ya no queda huérfana por esa vía. `account_missing`/`category_missing` se mantienen como defensa (p. ej. borrados por otras vías). `crear`/`actualizar` toman `FOR UPDATE` de la cuenta, el mismo lock que el borrado de cuenta.
   5. `es_candidato_anual`: el 20 % se mide dentro de la **pareja consecutiva** de 350-380 días (la última que cumple ambas), y `last_date`/`amount`/cuenta/categoría de la sugerencia salen de esa pareja, no de las dos últimas del grupo (nueva `indice_ultima_pareja_anual`).
   6. `sumar_meses`, `ultimo_dia_mes` y `primer_dia_del_mes` viven en `core/periods.py` (con tests en `tests/test_periods.py`); `services/recurring.py` los importa.
-  Quedan como deuda (no se hicieron): consulta de sugerencias, carrera del tope de 100 reglas, helper de invalidaciones del frontend. Observación: `PUT /accounts/{id}` que cambia la moneda de una cuenta con reglas no tiene guarda (sí la tiene para sobres).
+  Quedan como deuda (no se hicieron): consulta de sugerencias, carrera del tope de 100 reglas, helper de invalidaciones del frontend. Observación: `PUT /accounts/{id}` que cambiaba la moneda de una cuenta con reglas no tenía guarda; se agregó el 2026-10-18 (`400`, como con sobres).
 - **Hallazgo fuera de alcance:** el `TRUNCATE` del fixture `real_client` (tests de concurrencia) no nombra `funds`/`recurring_rules`; funciona por `CASCADE` desde `users`.
 
 - **Desvíos del frontend:** los toasts de confirmar/saltar/borrar salen desde `useMutation`, no desde el `mutate(..., { onSuccess })` del componente (la fila se desmonta al refrescar y TanStack no corre esos callbacks); la clave de `PendingRow` incluye el monto para que "Editar monto" no mande un override obsoleto (code-review); los tipos de `types/generated/api.ts` se regeneraron con `pnpm gen:types` contra un backend de dev aislado y `types/api.ts` tiene los tipos a mano.
-- **Fuera de la spec, documentado:** `PUT /accounts/{id}` puede cambiar la moneda de una cuenta con reglas (deuda en `docs/TODO.md`).
+- **Fuera de la spec, resuelto:** `PUT /accounts/{id}` ahora responde `400` si se cambia la moneda de una cuenta con reglas recurrentes (2026-10-18).
 
 ## Cierre (2026-10-18) — `/analyze-spec 37 cierre`
 

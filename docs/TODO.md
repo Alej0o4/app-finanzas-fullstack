@@ -625,7 +625,7 @@ Deuda consciente (spec `docs/specs/fase_37_spec.md`; D1–D20 sin `/grilling`, a
   que invalida crear una transacción (igual que `TransactionModal`/captura); extraer
   `invalidateAfterTransactionChange(queryClient)`.
 - [ ] **Calendario largo en móvil:** 12 tarjetas apiladas; plegar por mes.
-- [ ] **`PUT /accounts/{id}` puede cambiar la moneda de una cuenta con reglas** (tiene guarda para sobres, no para reglas recurrentes).
+- [x] **`PUT /accounts/{id}` puede cambiar la moneda de una cuenta con reglas** — resuelto 2026-10-18: `400` como con sobres (revisión D7).
 - [ ] **Cambiar `frequency`/`start_date` de una regla** exige borrar y recrear (D6).
 
 ## 🟢 Modularidad — revisar cuando el código duela al modificarlo

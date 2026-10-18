@@ -341,6 +341,24 @@ class TestEditarBorrarYAislamiento:
         assert client.delete(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).status_code == 200
         assert client.delete(f"/api/v1/categories/{cat_gasto['id']}", headers=auth_headers).status_code == 200
 
+    def test_no_se_cambia_la_moneda_de_una_cuenta_con_reglas(self, client, crear_regla, auth_headers, cuenta):
+        regla = crear_regla()
+        resp = client.put(
+            f"/api/v1/accounts/{cuenta['id']}",
+            json={"name": cuenta["name"], "type": cuenta["type"], "currency": "USD"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400 and "recurrentes" in resp.json()["detail"]
+        assert client.get(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).json()["currency"] == "COP"
+        # Una regla pausada también cuenta; reenviar la misma moneda nunca bloquea.
+        client.put(f"{URL}{regla['id']}", json={"status": "paused"}, headers=auth_headers)
+        mismo = {"name": cuenta["name"], "type": cuenta["type"], "currency": "COP"}
+        assert client.put(f"/api/v1/accounts/{cuenta['id']}", json=mismo, headers=auth_headers).status_code == 200
+        # Sin reglas ni transacciones el cambio vuelve a ser posible.
+        client.delete(f"{URL}{regla['id']}", headers=auth_headers)
+        usd = {**mismo, "currency": "USD"}
+        assert client.put(f"/api/v1/accounts/{cuenta['id']}", json=usd, headers=auth_headers).status_code == 200
+
     def test_is_due_false_si_la_regla_esta_huerfana(self, client, crear_regla, auth_headers, cuenta, db_session):
         crear_regla(start_date="2026-03-01")
         assert client.get(URL, headers=auth_headers).json()[0]["is_due"] is True

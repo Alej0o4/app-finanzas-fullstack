@@ -521,6 +521,10 @@ tiene al menos una transacción activa, el cambio se bloquea con `400` y detail 
 criterio que `DELETE /accounts/{id}`, Decisión C2/C4). Reenviar la misma moneda (sin
 cambio real) nunca dispara el bloqueo, con o sin transacciones.
 
+El mismo `400` (detail "No se puede cambiar la moneda de una cuenta que respalda sobres." o
+"No se puede cambiar la moneda de una cuenta con reglas recurrentes.") bloquea el cambio si la cuenta
+tiene sobres o reglas recurrentes, activas o pausadas (Fases 35 y 37).
+
 Errores esperados:
 
 - `404` si la cuenta no existe o no pertenece al usuario autenticado.
