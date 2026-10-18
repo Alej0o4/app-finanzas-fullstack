@@ -49,6 +49,15 @@ export const queryKeys = {
      *  cambia saldo y `linked_expenses` de algún sobre, así que se invalida por prefijo. */
     details: () => ['fund'] as const,
   },
+  recurring: {
+    /** Prefijo de todo lo recurrente (Fase 37): reglas, pendientes, calendario y sugerencias
+     *  cuelgan de aquí, así que `invalidateQueries(recurring.all())` los cubre. */
+    all: () => ['recurring'] as const,
+    rules: () => ['recurring', 'rules'] as const,
+    pending: () => ['recurring', 'pending'] as const,
+    calendar: () => ['recurring', 'calendar'] as const,
+    suggestions: () => ['recurring', 'suggestions'] as const,
+  },
   budgets: {
     all: () => ['budgets'] as const,
     /** Listado de `/budgets` de un mes (`'YYYY-MM'`). Cuelga del prefijo `['budgets']`, así que

@@ -293,6 +293,18 @@ Analítica depende de las cuentas) tiene que mostrar el error de la que falla.
   sobre las barras, para que ejes y etiquetas sigan compactos y sin decimales. El tooltip del
   mismo gráfico (`formatAmount`, sin la opción) sí muestra decimales, como el resto de la app.
 
+### Recurrentes (Fase 37)
+
+Página `app/(dashboard)/recurring/page.tsx` y subcomponentes en `components/recurring/`:
+
+- `PendingRecurringSection` — bloque "Por confirmar": Confirmar (con "Editar monto" opcional), Saltar (con confirmación accesible). Solo la ocurrencia `is_next` es accionable.
+- `RecurringRuleCard` — tarjeta de regla: costo mensualizado, pausar/reanudar, editar, eliminar (confirmación vía `useConfirmStore`) y aviso de cuenta/categoría borrada.
+- `RecurringFormModal` — crear/editar sobre `ModalShell`; al editar `frequency`, `start_date` y `type` son solo lectura. Acepta `suggestion` para prellenar el alta (D16).
+- `RecurringCalendarSection` — 12 meses, totales por moneda, insignia "Anual", "Vencida" y `monthly_commitment`.
+- `RecurringSuggestionsSection` — cargos anuales detectados; no se muestra si no hay.
+- `PendingRecurringCard` — aviso del dashboard "Tienes N recurrentes por confirmar" (solo si N > 0).
+- `recurringPresentation.tsx` — etiquetas de frecuencia, `formatDay`/`formatMonthLabel` y `Chip`.
+
 ### Cuentas y categorías
 
 - Usan tarjetas con lista y acciones flotantes.

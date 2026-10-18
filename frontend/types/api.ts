@@ -193,6 +193,110 @@ export interface UpdateFundPayload {
   target_date?: string | null;
 }
 
+export type RecurringFrequency = 'weekly' | 'monthly' | 'yearly';
+export type RecurringStatus = 'active' | 'paused';
+
+/** Regla recurrente (Fase 37). Los Decimal llegan como string: normalizar con `Number(...)`.
+ *  Fechas = días de calendario `YYYY-MM-DD` en la zona del usuario, no instantes. */
+export interface RecurringRule {
+  id: number;
+  name: string;
+  type: 'income' | 'expense';
+  amount: number | string;
+  /** Moneda de su cuenta; null si la cuenta se borró (`account_missing`). */
+  currency: string | null;
+  account_id: number;
+  category_id: number;
+  frequency: RecurringFrequency;
+  start_date: string;
+  /** Próxima ocurrencia no resuelta. */
+  next_date: string;
+  status: RecurringStatus;
+  /** Costo mensualizado calculado por el backend (semanal x52/12, anual /12). */
+  monthly_equivalent: number | string;
+  is_annual: boolean;
+  /** Activa y `next_date <= hoy`. */
+  is_due: boolean;
+  account_missing: boolean;
+  category_missing: boolean;
+  created_at: string | null;
+}
+
+export interface CreateRecurringPayload {
+  name: string;
+  type: 'income' | 'expense';
+  amount: number;
+  account_id: number;
+  category_id: number;
+  frequency: RecurringFrequency;
+  start_date: string;
+}
+
+/** `frequency`, `start_date` y `type` NO se editan: enviarlos es 422. */
+export interface UpdateRecurringPayload {
+  name?: string;
+  amount?: number;
+  account_id?: number;
+  category_id?: number;
+  status?: RecurringStatus;
+}
+
+export interface PendingOccurrence {
+  rule_id: number;
+  name: string;
+  type: 'income' | 'expense';
+  amount: number | string;
+  currency: string;
+  account_id: number;
+  category_id: number;
+  frequency: RecurringFrequency;
+  occurrence_date: string;
+  /** Solo la primera ocurrencia de cada regla se puede confirmar o saltar. */
+  is_next: boolean;
+}
+
+export interface RecurringCalendarItem {
+  rule_id: number;
+  name: string;
+  type: 'income' | 'expense';
+  amount: number | string;
+  currency: string;
+  date: string;
+  is_annual: boolean;
+  is_overdue: boolean;
+}
+
+export interface RecurringCalendarTotals {
+  currency: string;
+  income: number | string;
+  expense: number | string;
+  net: number | string;
+}
+
+export interface RecurringCalendarMonth {
+  /** `YYYY-MM`. */
+  month: string;
+  items: RecurringCalendarItem[];
+  totals: RecurringCalendarTotals[];
+}
+
+export interface RecurringCalendar {
+  months: RecurringCalendarMonth[];
+  /** Suma de `monthly_equivalent` de las reglas de gasto por moneda; informativo. */
+  monthly_commitment: { currency: string; amount: number | string }[];
+}
+
+export interface RecurringSuggestion {
+  name: string;
+  account_id: number;
+  category_id: number;
+  currency: string;
+  amount: number | string;
+  last_date: string;
+  suggested_start_date: string;
+  occurrences: number;
+}
+
 export interface CashflowItem {
   date_label: string;
   expense: number;
