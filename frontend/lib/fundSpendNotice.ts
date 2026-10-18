@@ -19,6 +19,7 @@ function fundNameFromCache(queryClient: QueryClient, fundId: number): string | u
  *
  * - `requestedFundId`: sobre que el usuario eligió en el formulario (para detectar el caso
  *   "pediste sobre pero estaba en 0", donde la respuesta trae `fund_id: null`).
+ * - `previous`: en una edición, el enlace que tenía antes la transacción.
  * - La única cuenta del lado del cliente es `amount − fund_applied_amount`, y solo para el
  *   texto (en centavos enteros, sin acumular flotantes); el backend sigue siendo la fuente de
  *   verdad de lo aplicado.
@@ -26,8 +27,18 @@ function fundNameFromCache(queryClient: QueryClient, fundId: number): string | u
 export function fundSpendNotice(
   queryClient: QueryClient,
   tx: Transaction,
-  requestedFundId?: number | null
+  requestedFundId?: number | null,
+  previous?: Pick<Transaction, 'fund_id' | 'fund_applied_amount'> | null
 ): string | undefined {
+  // Edición: si el enlace y lo aplicado no cambiaron (p. ej. solo se editó la descripción),
+  // no se avisa que "salió dinero del sobre": no se movió nada.
+  if (
+    previous &&
+    previous.fund_id === tx.fund_id &&
+    Number(previous.fund_applied_amount ?? 0) === Number(tx.fund_applied_amount ?? 0)
+  ) {
+    return undefined;
+  }
   if (tx.fund_id != null) {
     const name = fundNameFromCache(queryClient, tx.fund_id);
     const appliedCents = Math.round(Number(tx.fund_applied_amount ?? 0) * 100);

@@ -138,7 +138,9 @@ def _netos_del_periodo(db: Session, fund_ids: list[int], periodo: str) -> dict[i
     return {fund_id: total for fund_id, total in filas}
 
 
-def _enlaces(db: Session, fund_ids: list[int] | None = None, tx_ids: list[int] | None = None):
+def _enlaces(
+    db: Session, fund_ids: list[int] | None = None, tx_ids: list[int] | None = None, user_id: int | None = None
+):
     """Subconsulta `(tx_id, fund_id, neto)` de las transacciones enlazadas a un sobre (Fase 36
     D13): un enlace es una suma neta NEGATIVA de las entradas con ese `transaction_id` (una
     desvinculación deja suma 0). El monto aplicado es `-neto`."""
@@ -153,6 +155,8 @@ def _enlaces(db: Session, fund_ids: list[int] | None = None, tx_ids: list[int] |
         consulta = consulta.filter(models.FundEntry.fund_id.in_(fund_ids))
     if tx_ids is not None:
         consulta = consulta.filter(models.FundEntry.transaction_id.in_(tx_ids))
+    if user_id is not None:
+        consulta = consulta.filter(models.FundEntry.user_id == user_id)  # acota el agregado a los datos del usuario
     return (
         consulta.group_by(models.FundEntry.transaction_id, models.FundEntry.fund_id)
         .having(func.sum(models.FundEntry.amount) < 0)
@@ -160,10 +164,10 @@ def _enlaces(db: Session, fund_ids: list[int] | None = None, tx_ids: list[int] |
     )
 
 
-def ids_transacciones_enlazadas(db: Session):
+def ids_transacciones_enlazadas(db: Session, user_id: int):
     """`SELECT tx_id` de todas las transacciones enlazadas, para `IN (...)` en otras consultas
     (planeado del dashboard D9, exclusión del promedio de emergencia D11)."""
-    return select(_enlaces(db).c.tx_id)
+    return select(_enlaces(db, user_id=user_id).c.tx_id)
 
 
 def vinculos(db: Session, tx_ids: list[int]) -> dict[int, tuple[int, Decimal]]:
@@ -245,7 +249,7 @@ def promedio_gasto_mensual(db: Session, user_id: int, moneda: str, ahora: dateti
             models.Transaction.date >= inicio,
             models.Transaction.date < fin,
             # Fase 36 D11: lo pagado con un sobre ya estaba provisionado, no es gasto "normal".
-            models.Transaction.id.not_in(ids_transacciones_enlazadas(db)),
+            models.Transaction.id.not_in(ids_transacciones_enlazadas(db, user_id)),
         )
         .scalar()
     ) or Decimal("0.00")
@@ -606,11 +610,21 @@ def _fondo_del_enlace(db: Session, user: models.User, fund_id: int) -> models.Fu
         return None
 
 
-def devolver_gasto(db: Session, user: models.User, tx_id: int, ahora: datetime, *, estricto: bool = False) -> Decimal:
+def devolver_gasto(
+    db: Session,
+    user: models.User,
+    tx_id: int,
+    ahora: datetime,
+    *,
+    estricto: bool = False,
+    vinculo: tuple[int, Decimal] | None = None,
+) -> Decimal:
     """Devuelve al sobre lo aplicado a `tx_id` con un `adjustment` positivo (D4). Sin enlace, o
     con el sobre ya borrado, no hace nada. Un sobre archivado no recibe devoluciones (D16): al
-    borrar el gasto se ignora; con `estricto` (cambiar/quitar el enlace) es un 409."""
-    vinculo = vinculos(db, [tx_id]).get(tx_id)
+    borrar el gasto se ignora; con `estricto` (cambiar/quitar el enlace) es un 409. `vinculo`
+    evita releerlo si el caller ya lo tiene; lo aplicado a una transacción solo cambia bajo el
+    lock de esa transacción, que el caller ya tomó."""
+    vinculo = vinculo or vinculos(db, [tx_id]).get(tx_id)
     if vinculo is None:
         return Decimal("0.00")
     fund = _fondo_del_enlace(db, user, vinculo[0])
@@ -620,29 +634,80 @@ def devolver_gasto(db: Session, user: models.User, tx_id: int, ahora: datetime, 
         if estricto:
             raise ConflictError("El sobre está archivado; desarchívalo para cambiar el enlace del gasto.")
         return Decimal("0.00")
-    aplicado = vinculos(db, [tx_id]).get(tx_id, (fund.id, Decimal("0.00")))[1]  # relee bajo el lock
+    aplicado = vinculo[1]
     if aplicado > 0:
         db.add(_entrada_de_gasto(fund, user, tx_id, "adjustment", aplicado, ahora))
         db.flush()
     return aplicado
 
 
-def reajustar_gasto(db: Session, user: models.User, tx_id: int, nuevo_monto: Decimal, ahora: datetime) -> Decimal:
+def reajustar_gasto(
+    db: Session,
+    user: models.User,
+    tx_id: int,
+    nuevo_monto: Decimal,
+    ahora: datetime,
+    *,
+    vinculo: tuple[int, Decimal] | None = None,
+) -> Decimal:
     """Reajusta lo aplicado a `tx_id` al cambiar su monto (D5) con un `adjustment` por la
     diferencia, topado por el saldo (D3). Un sobre archivado no se toca (D16). Devuelve lo
     aplicado tras el reajuste."""
-    vinculo = vinculos(db, [tx_id]).get(tx_id)
+    vinculo = vinculo or vinculos(db, [tx_id]).get(tx_id)
     if vinculo is None:
         return Decimal("0.00")
     fund = _fondo_del_enlace(db, user, vinculo[0])
     if fund is None or fund.status != "active":
         return vinculo[1]
-    aplicado = vinculos(db, [tx_id]).get(tx_id, (fund.id, Decimal("0.00")))[1]
+    aplicado = vinculo[1]
     delta = delta_reajuste(aplicado, nuevo_monto, _saldo_bloqueado(db, fund.id))
     if delta != 0:
         db.add(_entrada_de_gasto(fund, user, tx_id, "adjustment", -delta, ahora))
         db.flush()
     return aplicado + delta
+
+
+def sincronizar_enlace(
+    db: Session,
+    user: models.User,
+    tx: models.Transaction,
+    *,
+    enviado: bool,
+    fund_id: int | None,
+    cuenta_id: int,
+    tipo: str,
+    monto: Decimal,
+    ahora: datetime,
+) -> int | None:
+    """Árbol de decisión del `PUT` de una transacción respecto a su sobre (D5, D16). `enviado` dice
+    si el body trajo `fund_id` (ausente conserva el enlace, `None` desvincula). `tx` conserva todavía
+    los valores previos a la edición; `cuenta_id`, `tipo` y `monto` son los nuevos. Devuelve el sobre
+    destino (el pedido o el conservado), `None` si queda sin sobre.
+
+    Solo reajusta si el monto cambió (una edición ajena al monto no vuelve a cobrar al sobre). Si
+    el gasto cambia de sobre, ambos se bloquean en orden de id: dos cambios en sentidos opuestos
+    no se interbloquean."""
+    vinculo = vinculos(db, [tx.id]).get(tx.id)
+    actual = vinculo[0] if vinculo else None
+    destino = fund_id if enviado else actual
+    if actual is not None and destino == actual:
+        if tipo != "expense" or cuenta_id != tx.account_id:
+            raise ConflictError(
+                "Un gasto pagado con un sobre no puede cambiar de cuenta ni pasar a ingreso: "
+                "desvincúlalo primero (fund_id: null)."
+            )
+        if monto != tx.amount:
+            reajustar_gasto(db, user, tx.id, monto, ahora, vinculo=vinculo)
+        return destino
+    if actual is not None and destino is not None:
+        for fid in sorted({actual, destino}):  # lock de ambos sobres en orden de id
+            _fondo_del_enlace(db, user, fid)
+    if actual is not None:
+        devolver_gasto(db, user, tx.id, ahora, estricto=True, vinculo=vinculo)
+    if destino is not None:
+        fondo = bloquear_para_gasto(db, user, destino, account_id=cuenta_id, tipo=tipo)
+        aplicar_gasto(db, user, fondo, tx.id, monto, ahora)
+    return destino
 
 
 def disponibilidad(db: Session, user_id: int, moneda_preferida: str) -> dict[str, list[dict]]:

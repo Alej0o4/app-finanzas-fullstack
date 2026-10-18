@@ -14,7 +14,8 @@ const PACE_STYLES: Record<FundPace, { label: string; className: string }> = {
 };
 
 /** D10 (Fase 36): sobre activo, vaciado por gastos enlazados. Presentación de campos del backend
- *  (`balance`, `linked_expenses_count`); el servidor ya no lo marca atrasado ni pide aporte. */
+ *  (`balance`, `linked_expenses_count`). El backend no cambió `pace` ni `required_contribution`: la UI
+ *  oculta el atraso y el aporte sugerido de un sobre pagado (chip, barra y `FundProgress`). */
 export function isFundPaid(fund: Fund): boolean {
   return fund.status === 'active' && Number(fund.balance) === 0 && fund.linked_expenses_count > 0;
 }

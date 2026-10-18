@@ -1,5 +1,6 @@
 'use client';
 
+import { isFundPaid } from '@/components/funds/fundPresentation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import ModalShell from '@/components/ui/ModalShell';
@@ -22,7 +23,10 @@ export default function FundMovementModal({ fund, mode, onClose }: FundMovementM
   const isContribution = mode === 'contribution';
   const balance = Number(fund.balance);
   const suggested =
-    isContribution && fund.required_contribution !== null && Number(fund.required_contribution) > 0
+    isContribution &&
+    !isFundPaid(fund) &&
+    fund.required_contribution !== null &&
+    Number(fund.required_contribution) > 0
       ? String(Number(fund.required_contribution))
       : '';
 

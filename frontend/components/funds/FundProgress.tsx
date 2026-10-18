@@ -46,7 +46,7 @@ export default function FundProgress({ fund }: { fund: Fund }) {
           className="bg-surface-elevated h-2 w-full overflow-hidden rounded-full"
         >
           <div
-            className={`h-full rounded-full transition-[width] ${fund.pace === 'behind' ? 'bg-danger' : 'bg-primary'}`}
+            className={`h-full rounded-full transition-[width] ${!paid && fund.pace === 'behind' ? 'bg-danger' : 'bg-primary'}`}
             style={{ width: `${pct}%` }}
           />
         </div>

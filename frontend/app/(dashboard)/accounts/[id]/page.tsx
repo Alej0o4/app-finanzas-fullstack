@@ -164,7 +164,12 @@ export default function AccountDetailPage() {
     },
     onSuccess: (updated, variables) => {
       // Antes de invalidar: el nombre del sobre sale del caché de la lista de sobres.
-      const fundNotice = fundSpendNotice(queryClient, updated, variables.fund_id);
+      const fundNotice = fundSpendNotice(
+        queryClient,
+        updated,
+        variables.fund_id,
+        selectedTransaction
+      );
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() });
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.byAccount(id as string) });
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.byId(id as string) });

@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy import desc, func, or_, update
@@ -142,6 +143,17 @@ def _resolver_fecha(valor: date | datetime | None, tz) -> datetime | None:
     return instante_de_dia(valor, datetime.now(UTC), tz)
 
 
+def _replay_con_enlace(
+    db: Session, existente: models.IdempotencyKey, request_hash: str, fund_id_pedido: int | None
+) -> models.Transaction:
+    """Respuesta de un replay idempotente con los campos de sobre del original; si pidió sobre y el
+    original quedó sin enlace (sobre sin saldo, D3), `fund_applied_amount` es 0 igual que en el POST."""
+    tx = _adjuntar_enlaces(db, [_resolver_transaccion_idempotente(db, existente, request_hash)])[0]
+    if fund_id_pedido is not None and tx.fund_applied_amount is None:
+        tx.fund_applied_amount = Decimal("0.00")
+    return tx
+
+
 # --- RUTA PROTEGIDA ---
 @router.post("/", response_model=schemas.TransactionResponse)
 @limiter.limit("60/minute", key_func=key_func_por_usuario_o_ip)
@@ -170,7 +182,7 @@ def crear_transaccion(
             .first()
         )
         if existente:
-            return _adjuntar_enlaces(db, [_resolver_transaccion_idempotente(db, existente, request_hash)])[0]
+            return _replay_con_enlace(db, existente, request_hash, transaccion.fund_id)
 
     # 🔒 1. Resolución de la cuenta (Fase 16 §16.2, Decisión 16.2.4 — ver
     # _resolver_cuenta). Aplica ANTES de la verificación de pertenencia de abajo: una vez
@@ -267,7 +279,7 @@ def crear_transaccion(
             .first()
         )
         if existente:
-            return _adjuntar_enlaces(db, [_resolver_transaccion_idempotente(db, existente, request_hash)])[0]
+            return _replay_con_enlace(db, existente, request_hash, transaccion.fund_id)
         raise InternalServerError("Error interno al procesar la transacción contable.") from None
     except DataError:
         # Fase 31 (Decisión B4, QA-015): con B3 el monto en sí ya es válido — el único
@@ -514,28 +526,17 @@ def actualizar_transaccion(
     # Fase 36 (D5, D16, D17): enlace con un sobre. Va antes de tocar el saldo de las cuentas
     # (orden de locks transacción → sobre → cuentas) y fuera del `try` para que los errores de
     # dominio (404/409/422) salgan tal cual. Con `fund_id` ausente se conserva el enlace actual.
-    ahora = datetime.now(UTC)
-    vinculo = funds_service.vinculos(db, [transaccion_db.id]).get(transaccion_db.id)
-    fondo_actual = vinculo[0] if vinculo else None
-    destino = transaccion_actualizada.fund_id if "fund_id" in transaccion_actualizada.model_fields_set else fondo_actual
-    tipo_nuevo = transaccion_actualizada.type.value
-    if fondo_actual is not None and destino == fondo_actual:
-        if tipo_nuevo != "expense" or cuenta_nueva.id != transaccion_db.account_id:
-            raise ConflictError(
-                "Un gasto pagado con un sobre no puede cambiar de cuenta ni pasar a ingreso: "
-                "desvincúlalo primero (fund_id: null)."
-            )
-        funds_service.reajustar_gasto(db, current_user, transaccion_db.id, transaccion_actualizada.amount, ahora)
-    else:
-        if fondo_actual is not None:
-            funds_service.devolver_gasto(db, current_user, transaccion_db.id, ahora, estricto=True)
-        if destino is not None:
-            fondo = funds_service.bloquear_para_gasto(
-                db, current_user, destino, account_id=cuenta_nueva.id, tipo=tipo_nuevo
-            )
-            funds_service.aplicar_gasto(
-                db, current_user, fondo, transaccion_db.id, transaccion_actualizada.amount, ahora
-            )
+    destino = funds_service.sincronizar_enlace(
+        db,
+        current_user,
+        transaccion_db,
+        enviado="fund_id" in transaccion_actualizada.model_fields_set,
+        fund_id=transaccion_actualizada.fund_id,
+        cuenta_id=cuenta_nueva.id,
+        tipo=transaccion_actualizada.type.value,
+        monto=transaccion_actualizada.amount,
+        ahora=datetime.now(UTC),
+    )
 
     try:
         ledger.aplicar_edicion(
@@ -628,4 +629,7 @@ def actualizar_transaccion(
                 get_zoneinfo(current_user.timezone),
             )
 
-    return _adjuntar_enlaces(db, [transaccion_db])[0]
+    _adjuntar_enlaces(db, [transaccion_db])
+    if destino is not None and transaccion_db.fund_applied_amount is None:
+        transaccion_db.fund_applied_amount = Decimal("0.00")  # D3: sobre sin saldo → sin enlace, aplicado = 0
+    return transaccion_db

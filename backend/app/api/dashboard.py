@@ -173,7 +173,7 @@ def obtener_resumen(
             models.Transaction.account_id.in_(tx_account_ids),
             models.Transaction.date >= primer_dia,
             models.Transaction.date < limite_gasto,
-            models.Transaction.id.in_(funds_service.ids_transacciones_enlazadas(db)),
+            models.Transaction.id.in_(funds_service.ids_transacciones_enlazadas(db, current_user.id)),
         )
         .group_by(models.Transaction.currency)
         .all()
@@ -387,7 +387,7 @@ def obtener_serie_flujo_caja(
         planned_expense = db.query(func.sum(models.Transaction.amount)).filter(
             *filtros,
             models.Transaction.type == "expense",
-            models.Transaction.id.in_(funds_service.ids_transacciones_enlazadas(db)),
+            models.Transaction.id.in_(funds_service.ids_transacciones_enlazadas(db, current_user.id)),
         ).scalar() or Decimal("0.00")
 
         return {

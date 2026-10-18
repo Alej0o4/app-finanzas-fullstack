@@ -296,6 +296,23 @@ la pantalla de captura; desglose por categoría de lo planeado; seguridad/auth.
 - **Editar y cambiar de cuenta:** el selector se limpia y el modal manda `fund_id: null`, así que un
   gasto enlazado que cambia de cuenta queda desvinculado a la vista del usuario, en lugar de recibir el
   `409` (que solo ocurre si un cliente API cambia de cuenta sin mandar `fund_id: null`).
+- **`/code-review` (high), 9 hallazgos:** 8 corregidos con test y 1 aceptado.
+  - Una edición ajena al monto volvía a cobrar al sobre (`reajustar` corría en cada `PUT`): ahora solo si el
+    monto cambió.
+  - `PUT` y replay idempotente con un sobre sin saldo devolvían `fund_applied_amount: null` (el `POST` da `0`):
+    unificado a `0.00`, y el aviso "El sobre no tenía saldo" sale también al editar.
+  - El árbol de decisión del enlace vivía inline en el router: pasó a `funds.sincronizar_enlace` (B3 ya lo
+    listaba como `cambiar_enlace`).
+  - Cambiar de sobre tomaba los dos locks en orden dependiente de los datos (deadlock posible entre dos cambios
+    opuestos): ahora ambos sobres se bloquean en orden de id (test `concurrencia` de intercambio).
+  - `ids_transacciones_enlazadas` agregaba `fund_entries` de todos los usuarios: ahora se acota por
+    `user_id`. Se quitaron las lecturas repetidas de `vinculos` (lo aplicado a una transacción solo cambia bajo
+    el lock de esa transacción).
+  - Frontend: el aviso "salieron del sobre" ya no sale en una edición que no movió nada; un sobre "Pagado"
+    ya no pinta la barra de atraso ni pre-llena el aporte sugerido.
+  - **Aceptado:** una transacción borrada cuyo sobre estaba archivado deja su entrada enlazada con neto
+    negativo (no se devuelve a un archivado, D16). Solo se ve si ese sobre se desarchiva y se consulta
+    `vinculos` sin unir `Transaction`; hoy toda consulta que importa ya une o filtra por transacciones vivas.
 - **`types/generated/api.ts`** se regenera con `pnpm gen:types` contra el stack dev (paso de verificación).
 
 ## Orden de ejecución
