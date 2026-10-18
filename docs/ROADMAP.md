@@ -28,7 +28,7 @@ sale de ella: **disponible real = saldo de las cuentas − lo comprometido**. Co
 | Fase (tentativa) | Feature | Por qué en ese lugar |
 |---|---|---|
 | 35 ✅ | **Sobres virtuales** (provisiones, fondo de emergencia, metas) + **disponible real** | **Completada 2026-10-17** (ver `docs/CHANGELOG.md`). Primitiva de la que cuelga todo; aditiva, sin tocar `Transaction`. |
-| 36 | **Gasto contra sobre** | Hace reales las provisiones, pero toca el núcleo contable (`ledger.py`): fase propia y `/grilling` previo obligatorio. |
+| 36 ✅ | **Gasto contra sobre** | **Completada 2026-10-17** (ver `docs/CHANGELOG.md`). Hizo reales las provisiones: un gasto se paga con un sobre y se muestra como "planeado" sin cambiar el gasto real. |
 | 37 | **Recurrentes + calendario de cargos anuales** | Era la Fase 35; base del pronóstico y fuente de sobres sugeridos. |
 | 38 | **CDT** (módulo independiente) | Bajo acoplamiento; cualquier hueco entre fases. **No** se mezcla con el fondo de emergencia, que solo cuenta lo líquido. |
 | 39 | **Págate primero** | Engancha la creación de ingresos; necesita sobres probados. |
@@ -39,7 +39,7 @@ calidad (Alembic, tests, servicios, `DomainError`) y que el backend es la fuente
 cálculo financiero. **Fuera por ahora:** posiciones en fondos de inversión. **En el backlog:**
 simulador "¿me lo puedo permitir?", clasificación necesidad/deseo/ahorro y pronóstico de caja.
 
-**Estado:** dirección acordada el 2026-10-17; la **Fase 35 (sobres + disponible real) está implementada** (2026-10-17), el resto sigue sin implementar. Cada fase pasa por el workflow
+**Estado:** dirección acordada el 2026-10-17; las **Fases 35 (sobres + disponible real) y 36 (gasto contra sobre) están implementadas** (2026-10-17), el resto sigue sin implementar. Cada fase pasa por el workflow
 completo de `docs/WORKFLOW.md`; las decisiones de diseño que siguen abiertas están en el
 documento de dirección, marcadas *Pendiente de `/grilling`*.
 
@@ -290,7 +290,7 @@ abajo siguen el orden de `docs/VISION_FINANZAS_RESPONSABLES.md` §4.
 | Prioridad | Feature | Nota |
 |---|---|---|
 | ✅ Hecho | **Sobres virtuales + disponible real** (provisiones, fondo de emergencia, metas) | **Fase 35, completada 2026-10-17.** Absorbe la fila de *sinking funds* (validado por YNAB). Primitiva del enfoque de finanzas responsables: dinero comprometido pero no gastado. Aditiva, sin tocar `Transaction`. |
-| Alta | **Gasto contra sobre** | **Fase 36.** Imputar un gasto planeado al sobre. Toca `ledger.py`; `/grilling` previo sobre cómo cuenta en el flujo del mes. |
+| ✅ Hecho | **Gasto contra sobre** | **Fase 36, completada 2026-10-17.** `fund_id` en transacciones; `planned_expense` como desglose; sin tocar `ledger.py`. Deuda: presupuestos no distinguen lo planeado (D8), ver `docs/TODO.md`. |
 | Alta | **Automatización de ingresos/gastos recurrentes** + calendario de cargos anuales | **Fase 37** (era la 35; aplazada tras QA y zonas horarias, ya cerradas). El scheduler ya existe desde Fase 14. Reduce fricción de captura y es la base del pronóstico. |
 | Media | **CDT** (capital, tasa E.A., vencimiento, interés causado, aviso) | **Fase 38.** Módulo independiente; no se mezcla con el fondo de emergencia. Redención depende de resolver transferencias (QA-030). |
 | Media | **Págate primero** (reparto a sobres al registrar un ingreso) y tasa de ahorro | **Fase 39.** Necesita sobres probados. |

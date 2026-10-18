@@ -9,6 +9,23 @@
 
 ---
 
+## Fase 36 — Gasto contra sobre (2026-10-17)
+
+Spec: `docs/specs/fase_36_spec.md` (decisiones D1–D17 del `/grilling` del dueño). Un **gasto** se paga con un
+sobre mandando `fund_id` en `POST`/`PUT /transactions`: el servidor aplica `min(gasto, saldo)` al sobre
+(`withdrawal` enlazado por `fund_entries.transaction_id`; reajustes y devoluciones son `adjustment`), el gasto
+**sigue siendo gasto real** en flujo, presupuestos y Analítica, y se muestra aparte como **planeado**
+(`planned_expense` en `GET /dashboard/summary` y `/cashflow-series`). Editar reajusta, borrar devuelve (una sola
+vez), cambiar de sobre devuelve y aplica en la misma transacción SQL; un sobre en 0 queda `active` como
+"Pagado"; borrar un sobre con gastos enlazados se permite (avisa N y total); el fondo de emergencia excluye lo
+pagado con sobre. Migración `e8a1c4d7b290` (solo un índice). Orden de locks transacción → sobre → cuentas.
+Frontend: selector "Pagar con sobre" (crear, editar y captura rápida), aviso de lo aplicado, insignia
+"Planeado", "Gastos de este sobre" y "de los cuales planeado" en dashboard/Analítica. Tests de API y de
+concurrencia (D17 a–d) en Postgres 16; verificado en navegador (390 px/escritorio). **Despliegue:** `pg_dump`
+previo; la migración corre sola en el `CMD` de Docker.
+
+---
+
 ## Fase 35 (ajustes post-uso) — borrar sobres, cuota cumplida, gasto anual con fecha (2026-10-17)
 
 Spec: `docs/specs/fase_35_spec.md`, "Ajustes post-uso" (A1–A4). **A1:** `DELETE /funds/{id}` (`204`) borra el
