@@ -234,6 +234,22 @@ Backend (pasos 1–6), implementado el 2026-10-18.
 
 ---
 
+- **Desvíos del frontend:** la lista usa una sola query sin `status` y la página parte vigentes y redimidos en cliente (comparte caché con la tarjeta del dashboard); los redimidos solo ofrecen Eliminar (el backend da `409` al editarlos); monedas del formulario COP/USD/EUR; `pnpm build` no corre dentro del worktree (`.next` pertenece a root por el contenedor de dev), el typecheck se hizo con `tsc --noEmit`.
+- **QA en navegador (T8, 390 px y 1280 px):** sin bloqueantes. Corregidos L1 (mensaje de tasa), L2 (texto de borrar un redimido) y L4 (la tarjeta del dashboard dice "por vencer o vencidos"). Quedan como deuda cosmética L3 (foco tras borrar cae en `body`) y L5 (botón Eliminar baja de línea en el grid de 3 columnas). Estado vacío y de error solo revisados por código.
+- **Correcciones del code-review:** (1) `PUT` ya no revalida las cotas de fecha relativas a hoy si no se envían fechas (renombrar un CDT viejo no falla; test nuevo); (2) la insignia dice "Vence hoy: redímelo" el día del vencimiento; (3) el campo "monto recibido" de redimir ya no muestra el valor de hoy como placeholder (el servidor calcula a la fecha elegida). Aceptados como deuda: tope de 50 sin lock (igual que el de 100 de recurrentes), helpers de presentación compartidos con recurrentes (`recurringPresentation`), validación de cliente de decimales y plazo, y que `patrimonio` recalcule el interés con la misma función pura que `_item` (no hay duplicación de fórmula, solo de la consulta).
+
+## Cierre (2026-10-18) — `/analyze-spec 38 cierre`
+
+| D | Estado | Dónde |
+|---|---|---|
+| D1, D2, D3, D5–D13, D15 | implementadas | `models.py`, migración `b4e7a2d9c613`, `services/cdt.py`, `api/cdt.py`, `api/dashboard.py`, `user_deletion.py`, `seed.py` |
+| D4, D14 | implementadas; **cifras de un redimido definidas al implementar** (ver Desvíos) | `services/cdt.py` |
+| D16 | implementada | `app/(dashboard)/cdts/`, `components/cdts/*`, `Sidebar`, dashboard |
+
+- Tests: T1 `test_cdt_logic.py`; T2–T5 y T7 `test_cdt.py`; T6 `test_cdt_concurrency.py` (`concurrencia`); migración con `alembic check` en `test_migrations.py`; seed en `test_seed.py`; T8 en navegador (agente de QA).
+- Docs: ambos contratos de API, `BUSINESS_RULES`, `ARCHITECTURE` (backend), `STATE_AND_FETCHING` y `COMPONENTS_GUIDE` (frontend), CHANGELOG, ROADMAP, TODO, AGENTS y VISION §2.5.
+- Veredicto: **listo para cerrar** (sin CRÍTICO/ALTO).
+
 ## Orden de ejecución
 
 1. [backend] `models.py` (`Cdt`) + migración Alembic — D6–D8, B1.

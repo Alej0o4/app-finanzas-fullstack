@@ -86,7 +86,7 @@ lo comprometido en sobres**. El flujo sigue siendo la cifra principal del dashbo
 disponible real, **36** gasto contra sobre, **37** recurrentes + calendario de cargos anuales (era
 la 35), **38** CDT, **39** "págate primero", **40** cierre de mes con puntaje. Regla ya decidida:
 el **fondo de emergencia solo cuenta dinero líquido** y el CDT es un módulo aparte, nunca parte del
-fondo. **Las Fases 35, 36 y 37 (2026-10-17/18) están implementadas** y lo demás no; cada feature con su justificación, el diseño base y las
+fondo. **Las Fases 35, 36, 37 y 38 (2026-10-17/18) están implementadas** y lo demás no; cada feature con su justificación, el diseño base y las
 decisiones abiertas están en [docs/VISION_FINANZAS_RESPONSABLES.md](docs/VISION_FINANZAS_RESPONSABLES.md)
 (los nombres de tablas y columnas ahí son propuestas sin verificar contra `models.py`). La Fase 35
 original (recurrentes) pasó a la Fase 37; las menciones anteriores a esta fecha son históricas.
@@ -102,6 +102,17 @@ siendo la cifra principal. Se hizo **sin `/grilling`**: las decisiones D1–D10 
 previo; la migración `d5f2a8c1e703` corre sola en el `CMD` de Docker. **Ajustes post-uso (2026-10-17,
 implementados):** `DELETE /funds/{id}` borra el sobre y su libro (archivar sigue exigiendo saldo 0);
 `FundResponse.next_month_contribution`; `annual_expense` exige `target_date` (`422`); sin migración nueva.
+
+**Fase 38 — CDT (hecho operativo vigente):** `Cdt` (`/api/v1/cdts`, `app/services/cdt.py`) es un módulo
+**aislado**: no referencia cuentas ni transacciones y no toca `Account.balance`, `Transaction` ni `ledger.py`
+(crear/editar/redimir/borrar no mueven saldos). El interés causado lo calcula el backend (E.A. compuesto, base
+365, `Decimal`, bruto, acotado al plazo); `alert` = `due_soon` (≤ 15 días) / `matured`, solo en la UI (sin job ni
+push). **Redimir solo cambia de estado** y guarda `redeemed_on` + `final_amount`; el retorno a una cuenta espera
+a las transferencias (QA-030). `GET /dashboard/summary` suma `cdt_total` y `net_worth` (cuentas + CDT vigentes);
+`free_to_spend`, `committed` y el fondo de emergencia **no cambian** (solo cuentan dinero líquido). Se hizo
+**sin `/grilling`**: las decisiones D1–D16 de `docs/specs/fase_38_spec.md` las tomó el agente y esperan
+revisión del dueño. Despliegue: `pg_dump` previo; la migración `b4e7a2d9c613` (tabla nueva) corre sola en el
+`CMD` de Docker.
 
 **Fase 37 — recurrentes y calendario (hecho operativo vigente):** `RecurringRule` (`/api/v1/recurring`,
 `app/services/recurring.py`) propone una transacción por ocurrencia y el dueño la confirma o salta
@@ -272,8 +283,8 @@ directamente en los routers, a propósito a esta escala):
   `ServiceUnavailableError`, más `AccountNotFoundError`/`CategoryNotFoundError`; empezó como
   piloto en la Fase 25 y se extendió a todos los routers en la Fase 28 — todo router lanza
   subclases de `DomainError`, no `HTTPException` directo), `seed.py`.
-- `models/models.py` — 16 modelos SQLAlchemy en un archivo (User, Account, Category,
-  HiddenCategory, Transaction, Budget, Fund, FundEntry, RecurringRule, RefreshToken, PasswordResetToken,
+- `models/models.py` — 17 modelos SQLAlchemy en un archivo (User, Account, Category,
+  HiddenCategory, Transaction, Budget, Fund, FundEntry, RecurringRule, Cdt, RefreshToken, PasswordResetToken,
   EmailVerificationToken, IdempotencyKey, Notification, PushSubscription, ApiKey).
 - `schemas/` — schemas Pydantic divididos por dominio desde la Fase 25 (`accounts.py`,
   `api_keys.py`, `auth.py`, `budgets.py`, `categories.py`, `common.py`, `dashboard.py`,

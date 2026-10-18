@@ -628,6 +628,24 @@ Deuda consciente (spec `docs/specs/fase_37_spec.md`; D1–D20 sin `/grilling`, a
 - [x] **`PUT /accounts/{id}` puede cambiar la moneda de una cuenta con reglas** — resuelto 2026-10-18: `400` como con sobres (revisión D7).
 - [ ] **Cambiar `frequency`/`start_date` de una regla** exige borrar y recrear (D6).
 
+## 🟡 Deuda de la Fase 38 (CDT, 2026-10-18)
+
+Deuda consciente (spec `docs/specs/fase_38_spec.md`; D1–D16 sin `/grilling`, a revisar por el dueño):
+
+- [ ] **Revisar D1–D16 con el dueño.** En especial D1 (el CDT no mueve saldos: el capital debe dejar de figurar en
+  una cuenta por ajuste manual, si no el patrimonio lo cuenta dos veces), D4 (redimir solo cambia de estado) y D3
+  (aviso de vencimiento solo en la UI).
+- [ ] **Redención con retorno a una cuenta.** Registrar `final_amount` en una cuenta (y el interés realizado como
+  ingreso) depende de las transferencias entre cuentas (QA-030). Hasta entonces el patrimonio cae al redimir.
+- [ ] **Push o aviso en la bandeja por vencimiento** (hoy solo UI; exigiría job o escritura perezosa).
+- [ ] **Interés neto** (retención en la fuente, GMF) y renovación de un CDT: fuera de alcance.
+- [ ] Tope de 50 CDT sin lock (carrera menor, igual que el tope de 100 de recurrentes).
+- [ ] Mover `Chip`/`formatDay`/`money` de `components/recurring/recurringPresentation` a un módulo compartido.
+- [ ] Validación de cliente en `CdtFormModal`: decimales de la tasa (4) y plazo máximo (10 años).
+- [ ] Cosmético: el foco cae en `body` tras confirmar el borrado de un CDT (L3); el botón Eliminar baja de línea
+  en el grid de 3 columnas a 1280 px (L5).
+- [ ] `pnpm build` falla dentro de un worktree por `.next` de root (contenedor de dev); se usó `tsc --noEmit`.
+
 ## 🟢 Modularidad — revisar cuando el código duela al modificarlo
 
 - [x] **Lógica de negocio embebida en routers FastAPI — y la excepción ya existente apuntaba
