@@ -327,7 +327,8 @@ Spec: `docs/specs/fase_34_spec.md`. Contratos de API en `API_REFERENCE.md`.
 Spec: `docs/specs/fase_35_spec.md`; dirección en `docs/VISION_FINANZAS_RESPONSABLES.md`.
 
 - Un **sobre** reserva dinero de una cuenta sin moverlo: aportar o retirar **no** crea transacción ni
-  toca `Account.balance` (`FundEntry.transaction_id` es siempre `NULL` hasta la Fase 36).
+  toca `Account.balance` (`FundEntry.transaction_id` es `NULL` en los movimientos manuales; lo usa solo
+  el gasto contra sobre, ver "Gasto contra sobre" abajo).
 - **Saldo del sobre = `SUM(fund_entries.amount)`**; no existe columna `balance`. `fund_entries` es un
   libro **append-only**: la API nunca actualiza ni borra filas (aporte `> 0`, retiro `< 0`; lo
   garantizan CHECK en DB).
@@ -353,8 +354,8 @@ Spec: `docs/specs/fase_35_spec.md`; dirección en `docs/VISION_FINANZAS_RESPONSA
   pasó). Todo se calcula en `app/services/funds.py`; el frontend no recalcula.
 - **Archivar** exige saldo `0` (primero se retira, lo que libera el dinero al disponible). **Borrar**
   (Ajuste A1) elimina el sobre y su libro en cualquier estado y con cualquier saldo (`FOR UPDATE`, sin
-  `ON DELETE CASCADE`): el saldo vuelve al disponible y `Account.balance` no cambia. Cuando existan
-  movimientos enlazados a transacciones (Fase 36) habrá que definir qué pasa con los gastos imputados. No se puede
+  `ON DELETE CASCADE`): el saldo vuelve al disponible y `Account.balance` no cambia. Con gastos enlazados
+  (Fase 36) también se permite: las transacciones quedan intactas como gasto normal. No se puede
   borrar una cuenta con sobres **activos** (`400`). Si el saldo de la cuenta baja de lo apartado (se
   gastó de ella), los sobres reportan `backing_shortfall > 0` ("sobre sin respaldo"): se avisa, no se
   bloquea. Los sobres se borran en la cascada de `delete_user_cascade`.
@@ -362,6 +363,41 @@ Spec: `docs/specs/fase_35_spec.md`; dirección en `docs/VISION_FINANZAS_RESPONSA
   sobre **todas** las cuentas y los sobres activos; foto de hoy, independiente del mes consultado. Puede
   ser **negativo** y eso **no bloquea nada** (no se impide gastar ni aportar): se informa. El flujo
   mensual sigue siendo la cifra principal del dashboard.
+
+## Gasto contra sobre (Fase 36)
+
+Spec: `docs/specs/fase_36_spec.md` (decisiones D1–D17).
+
+- Un **gasto** (`expense`) se paga con un sobre mandando `fund_id` en `POST`/`PUT /transactions`. Solo
+  gastos (`422` con ingreso) y de la **misma cuenta** que respalda el sobre (`422`; no hay transferencias,
+  QA-030 sigue abierto). Sobre ajeno/inexistente `404`; archivado `409`.
+- **Cuenta como gasto real** (D1): el gasto enlazado es gasto real en todas partes — flujo, KPI, presupuestos
+  y alertas, Analítica (la regla de la Fase 31 no cambia). `planned_expense` es solo un **desglose** (monto
+  total de la transacción enlazada) en `GET /dashboard/summary` y `/cashflow-series`. **Deuda consciente
+  (D8):** los presupuestos no distinguen lo planeado, así que un gasto pagado con sobre sigue empujando la
+  alerta del presupuesto de su categoría.
+- **Monto aplicado = `min(gasto, saldo del sobre)`** (D3): el excedente es gasto normal y con el sobre en `0`
+  no se crea entrada ni enlace. El libro registra un `withdrawal` negativo con `transaction_id`; reajustes y
+  devoluciones son `adjustment` con el mismo `transaction_id`. Monto aplicado a una transacción =
+  `-SUM(amount)` de sus entradas; una transacción está enlazada a un sobre mientras esa suma sea negativa
+  (desvincular la deja en 0). Una transacción pertenece a lo sumo a un sobre: lo garantiza el servicio con
+  el row-lock del sobre, no la base (el índice `ix_fund_entries_transaction_id` no es único).
+- **Editar** (D5): cambiar el monto reajusta con un `adjustment` por la diferencia (mismo tope); `fund_id`
+  ausente conserva el enlace, `null` desvincula y devuelve, otro id devuelve al viejo y aplica al nuevo en
+  la misma transacción SQL; cambiar de cuenta o pasar a ingreso un gasto enlazado es `409` salvo que el
+  mismo `PUT` mande `fund_id: null`. **Borrar** (D4) devuelve lo aplicado, una sola vez.
+- **Sobre archivado** (D16): no recibe devoluciones ni ajustes. Borrar o editar el monto de un gasto
+  enlazado a un archivado procede normalmente (el dinero vuelve al disponible vía la cuenta), pero cambiar
+  o quitar su enlace es `409`. **Limitación documentada:** el `planned_expense` histórico de un mes puede
+  cambiar al editar o borrar una transacción enlazada (el desglose se calcula en vivo, no es una foto).
+- **Borrar un sobre con gastos enlazados** (D12): se permite; se borran sus entradas y las transacciones
+  quedan intactas (`Account.balance` y totales no cambian), solo pierden la marca de planeado. Archivar
+  conserva el historial.
+- **Fondo de emergencia** (D11): el promedio mensual de gasto (meta y runway) **excluye** las
+  transacciones pagadas con un sobre — ya estaban provisionadas.
+- **Locks** (D17): transacción → sobre → cuentas (por id). En crear, el sobre se bloquea antes del `INSERT`
+  y de tocar `Account.balance`; la lógica vive en `app/services/funds.py` y el router de transacciones
+  sigue siendo dueño del `commit`.
 
 ## Dashboard
 
