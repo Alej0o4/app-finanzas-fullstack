@@ -11,4 +11,4 @@ Rama/worktree: `fase-37` (desde main 364036b). Seguir `docs/WORKFLOW.md`.
 - [x] 7. /code-review high: 10 hallazgos; 7 corregidos (783 tests), 3 aceptados como deuda en TODO
 - [x] 8. /analyze-spec 37 cierre: sin CRÍTICO/ALTO; spec actualizada (estado, desvíos frontend, sección Cierre)
 - [x] 9. Docs de cierre + graphify update
-- [ ] 10. Commits, push, PR en borrador
+- [x] 10. Push y PR en borrador: https://github.com/Alej0o4/app-finanzas-fullstack/pull/20
