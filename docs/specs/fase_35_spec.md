@@ -321,11 +321,11 @@ refinamientos hallados en la verificación en navegador y en `/code-review`, tod
 13. [docs] cierre (CHANGELOG, ROADMAP, TODO, AGENTS, VISION), `graphify update .`, PR — X3.
     Depende de: 12
 
-## Ajustes post-uso (2026-10-17) — PENDIENTES DE IMPLEMENTAR
+## Ajustes post-uso (2026-10-17) — IMPLEMENTADOS
 
 > El dueño probó la Fase 35 en su stack real y revisó las decisiones D1–D10 con el agente. De ahí
-> salen cuatro cambios, **acordados el 2026-10-17 y todavía sin código**: este bloque es el registro
-> de lo que se va a hacer. Se implementan juntos, en una sola rama, en el flujo del `docs/WORKFLOW.md`
+> salen cuatro cambios, **acordados e implementados el 2026-10-17** (rama `worktree-fase-35-ajustes-sobres`):
+> este bloque es el registro de lo que se hizo; los desvíos están al final. Se implementan juntos, en una sola rama, en el flujo del `docs/WORKFLOW.md`
 > (correr `/analyze-spec 35` antes de empezar y de nuevo al cerrar). Convención de IDs: **A** = ajuste.
 > De D1–D10 solo cambian **D4** (A1) y la presentación de **D2** (A2); el resto no se tocó y sigue
 > pendiente de confirmación. D1 (cuentas de crédito) y D3 (gasto esencial) siguen abiertas en
@@ -444,3 +444,27 @@ borrado), `docs/CHANGELOG.md`, y mover los ítems de `docs/TODO.md` y `docs/ROAD
     Depende de: 5, 6, 7, 8, 9
 11. [docs] cierre (CHANGELOG, ROADMAP, TODO, VISION, `graphify update .`), PR.
     Depende de: 10
+
+### Desvíos y hallazgos del cierre de los ajustes (2026-10-17)
+
+`/analyze-spec 35 cierre` (solo A1–A4): los cuatro ajustes implementados, con tests y docs; sin decisiones
+faltantes.
+
+- **A4 y fixtures:** como `annual_expense` ya no se crea sin fecha, la fixture `crear_sobre` de los tests
+  y el sobre de `test_funds_concurrency.py` pasaron a `kind: goal`. El `422` del `PUT` con `target_date:
+  null` vive en el servicio (el schema `FundUpdate` no conoce `kind`).
+- **A1:** la key del detalle (`funds.byId`) **no** se invalida ni se quita al borrar: la página sigue
+  montada hasta navegar y un refetch daría un 404 visible (hallazgo de `/code-review`, corregido). Los
+  docstrings de `Fund`/`FundEntry` se actualizaron (ya no son "nunca se borran").
+- **A2:** `next_month_contribution` es `null` con `months_remaining ≤ 1`; con un solo mes la cuota de ese
+  mes es todo lo que falta, así que no existe el caso "cuota cumplida con resto pendiente" ahí
+  (hallazgo de `/code-review` descartado por eso).
+- **A3:** extraído el componente `Breakdown` en `AvailableCard`; sin cambios de backend. La verificación
+  con los números reales de USD del dueño sigue pendiente (ver TODO): en el stack dev,
+  `10.515 − 99 = 10.416` cuadra.
+- **Hallazgos aceptados:** (a) editar un `annual_expense` legado sin fecha desde la UI exige fecha (es lo
+  que dice A4); la API sí lo deja editar otros campos. (b) Borrar un sobre no revisa
+  `fund_entries.transaction_id`: hoy siempre es `NULL`; la Fase 36 debe definirlo en su `/grilling`.
+- **Verificación T9:** Playwright por node contra un stack dev aislado (`-p oikos-dev-ajustes`, ambos
+  `-f`): borrar con saldo desde tarjeta y detalle, cuota cumplida, gasto anual sin fecha (UI y `422`),
+  USD con desglose; 390 px y escritorio, oscuro/claro.

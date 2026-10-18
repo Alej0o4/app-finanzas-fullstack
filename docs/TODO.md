@@ -561,21 +561,18 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 Decisiones tomadas por el agente sin `/grilling`; el dueño las revisa (ver `docs/specs/fase_35_spec.md`).
 
-**Ajustes post-uso acordados el 2026-10-17 (detalle en la spec, "Ajustes post-uso"):**
+**Ajustes post-uso (2026-10-17) — ✅ hechos** (spec, "Ajustes post-uso"):
 
-- [ ] **A1 — Borrar sobres (revisa D4).** `DELETE /funds/{id}` borra el sobre y sus movimientos en
-  cualquier estado y con cualquier saldo (el dinero vuelve al disponible), con confirmación que dice
-  cuánto se libera. Archivar se mantiene. Un sobre de prueba o creado por error hoy no se puede quitar.
-  Para la Fase 36: definir qué hace borrar un sobre con gastos imputados.
-- [ ] **A2 — Mensaje de "cuota cumplida".** Tras cubrir la cuota del mes el sugerido desaparece sin
-  explicación. Agregar `next_month_contribution` y mostrar "cuota de {mes} cumplida ✓ — el mes que
-  viene ~{monto}".
-- [ ] **A3 — Desglose por cada moneda en "Disponible real".** Solo la principal muestra "saldo en
-  cuentas − apartado"; las demás solo el neto. Verificar con los números reales de USD del dueño; si no
-  cuadran es un bug de `disponibilidad()`.
-- [ ] **A4 — `annual_expense` exige `target_date`.** Hoy es idéntico a `goal`; la fecha obligatoria es la
-  diferencia real. `422` al crear sin fecha o al quitársela; sin CHECK ni migración (los sobres
-  existentes sin fecha siguen válidos).
+- [x] **A1 — Borrar sobres (revisa D4).** `DELETE /funds/{id}` → `204`; borra sobre y libro en cualquier
+  estado/saldo, con confirmación que dice cuánto se libera. Archivar se mantiene.
+- [x] **A2 — Mensaje de "cuota cumplida".** `next_month_contribution` + "Cuota de {mes} cumplida ✓".
+- [x] **A3 — Desglose por cada moneda en "Disponible real".**
+- [x] **A4 — `annual_expense` exige `target_date`** (`422` al crear sin fecha o al quitársela).
+- [ ] **Pendiente del dueño (A3):** contrastar con tus datos reales que USD "saldo en cuentas − apartado en
+  sobres" cuadra con el neto que muestra la tarjeta; si no cuadra, es un bug de `disponibilidad()` y se
+  abre aparte. En el stack dev cuadra (10.515 − 99 = 10.416).
+- [ ] **Fase 36 (`/grilling`):** definir qué hace borrar un sobre con movimientos enlazados a transacciones
+  (`fund_entries.transaction_id`); hoy el borrado no lo comprueba porque siempre es `NULL`.
 
 **Deuda abierta de la revisión:**
 

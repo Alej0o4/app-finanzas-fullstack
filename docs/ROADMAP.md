@@ -206,9 +206,9 @@ migración de datos. **Pendientes del dueño antes de desplegar:** respaldo, rep
 
 **Implementada** (spec `docs/specs/fase_35_spec.md`, historia en `docs/CHANGELOG.md`). Quedan sus decisiones de diseño tomadas por el agente a revisar por el dueño (spec, "Decisiones tomadas por el agente"). Lo que sigue en el nuevo enfoque es la **Fase 36 (gasto contra sobre)**, que exige `/grilling` previo.
 
-**Ajustes post-uso acordados el 2026-10-17 — ⏳ pendientes de implementar** (detalle, orden de
-ejecución y tests en `docs/specs/fase_35_spec.md`, "Ajustes post-uso"). Salen de la primera prueba del
-dueño y de la revisión de D1–D10; van juntos en una rama antes de la Fase 36:
+**Ajustes post-uso acordados el 2026-10-17 — ✅ implementados** (detalle, orden de ejecución, tests y
+desvíos en `docs/specs/fase_35_spec.md`, "Ajustes post-uso"). Salieron de la primera prueba del dueño y de
+la revisión de D1–D10; fueron juntos en una rama antes de la Fase 36:
 
 | # | Cambio | Qué toca |
 |---|---|---|

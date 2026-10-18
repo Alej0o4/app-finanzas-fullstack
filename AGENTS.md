@@ -99,7 +99,9 @@ aportar o retirar **no** crea transacción ni toca `Account.balance`/`ledger.py`
 moneda, sobre todas las cuentas; puede ser negativo y **no bloquea nada**). El flujo mensual sigue
 siendo la cifra principal. Se hizo **sin `/grilling`**: las decisiones D1–D10 de
 `docs/specs/fase_35_spec.md` las tomó el agente y esperan revisión del dueño. Despliegue: `pg_dump`
-previo; la migración `d5f2a8c1e703` corre sola en el `CMD` de Docker.
+previo; la migración `d5f2a8c1e703` corre sola en el `CMD` de Docker. **Ajustes post-uso (2026-10-17,
+implementados):** `DELETE /funds/{id}` borra el sobre y su libro (archivar sigue exigiendo saldo 0);
+`FundResponse.next_month_contribution`; `annual_expense` exige `target_date` (`422`); sin migración nueva.
 
 Algunos hechos operativos de esa historia siguen vigentes hoy, no son solo registro:
 
