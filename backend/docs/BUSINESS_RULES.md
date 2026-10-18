@@ -340,7 +340,7 @@ Spec: `docs/specs/fase_35_spec.md`; dirección en `docs/VISION_FINANZAS_RESPONSA
   fondo de emergencia: meta = N × **gasto promedio mensual** de los hasta 3 meses completos anteriores
   (todas las cuentas, moneda del sobre, desde el mes de la primera transacción); sin historial no hay
   meta efectiva. "Gasto esencial" no existe todavía (deuda en `docs/TODO.md`).
-- El **fondo de emergencia solo cuenta dinero líquido**: se respalda con una cuenta normal. El CDT, cuando
+- El **fondo de emergencia solo cuenta dinero líquido**: se respalda con una cuenta normal: crear o mover un `emergency` a una cuenta `credit` es `422` (QA 2026-10-18). Mover un sobre a otra cuenta con gastos pagados con él vivos es `409`: el gasto debe salir de la cuenta que respalda el sobre. El CDT, cuando
   llegue, será un módulo aparte.
 - **Gasto anual con fecha** (Ajuste A4): `annual_expense` exige `target_date` al crear y no admite
   `target_date: null` en `PUT` (`422`); `goal` y `emergency` la dejan opcional. Sin CHECK ni migración: los

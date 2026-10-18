@@ -86,6 +86,32 @@ class TestCrear:
         assert fondo["pace"] is None
         assert fondo["runway_months"] is None
 
+    def test_emergencia_sobre_tarjeta_de_credito_422(self, client, auth_headers, make_account):
+        tarjeta = make_account(auth_headers, name="Tarjeta", type="credit", balance="0.00")
+        resp = client.post(
+            URL,
+            json={"name": "Colchón", "kind": "emergency", "account_id": tarjeta["id"], "target_months": 3},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+        assert "líquido" in resp.json()["detail"]
+
+    @pytest.mark.parametrize("kind", ["goal", "annual_expense"])
+    def test_otros_tipos_si_aceptan_tarjeta_de_credito(self, client, auth_headers, make_account, kind):
+        tarjeta = make_account(auth_headers, name="Tarjeta", type="credit", balance="0.00")
+        body = {"name": "Meta", "kind": kind, "account_id": tarjeta["id"], "target_amount": "100.00"}
+        if kind == "annual_expense":
+            body["target_date"] = (datetime.now(UTC) + timedelta(days=60)).date().isoformat()
+        assert client.post(URL, json=body, headers=auth_headers).status_code == 200
+
+    def test_put_mover_emergencia_a_tarjeta_de_credito_422(self, client, auth_headers, make_account, crear_sobre):
+        normal = make_account(auth_headers, name="Débito", type="debit", balance="900.00")
+        tarjeta = make_account(auth_headers, name="Tarjeta", type="credit", balance="0.00")
+        fondo = crear_sobre(normal["id"], kind="emergency", target_amount=None, target_months=3)
+        resp = client.put(f"{URL}{fondo['id']}", json={"account_id": tarjeta["id"]}, headers=auth_headers)
+        assert resp.status_code == 422
+        assert client.get(f"{URL}{fondo['id']}", headers=auth_headers).json()["account_id"] == normal["id"]
+
     def test_fecha_objetivo_pasada_422(self, client, auth_headers, cuenta):
         ayer = (datetime.now(UTC) - timedelta(days=3)).date().isoformat()
         resp = client.post(

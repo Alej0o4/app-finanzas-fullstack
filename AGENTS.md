@@ -251,7 +251,7 @@ cuando el problema *es* testcontainers. Nunca contra el Postgres de compose:
 Solo contra dev o una DB descartable — nunca producción.
 `python -c "from app.core.seed import run_seed; run_seed()"` desde `backend/` (venv activo,
 `DATABASE_URL` apuntando a una DB que no sea producción), o el comando `-p oikos-dev` de arriba —
-crea 3 cuentas, 76 transacciones y 6 presupuestos bajo `test@test.com` / `testpass123`.
+crea 3 cuentas, ~75 transacciones y 6 presupuestos bajo `test@test.com` / `testpass123`. Desde la Fase 37 también deja 7 sobres (uno por situación: en ritmo, cumplido, sin respaldo, archivado, en USD, con 2 gastos pagados con sobre), 7 reglas recurrentes (pendientes vencidas, al día, pausada, anual, en USD) y un cargo anual detectable como sugerencia; todas las fechas son relativas a hoy.
 
 ## Arquitectura
 

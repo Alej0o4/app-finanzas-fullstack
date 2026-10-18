@@ -25,6 +25,9 @@ CENTAVO = Decimal("0.01")
 MESES_PROMEDIO = 3  # D3: meses completos que promedian el gasto del fondo de emergencia
 KINDS_META_FIJA = {"annual_expense", "goal"}
 _MSG_NO_EXISTE = "El sobre no existe o no tienes permisos."
+_MSG_EMERGENCIA_CREDITO = (
+    "El fondo de emergencia solo cuenta dinero líquido: no se puede respaldar con una tarjeta de crédito."
+)
 
 
 # --------------------------------------------------------------------------------------
@@ -412,6 +415,13 @@ def detalle(db: Session, user: models.User, fund_id: int, ahora: datetime) -> di
     return respuesta
 
 
+def _validar_cuenta_para_tipo(kind: str, cuenta: models.Account) -> None:
+    """El fondo de emergencia solo cuenta dinero líquido (BUSINESS_RULES): una cuenta `credit`
+    es deuda, no liquidez, y el sobre quedaría "sin respaldo" de forma permanente."""
+    if kind == "emergency" and cuenta.type == "credit":
+        raise ValidationError(_MSG_EMERGENCIA_CREDITO)
+
+
 def _validar_fecha_objetivo(objetivo: date, hoy: date) -> None:
     if objetivo < hoy:
         raise ValidationError("La fecha objetivo no puede ser anterior a hoy.")
@@ -420,6 +430,7 @@ def _validar_fecha_objetivo(objetivo: date, hoy: date) -> None:
 def crear(db: Session, user: models.User, datos, ahora: datetime) -> dict:
     tz = get_zoneinfo(user.timezone)
     cuenta = _cuenta_del_usuario(db, user.id, datos.account_id)
+    _validar_cuenta_para_tipo(datos.kind.value, cuenta)
     if datos.target_date is not None:
         _validar_fecha_objetivo(datos.target_date, dia_local(ahora, tz))
     fund = models.Fund(
@@ -450,9 +461,17 @@ def actualizar(db: Session, user: models.User, fund_id: int, datos, ahora: datet
         fund.name = datos.name
 
     if "account_id" in enviados and datos.account_id is not None and datos.account_id != fund.account_id:
+        # Un gasto pagado con el sobre tiene que salir de la cuenta que lo respalda (Fase 36 D15);
+        # mover el sobre dejaría gastos enlazados a otra cuenta, y `sincronizar_enlace` seguiría
+        # reajustándolos como si nada.
+        if _resumen_enlazados(db, [fund.id]).get(fund.id, (0, Decimal("0.00")))[0] > 0:
+            raise ConflictError(
+                "El sobre tiene gastos pagados con él: desvincúlalos o bórralos antes de cambiar su cuenta."
+            )
         cuenta = _cuenta_del_usuario(db, user.id, datos.account_id)
         if cuenta.currency != fund.currency:
             raise ValidationError("La cuenta debe tener la misma moneda del sobre.")
+        _validar_cuenta_para_tipo(fund.kind, cuenta)
         fund.account_id = cuenta.id
 
     # La meta se evalúa como un todo: lo enviado reemplaza a la alternativa (monto XOR meses).

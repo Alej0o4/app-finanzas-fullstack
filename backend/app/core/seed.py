@@ -1,16 +1,18 @@
 import calendar
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import or_
 
 from app.core.database import SessionLocal
 from app.core.default_categories import ensure_default_categories
-from app.core.periods import dia_local, instante_de_dia
+from app.core.periods import dia_local, instante_de_dia, mediodia_local, sumar_meses
 from app.core.security import get_password_hash
 from app.core.timezones import DEFAULT_TIMEZONE, get_zoneinfo
 from app.core.user_deletion import delete_user_cascade
 from app.models import models
+from app.services import funds as funds_service
+from app.services import recurring as recurring_service
 from app.services.ledger import registrar_impacto
 
 # Cuántos meses hacia atrás cubre el seed, además del mes en curso (Fase 11, seguimiento:
@@ -107,6 +109,191 @@ def _build_transactions_data(cuenta, ahorros, tarjeta, today: datetime) -> list[
     # después de hoy (equivale a "solo lo que ya pasó este mes").
     tz = get_zoneinfo(DEFAULT_TIMEZONE)
     return [row for row in tx_data if dia_local(row[-1], tz) <= dia_local(today, tz)]
+
+
+def _categoria(db, user, nombre: str, tipo: str) -> models.Category:
+    return (
+        db.query(models.Category)
+        .filter(
+            or_(models.Category.user_id.is_(None), models.Category.user_id == user.id),
+            models.Category.name == nombre,
+            models.Category.type == tipo,
+        )
+        .one()
+    )
+
+
+def _crear_sobre(
+    db,
+    user,
+    cuenta,
+    nombre,
+    tipo,
+    *,
+    aportes=(),
+    target_amount=None,
+    target_months=None,
+    target_date=None,
+    status="active",
+):
+    """Sobre de seed. `aportes`: (meses_atrás, día, monto, tipo_de_entrada) — el libro es la fuente
+    del saldo, igual que en la app (`SUM(fund_entries.amount)`)."""
+    tz = get_zoneinfo(DEFAULT_TIMEZONE)
+    sobre = models.Fund(
+        user_id=user.id,
+        account_id=cuenta.id,
+        name=nombre,
+        kind=tipo,
+        currency=cuenta.currency,
+        target_amount=Decimal(str(target_amount)) if target_amount is not None else None,
+        target_months=target_months,
+        target_date=mediodia_local(target_date, tz) if target_date else None,
+        status=status,
+    )
+    db.add(sobre)
+    db.flush()
+    ahora = datetime.now(UTC)
+    for meses_atras, dia, monto, tipo_entrada in aportes:
+        ocurrido = _seed_date(ahora, meses_atras, dia)
+        local = dia_local(ocurrido, tz)
+        db.add(
+            models.FundEntry(
+                fund_id=sobre.id,
+                user_id=user.id,
+                amount=Decimal(str(monto)) if tipo_entrada == "contribution" else -Decimal(str(monto)),
+                type=tipo_entrada,
+                occurred_at=ocurrido,
+                period=f"{local.year:04d}-{local.month:02d}",
+            )
+        )
+    db.flush()
+    return sobre
+
+
+def _gasto_con_sobre(db, user, cuenta, sobre, categoria, monto, descripcion, dias_atras):
+    """Gasto normal pagado con un sobre (Fase 36): mismo camino que la API — transacción, impacto en
+    la cuenta y retiro enlazado por `min(gasto, saldo)`."""
+    ahora = datetime.now(UTC)
+    tz = get_zoneinfo(DEFAULT_TIMEZONE)
+    dia = dia_local(ahora, tz) - timedelta(days=dias_atras)
+    tx = _make_tx(db, user, cuenta, categoria, "expense", monto, descripcion, instante_de_dia(dia, ahora, tz))
+    db.add(tx)
+    db.flush()
+    registrar_impacto(db, cuenta.id, "expense", tx.amount)
+    aplicado = funds_service.aplicar_gasto(db, user, sobre, tx.id, tx.amount, ahora)
+    return tx, aplicado
+
+
+def _seed_sobres(db, user, cuenta, ahorros, tarjeta, hoy: date):
+    """Sobres para probar la Fase 35/36: uno por tipo y por situación (en ritmo, cumplido, sin
+    respaldo, archivado, con gastos enlazados, en otra moneda)."""
+    _crear_sobre(  # gasto anual en ritmo, vence en 4 meses
+        db,
+        user,
+        cuenta,
+        "SOAT",
+        "annual_expense",
+        target_amount=1200000,
+        target_date=sumar_meses(hoy, 4),
+        aportes=[(2, 5, 300000, "contribution"), (1, 5, 300000, "contribution")],
+    )
+    _crear_sobre(  # emergencia por meses de gasto (la meta sale del promedio de los 3 meses previos)
+        db,
+        user,
+        cuenta,
+        "Fondo de emergencia",
+        "emergency",
+        target_months=3,
+        aportes=[(3, 2, 1000000, "contribution"), (1, 2, 500000, "contribution")],
+    )
+    _crear_sobre(  # meta en USD, otra moneda: poco aportado y vence en 3 meses
+        db,
+        user,
+        ahorros,
+        "Viaje a Lisboa",
+        "goal",
+        target_amount=2000,
+        target_date=sumar_meses(hoy, 3),
+        aportes=[(1, 10, 150, "contribution")],
+    )
+    _crear_sobre(  # cumplido
+        db,
+        user,
+        cuenta,
+        "Regalos de diciembre",
+        "goal",
+        target_amount=500000,
+        aportes=[(2, 20, 300000, "contribution"), (0, 1, 200000, "contribution")],
+    )
+    _crear_sobre(  # sin respaldo: la tarjeta está en negativo y se apartó plata en ella
+        db,
+        user,
+        tarjeta,
+        "Pago de la tarjeta",
+        "goal",
+        target_amount=400000,
+        aportes=[(0, 1, 100000, "contribution")],
+    )
+    _crear_sobre(  # archivado: aporte y retiro completo (saldo 0)
+        db,
+        user,
+        cuenta,
+        "Matrícula 2025",
+        "goal",
+        target_amount=800000,
+        status="archived",
+        aportes=[(4, 3, 800000, "contribution"), (3, 3, 800000, "withdrawal")],
+    )
+    ropa = _crear_sobre(
+        db, user, cuenta, "Ropa", "goal", target_amount=600000, aportes=[(1, 8, 250000, "contribution")]
+    )
+    # Gastos pagados con el sobre: el primero cabe entero, el segundo excede el saldo (queda
+    # 130.000 en el sobre → se aplican 130.000 y el resto cae como gasto normal).
+    _gasto_con_sobre(db, user, cuenta, ropa, "Cuidado personal", 120000, "Chaqueta", 6)
+    _gasto_con_sobre(db, user, cuenta, ropa, "Cuidado personal", 200000, "Zapatos", 2)
+
+
+def _seed_recurrentes(db, user, cuenta, ahorros, hoy: date, today: datetime):
+    """Reglas para probar la Fase 37: pendientes vencidas (varias por regla), al día, pausada, anual,
+    en otra moneda, y un cargo anual detectable que todavía NO es regla (sugerencias)."""
+    tz = get_zoneinfo(DEFAULT_TIMEZONE)
+
+    def regla(nombre, tipo, monto, cuenta_, categoria, frecuencia, inicio, *, estado="active", al_dia=False):
+        siguiente = recurring_service.primera_desde(inicio, frecuencia, hoy + timedelta(days=1)) if al_dia else inicio
+        db.add(
+            models.RecurringRule(
+                user_id=user.id,
+                account_id=cuenta_.id,
+                category_id=_categoria(db, user, categoria, tipo).id,
+                name=nombre,
+                type=tipo,
+                amount=Decimal(str(monto)),
+                frequency=frecuencia,
+                start_date=inicio,
+                next_date=siguiente,
+                status=estado,
+            )
+        )
+
+    primero_mes = hoy.replace(day=1)
+    regla("Arriendo", "expense", 1200000, cuenta, "Vivienda", "monthly", sumar_meses(primero_mes, -2))  # 3 pendientes
+    regla("Clase de guitarra", "expense", 40000, cuenta, "Entretenimiento", "weekly", hoy - timedelta(days=8))
+    regla("Netflix", "expense", 25000, cuenta, "Suscripción", "monthly", hoy.replace(day=15), al_dia=True)
+    regla("Salario mensual", "income", 3500000, cuenta, "Salario", "monthly", primero_mes, al_dia=True)
+    regla("Seguro del carro", "expense", 900000, cuenta, "Transporte", "yearly", hoy + timedelta(days=45))
+    regla("Gimnasio", "expense", 90000, cuenta, "Cuidado personal", "monthly", sumar_meses(hoy, -1), estado="paused")
+    regla("iCloud", "expense", 3, ahorros, "Suscripción", "monthly", hoy + timedelta(days=3))  # USD
+
+    # Cargo anual detectable (sugerencias): dos cobros separados 365 días con montos parecidos, el
+    # último hace ~10 meses, para que la próxima caiga dentro de los 12 meses del calendario.
+    for dias_atras, monto in ((665, 280000), (300, 300000)):
+        dia = hoy - timedelta(days=dias_atras)
+        tx = _make_tx(
+            db, user, cuenta, "Transporte", "expense", monto, "Seguro de moto", instante_de_dia(dia, today, tz)
+        )
+        db.add(tx)
+        db.flush()
+        registrar_impacto(db, cuenta.id, "expense", tx.amount)
 
 
 def run_seed():
@@ -230,8 +417,14 @@ def run_seed():
             budgets.append(budget)
 
         db.add_all(budgets)
-        db.commit()
+        db.flush()
         print(f"Budgets created: {len(budgets)}")
+
+        hoy = dia_local(today, get_zoneinfo(DEFAULT_TIMEZONE))
+        _seed_sobres(db, user, cuenta, ahorros, tarjeta, hoy)
+        _seed_recurrentes(db, user, cuenta, ahorros, hoy, today)
+        db.commit()
+        print("Funds: 7 (1 archivado) con 2 gastos pagados con sobre · Recurring: 7 reglas + 1 cargo anual sugerido")
         print("\n--- SEED COMPLETE ---")
         print("Login: test@test.com / testpass123")
 

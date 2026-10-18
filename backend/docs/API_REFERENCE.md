@@ -939,13 +939,13 @@ saldo `0` y gastos enlazados sigue `active` (la UI lo muestra "pagado"). Spec: `
 Body: `name` (1-100, recortado), `kind`, `account_id`, `target_amount` (>0, `Numeric(14,2)`) **o**
 `target_months` (1-60; solo `emergency`) — exactamente uno —, `target_date` (opcional, `YYYY-MM-DD`, hoy o
 posterior en la zona del usuario; **obligatoria para `kind = annual_expense`**, Ajuste A4). La moneda se
-hereda de la cuenta. Errores: `404` cuenta ajena, `422` validación (incluye gasto anual sin `target_date`).
+hereda de la cuenta. Errores: `404` cuenta ajena, `422` validación (incluye gasto anual sin `target_date` y un `emergency` sobre una cuenta `credit`: el fondo de emergencia solo cuenta dinero líquido).
 
 ### `GET /api/v1/funds/{fund_id}` → `FundDetailResponse`
 
 ### `PUT /api/v1/funds/{fund_id}`
 
-Parcial (solo lo enviado cambia): `name`, `account_id` (misma moneda, si no `422`), `target_amount` /
+Parcial (solo lo enviado cambia): `name`, `account_id` (misma moneda, si no `422`; un `emergency` tampoco admite una cuenta `credit`, `422`); con gastos pagados con el sobre aún vivos es `409`: desvincúlalos o bórralos antes de moverlo, `target_amount` /
 `target_months` (lo enviado reemplaza a la alternativa; `target_months` solo en `emergency`),
 `target_date` (`null` la quita salvo en `annual_expense`, donde es `422`; una fecha nueva no puede ser
 pasada). Un `annual_expense` legado sin fecha sigue siendo editable en otros campos. No cambia `kind` ni

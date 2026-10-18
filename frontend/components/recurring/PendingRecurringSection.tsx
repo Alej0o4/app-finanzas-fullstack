@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Check, SkipForward } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -30,8 +30,13 @@ function PendingRow({ item }: { item: PendingOccurrence }) {
   const [amountText, setAmountText] = useState(String(Number(item.amount)));
   const [amountError, setAmountError] = useState<string>();
   const busy = confirmMutation.isPending || skipMutation.isPending;
+  // `busy` llega con el siguiente render: un doble clic dispara dos handlers antes de eso y el
+  // segundo POST da 409. El ref se actualiza en el acto y cierra esa ventana.
+  const inFlight = useRef(false);
+  const release = { onSettled: () => (inFlight.current = false) };
 
   const confirm = () => {
+    if (inFlight.current) return;
     let amount: number | undefined;
     if (editing) {
       const error = validateAmountText(amountText);
@@ -40,17 +45,26 @@ function PendingRow({ item }: { item: PendingOccurrence }) {
       // Solo se manda si cambió; si no, el backend usa el de la regla.
       if (Number(amountText) !== Number(item.amount)) amount = Number(amountText);
     }
-    confirmMutation.mutate({ ruleId: item.rule_id, occurrenceDate: item.occurrence_date, amount });
+    inFlight.current = true;
+    confirmMutation.mutate(
+      { ruleId: item.rule_id, occurrenceDate: item.occurrence_date, amount },
+      release
+    );
   };
 
   const skip = () =>
-    useConfirmStore
-      .getState()
-      .confirm(
-        `¿Saltar "${item.name}" del ${formatDay(item.occurrence_date)}? No se registra ninguna transacción y esta ocurrencia no se puede recuperar.`,
-        () => skipMutation.mutate({ ruleId: item.rule_id, occurrenceDate: item.occurrence_date }),
-        'Saltar'
-      );
+    useConfirmStore.getState().confirm(
+      `¿Saltar "${item.name}" del ${formatDay(item.occurrence_date)}? No se registra ninguna transacción y esta ocurrencia no se puede recuperar.`,
+      () => {
+        if (inFlight.current) return;
+        inFlight.current = true;
+        skipMutation.mutate(
+          { ruleId: item.rule_id, occurrenceDate: item.occurrence_date },
+          release
+        );
+      },
+      'Saltar'
+    );
 
   return (
     <li className="border-border bg-surface rounded-2xl border p-4">
