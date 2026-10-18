@@ -300,11 +300,12 @@ en el frontend dice: "Se borra el de este mes. Si venía de meses anteriores, el
 Un sobre reserva dinero de una cuenta **sin moverlo**: aportar o retirar no crea transacción ni cambia el saldo de la cuenta. Todo cálculo (progreso, aporte sugerido, ritmo, runway, meta del fondo de emergencia) llega ya hecho; el frontend solo lo presenta. Detalle completo en `backend/docs/API_REFERENCE.md` ("Sobres").
 
 - `GET /api/v1/funds/?include_archived=false` — `Fund[]`.
-- `POST /api/v1/funds/` — body `{ name, kind, account_id, target_amount | target_months, target_date? }` (`target_amount` XOR `target_months`; `target_months` solo para `kind: 'emergency'`; `target_date` es un día `YYYY-MM-DD`). La moneda se hereda de la cuenta.
+- `POST /api/v1/funds/` — body `{ name, kind, account_id, target_amount | target_months, target_date? }` (`target_amount` XOR `target_months`; `target_months` solo para `kind: 'emergency'`; `target_date` es un día `YYYY-MM-DD`, **obligatoria para `annual_expense`** → `422` si falta). La moneda se hereda de la cuenta.
 - `GET /api/v1/funds/{id}` — `FundDetail` (= `Fund` + `entries`, los 50 movimientos más recientes).
-- `PUT /api/v1/funds/{id}` — parcial: `name`, `account_id` (misma moneda), `target_amount`/`target_months`, `target_date` (`null` la quita).
+- `PUT /api/v1/funds/{id}` — parcial: `name`, `account_id` (misma moneda), `target_amount`/`target_months`, `target_date` (`null` la quita; `422` en un `annual_expense`).
 - `POST /api/v1/funds/{id}/contributions` y `/withdrawals` — body `{ amount, note? }` (`amount` positivo; el signo lo pone el endpoint). `422` si el retiro excede el saldo; `409` si el sobre está archivado.
-- `POST /api/v1/funds/{id}/archive` (`409` con saldo distinto de 0) y `/unarchive`. No hay `DELETE`.
+- `POST /api/v1/funds/{id}/archive` (`409` con saldo distinto de 0) y `/unarchive`.
+- `DELETE /api/v1/funds/{id}` → `204` sin body: borra el sobre y su historial en cualquier estado o saldo (el saldo vuelve al disponible; las cuentas no cambian). Al borrar, invalida `funds` y `dashboardSummary` (no toca el detalle, la página navega a `/funds`).
 - `GET /api/v1/dashboard/summary` suma `accounts_total`, `committed` y `free_to_spend` (ver "Contratos de datos > Dashboard").
 
 ### Notificaciones (Fase 13 §13.5)
@@ -553,7 +554,7 @@ Los endpoints de series (`cashflow-series`, `category-distribution`) devuelven u
 
 ### Sobre (Fase 35)
 
-`Fund`: `id`, `name`, `kind` (`'annual_expense' | 'emergency' | 'goal'`), `status` (`'active' | 'archived'`), `account_id`, `currency`, `balance`, `target_amount` (meta efectiva; `null` en un fondo de emergencia sin historial de gasto), `target_months`, `target_date` (`YYYY-MM-DD` | `null`), `progress_pct` (0-100 | `null`), `remaining`, `months_remaining`, `required_contribution` (monto sugerido para aportar este mes | `null`), `pace` (`'completed' | 'on_track' | 'behind' | null`; `null` = sin fecha o sin meta), `monthly_expense_avg` y `runway_months` (solo emergencia), `backing_shortfall` (`> 0` = "sobre sin respaldo"), `created_at`. `FundEntry`: `id`, `fund_id`, `amount` (con signo), `type` (`'contribution' | 'withdrawal' | 'adjustment'`), `occurred_at`, `period` (`YYYY-MM`), `note`.
+`Fund`: `id`, `name`, `kind` (`'annual_expense' | 'emergency' | 'goal'`), `status` (`'active' | 'archived'`), `account_id`, `currency`, `balance`, `target_amount` (meta efectiva; `null` en un fondo de emergencia sin historial de gasto), `target_months`, `target_date` (`YYYY-MM-DD` | `null`), `progress_pct` (0-100 | `null`), `remaining`, `months_remaining`, `required_contribution` (monto sugerido para aportar este mes | `null`), `next_month_contribution` (cuota sugerida del mes siguiente | `null`; la UI la muestra como "Cuota de {mes} cumplida ✓" cuando `remaining > 0` y `required_contribution` es `null`), `pace` (`'completed' | 'on_track' | 'behind' | null`; `null` = sin fecha o sin meta), `monthly_expense_avg` y `runway_months` (solo emergencia), `backing_shortfall` (`> 0` = "sobre sin respaldo"), `created_at`. `FundEntry`: `id`, `fund_id`, `amount` (con signo), `type` (`'contribution' | 'withdrawal' | 'adjustment'`), `occurred_at`, `period` (`YYYY-MM`), `note`.
 
 ### Notificación
 

@@ -9,6 +9,18 @@
 
 ---
 
+## Fase 35 (ajustes post-uso) — borrar sobres, cuota cumplida, gasto anual con fecha (2026-10-17)
+
+Spec: `docs/specs/fase_35_spec.md`, "Ajustes post-uso" (A1–A4). **A1:** `DELETE /funds/{id}` (`204`) borra el
+sobre y su libro en cualquier estado/saldo (`FOR UPDATE`, sin migración); el saldo vuelve al disponible;
+"Eliminar" con confirmación en tarjeta y detalle. **A2:** `next_month_contribution` y el mensaje "Cuota de
+{mes} cumplida ✓ — el mes que viene te sugerimos ~{monto}". **A3:** "Disponible real" desglosa saldo y
+apartado por cada moneda. **A4:** `annual_expense` exige `target_date` (`422`; sin CHECK ni migración). 602
+tests en Postgres 16, verificado en navegador (390 px/escritorio, oscuro/claro) y `/code-review` high
+(hallazgos reales corregidos, el resto descartado por escrito en la spec).
+
+---
+
 ## Fase 35 — Sobres virtuales + disponible real (2026-10-17)
 
 Spec: `docs/specs/fase_35_spec.md`. Primera fase del enfoque "finanzas responsables"

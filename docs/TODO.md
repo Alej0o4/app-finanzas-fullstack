@@ -561,6 +561,21 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 Decisiones tomadas por el agente sin `/grilling`; el dueño las revisa (ver `docs/specs/fase_35_spec.md`).
 
+**Ajustes post-uso (2026-10-17) — ✅ hechos** (spec, "Ajustes post-uso"):
+
+- [x] **A1 — Borrar sobres (revisa D4).** `DELETE /funds/{id}` → `204`; borra sobre y libro en cualquier
+  estado/saldo, con confirmación que dice cuánto se libera. Archivar se mantiene.
+- [x] **A2 — Mensaje de "cuota cumplida".** `next_month_contribution` + "Cuota de {mes} cumplida ✓".
+- [x] **A3 — Desglose por cada moneda en "Disponible real".**
+- [x] **A4 — `annual_expense` exige `target_date`** (`422` al crear sin fecha o al quitársela).
+- [ ] **Pendiente del dueño (A3):** contrastar con tus datos reales que USD "saldo en cuentas − apartado en
+  sobres" cuadra con el neto que muestra la tarjeta; si no cuadra, es un bug de `disponibilidad()` y se
+  abre aparte. En el stack dev cuadra (10.515 − 99 = 10.416).
+- [ ] **Fase 36 (`/grilling`):** definir qué hace borrar un sobre con movimientos enlazados a transacciones
+  (`fund_entries.transaction_id`); hoy el borrado no lo comprueba porque siempre es `NULL`.
+
+**Deuda abierta de la revisión:**
+
 - [ ] **"Gasto esencial" para el fondo de emergencia (D3).** La meta en meses usa el gasto promedio
   total de los últimos 3 meses completos porque Oikos no clasifica necesidad/deseo. Cuando exista esa
   clasificación (backlog), el promedio debe excluir lo no esencial.

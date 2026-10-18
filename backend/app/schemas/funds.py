@@ -42,6 +42,9 @@ class FundCreate(BaseModel):
             raise ValueError("Indica `target_amount` o `target_months`, uno solo.")
         if self.target_months is not None and self.kind != FundKind.emergency:
             raise ValueError("`target_months` solo aplica al fondo de emergencia.")
+        # A4: un gasto anual sin vencimiento no es un gasto anual.
+        if self.kind == FundKind.annual_expense and self.target_date is None:
+            raise ValueError("Un gasto anual necesita `target_date` (su fecha de vencimiento).")
         return self
 
 
@@ -102,6 +105,9 @@ class FundResponse(BaseModel):
     remaining: Decimal | None = None
     months_remaining: int | None = None
     required_contribution: Decimal | None = None
+    # A2: cuota sugerida del mes siguiente con el saldo actual; `None` si no hay fecha, es el
+    # último mes o no queda nada por aportar.
+    next_month_contribution: Decimal | None = None
     pace: Literal["completed", "on_track", "behind"] | None = None
     monthly_expense_avg: Decimal | None = None
     runway_months: Decimal | None = None

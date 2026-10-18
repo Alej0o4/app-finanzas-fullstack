@@ -882,7 +882,10 @@ ajeno o inexistente responde `404` ("El sobre no existe o no tienes permisos.").
 `target_months`, `target_date` (`YYYY-MM-DD` en la zona del usuario | `null`), `progress_pct` (0-100 |
 `null`), `remaining` (`max(meta − saldo, 0)`), `months_remaining`, `required_contribution` (monto sugerido
 a aportar este mes = `remaining / max(months_remaining, 1)` redondeado hacia arriba al centavo; `null` sin
-fecha o sin nada por aportar), `pace` (`completed` | `on_track` | `behind` | `null` — `null` sin fecha o
+fecha o sin nada por aportar; tras aportar de más queda `null` hasta el mes siguiente), `next_month_contribution`
+(Ajuste A2: cuota sugerida del mes siguiente con el saldo actual = `remaining / (months_remaining − 1)`
+redondeado hacia arriba al centavo; `null` sin fecha, en el último mes, con la fecha vencida o sin nada por
+aportar), `pace` (`completed` | `on_track` | `behind` | `null` — `null` sin fecha o
 sin meta; ritmo lineal por días desde la creación hasta `target_date`), `monthly_expense_avg` y
 `runway_months` (solo `emergency`), `backing_shortfall` (Σ saldos de sobres activos de la cuenta que
 excede el saldo de la cuenta, `0.00` si está respaldado), `created_at`. `FundDetailResponse` agrega
@@ -897,8 +900,8 @@ excede el saldo de la cuenta, `0.00` si está respaldado), `created_at`. `FundDe
 
 Body: `name` (1-100, recortado), `kind`, `account_id`, `target_amount` (>0, `Numeric(14,2)`) **o**
 `target_months` (1-60; solo `emergency`) — exactamente uno —, `target_date` (opcional, `YYYY-MM-DD`, hoy o
-posterior en la zona del usuario). La moneda se hereda de la cuenta. Errores: `404` cuenta ajena, `422`
-validación.
+posterior en la zona del usuario; **obligatoria para `kind = annual_expense`**, Ajuste A4). La moneda se
+hereda de la cuenta. Errores: `404` cuenta ajena, `422` validación (incluye gasto anual sin `target_date`).
 
 ### `GET /api/v1/funds/{fund_id}` → `FundDetailResponse`
 
@@ -906,7 +909,9 @@ validación.
 
 Parcial (solo lo enviado cambia): `name`, `account_id` (misma moneda, si no `422`), `target_amount` /
 `target_months` (lo enviado reemplaza a la alternativa; `target_months` solo en `emergency`),
-`target_date` (`null` la quita; una fecha nueva no puede ser pasada). No cambia `kind` ni moneda.
+`target_date` (`null` la quita salvo en `annual_expense`, donde es `422`; una fecha nueva no puede ser
+pasada). Un `annual_expense` legado sin fecha sigue siendo editable en otros campos. No cambia `kind` ni
+moneda.
 
 ### `POST /api/v1/funds/{fund_id}/contributions` y `/withdrawals`
 
@@ -917,8 +922,15 @@ la cuenta (no se bloquea).
 
 ### `POST /api/v1/funds/{fund_id}/archive` y `/unarchive`
 
-Archivar exige saldo `0` (`409` "Retira el saldo del sobre antes de archivarlo."). Idempotente. No hay
-`DELETE`: el libro es histórico.
+Archivar exige saldo `0` (`409` "Retira el saldo del sobre antes de archivarlo."). Idempotente. Se
+conserva para guardar el historial de sobres cumplidos.
+
+### `DELETE /api/v1/funds/{fund_id}` → `204` (Ajuste A1)
+
+Borra el sobre **y sus movimientos**, activo o archivado y con cualquier saldo. Toma `FOR UPDATE` del sobre
+como primera consulta; entradas y sobre se borran en la misma transacción. El saldo vuelve al disponible
+real (el sobre deja de contar en `committed`); `Account.balance` no cambia. Sobre ajeno o inexistente →
+`404`. Un aporte/retiro concurrente que espera el lock responde `404` (sin entradas huérfanas).
 
 ## Dashboard
 

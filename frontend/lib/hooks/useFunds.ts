@@ -79,6 +79,21 @@ export function useFundMovement(id: string | number, kind: 'contributions' | 'wi
   });
 }
 
+/** Borra el sobre y su historial (A1). La key del detalle NO se toca (ni invalidar ni quitar):
+ *  la página de detalle sigue montada hasta que navega y refetchearía un 404; la lista y el
+ *  "Disponible real" sí se invalidan. */
+export function useDeleteFund(id: string | number) {
+  const invalidate = useInvalidateFunds();
+  return useMutation({
+    mutationFn: async () => {
+      await api.delete(`funds/${id}`);
+    },
+    onSuccess: () => {
+      invalidate();
+    },
+  });
+}
+
 export function useArchiveFund(id: string | number) {
   const invalidate = useInvalidateFunds();
   return useMutation({

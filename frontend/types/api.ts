@@ -126,6 +126,8 @@ export interface Fund {
   remaining: number | string | null;
   months_remaining: number | null;
   required_contribution: number | string | null;
+  /** Cuota sugerida del mes siguiente con el saldo actual; null sin fecha, en el último mes o sin nada por aportar. */
+  next_month_contribution: number | string | null;
   pace: FundPace | null;
   monthly_expense_avg: number | string | null;
   runway_months: number | string | null;

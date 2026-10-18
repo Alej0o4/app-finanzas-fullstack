@@ -10,6 +10,8 @@ from decimal import Decimal
 
 import pytest
 
+from app.models import models
+
 pytestmark = pytest.mark.concurrencia
 
 URL = "/api/v1/funds/"
@@ -20,7 +22,7 @@ def _preparar(real_client, real_register_and_login, real_make_account, email: st
     cuenta = real_make_account(usuario["headers"], balance="1000.00")
     resp = real_client.post(
         URL,
-        json={"name": "Seguro", "kind": "annual_expense", "account_id": cuenta["id"], "target_amount": "1000.00"},
+        json={"name": "Seguro", "kind": "goal", "account_id": cuenta["id"], "target_amount": "1000.00"},
         headers=usuario["headers"],
     )
     assert resp.status_code == 200, resp.text
@@ -111,3 +113,28 @@ class TestRetiroYArchivoParalelos:
         # Invariante: un sobre archivado siempre tiene saldo 0.
         if detalle["status"] == "archived":
             assert Decimal(str(detalle["balance"])) == Decimal("0.00")
+
+
+class TestBorrarVsAportar:
+    def test_borrar_y_aportar_en_paralelo_no_dejan_entradas_huerfanas(
+        self, real_client, real_register_and_login, real_make_account, real_session
+    ):
+        usuario, fondo = _preparar(
+            real_client, real_register_and_login, real_make_account, "fondos-del@example.com", "100.00"
+        )
+
+        def _trabajo(i: int) -> int:
+            if i == 0:
+                return real_client.delete(f"{URL}{fondo['id']}", headers=usuario["headers"]).status_code
+            return real_client.post(
+                f"{URL}{fondo['id']}/contributions", json={"amount": "10.00"}, headers=usuario["headers"]
+            ).status_code
+
+        resultados = _disparar(6, _trabajo)
+
+        assert resultados[0] == 204, resultados
+        assert 500 not in resultados, resultados
+        assert all(r in (200, 404) for r in resultados[1:]), resultados
+        assert real_client.get(f"{URL}{fondo['id']}", headers=usuario["headers"]).status_code == 404
+        huerfanas = real_session.query(models.FundEntry).filter(models.FundEntry.fund_id == fondo["id"]).count()
+        assert huerfanas == 0
