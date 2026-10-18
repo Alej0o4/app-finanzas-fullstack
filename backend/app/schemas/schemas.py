@@ -27,6 +27,7 @@ from app.schemas.auth import (
 )
 from app.schemas.budgets import BudgetBase, BudgetCreate, BudgetResponse
 from app.schemas.categories import CategoryBase, CategoryCreate, CategoryResponse, CategoryType
+from app.schemas.cdt import CdtCreate, CdtListResponse, CdtRedeem, CdtResponse, CdtStatus, CdtTotals, CdtUpdate
 from app.schemas.common import PaginatedResponse
 from app.schemas.dashboard import (
     BalanceByCurrency,
@@ -114,6 +115,13 @@ __all__ = [
     "CategoryDistributionData",
     "CategoryResponse",
     "CategoryType",
+    "CdtCreate",
+    "CdtListResponse",
+    "CdtRedeem",
+    "CdtResponse",
+    "CdtStatus",
+    "CdtTotals",
+    "CdtUpdate",
     "DashboardSummary",
     "FundCreate",
     "FundDetailResponse",

@@ -219,6 +219,21 @@ Backend en Postgres 16 (testcontainers). T1 con TDD.
 
 ---
 
+## Desvíos y hallazgos
+
+Backend (pasos 1–6), implementado el 2026-10-18.
+
+- **`patrimonio` recibe `accounts_total`.** La firma es `patrimonio(db, user, ahora, moneda_preferida, accounts_total)`: el total de cuentas lo calcula `funds.disponibilidad` (ya invocada en el dashboard) y `patrimonio` solo lo suma, para no duplicar la consulta de saldos. `cdt_total` y `net_worth` cubren la unión de monedas de cuentas y CDT vigentes (con `0.00` donde un lado no tiene), preferida primero.
+- **Cifras de un CDT redimido (D12/D14 no lo precisaban).** `elapsed_days` y `accrued_interest` se congelan al `redeemed_on`; `current_value = final_amount`; `days_to_maturity = null`; `alert = "ok"`; `realized_interest = final_amount − principal`. Para uno vigente `final_amount`/`realized_interest`/`redeemed_on` son `null`.
+- **`CdtUpdate` rechaza `null` explícito** (`422`) además de campos desconocidos (`extra="forbid"`), para no ignorar nada en silencio (en `PUT` se pueden editar `name`, `currency`, `principal`, `rate_ea`, `opened_on`, `maturity_on`; las reglas de fechas D8 se validan sobre el resultado combinado).
+- **`CdtRedeem` también es `extra="forbid"`**, `final_amount >= 0` con los límites de dinero.
+- **Alerta el día del vencimiento:** `maturity_on == hoy` ya es `matured` (la spec decía `maturity_on ≤ hoy`); `due_soon` cubre 1..15 días.
+- **Migración:** revisión `b4e7a2d9c613`; los CHECK llevan nombre propio (`ck_cdts_*`) y se agregó el de coherencia de la redención de B1.
+- **Sin límite de concurrencia en `POST`** para el tope de 50 CDT (dos creaciones simultáneas podrían pasar de 50 por una); mismo criterio que el tope de 100 de recurrentes.
+- **Seed:** 5 CDT (vigente, por vencer a 10 días, vencido sin redimir hace 5 días, redimido con rendimiento, en USD) con fechas relativas a hoy.
+
+---
+
 ## Orden de ejecución
 
 1. [backend] `models.py` (`Cdt`) + migración Alembic — D6–D8, B1.

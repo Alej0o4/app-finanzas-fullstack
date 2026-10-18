@@ -16,6 +16,7 @@ from app.core.security import get_current_user
 from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.schemas import schemas
+from app.services import cdt as cdt_service
 from app.services import funds as funds_service
 
 router = APIRouter()
@@ -223,8 +224,12 @@ def obtener_resumen(
     # activos; no depende del mes consultado ni de las cuentas destacadas.
     disponibilidad = funds_service.disponibilidad(db, current_user.id, preferred_currency)
 
+    # Fase 38 (D5): patrimonio = cuentas + CDT vigentes. Solo suma campos nuevos.
+    patrimonio = cdt_service.patrimonio(db, current_user, ahora, preferred_currency, disponibilidad["accounts_total"])
+
     return {
         **disponibilidad,
+        **patrimonio,
         "balances": balances,
         "monthly_income_by_currency": income,
         "monthly_expense_by_currency": expense,

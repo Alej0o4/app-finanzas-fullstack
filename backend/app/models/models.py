@@ -453,3 +453,40 @@ class RecurringRule(Base):
         CheckConstraint("status IN ('active', 'paused')", name="ck_recurring_rules_status"),
         Index("ix_recurring_rules_user_id_status", "user_id", "status"),
     )
+
+
+class Cdt(Base):
+    """CDT (Fase 38 §B1): inversión a plazo fijo, módulo independiente del libro contable.
+
+    No referencia cuentas ni transacciones (D1): crear, editar, redimir o borrar un CDT no mueve
+    `Account.balance`. `opened_on`, `maturity_on` y `redeemed_on` son días de calendario en la zona
+    del usuario (D15). Sin `SoftDeleteMixin`: borrar es real (D10).
+    """
+
+    __tablename__ = "cdts"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String(100), nullable=False)
+    currency = Column(String(3), nullable=False)
+    principal = Column(Numeric(14, 2), nullable=False)
+    rate_ea = Column(Numeric(7, 4), nullable=False)  # puntos porcentuales: 11.5 = 11,5 % E.A.
+    opened_on = Column(Date, nullable=False)
+    maturity_on = Column(Date, nullable=False)
+    status = Column(String(10), nullable=False, default="active", server_default="active")
+    redeemed_on = Column(Date, nullable=True)
+    final_amount = Column(Numeric(14, 2), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("principal > 0", name="ck_cdts_principal_positive"),
+        CheckConstraint("rate_ea > 0 AND rate_ea <= 100", name="ck_cdts_rate_ea_range"),
+        CheckConstraint("maturity_on > opened_on", name="ck_cdts_maturity_after_opened"),
+        CheckConstraint("status IN ('active', 'redeemed')", name="ck_cdts_status"),
+        CheckConstraint("final_amount IS NULL OR final_amount >= 0", name="ck_cdts_final_amount_nonneg"),
+        CheckConstraint(
+            "(status = 'redeemed') = (redeemed_on IS NOT NULL AND final_amount IS NOT NULL)",
+            name="ck_cdts_redeemed_coherent",
+        ),
+        Index("ix_cdts_user_id_status", "user_id", "status"),
+    )
