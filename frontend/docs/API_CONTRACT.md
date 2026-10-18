@@ -305,7 +305,7 @@ Un sobre reserva dinero de una cuenta **sin moverlo**: aportar o retirar no crea
 - `PUT /api/v1/funds/{id}` — parcial: `name`, `account_id` (misma moneda), `target_amount`/`target_months`, `target_date` (`null` la quita; `422` en un `annual_expense`).
 - `POST /api/v1/funds/{id}/contributions` y `/withdrawals` — body `{ amount, note? }` (`amount` positivo; el signo lo pone el endpoint). `422` si el retiro excede el saldo; `409` si el sobre está archivado.
 - `POST /api/v1/funds/{id}/archive` (`409` con saldo distinto de 0) y `/unarchive`.
-- `DELETE /api/v1/funds/{id}` → `204` sin body: borra el sobre y su historial en cualquier estado o saldo (el saldo vuelve al disponible; las cuentas no cambian). Al borrar, invalida `funds` y `dashboardSummary` y quita el detalle del caché.
+- `DELETE /api/v1/funds/{id}` → `204` sin body: borra el sobre y su historial en cualquier estado o saldo (el saldo vuelve al disponible; las cuentas no cambian). Al borrar, invalida `funds` y `dashboardSummary` (no toca el detalle, la página navega a `/funds`).
 - `GET /api/v1/dashboard/summary` suma `accounts_total`, `committed` y `free_to_spend` (ver "Contratos de datos > Dashboard").
 
 ### Notificaciones (Fase 13 §13.5)

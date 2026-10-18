@@ -20,10 +20,11 @@ export default function FundProgress({ fund }: { fund: Fund }) {
     Number(fund.remaining ?? 0) > 0 &&
     fund.required_contribution === null &&
     fund.next_month_contribution !== null;
-  const monthName = new Intl.DateTimeFormat('es-CO', {
-    month: 'long',
-    timeZone: displayTimezone,
-  }).format(new Date());
+  const monthName = monthDone
+    ? new Intl.DateTimeFormat('es-CO', { month: 'long', timeZone: displayTimezone }).format(
+        new Date()
+      )
+    : '';
 
   return (
     <div className="space-y-3">

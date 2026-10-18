@@ -18,6 +18,32 @@ interface AvailableCardProps {
 const totalOf = (list: BalanceByCurrency[], currency: string) =>
   Number(list.find((b) => b.currency === currency)?.total ?? 0);
 
+/** "Saldo en cuentas − Apartado en sobres" de una moneda; los montos vienen del servidor. */
+function Breakdown({
+  accounts,
+  committed,
+  currency,
+  className = '',
+}: {
+  accounts: number;
+  committed: number;
+  currency: string;
+  className?: string;
+}) {
+  return (
+    <dl className={`text-text-muted space-y-1 text-xs ${className}`}>
+      <div className="flex justify-between gap-2">
+        <dt>Saldo en cuentas</dt>
+        <dd className="text-text tabular-nums">{formatCurrency(accounts, currency)}</dd>
+      </div>
+      <div className="flex justify-between gap-2">
+        <dt>− Apartado en sobres</dt>
+        <dd className="text-text tabular-nums">{formatCurrency(committed, currency)}</dd>
+      </div>
+    </dl>
+  );
+}
+
 /**
  * Fase 35 F5: tarjeta SECUNDARIA "Disponible real" (saldo de cuentas - apartado en sobres). El
  * flujo mensual sigue siendo la cifra principal. Todo viene del servidor, nada se resta aquí.
@@ -86,20 +112,12 @@ export default function AvailableCard({
         </p>
       )}
 
-      <dl className="text-text-muted mt-3 space-y-1 text-xs">
-        <div className="flex justify-between gap-2">
-          <dt>Saldo en cuentas</dt>
-          <dd className="text-text tabular-nums">
-            {formatCurrency(totalOf(accounts_total, currency), currency)}
-          </dd>
-        </div>
-        <div className="flex justify-between gap-2">
-          <dt>− Apartado en sobres</dt>
-          <dd className="text-text tabular-nums">
-            {formatCurrency(totalOf(committed, currency), currency)}
-          </dd>
-        </div>
-      </dl>
+      <Breakdown
+        className="mt-3"
+        accounts={totalOf(accounts_total, currency)}
+        committed={totalOf(committed, currency)}
+        currency={currency}
+      />
 
       {isNegative && (
         <p role="status" className="bg-danger/10 text-text mt-3 rounded-xl p-2.5 text-xs">
@@ -122,20 +140,11 @@ export default function AvailableCard({
                     {formatCurrency(Number(b.total), b.currency)}
                   </span>
                 </div>
-                <dl className="text-text-muted space-y-1">
-                  <div className="flex justify-between gap-2">
-                    <dt>Saldo en cuentas</dt>
-                    <dd className="text-text tabular-nums">
-                      {formatCurrency(totalOf(accounts_total, b.currency), b.currency)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <dt>− Apartado en sobres</dt>
-                    <dd className="text-text tabular-nums">
-                      {formatCurrency(totalOf(committed, b.currency), b.currency)}
-                    </dd>
-                  </div>
-                </dl>
+                <Breakdown
+                  accounts={totalOf(accounts_total, b.currency)}
+                  committed={totalOf(committed, b.currency)}
+                  currency={b.currency}
+                />
               </div>
             );
           })}

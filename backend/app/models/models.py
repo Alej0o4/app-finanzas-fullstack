@@ -140,7 +140,8 @@ class Fund(Base):
     """Sobre virtual (Fase 35 §B1): dinero comprometido pero no gastado, una capa de asignación
     sobre una cuenta. No es una cuenta ni mueve dinero: el saldo es `SUM(fund_entries.amount)`.
 
-    Sin `SoftDeleteMixin`: "archivar" (`status`) es el borrado, y exige saldo 0 (D4).
+    Sin `SoftDeleteMixin`: "archivar" (`status`) conserva el historial y exige saldo 0 (D4);
+    `DELETE /funds/{id}` (Ajuste A1) borra el sobre y su libro en cualquier estado y saldo.
     `target_amount` XOR `target_months` lo garantiza un CHECK; `target_months` solo aplica al
     fondo de emergencia (lo valida el servicio).
     """
@@ -174,7 +175,8 @@ class Fund(Base):
 
 
 class FundEntry(Base):
-    """Libro append-only de un sobre (Fase 35 §B2): la API nunca actualiza ni borra filas.
+    """Libro append-only de un sobre (Fase 35 §B2): la API nunca actualiza filas; solo se borran
+    en bloque al eliminar el sobre (Ajuste A1).
 
     `amount` con signo (aporte > 0, retiro < 0). `transaction_id` queda siempre NULL en la
     Fase 35 (lo usa la Fase 36). Sin UNIQUE (fund_id, period): permite aportes extra.

@@ -184,8 +184,8 @@ Los hooks de mutación de `lib/hooks/useFunds.ts` invalidan siempre:
   (`committed`/`free_to_spend`) cambia con cada aporte o retiro.
 
 `useDeleteFund(id)` (Ajuste A1) invalida `funds.all()` y `dashboard.summary()` pero **no** `funds.byId(id)`:
-el detalle ya no existe y refetchearlo daría 404, así que se hace `removeQueries` sobre esa key. La página
-de detalle navega a `/funds` tras borrar.
+el detalle ya no existe y, con la página aún montada, refetchearlo (o quitarlo del caché) daría un 404
+visible. La página de detalle navega a `/funds` tras borrar.
 
 Crear/editar/borrar una **cuenta** o una **transacción** ya invalidan `dashboard.summary()`, que es
 lo que refresca `free_to_spend`; no hace falta invalidar `funds` salvo que cambie el respaldo
