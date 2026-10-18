@@ -341,11 +341,20 @@ Spec: `docs/specs/fase_35_spec.md`; dirección en `docs/VISION_FINANZAS_RESPONSA
   meta efectiva. "Gasto esencial" no existe todavía (deuda en `docs/TODO.md`).
 - El **fondo de emergencia solo cuenta dinero líquido**: se respalda con una cuenta normal. El CDT, cuando
   llegue, será un módulo aparte.
+- **Gasto anual con fecha** (Ajuste A4): `annual_expense` exige `target_date` al crear y no admite
+  `target_date: null` en `PUT` (`422`); `goal` y `emergency` la dejan opcional. Sin CHECK ni migración: los
+  `annual_expense` legados sin fecha siguen siendo válidos.
+- **Cuota del mes siguiente** (Ajuste A2): `next_month_contribution = remaining / (months_remaining − 1)`
+  hacia arriba al centavo; `null` sin fecha, con `months_remaining ≤ 1` o sin nada por aportar.
+  `required_contribution` sigue siendo la cuota de este mes.
 - **Ritmo** (`pace`): `completed` si saldo ≥ meta; sin `target_date` no hay ritmo (`null`); con fecha,
   `behind` si el saldo está por debajo de lo lineal esperado desde la creación, o si la fecha ya pasó sin
   cumplir. Meses restantes = diferencia de meses calendario en la zona del usuario (mín. 1 si la fecha no
   pasó). Todo se calcula en `app/services/funds.py`; el frontend no recalcula.
-- **Archivar** exige saldo `0` (primero se retira, lo que libera el dinero al disponible). No se puede
+- **Archivar** exige saldo `0` (primero se retira, lo que libera el dinero al disponible). **Borrar**
+  (Ajuste A1) elimina el sobre y su libro en cualquier estado y con cualquier saldo (`FOR UPDATE`, sin
+  `ON DELETE CASCADE`): el saldo vuelve al disponible y `Account.balance` no cambia. Cuando existan
+  movimientos enlazados a transacciones (Fase 36) habrá que definir qué pasa con los gastos imputados. No se puede
   borrar una cuenta con sobres **activos** (`400`). Si el saldo de la cuenta baja de lo apartado (se
   gastó de ella), los sobres reportan `backing_shortfall > 0` ("sobre sin respaldo"): se avisa, no se
   bloquea. Los sobres se borran en la cascada de `delete_user_cascade`.

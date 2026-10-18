@@ -174,7 +174,7 @@ Después de mutar una cuenta:
 - `accounts-summary` (Fase 11 §11.5)
 - `dashboardSummary`
 
-### Crear/editar/aportar/retirar/archivar sobre (Fase 35)
+### Crear/editar/aportar/retirar/archivar/eliminar sobre (Fase 35)
 
 Keys nuevas: `funds.all()` → `['funds']` (lista) y `funds.byId(id)` → `['fund', id]` (detalle).
 Los hooks de mutación de `lib/hooks/useFunds.ts` invalidan siempre:
@@ -182,6 +182,10 @@ Los hooks de mutación de `lib/hooks/useFunds.ts` invalidan siempre:
 - `funds.all()` y `funds.byId(id)`
 - `dashboard.summary()` — por prefijo, cubre todos los meses cacheados: el disponible real
   (`committed`/`free_to_spend`) cambia con cada aporte o retiro.
+
+`useDeleteFund(id)` (Ajuste A1) invalida `funds.all()` y `dashboard.summary()` pero **no** `funds.byId(id)`:
+el detalle ya no existe y refetchearlo daría 404, así que se hace `removeQueries` sobre esa key. La página
+de detalle navega a `/funds` tras borrar.
 
 Crear/editar/borrar una **cuenta** o una **transacción** ya invalidan `dashboard.summary()`, que es
 lo que refresca `free_to_spend`; no hace falta invalidar `funds` salvo que cambie el respaldo
