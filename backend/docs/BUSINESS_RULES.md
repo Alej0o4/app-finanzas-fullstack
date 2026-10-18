@@ -423,6 +423,25 @@ Spec: `docs/specs/fase_36_spec.md` (decisiones D1–D17).
   `free_to_spend`, flujo, presupuestos ni Analítica. Borrar la regla no toca transacciones ya confirmadas.
 - **Borrado de usuario:** `delete_user_cascade` borra sus reglas antes de cuentas y categorías.
 
+## CDT (Fase 38)
+
+- **Aislado del libro contable:** crear, editar, redimir o borrar un CDT no mueve `Account.balance`, no crea
+  `Transaction` y no usa `ledger.py`. Redimir solo cambia de estado y guarda `redeemed_on` y `final_amount`
+  (defecto: capital + interés causado a esa fecha); el retorno a una cuenta espera a las transferencias (QA-030).
+- **Interés causado:** `capital × ((1 + r)^(d/365) − 1)`, `r = rate_ea/100`, `Decimal`, redondeo `ROUND_HALF_UP`
+  a centavo, bruto (sin retención ni GMF). `d` = días entre `opened_on` y hoy (zona del usuario), acotado a
+  `[0, plazo]`: no se causa interés después del vencimiento ni antes de abrir.
+- **Patrimonio, no disponible:** un CDT vigente suma `capital + interés causado` a `cdt_total`/`net_worth`
+  (`GET /dashboard/summary`). **Nunca** entra en `free_to_spend`, `committed`, sobres ni el fondo de emergencia,
+  que solo cuentan dinero líquido. Un CDT redimido deja de contar.
+- **Aviso de vencimiento solo en la UI:** `alert` = `due_soon` (1-15 días) o `matured` (vence hoy o ya venció
+  sin redimir). Sin job, push ni fila en `notifications`.
+- **Estados y límites:** `active` → `redeemed` (sin vuelta atrás; si fue un error se borra). Solo un vigente se
+  edita (`409` si no). `0 < rate_ea <= 100`, `principal > 0`, `maturity_on > opened_on`, plazo <= 10 años,
+  `opened_on` entre hoy − 10 años y hoy + 1 año, hasta 50 CDT por usuario. Moneda propia, sin conversión.
+- **Concurrencia:** `PUT`/`redeem`/`DELETE` toman `FOR UPDATE`; dos `redeem` simultáneos dan un `200` y un `409`.
+- **Borrado de usuario:** `delete_user_cascade` borra sus CDT.
+
 ## Dashboard
 
 - El resumen usa datos agregados del backend.
