@@ -338,6 +338,22 @@ Backend en Postgres 16 (testcontainers, default de la Fase 32). T1 y T2 con TDD.
 
 ---
 
+## Desvíos y hallazgos (implementación backend)
+
+- **Guarda de `start_date` futura (no estaba en la spec):** `start_date` a más de 10 años en el futuro es `422`.
+  Sin tope, una fecha cerca de `9999-12-31` desbordaba `date` al calcular la siguiente ocurrencia.
+- **`PUT` con `extra="forbid"`:** enviar `frequency`, `start_date` o `type` es `422` en vez de ignorarse en silencio (D6).
+- **`confirm`/`skip` sobre una regla pausada → `409`** (la spec no lo decía; evita resolver ocurrencias de una regla pausada).
+- **`RecurringResponse.currency` puede ser `null`** cuando la cuenta se borró (`account_missing`), porque la moneda no se guarda (D7).
+- **`PendingOccurrenceResponse.is_next`** (extra): marca la única ocurrencia resoluble por regla (D9) para que el frontend habilite el botón.
+- **`confirm` devuelve `TransactionResponse`**; `skip` devuelve la `RecurringResponse` ya avanzada.
+- **`core/user_deletion.py`** ahora borra `RecurringRule` antes de cuentas y categorías (las FK no tienen cascada); no estaba en la spec y es necesario para `DELETE /users/me`.
+- **`normalizar_nombre` de `services/recurring.py`** sigue D15 literal (strip + minúsculas + espacios colapsados, **conserva acentos**); es distinto de `core/text.normalizar_nombre` (que quita acentos).
+- **`es_candidato_anual`:** "monto de la última difiere <= 20 %" se mide contra la transacción inmediatamente anterior del grupo, y el intervalo de 350-380 días puede ser cualquier pareja consecutiva.
+- **Migración:** `a9c3d6e1f845` (down_revision `e8a1c4d7b290`); subida, `downgrade -1` y resubida verificadas contra Postgres 16 y `alembic check` limpio.
+- **Calendario:** las ocurrencias vencidas de meses anteriores al actual se saltan con `primera_desde(inicio, frecuencia, primer_dia_del_mes)`, así el tope de 400 iteraciones no se consume en atrasos viejos.
+- **Hallazgo fuera de alcance:** el `TRUNCATE` del fixture `real_client` (tests de concurrencia) no nombra `funds`/`recurring_rules`; funciona por `CASCADE` desde `users`.
+
 ## Orden de ejecución
 
 1. [backend] `models.py` (`RecurringRule`) + migración Alembic — D5, D7, D17, B1.

@@ -969,6 +969,90 @@ Fase 36: **se permite aunque tenga gastos enlazados**: las transacciones quedan 
 y totales no cambian), solo pierden la marca de "planeado". `GET /funds/{id}` (y la lista) devuelven
 `linked_expenses_count`/`linked_expenses_total` para avisar antes de borrar; archivar conserva el historial.
 
+## Recurrentes (Fase 37)
+
+Una **regla recurrente** propone una transacción cada vez que vence una ocurrencia; el dueño la confirma o la
+salta (nada se registra solo). No hay job: las pendientes se calculan bajo demanda desde `next_date`. Spec:
+`docs/specs/fase_37_spec.md`. Todo requiere autenticación (cookie o API key); una regla ajena o inexistente
+responde `404` ("La regla recurrente no existe o no tienes permisos."). Las rutas fijas (`/pending`,
+`/calendar`, `/suggestions`) van antes de `/{rule_id}`. Las fechas son **días de calendario** `YYYY-MM-DD` en
+la zona del usuario, no instantes.
+
+### `RecurringResponse`
+
+`id`, `name`, `type` (`income` | `expense`), `amount`, `currency` (la de su cuenta; `null` si la cuenta se
+borró), `account_id`, `category_id`, `frequency` (`weekly` | `monthly` | `yearly`), `start_date` (ancla del
+calendario), `next_date` (próxima ocurrencia **no resuelta**), `status` (`active` | `paused`),
+`monthly_equivalent` (semanal `amount x 52 / 12`, mensual `amount`, anual `amount / 12`; 2 decimales
+`ROUND_HALF_UP`), `is_annual` (`frequency = yearly`), `is_due` (activa y `next_date <= hoy`),
+`account_missing`, `category_missing` (la cuenta/categoría se borró: la regla no propone ni proyecta, y
+`confirm` responde `404`), `created_at`.
+
+### `GET /api/v1/recurring/`
+
+Todas las reglas del usuario (activas y pausadas), ordenadas por `next_date`.
+
+### `POST /api/v1/recurring/` → `RecurringResponse`
+
+Body: `name` (1-100, recortado), `type`, `amount` (> 0, 2 decimales, 14 dígitos), `account_id`, `category_id`,
+`frequency`, `start_date`. `next_date` arranca igual a `start_date`. La moneda es la de la cuenta. La
+categoría puede ser de cualquier tipo (reembolsos cruzados, Fase 31). Errores: `404` cuenta ajena/borrada o
+categoría ajena/borrada; `422` monto inválido, `start_date` anterior a un año atrás (o a más de 10 años en el
+futuro), esquema inválido, o tope de **100 reglas por usuario**.
+
+### `PUT /api/v1/recurring/{rule_id}` → `RecurringResponse`
+
+Parcial: `name`, `amount`, `account_id`, `category_id`, `status`. **`frequency`, `start_date` y `type` no se
+editan: enviarlos es `422`** (borrar y recrear). Cambiar la cuenta cambia la moneda de las ocurrencias futuras.
+Reanudar (`paused` → `active`) mueve `next_date` a la primera ocurrencia `>= hoy` (no se acumulan las de la
+pausa); pausar no toca `next_date`.
+
+### `DELETE /api/v1/recurring/{rule_id}` → `204`
+
+Borrado real. Las transacciones ya confirmadas no se tocan (no guardan su regla de origen). Toma `FOR UPDATE`
+de la regla: un `confirm` concurrente que espera el lock responde `404`.
+
+### `GET /api/v1/recurring/pending` → `PendingOccurrenceResponse[]`
+
+Ocurrencias vencidas (`<= hoy` en la zona del usuario) de las reglas **activas** con cuenta y categoría vivas,
+hasta **12 por regla**, de la más antigua a la más nueva. Cada ítem: `rule_id`, `name`, `type`, `amount`,
+`currency`, `account_id`, `category_id`, `frequency`, `occurrence_date`, `is_next` (solo la primera de cada
+regla se puede confirmar o saltar).
+
+### `POST /api/v1/recurring/{rule_id}/confirm` → `TransactionResponse`
+
+Body `{occurrence_date, amount?}` (`amount` opcional > 0; por defecto el de la regla). Crea una transacción
+normal (`description` = nombre de la regla, moneda de la cuenta, sin `payment_method` ni `fund_id`; `date` =
+hora real si la ocurrencia es hoy, si no las 12:00 locales de ese día), mueve `Account.balance` con el mismo
+delta que `POST /transactions`, avanza `next_date` y, si es gasto, evalúa las alertas de presupuesto. Una sola
+transacción SQL. Errores: `409` si `occurrence_date != next_date` (se resuelve en orden), si todavía no vence
+o si la regla está pausada; `404` regla ajena, cuenta o categoría borradas; `422` monto o fecha inválidos o
+saldo fuera de rango. Dos confirmaciones concurrentes de la misma ocurrencia: una `200`, el resto `409`.
+
+### `POST /api/v1/recurring/{rule_id}/skip` → `RecurringResponse`
+
+Body `{occurrence_date}`. Avanza `next_date` sin registrar nada. Mismos `409` que `confirm`.
+
+### `GET /api/v1/recurring/calendar` → `CalendarResponse`
+
+`{months: [{month: "YYYY-MM", items: [{rule_id, name, type, amount, currency, date, is_annual,
+is_overdue}], totals: [{currency, income, expense, net}]}], monthly_commitment: [{currency, amount}]}`.
+Siempre **12 meses** calendario (el actual + 11) en la zona del usuario, aunque estén vacíos. Solo reglas
+activas con cuenta y categoría vivas. Las ocurrencias de meses anteriores al actual no entran (están en
+`pending`); las vencidas del mes actual sí, con `is_overdue = true`. `monthly_commitment` = suma de
+`monthly_equivalent` de las reglas **de gasto** por moneda; es informativo (no alimenta `free_to_spend` ni
+el flujo).
+
+### `GET /api/v1/recurring/suggestions` → `SuggestionResponse[]`
+
+Cargos anuales detectados en los gastos de los últimos 26 meses (agrupa por cuenta + descripción normalizada
++ moneda; ignora transacciones sin descripción; candidato = pareja consecutiva separada 350-380 días y monto
+de la última dentro de +-20 % del anterior; se descarta si ya hay una regla de cualquier estado en la misma
+cuenta con el mismo nombre normalizado, si la última tiene más de 13 meses o si su próxima fecha cae a más
+de 12 meses). Cada ítem: `name`, `account_id`, `category_id`, `currency`, `amount` (el último),
+`last_date`, `suggested_start_date` (última + 1 año), `occurrences`. No hay endpoint de "aceptar": el
+frontend prellena `POST /recurring/` con `frequency = yearly`. Sin descartes persistidos.
+
 ## Dashboard
 
 ### `GET /api/v1/dashboard/summary`

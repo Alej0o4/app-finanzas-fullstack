@@ -399,6 +399,28 @@ Spec: `docs/specs/fase_36_spec.md` (decisiones D1–D17).
   y de tocar `Account.balance`; la lógica vive en `app/services/funds.py` y el router de transacciones
   sigue siendo dueño del `commit`.
 
+## Recurrentes (Fase 37)
+
+- **Propone, no registra solo:** una regla nunca crea una transacción sin que el dueño la confirme. No hay job:
+  una ocurrencia está pendiente si `next_date <= hoy` (`periods.dia_local`, zona del usuario).
+- **Calendario por días:** `start_date`/`next_date` son `Date` en la zona del usuario. La ocurrencia n se calcula
+  siempre desde `start_date` (el día 31 y el 29 de febrero se recortan al último día del mes y vuelven a su día).
+  Frecuencias: semanal (7 días), mensual, anual; la quincena son dos reglas mensuales.
+- **Orden y concurrencia:** `confirm`/`skip` exigen `occurrence_date == next_date` y que ya haya vencido (`409`);
+  toman `FOR UPDATE` de la regla como primera consulta (orden regla → cuentas), así dos confirmaciones
+  concurrentes no duplican y `confirm` vs `DELETE` no deja nada a medias.
+- **Confirmar = transacción normal:** moneda de la cuenta, `ledger.registrar_impacto`, alertas de presupuesto
+  después del `commit` (un fallo del motor no revierte). Sin `fund_id`.
+- **Esquema inmutable:** `frequency`, `start_date` y `type` no se editan (`422`). Reanudar salta a la primera
+  ocurrencia `>= hoy`; pausar no toca `next_date`. Pausada: fuera de pendientes y calendario, `confirm`/`skip`
+  `409`, y cuenta como "ya recurrente" para las sugerencias.
+- **Cuenta o categoría borrada:** la regla sigue listada (`account_missing`/`category_missing`) pero no propone
+  ni proyecta, y `confirm` responde `404`.
+- **Límites:** hasta 100 reglas por usuario; `start_date` entre un año atrás y 10 años adelante; `name` <= 100.
+- **Cifras existentes intactas:** `monthly_equivalent` y `monthly_commitment` son informativos; no entran en
+  `free_to_spend`, flujo, presupuestos ni Analítica. Borrar la regla no toca transacciones ya confirmadas.
+- **Borrado de usuario:** `delete_user_cascade` borra sus reglas antes de cuentas y categorías.
+
 ## Dashboard
 
 - El resumen usa datos agregados del backend.
