@@ -113,5 +113,15 @@ class TestEsCandidatoAnual:
     def test_dos_pagos_muy_cercanos_no_son_anuales(self):
         assert not svc.es_candidato_anual([date(2026, 1, 1), date(2026, 2, 1)], [D("100"), D("100")])
 
+    def test_el_monto_se_mide_en_la_pareja_anual_no_en_las_dos_ultimas(self):
+        fechas = [date(2025, 3, 10), date(2026, 3, 8), date(2026, 3, 12)]
+        montos = [D("1000"), D("1000"), D("50")]
+        assert svc.es_candidato_anual(fechas, montos)
+        assert svc.indice_ultima_pareja_anual(fechas, montos) == 1
+
+    def test_pareja_anual_con_monto_distinto_no_califica(self):
+        fechas = [date(2025, 3, 10), date(2026, 3, 8), date(2026, 3, 12)]
+        assert not svc.es_candidato_anual(fechas, [D("1000"), D("1500"), D("1500")])
+
     def test_acepta_fechas_desordenadas(self):
         assert svc.es_candidato_anual([date(2026, 10, 1), date(2025, 10, 1)], [D("1100"), D("1000")])

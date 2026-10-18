@@ -984,9 +984,9 @@ la zona del usuario, no instantes.
 borró), `account_id`, `category_id`, `frequency` (`weekly` | `monthly` | `yearly`), `start_date` (ancla del
 calendario), `next_date` (próxima ocurrencia **no resuelta**), `status` (`active` | `paused`),
 `monthly_equivalent` (semanal `amount x 52 / 12`, mensual `amount`, anual `amount / 12`; 2 decimales
-`ROUND_HALF_UP`), `is_annual` (`frequency = yearly`), `is_due` (activa y `next_date <= hoy`),
-`account_missing`, `category_missing` (la cuenta/categoría se borró: la regla no propone ni proyecta, y
-`confirm` responde `404`), `created_at`.
+`ROUND_HALF_UP`), `is_annual` (`frequency = yearly`), `is_due` (activa, con cuenta y categoría vivas y `next_date <= hoy`),
+`account_missing`, `category_missing` (defensa: la cuenta/categoría se borró por otra vía; la regla no propone ni proyecta, y
+`confirm` responde `404`; `DELETE /accounts/{id}` y `DELETE /categories/{id}` dan `409` mientras haya reglas que las usen), `created_at`.
 
 ### `GET /api/v1/recurring/`
 
@@ -1003,7 +1003,7 @@ futuro), esquema inválido, o tope de **100 reglas por usuario**.
 ### `PUT /api/v1/recurring/{rule_id}` → `RecurringResponse`
 
 Parcial: `name`, `amount`, `account_id`, `category_id`, `status`. **`frequency`, `start_date` y `type` no se
-editan: enviarlos es `422`** (borrar y recrear). Cambiar la cuenta cambia la moneda de las ocurrencias futuras.
+editan: enviarlos es `422`** (borrar y recrear). `account_id` solo puede cambiar a una cuenta de la **misma moneda** (`422` si no).
 Reanudar (`paused` → `active`) mueve `next_date` a la primera ocurrencia `>= hoy` (no se acumulan las de la
 pausa); pausar no toca `next_date`.
 
@@ -1039,7 +1039,7 @@ Body `{occurrence_date}`. Avanza `next_date` sin registrar nada. Mismos `409` qu
 is_overdue}], totals: [{currency, income, expense, net}]}], monthly_commitment: [{currency, amount}]}`.
 Siempre **12 meses** calendario (el actual + 11) en la zona del usuario, aunque estén vacíos. Solo reglas
 activas con cuenta y categoría vivas. Las ocurrencias de meses anteriores al actual no entran (están en
-`pending`); las vencidas del mes actual sí, con `is_overdue = true`. `monthly_commitment` = suma de
+`pending`); las del mes actual anteriores a hoy sí, con `is_overdue = true` (una que cae hoy es `false`). `monthly_commitment` = suma de
 `monthly_equivalent` de las reglas **de gasto** por moneda; es informativo (no alimenta `free_to_spend` ni
 el flujo).
 

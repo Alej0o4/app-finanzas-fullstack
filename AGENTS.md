@@ -86,7 +86,7 @@ lo comprometido en sobres**. El flujo sigue siendo la cifra principal del dashbo
 disponible real, **36** gasto contra sobre, **37** recurrentes + calendario de cargos anuales (era
 la 35), **38** CDT, **39** "págate primero", **40** cierre de mes con puntaje. Regla ya decidida:
 el **fondo de emergencia solo cuenta dinero líquido** y el CDT es un módulo aparte, nunca parte del
-fondo. **Las Fases 35 y 36 (2026-10-17) están implementadas** y lo demás no; cada feature con su justificación, el diseño base y las
+fondo. **Las Fases 35, 36 y 37 (2026-10-17/18) están implementadas** y lo demás no; cada feature con su justificación, el diseño base y las
 decisiones abiertas están en [docs/VISION_FINANZAS_RESPONSABLES.md](docs/VISION_FINANZAS_RESPONSABLES.md)
 (los nombres de tablas y columnas ahí son propuestas sin verificar contra `models.py`). La Fase 35
 original (recurrentes) pasó a la Fase 37; las menciones anteriores a esta fecha son históricas.
@@ -102,6 +102,17 @@ siendo la cifra principal. Se hizo **sin `/grilling`**: las decisiones D1–D10 
 previo; la migración `d5f2a8c1e703` corre sola en el `CMD` de Docker. **Ajustes post-uso (2026-10-17,
 implementados):** `DELETE /funds/{id}` borra el sobre y su libro (archivar sigue exigiendo saldo 0);
 `FundResponse.next_month_contribution`; `annual_expense` exige `target_date` (`422`); sin migración nueva.
+
+**Fase 37 — recurrentes y calendario (hecho operativo vigente):** `RecurringRule` (`/api/v1/recurring`,
+`app/services/recurring.py`) propone una transacción por ocurrencia y el dueño la confirma o salta
+(`POST /recurring/{id}/confirm|skip`, solo la ocurrencia más antigua, `409` si la fecha no coincide); las
+pendientes se calculan perezosamente desde `next_date` (sin job nuevo; el scheduler sigue siendo solo el resumen
+semanal). Confirmar crea una transacción normal (moneda de la cuenta, `ledger.registrar_impacto`, alertas de
+presupuesto): `Transaction` y `ledger.py` no cambiaron y ninguna cifra existente se mueve. `GET /recurring/calendar`
+(12 meses, `monthly_commitment` informativo) y `GET /recurring/suggestions` (cargos anuales detectados). Se hizo
+**sin `/grilling`**: las decisiones D1–D20 de `docs/specs/fase_37_spec.md` las tomó el agente y esperan revisión
+del dueño. Despliegue: `pg_dump` previo; la migración `a9c3d6e1f845` (tabla nueva) corre sola en el `CMD` de
+Docker.
 
 **Fase 36 — gasto contra sobre (hecho operativo vigente):** un gasto se paga con un sobre mandando
 `fund_id` en `POST`/`PUT /transactions` (solo `expense`, de la **misma cuenta** del sobre; sin
@@ -261,8 +272,8 @@ directamente en los routers, a propósito a esta escala):
   `ServiceUnavailableError`, más `AccountNotFoundError`/`CategoryNotFoundError`; empezó como
   piloto en la Fase 25 y se extendió a todos los routers en la Fase 28 — todo router lanza
   subclases de `DomainError`, no `HTTPException` directo), `seed.py`.
-- `models/models.py` — 15 modelos SQLAlchemy en un archivo (User, Account, Category,
-  HiddenCategory, Transaction, Budget, Fund, FundEntry, RefreshToken, PasswordResetToken,
+- `models/models.py` — 16 modelos SQLAlchemy en un archivo (User, Account, Category,
+  HiddenCategory, Transaction, Budget, Fund, FundEntry, RecurringRule, RefreshToken, PasswordResetToken,
   EmailVerificationToken, IdempotencyKey, Notification, PushSubscription, ApiKey).
 - `schemas/` — schemas Pydantic divididos por dominio desde la Fase 25 (`accounts.py`,
   `api_keys.py`, `auth.py`, `budgets.py`, `categories.py`, `common.py`, `dashboard.py`,

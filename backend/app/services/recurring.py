@@ -11,7 +11,6 @@ naive — `core/periods.py` es el único dueño de esa aritmética) y la lógica
 **no comitea** (el router es dueño de la transacción SQL).
 """
 
-import calendar
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -27,7 +26,14 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
-from app.core.periods import dia_local, instante_de_dia, rango_dias
+from app.core.periods import (
+    dia_local,
+    instante_de_dia,
+    primer_dia_del_mes,
+    rango_dias,
+    sumar_meses,
+    ultimo_dia_mes,
+)
 from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.services import ledger
@@ -46,18 +52,6 @@ _MSG_NO_EXISTE = "La regla recurrente no existe o no tienes permisos."
 # --------------------------------------------------------------------------------------
 # Funciones puras
 # --------------------------------------------------------------------------------------
-def _ultimo_dia(anio: int, mes: int) -> int:
-    return calendar.monthrange(anio, mes)[1]
-
-
-def sumar_meses(dia: date, meses: int) -> date:
-    """`dia` desplazado `meses` meses (negativo = atrás), recortando al último día del mes."""
-    total = dia.year * 12 + (dia.month - 1) + meses
-    anio, mes = divmod(total, 12)
-    mes += 1
-    return date(anio, mes, min(dia.day, _ultimo_dia(anio, mes)))
-
-
 def _ocurrencia_n(inicio: date, frecuencia: str, n: int) -> date:
     """Ocurrencia número `n` (0 = el ancla), siempre calculada desde `inicio` (D4)."""
     if frecuencia == "weekly":
@@ -117,20 +111,27 @@ def normalizar_nombre(texto: str) -> str:
     return " ".join(texto.lower().split())
 
 
-def es_candidato_anual(fechas: list[date], montos: list[Decimal]) -> bool:
-    """¿El grupo de gastos parece un cargo anual? (D15) Hacen falta >= 2 transacciones, alguna
-    pareja consecutiva separada por 350-380 días y que el monto de la última difiera <= 20 % del
-    de la anterior."""
+def indice_ultima_pareja_anual(fechas: list[date], montos: list[Decimal]) -> int | None:
+    """Índice (en la lista original) de la transacción que cierra la **última pareja anual** del
+    grupo, o `None` si no hay (D15). Una pareja de transacciones consecutivas (por fecha) es anual
+    si están separadas 350-380 días **y** el monto de la segunda difiere <= 20 % del de la primera.
+    El monto se mide dentro de esa pareja, no contra las dos últimas del grupo, para que un cargo
+    duplicado cercano no tape ni invente un patrón anual."""
     if len(fechas) < 2 or len(fechas) != len(montos):
-        return False
-    pares = sorted(zip(fechas, montos, strict=True), key=lambda p: p[0])
-    hay_intervalo_anual = any(350 <= (b[0] - a[0]).days <= 380 for a, b in pairwise(pares))
-    if not hay_intervalo_anual:
-        return False
-    anterior, ultimo = pares[-2][1], pares[-1][1]
-    if anterior <= 0:
-        return False
-    return abs(ultimo - anterior) <= anterior * Decimal("0.20")
+        return None
+    orden = sorted(range(len(fechas)), key=lambda i: fechas[i])
+    for i, j in reversed(list(pairwise(orden))):
+        if not 350 <= (fechas[j] - fechas[i]).days <= 380:
+            continue
+        previo = montos[i]
+        if previo > 0 and abs(montos[j] - previo) <= previo * Decimal("0.20"):
+            return j
+    return None
+
+
+def es_candidato_anual(fechas: list[date], montos: list[Decimal]) -> bool:
+    """¿El grupo de gastos parece un cargo anual? (D15) Ver `indice_ultima_pareja_anual`."""
+    return indice_ultima_pareja_anual(fechas, montos) is not None
 
 
 # --------------------------------------------------------------------------------------
@@ -151,8 +152,13 @@ def _obtener(db: Session, user_id: int, rule_id: int, *, bloquear: bool = False)
     return regla
 
 
-def _cuenta_del_usuario(db: Session, user_id: int, account_id: int) -> models.Account:
-    cuenta = db.query(models.Account).filter(models.Account.id == account_id, models.Account.user_id == user_id).first()
+def _cuenta_del_usuario(db: Session, user_id: int, account_id: int, *, bloquear: bool = False) -> models.Account:
+    consulta = db.query(models.Account).filter(models.Account.id == account_id, models.Account.user_id == user_id)
+    if bloquear:
+        # Mismo `FOR UPDATE` que `DELETE /accounts/{id}`: no queda una regla nueva sobre una cuenta
+        # que se está borrando (la guarda de borrado mira las reglas con ese lock tomado).
+        consulta = consulta.with_for_update()
+    cuenta = consulta.first()
     if cuenta is None:
         raise AccountNotFoundError()
     return cuenta
@@ -210,7 +216,7 @@ def _respuesta(regla: models.RecurringRule, cuenta: models.Account | None, categ
         "status": regla.status,
         "monthly_equivalent": equivalente_mensual(regla.amount, regla.frequency),
         "is_annual": regla.frequency == "yearly",
-        "is_due": regla.status == "active" and regla.next_date <= hoy,
+        "is_due": regla.status == "active" and cuenta is not None and categoria_ok and regla.next_date <= hoy,
         "account_missing": cuenta is None,
         "category_missing": not categoria_ok,
         "created_at": regla.created_at,
@@ -250,7 +256,7 @@ def listar(db: Session, user: models.User, ahora: datetime) -> list[dict]:
 
 def crear(db: Session, user: models.User, datos, ahora: datetime) -> dict:
     hoy = dia_local(ahora, get_zoneinfo(user.timezone))
-    cuenta = _cuenta_del_usuario(db, user.id, datos.account_id)
+    cuenta = _cuenta_del_usuario(db, user.id, datos.account_id, bloquear=True)
     _categoria_del_usuario(db, user.id, datos.category_id)
     if datos.start_date < sumar_meses(hoy, -12):
         raise ValidationError("`start_date` no puede ser anterior a un año atrás.")
@@ -287,7 +293,11 @@ def actualizar(db: Session, user: models.User, rule_id: int, datos, ahora: datet
     if "amount" in enviados and datos.amount is not None:
         regla.amount = datos.amount
     if "account_id" in enviados and datos.account_id is not None and datos.account_id != regla.account_id:
-        regla.account_id = _cuenta_del_usuario(db, user.id, datos.account_id).id
+        nueva = _cuenta_del_usuario(db, user.id, datos.account_id, bloquear=True)
+        actual = db.query(models.Account).filter(models.Account.id == regla.account_id).first()
+        if actual is not None and actual.currency != nueva.currency:
+            raise ValidationError("La cuenta debe tener la misma moneda que la cuenta actual de la regla.")
+        regla.account_id = nueva.id
     if "category_id" in enviados and datos.category_id is not None and datos.category_id != regla.category_id:
         regla.category_id = _categoria_del_usuario(db, user.id, datos.category_id).id
     if "status" in enviados and datos.status is not None:
@@ -392,9 +402,9 @@ def calendario(db: Session, user: models.User, ahora: datetime) -> dict:
     """12 meses calendario (el actual + 11) de cargos e ingresos proyectados, con totales por
     moneda y por mes, y el compromiso mensualizado de las reglas de gasto (D13, D14)."""
     hoy = dia_local(ahora, get_zoneinfo(user.timezone))
-    primer_mes = hoy.replace(day=1)
+    primer_mes = primer_dia_del_mes(hoy)
     ultimo_mes = sumar_meses(primer_mes, MESES_CALENDARIO - 1)
-    hasta = ultimo_mes.replace(day=_ultimo_dia(ultimo_mes.year, ultimo_mes.month))
+    hasta = ultimo_mes.replace(day=ultimo_dia_mes(ultimo_mes.year, ultimo_mes.month))
     meses = [sumar_meses(primer_mes, i) for i in range(MESES_CALENDARIO)]
     items: dict[tuple[int, int], list[dict]] = {(m.year, m.month): [] for m in meses}
     compromiso: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
@@ -416,7 +426,7 @@ def calendario(db: Session, user: models.User, ahora: datetime) -> dict:
                     "currency": cuenta.currency,
                     "date": fecha,
                     "is_annual": regla.frequency == "yearly",
-                    "is_overdue": fecha <= hoy,
+                    "is_overdue": fecha < hoy,
                 }
             )
 
@@ -478,10 +488,12 @@ def sugerencias(db: Session, user: models.User, ahora: datetime) -> list[dict]:
         if (cuenta_id, nombre) in ya_recurrentes:
             continue
         fechas = [dia_local(t.date, tz) for t in grupo]
-        if not es_candidato_anual(fechas, [t.amount for t in grupo]):
+        cierre = indice_ultima_pareja_anual(fechas, [t.amount for t in grupo])
+        if cierre is None:
             continue
-        ultima = grupo[-1]
-        ultima_fecha = max(fechas)
+        # La sugerencia sale de la pareja anual (no de un cargo duplicado posterior).
+        ultima = grupo[cierre]
+        ultima_fecha = fechas[cierre]
         proxima = sumar_meses(ultima_fecha, 12)
         if ultima_fecha < limite_ultima or proxima > limite_proxima:
             continue

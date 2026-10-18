@@ -352,6 +352,14 @@ Backend en Postgres 16 (testcontainers, default de la Fase 32). T1 y T2 con TDD.
 - **`es_candidato_anual`:** "monto de la última difiere <= 20 %" se mide contra la transacción inmediatamente anterior del grupo, y el intervalo de 350-380 días puede ser cualquier pareja consecutiva.
 - **Migración:** `a9c3d6e1f845` (down_revision `e8a1c4d7b290`); subida, `downgrade -1` y resubida verificadas contra Postgres 16 y `alembic check` limpio.
 - **Calendario:** las ocurrencias vencidas de meses anteriores al actual se saltan con `primera_desde(inicio, frecuencia, primer_dia_del_mes)`, así el tope de 400 iteraciones no se consume en atrasos viejos.
+- **Correcciones del code-review (backend):**
+  1. `PUT` con `account_id` de **otra moneda** da `422` ("La cuenta debe tener la misma moneda que la cuenta actual de la regla."); la misma moneda sigue permitida. Cambia D6 (que dejaba mover la regla a cualquier cuenta).
+  2. `is_due` exige también cuenta y categoría vivas (igual que `pending`).
+  3. `is_overdue` del calendario es `fecha < hoy`: una ocurrencia de hoy no es "vencida" en el calendario (sí es pendiente).
+  4. **Cambia D7:** `DELETE /accounts/{id}` y `DELETE /categories/{id}` dan `409` si el usuario tiene reglas recurrentes (activas o pausadas) que las usan, así una regla ya no queda huérfana por esa vía. `account_missing`/`category_missing` se mantienen como defensa (p. ej. borrados por otras vías). `crear`/`actualizar` toman `FOR UPDATE` de la cuenta, el mismo lock que el borrado de cuenta.
+  5. `es_candidato_anual`: el 20 % se mide dentro de la **pareja consecutiva** de 350-380 días (la última que cumple ambas), y `last_date`/`amount`/cuenta/categoría de la sugerencia salen de esa pareja, no de las dos últimas del grupo (nueva `indice_ultima_pareja_anual`).
+  6. `sumar_meses`, `ultimo_dia_mes` y `primer_dia_del_mes` viven en `core/periods.py` (con tests en `tests/test_periods.py`); `services/recurring.py` los importa.
+  Quedan como deuda (no se hicieron): consulta de sugerencias, carrera del tope de 100 reglas, helper de invalidaciones del frontend. Observación: `PUT /accounts/{id}` que cambia la moneda de una cuenta con reglas no tiene guarda (sí la tiene para sobres).
 - **Hallazgo fuera de alcance:** el `TRUNCATE` del fixture `real_client` (tests de concurrencia) no nombra `funds`/`recurring_rules`; funciona por `CASCADE` desde `users`.
 
 ## Orden de ejecución

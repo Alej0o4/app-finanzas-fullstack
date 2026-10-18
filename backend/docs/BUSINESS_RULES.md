@@ -414,8 +414,10 @@ Spec: `docs/specs/fase_36_spec.md` (decisiones D1–D17).
 - **Esquema inmutable:** `frequency`, `start_date` y `type` no se editan (`422`). Reanudar salta a la primera
   ocurrencia `>= hoy`; pausar no toca `next_date`. Pausada: fuera de pendientes y calendario, `confirm`/`skip`
   `409`, y cuenta como "ya recurrente" para las sugerencias.
-- **Cuenta o categoría borrada:** la regla sigue listada (`account_missing`/`category_missing`) pero no propone
-  ni proyecta, y `confirm` responde `404`.
+- **Borrado de cuenta o categoría:** `DELETE /accounts/{id}` y `DELETE /categories/{id}` dan `409` si hay reglas
+  (activas o pausadas) que las usan. Como defensa, si igual desaparecen, la regla sigue listada
+  (`account_missing`/`category_missing`, `is_due = false`), no propone ni proyecta, y `confirm` responde `404`.
+- **Cambio de cuenta:** una regla solo se mueve a una cuenta de la misma moneda (`422`).
 - **Límites:** hasta 100 reglas por usuario; `start_date` entre un año atrás y 10 años adelante; `name` <= 100.
 - **Cifras existentes intactas:** `monthly_equivalent` y `monthly_commitment` son informativos; no entran en
   `free_to_spend`, flujo, presupuestos ni Analítica. Borrar la regla no toca transacciones ya confirmadas.

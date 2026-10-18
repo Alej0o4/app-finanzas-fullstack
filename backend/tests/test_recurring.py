@@ -4,7 +4,7 @@ El "hoy" se fija con `freeze_time` (zona del usuario: America/Bogota por defecto
 `HOY` = 2026-03-15 10:00 hora de Bogotá.
 """
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -64,6 +64,13 @@ def crear_regla(client, auth_headers, cuenta, cat_gasto):
         return resp.json()
 
     return _factory
+
+
+def _borrar_en_db(db_session, modelo, id_: int) -> None:
+    """Soft-delete directo: la API ya no deja borrar una cuenta/categoría con reglas (409), pero la
+    defensa `account_missing`/`category_missing` sigue cubriendo borrados por otras vías."""
+    db_session.query(modelo).filter(modelo.id == id_).update({"deleted_at": datetime.now(UTC)})
+    db_session.commit()
 
 
 def _relogin(client, usuario: dict) -> dict:
@@ -252,13 +259,24 @@ class TestEditarBorrarYAislamiento:
 
     def test_put_cambia_cuenta_y_categoria(self, client, crear_regla, make_account, make_category, auth_headers):
         regla = crear_regla()
-        otra = make_account(auth_headers, name="USD", currency="USD")
+        otra = make_account(auth_headers, name="Otra COP", currency="COP")
         cat = make_category(auth_headers, name="Otra")
         resp = client.put(
             f"{URL}{regla['id']}", json={"account_id": otra["id"], "category_id": cat["id"]}, headers=auth_headers
         )
         assert resp.status_code == 200, resp.text
-        assert resp.json()["currency"] == "USD" and resp.json()["category_id"] == cat["id"]
+        assert resp.json()["account_id"] == otra["id"] and resp.json()["category_id"] == cat["id"]
+
+    def test_put_cuenta_de_otra_moneda_422_y_misma_moneda_ok(self, client, crear_regla, make_account, auth_headers):
+        regla = crear_regla()  # cuenta COP
+        usd = make_account(auth_headers, name="USD", currency="USD")
+        otra_cop = make_account(auth_headers, name="Otra COP", currency="COP")
+        resp = client.put(f"{URL}{regla['id']}", json={"account_id": usd["id"]}, headers=auth_headers)
+        assert resp.status_code == 422
+        assert "moneda" in resp.json()["detail"]
+        assert client.get(URL, headers=auth_headers).json()[0]["account_id"] == regla["account_id"]
+        resp = client.put(f"{URL}{regla['id']}", json={"account_id": otra_cop["id"]}, headers=auth_headers)
+        assert resp.status_code == 200 and resp.json()["account_id"] == otra_cop["id"]
 
     def test_put_cuenta_ajena_404(self, client, crear_regla, make_account, other_user, auth_headers):
         regla = crear_regla()
@@ -294,19 +312,41 @@ class TestEditarBorrarYAislamiento:
     def test_sin_autenticacion_401(self, client):
         assert client.get(URL).status_code == 401
 
-    def test_cuenta_borrada_se_marca_missing_y_confirm_404(self, client, crear_regla, auth_headers, cuenta):
+    def test_cuenta_borrada_se_marca_missing_y_confirm_404(self, client, crear_regla, auth_headers, cuenta, db_session):
         regla = crear_regla()
-        assert client.delete(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).status_code == 200
+        _borrar_en_db(db_session, models.Account, cuenta["id"])
         listada = client.get(URL, headers=auth_headers).json()[0]
         assert listada["account_missing"] is True and listada["currency"] is None
         assert _confirmar(client, auth_headers, regla["id"], "2026-03-01").status_code == 404
 
-    def test_categoria_borrada_se_marca_missing_y_confirm_404(self, client, crear_regla, auth_headers, make_category):
+    def test_categoria_borrada_se_marca_missing_y_confirm_404(
+        self, client, crear_regla, auth_headers, make_category, db_session
+    ):
         cat = make_category(auth_headers, name="Temporal")
         regla = crear_regla(category_id=cat["id"])
-        assert client.delete(f"/api/v1/categories/{cat['id']}", headers=auth_headers).status_code in (200, 204)
+        _borrar_en_db(db_session, models.Category, cat["id"])
         assert client.get(URL, headers=auth_headers).json()[0]["category_missing"] is True
         assert _confirmar(client, auth_headers, regla["id"], "2026-03-01").status_code == 404
+
+    def test_no_se_borra_cuenta_ni_categoria_con_reglas_409(self, client, crear_regla, auth_headers, cuenta, cat_gasto):
+        regla = crear_regla()
+        resp = client.delete(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers)
+        assert resp.status_code == 409 and "recurrentes" in resp.json()["detail"]
+        resp = client.delete(f"/api/v1/categories/{cat_gasto['id']}", headers=auth_headers)
+        assert resp.status_code == 409 and "recurrentes" in resp.json()["detail"]
+        # Una regla pausada también cuenta; al borrar la regla ya se puede.
+        client.put(f"{URL}{regla['id']}", json={"status": "paused"}, headers=auth_headers)
+        assert client.delete(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).status_code == 409
+        client.delete(f"{URL}{regla['id']}", headers=auth_headers)
+        assert client.delete(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).status_code == 200
+        assert client.delete(f"/api/v1/categories/{cat_gasto['id']}", headers=auth_headers).status_code == 200
+
+    def test_is_due_false_si_la_regla_esta_huerfana(self, client, crear_regla, auth_headers, cuenta, db_session):
+        crear_regla(start_date="2026-03-01")
+        assert client.get(URL, headers=auth_headers).json()[0]["is_due"] is True
+        _borrar_en_db(db_session, models.Account, cuenta["id"])
+        regla = client.get(URL, headers=auth_headers).json()[0]
+        assert regla["account_missing"] is True and regla["is_due"] is False
 
     def test_borrar_usuario_borra_sus_reglas(self, client, crear_regla, db_session, test_user):
         crear_regla()
@@ -345,13 +385,15 @@ class TestPendientes:
         assert r.status_code == 200, r.text
         assert len(client.get(f"{URL}pending", headers=auth_headers).json()) == 1
 
-    def test_pausadas_y_cuenta_borrada_excluidas(self, client, crear_regla, make_account, auth_headers, cat_gasto):
+    def test_pausadas_y_cuenta_borrada_excluidas(
+        self, client, crear_regla, make_account, auth_headers, cat_gasto, db_session
+    ):
         pausada = crear_regla(name="Pausada", start_date="2026-03-01")
         client.put(f"{URL}{pausada['id']}", json={"status": "paused"}, headers=auth_headers)
         sin_cuenta = make_account(auth_headers, name="Se va")
         crear_regla(name="Huérfana", start_date="2026-03-01", account_id=sin_cuenta["id"])
         crear_regla(name="Viva", start_date="2026-03-01")
-        client.delete(f"/api/v1/accounts/{sin_cuenta['id']}", headers=auth_headers)
+        _borrar_en_db(db_session, models.Account, sin_cuenta["id"])
         assert [p["name"] for p in client.get(f"{URL}pending", headers=auth_headers).json()] == ["Viva"]
 
 
@@ -558,6 +600,9 @@ class TestCalendario:
         cal = client.get(f"{URL}calendar", headers=auth_headers).json()
         marzo = cal["months"][0]
         assert [(i["date"], i["is_overdue"]) for i in marzo["items"]] == [("2026-03-10", True)]
+        crear_regla(name="Hoy", start_date="2026-03-15")  # cae hoy: no es "vencida" en el calendario
+        hoy = client.get(f"{URL}calendar", headers=auth_headers).json()["months"][0]["items"]
+        assert [i["is_overdue"] for i in hoy if i["name"] == "Hoy"] == [False]
         assert cal["months"][1]["items"][0]["is_overdue"] is False
 
     def test_borde_de_mes_en_la_zona_del_usuario(self, client, crear_regla, auth_headers, test_user):
@@ -569,10 +614,10 @@ class TestCalendario:
         assert cal["months"][0]["month"] == "2026-03"
         assert cal["months"][0]["items"][0]["date"] == "2026-03-31"
 
-    def test_cuenta_borrada_no_se_proyecta(self, client, crear_regla, make_account, auth_headers):
+    def test_cuenta_borrada_no_se_proyecta(self, client, crear_regla, make_account, auth_headers, db_session):
         sin_cuenta = make_account(auth_headers, name="Se va")
         crear_regla(account_id=sin_cuenta["id"], start_date="2026-04-01")
-        client.delete(f"/api/v1/accounts/{sin_cuenta['id']}", headers=auth_headers)
+        _borrar_en_db(db_session, models.Account, sin_cuenta["id"])
         cal = client.get(f"{URL}calendar", headers=auth_headers).json()
         assert all(m["items"] == [] for m in cal["months"]) and cal["monthly_commitment"] == []
 
@@ -602,6 +647,15 @@ class TestSugerencias:
         assert s["last_date"] == "2026-03-08" and s["suggested_start_date"] == "2027-03-08"
         assert s["occurrences"] == 2
         assert s["account_id"] == cuenta["id"] and s["category_id"] == cat_gasto["id"]
+
+    def test_cargo_duplicado_cercano_no_tapa_el_patron_anual(self, client, auth_headers, cuenta, cat_gasto):
+        self._gasto(client, auth_headers, cuenta, cat_gasto, "2025-03-10", "1000.00", "Seguro")
+        self._gasto(client, auth_headers, cuenta, cat_gasto, "2026-03-08", "1000.00", "Seguro")
+        self._gasto(client, auth_headers, cuenta, cat_gasto, "2026-03-12", "50.00", "Seguro")  # duplicado/otro monto
+        sug = client.get(f"{URL}suggestions", headers=auth_headers).json()
+        assert len(sug) == 1
+        assert sug[0]["last_date"] == "2026-03-08" and _money(sug[0]["amount"]) == D("1000.00")
+        assert sug[0]["suggested_start_date"] == "2027-03-08"
 
     def test_ignora_sin_descripcion_y_otro_monto(self, client, auth_headers, cuenta, cat_gasto):
         self._gasto(client, auth_headers, cuenta, cat_gasto, "2025-03-10", "1000.00", None)

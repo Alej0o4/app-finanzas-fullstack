@@ -15,7 +15,17 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.core.exceptions import ValidationError as DomainValidationError
-from app.core.periods import dia_local, instante_de_dia, limites_semana, rango_dias, rango_mes, resolver_mes
+from app.core.periods import (
+    dia_local,
+    instante_de_dia,
+    limites_semana,
+    primer_dia_del_mes,
+    rango_dias,
+    rango_mes,
+    resolver_mes,
+    sumar_meses,
+    ultimo_dia_mes,
+)
 
 # Momento de referencia inyectado en todos los casos: 15 de marzo de 2026, 10:30 UTC.
 AHORA = datetime(2026, 3, 15, 10, 30, 0, tzinfo=UTC)
@@ -262,3 +272,31 @@ class TestInstanteDeDia:
     def test_el_dia_local_del_resultado_es_el_pedido(self):
         for tz in (BOGOTA, TOKYO, NEW_YORK):
             assert dia_local(instante_de_dia(date(2026, 3, 10), AHORA, tz), tz) == date(2026, 3, 10)
+
+
+class TestAritmeticaDeMeses:
+    @pytest.mark.parametrize(
+        "anio,mes,esperado", [(2026, 1, 31), (2026, 2, 28), (2028, 2, 29), (2100, 2, 28), (2026, 4, 30), (2026, 12, 31)]
+    )
+    def test_ultimo_dia_mes(self, anio, mes, esperado):
+        assert ultimo_dia_mes(anio, mes) == esperado
+
+    @pytest.mark.parametrize(
+        "dia,meses,esperado",
+        [
+            (date(2026, 1, 31), 1, date(2026, 2, 28)),
+            (date(2028, 1, 31), 1, date(2028, 2, 29)),
+            (date(2026, 12, 15), 1, date(2027, 1, 15)),
+            (date(2026, 1, 15), -1, date(2025, 12, 15)),
+            (date(2026, 3, 31), -1, date(2026, 2, 28)),
+            (date(2028, 2, 29), 12, date(2029, 2, 28)),
+            (date(2026, 3, 15), -26, date(2024, 1, 15)),
+            (date(2026, 3, 15), 0, date(2026, 3, 15)),
+        ],
+    )
+    def test_sumar_meses(self, dia, meses, esperado):
+        assert sumar_meses(dia, meses) == esperado
+
+    def test_primer_dia_del_mes(self):
+        assert primer_dia_del_mes(date(2026, 3, 15)) == date(2026, 3, 1)
+        assert primer_dia_del_mes(date(2026, 3, 1)) == date(2026, 3, 1)

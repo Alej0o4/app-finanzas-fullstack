@@ -16,6 +16,7 @@ compara con `< fin`, nunca `<=`.
 valida y jamás lanza por un mes futuro, solo acota el rango (ver su docstring).
 """
 
+import calendar
 import re
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -41,6 +42,25 @@ def dia_local(instante: datetime, tz: ZoneInfo) -> date:
     """Día de calendario de `instante` en la zona `tz`. Un `instante` naive se lee como UTC
     (así lo guarda SQLite y así se interpretan los datetimes naive de la API)."""
     return _a_utc(instante).astimezone(tz).date()
+
+
+def ultimo_dia_mes(anio: int, mes: int) -> int:
+    """Último día (28-31) del mes `mes` del año `anio`."""
+    return calendar.monthrange(anio, mes)[1]
+
+
+def sumar_meses(dia: date, meses: int) -> date:
+    """`dia` desplazado `meses` meses (negativo = atrás), recortando al último día del mes
+    destino (31 de enero + 1 mes = 28/29 de febrero). Aritmética pura de `date`."""
+    total = dia.year * 12 + (dia.month - 1) + meses
+    anio, mes = divmod(total, 12)
+    mes += 1
+    return date(anio, mes, min(dia.day, ultimo_dia_mes(anio, mes)))
+
+
+def primer_dia_del_mes(dia: date) -> date:
+    """Día 1 del mes de `dia`."""
+    return dia.replace(day=1)
 
 
 def mediodia_local(dia: date, tz: ZoneInfo) -> datetime:

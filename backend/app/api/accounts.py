@@ -6,7 +6,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.core.periods import rango_mes, resolver_mes
 from app.core.security import get_current_user
 from app.core.timezones import get_zoneinfo
@@ -268,6 +268,17 @@ def eliminar_cuenta(
     )
     if tiene_sobres:
         raise BadRequestError("No se puede eliminar la cuenta porque respalda sobres activos.")
+
+    # Fase 37: una regla recurrente (activa o pausada) apunta a esta cuenta.
+    tiene_reglas = (
+        db.query(models.RecurringRule)
+        .filter(models.RecurringRule.account_id == account_id, models.RecurringRule.user_id == current_user.id)
+        .first()
+    )
+    if tiene_reglas:
+        raise ConflictError(
+            "No se puede eliminar la cuenta porque tiene reglas recurrentes. Elimínalas o cámbialas de cuenta primero."
+        )
 
     cuenta.deleted_at = datetime.now(UTC)
     db.commit()

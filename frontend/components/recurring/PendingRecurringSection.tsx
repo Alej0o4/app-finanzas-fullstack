@@ -142,7 +142,12 @@ export default function PendingRecurringSection() {
       ) : (
         <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {pending.map((item) => (
-            <PendingRow key={`${item.rule_id}-${item.occurrence_date}`} item={item} />
+            // El monto va en la clave: si la regla cambia de monto, la fila se remonta y el borrador
+            // de "Editar monto" no manda un override obsoleto.
+            <PendingRow
+              key={`${item.rule_id}-${item.occurrence_date}-${item.amount}`}
+              item={item}
+            />
           ))}
         </ul>
       )}
