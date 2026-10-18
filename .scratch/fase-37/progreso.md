@@ -9,6 +9,6 @@ Rama/worktree: `fase-37` (desde main 364036b). Seguir `docs/WORKFLOW.md`.
 - [x] 5. Implementar — backend (13b5955) y frontend commiteados; docs de contrato ya incluidos por los agentes
 - [x] 6. /run-tests: pytest 762 passed (PG16), ruff, eslint, prettier verdes; Playwright 390px+1280px hecho por frontend-engineer
 - [x] 7. /code-review high: 10 hallazgos; 7 corregidos (783 tests), 3 aceptados como deuda en TODO
-- [ ] 8. `/analyze-spec 37 cierre`
-- [ ] 9. Docs de cierre + `graphify update .`
+- [x] 8. /analyze-spec 37 cierre: sin CRÍTICO/ALTO; spec actualizada (estado, desvíos frontend, sección Cierre)
+- [x] 9. Docs de cierre + graphify update
 - [ ] 10. Commits, push, PR en borrador

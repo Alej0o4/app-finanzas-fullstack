@@ -6,11 +6,7 @@
 > (`/api/v1/recurring`). **No modifica** `Transaction`, `ledger.py` ni ninguna cifra existente: una
 > ocurrencia confirmada crea una transacción normal por el camino contable de siempre.
 
-**Estado:** especificada el **2026-10-18**. **Sin `/grilling` con el dueño**: las decisiones D1–D20
-las tomó el agente contra el código y la visión (precedente: Fase 35) y esperan revisión — ver
-"Decisiones tomadas por el agente, pendientes de revisión del dueño". Marcadores
-`[NEEDS CLARIFICATION]` abiertos: ninguno (los tres puntos más de producto tienen un default
-conservador y están listados en esa sección).
+**Estado:** **implementada y cerrada el 2026-10-18** (783 tests en Postgres 16; ver "Desvíos y hallazgos" y "Cierre"). **Sin `/grilling` con el dueño**: las decisiones D1–D20 las tomó el agente contra el código y la visión (precedente: Fase 35) y esperan revisión — ver "Decisiones tomadas por el agente, pendientes de revisión del dueño". Marcadores `[NEEDS CLARIFICATION]` abiertos: ninguno (los puntos más de producto tienen un default conservador).
 
 ---
 
@@ -89,13 +85,13 @@ tz)` con `ahora` inyectado. Al confirmar, el `date` de la transacción es
 locales, igual que `POST /transactions` con solo-día). Cambiar la zona del usuario no mueve las
 reglas (son días).
 
-**D6 — El esquema de la regla no se edita; el resto sí.** `PUT` permite cambiar `name`, `amount`,
+**D6 — El esquema de la regla no se edita; el resto sí.** *(Desviada al implementar: `PUT` con `frequency`/`start_date`/`type` da `422`, y `account_id` solo puede cambiar a una cuenta de la misma moneda; ver "Desvíos".)* `PUT` permite cambiar `name`, `amount`,
 `account_id`, `category_id` y `status`. **No** cambia `frequency` ni `start_date` (si el arriendo pasa
 del día 1 al 5, se borra y se crea otra). Justificación: editar el calendario obliga a decidir qué
 pasa con lo ya confirmado/saltado; borrar y recrear lo hace explícito y simple. Cambiar `account_id`
 cambia la moneda efectiva de las ocurrencias futuras (permitido; las ya confirmadas no se tocan).
 
-**D7 — Cuenta, moneda y categoría.** La regla guarda `account_id` y `category_id`; **la moneda es la
+**D7 — Cuenta, moneda y categoría.** *(Desviada al implementar: borrar una cuenta o categoría con reglas da `409`; `account_missing`/`category_missing` quedan solo como defensa; ver "Desvíos".)* La regla guarda `account_id` y `category_id`; **la moneda es la
 de la cuenta** (nunca se guarda: una cuenta no cambia de moneda, y el router de transacciones ya
 hereda `cuenta.currency`). La cuenta debe ser del usuario y estar activa; la categoría debe ser base o
 del usuario (mismas reglas y mismo `404` que `POST /transactions`). **No** se valida que el tipo de la
@@ -361,6 +357,21 @@ Backend en Postgres 16 (testcontainers, default de la Fase 32). T1 y T2 con TDD.
   6. `sumar_meses`, `ultimo_dia_mes` y `primer_dia_del_mes` viven en `core/periods.py` (con tests en `tests/test_periods.py`); `services/recurring.py` los importa.
   Quedan como deuda (no se hicieron): consulta de sugerencias, carrera del tope de 100 reglas, helper de invalidaciones del frontend. Observación: `PUT /accounts/{id}` que cambia la moneda de una cuenta con reglas no tiene guarda (sí la tiene para sobres).
 - **Hallazgo fuera de alcance:** el `TRUNCATE` del fixture `real_client` (tests de concurrencia) no nombra `funds`/`recurring_rules`; funciona por `CASCADE` desde `users`.
+
+- **Desvíos del frontend:** los toasts de confirmar/saltar/borrar salen desde `useMutation`, no desde el `mutate(..., { onSuccess })` del componente (la fila se desmonta al refrescar y TanStack no corre esos callbacks); la clave de `PendingRow` incluye el monto para que "Editar monto" no mande un override obsoleto (code-review); los tipos de `types/generated/api.ts` se regeneraron con `pnpm gen:types` contra un backend de dev aislado y `types/api.ts` tiene los tipos a mano.
+- **Fuera de la spec, documentado:** `PUT /accounts/{id}` puede cambiar la moneda de una cuenta con reglas (deuda en `docs/TODO.md`).
+
+## Cierre (2026-10-18) — `/analyze-spec 37 cierre`
+
+| D | Estado | Dónde |
+|---|---|---|
+| D1, D2, D3, D4, D5, D8–D15, D17, D18, D20 | implementadas | `services/recurring.py`, `api/recurring.py`, `core/periods.py`, `models.py`, migración `a9c3d6e1f845` |
+| D6, D7 | **desviadas** (registradas arriba) | `services/recurring.py`, `api/accounts.py`, `api/categories.py` |
+| D16, D19 | implementadas | `components/recurring/*`, `app/(dashboard)/recurring/page.tsx`, `PendingRecurringCard` |
+
+- Tests: T1 (`test_recurring_logic.py`, `test_periods.py`), T2–T8 y T10 (`test_recurring.py`, incl. `TestContratoSinCambios`), T9 (`test_recurring_concurrency.py`, `concurrencia`), T10 migración (`test_migrations.py`, `alembic check`). **T11** (navegador, 390 px y 1280 px) lo ejecutó el agente de frontend; las reglas con cuenta/categoría borrada y el `409` por ocurrencia resuelta en otra pestaña se revisaron solo por código.
+- Docs: ambos contratos de API, `BUSINESS_RULES`, `STATE_AND_FETCHING`, `ARCHITECTURE` (backend y frontend), `COMPONENTS_GUIDE`, CHANGELOG, ROADMAP, TODO, AGENTS y VISION §2.4 actualizados.
+- Veredicto: **listo para cerrar** (sin CRÍTICO/ALTO).
 
 ## Orden de ejecución
 
