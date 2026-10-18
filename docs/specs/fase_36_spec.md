@@ -5,7 +5,7 @@
 > Fase 35 (`Fund`/`FundEntry`, libro append-only, `services/funds.py`): **toca el núcleo contable**
 > (`api/transactions.py`), pero no `ledger.py` ni la regla de saldo de cuentas.
 
-**Estado:** **en implementación (2026-10-17); `/analyze-spec 36` previo sin CRÍTICO/ALTO.** Sin marcadores `[NEEDS CLARIFICATION]`: las 17
+**Estado:** **implementada y cerrada el 2026-10-17** (660 tests en Postgres 16; ver "Cierre" y "Desvíos y hallazgos"). Sin marcadores `[NEEDS CLARIFICATION]`.
 decisiones están resueltas. Cómo se leyeron las que llegaron ambiguas está en "Desvíos y hallazgos".
 
 ---
@@ -314,6 +314,23 @@ la pantalla de captura; desglose por categoría de lo planeado; seguridad/auth.
     negativo (no se devuelve a un archivado, D16). Solo se ve si ese sobre se desarchiva y se consulta
     `vinculos` sin unir `Transaction`; hoy toda consulta que importa ya une o filtra por transacciones vivas.
 - **`types/generated/api.ts`** se regenera con `pnpm gen:types` contra el stack dev (paso de verificación).
+
+## Cierre (2026-10-17) — `/analyze-spec 36 cierre`
+
+Spec vs diff, decisión por decisión: **D1–D17 implementadas**, sin faltantes ni parciales; los desvíos están
+arriba y no cambian ningún contrato. D1/D8 `planned_expense` + presupuestos intactos (tests T6); D2/D7/D15
+`bloquear_para_gasto`; D3 `monto_a_aplicar`; D4 `devolver_gasto`; D5/D16 `sincronizar_enlace`; D6 `fund_id` en
+`TransactionCreate`/`TransactionUpdate`; D9/D12 `linked_expenses_*` y `planned_expense`; D10 `isFundPaid`; D11
+exclusión en `promedio_gasto_mensual`; D13 índice `ix_fund_entries_transaction_id`; D14 `PayWithFundSelect` +
+`fundSpendNotice`; D17 orden de locks (+ sobres por id) y los cuatro `concurrencia`.
+
+- **Tests (T1–T11):** 660 en Postgres 16 (`test_funds_logic`, `test_funds_gasto`, `test_funds_gasto_concurrency`,
+  `test_funds_gasto_revision`). T10: `alembic check` en la suite y upgrade → downgrade → upgrade sobre la base dev.
+  T11: Playwright por node contra un stack dev aislado (`-p oikos-dev-f36`), escritorio y 390 px.
+- **Archivos sin decisión propia:** `types/generated/api.ts` (regenerado con `pnpm gen:types`),
+  `SummaryCard`/`AnalyticsSummary` (línea "de los cuales planeado", D9), `LinkedExpensesList` (lista de D9).
+- **Docs:** ambos contratos de API, `BUSINESS_RULES`, `ARCHITECTURE`, `STATE_AND_FETCHING`, CHANGELOG, ROADMAP,
+  TODO (deuda D8 y limitación D16), AGENTS y VISION movidos.
 
 ## Orden de ejecución
 
