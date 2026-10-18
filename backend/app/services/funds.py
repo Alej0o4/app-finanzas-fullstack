@@ -142,16 +142,22 @@ def _enlaces(db: Session, fund_ids: list[int] | None = None, tx_ids: list[int] |
     """Subconsulta `(tx_id, fund_id, neto)` de las transacciones enlazadas a un sobre (Fase 36
     D13): un enlace es una suma neta NEGATIVA de las entradas con ese `transaction_id` (una
     desvinculación deja suma 0). El monto aplicado es `-neto`."""
+    # Se agrupa por (transacción, sobre): si el gasto cambió de sobre, el viejo queda en neto 0
+    # (devolución) y solo el nuevo sobrevive al HAVING, así hay a lo sumo una fila por transacción.
     consulta = db.query(
         models.FundEntry.transaction_id.label("tx_id"),
-        func.min(models.FundEntry.fund_id).label("fund_id"),
+        models.FundEntry.fund_id.label("fund_id"),
         func.sum(models.FundEntry.amount).label("neto"),
     ).filter(models.FundEntry.transaction_id.isnot(None))
     if fund_ids is not None:
         consulta = consulta.filter(models.FundEntry.fund_id.in_(fund_ids))
     if tx_ids is not None:
         consulta = consulta.filter(models.FundEntry.transaction_id.in_(tx_ids))
-    return consulta.group_by(models.FundEntry.transaction_id).having(func.sum(models.FundEntry.amount) < 0).subquery()
+    return (
+        consulta.group_by(models.FundEntry.transaction_id, models.FundEntry.fund_id)
+        .having(func.sum(models.FundEntry.amount) < 0)
+        .subquery()
+    )
 
 
 def ids_transacciones_enlazadas(db: Session):
