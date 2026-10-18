@@ -110,8 +110,8 @@ pendientes se calculan perezosamente desde `next_date` (sin job nuevo; el schedu
 semanal). Confirmar crea una transacción normal (moneda de la cuenta, `ledger.registrar_impacto`, alertas de
 presupuesto): `Transaction` y `ledger.py` no cambiaron y ninguna cifra existente se mueve. `GET /recurring/calendar`
 (12 meses, `monthly_commitment` informativo) y `GET /recurring/suggestions` (cargos anuales detectados). Se hizo
-**sin `/grilling`**: las decisiones D1–D20 de `docs/specs/fase_37_spec.md` las tomó el agente y esperan revisión
-del dueño. Despliegue: `pg_dump` previo; la migración `a9c3d6e1f845` (tabla nueva) corre sola en el `CMD` de
+**sin `/grilling`**: las decisiones D1–D20 de `docs/specs/fase_37_spec.md` las tomó el agente y el dueño las revisó una
+por una el 2026-10-18 y las mantuvo. Despliegue: `pg_dump` previo; la migración `a9c3d6e1f845` (tabla nueva) corre sola en el `CMD` de
 Docker.
 
 **Fase 36 — gasto contra sobre (hecho operativo vigente):** un gasto se paga con un sobre mandando

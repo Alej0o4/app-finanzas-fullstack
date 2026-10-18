@@ -230,7 +230,7 @@ recurrentes más bien alimentan sugerencias de sobres. Detalle, diseño base y d
 ## Fase 37 (antes 35): ingresos y gastos recurrentes
 
 **✅ Implementada (2026-10-18)** — spec `docs/specs/fase_37_spec.md`, historia en `docs/CHANGELOG.md`.
-Las decisiones D1–D20 las tomó el agente sin `/grilling` y esperan revisión del dueño (propone/confirma,
+Las decisiones D1–D20 las tomó el agente sin `/grilling`; el dueño las revisó una por una el 2026-10-18 y las mantuvo (propone/confirma,
 ocurrencias perezosas sin job, semanal/mensual/anual, calendario de 12 meses, detección solo de cargos
 anuales). Abajo, el texto original de las preguntas abiertas (histórico).
 
