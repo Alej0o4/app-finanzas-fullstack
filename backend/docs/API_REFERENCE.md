@@ -697,6 +697,16 @@ Entrada:
     matchea ninguna (la respuesta lista las categorías válidas del tipo).
 - `payment_method` (opcional): tag de método de pago — `cash | card | transfer`. Es un dato
   de la transacción, independiente del `type` de la cuenta asociada (Fase 8 §2).
+- `fund_id` (opcional, Fase 36): paga el gasto con un **sobre**. Solo `type = expense` y la
+  transacción debe salir de la **misma cuenta** que respalda el sobre (sin transferencias).
+  Se aplica al sobre `min(gasto, saldo del sobre)`: el sobre queda en `0` y el excedente es gasto
+  normal; el gasto **sigue siendo gasto real** (no cambia `monthly_expense_by_currency`, presupuestos
+  ni Analítica). Errores: `404` sobre inexistente o ajeno, `409` sobre archivado, `422` ingreso o
+  cuenta distinta de la del sobre. Con el sobre en saldo `0` la transacción se crea **sin enlace**
+  (`fund_id: null`, `fund_applied_amount: "0.00"`). Las API keys (`oikos_pat_...`) lo aceptan igual.
+
+Salida: la `Transaction` creada, con `fund_id` (`int | null`) y `fund_applied_amount` (`Decimal | null`,
+lo que salió del sobre, nunca mayor que `amount`) — `null`/`null` si no está enlazada (Fase 36).
 
 Header opcional:
 
@@ -744,7 +754,9 @@ Filtros opcionales:
 
 Salida paginada:
 
-- `items`: `Transaction[]` — transacciones de la página solicitada
+- `items`: `Transaction[]` — transacciones de la página solicitada; cada una trae `fund_id` y
+  `fund_applied_amount` (Fase 36, `null` si no está enlazada a un sobre), calculados para toda la
+  página en **una sola consulta**
 - `total`: `int` — total de transacciones que coinciden con los filtros (Fase 31, Decisión B5,
   QA-006: excluye las borradas lógicamente — antes el conteo sí las incluía aunque `items` ya
   las excluyera, y "Cargar más" del frontend quedaba disponible para siempre)
@@ -763,6 +775,14 @@ para distinguir "ausente" de "null explícito":
 - `date`: ausente → conserva; `null` no se acepta (el response exige `datetime` no opcional).
   Mismos dos formatos y la misma conversión que en `POST` (Fase 34 §B9). El cliente web manda
   `date` **solo si el usuario la cambió**: así editar el monto no re-estampa la hora.
+- `fund_id` (Fase 36): **ausente** conserva el enlace actual; **`null`** desvincula y devuelve al
+  sobre lo aplicado; otro id mueve el gasto (devuelve al sobre viejo y aplica al nuevo, en la misma
+  transacción SQL); un id en una transacción sin enlace la enlaza. Con el enlace conservado, cambiar
+  el `amount` reajusta el sobre por la diferencia (con el tope `min(gasto, saldo)`), y cambiar de
+  cuenta o pasar a ingreso es `409` ("desvincúlalo primero"): se puede en el mismo `PUT` mandando
+  `fund_id: null`. Errores del sobre nuevo: los mismos que en `POST`. Cambiar o quitar el enlace de
+  un gasto ligado a un sobre **archivado** es `409` (un archivado no recibe devoluciones). La
+  respuesta trae `fund_id` y `fund_applied_amount` actualizados.
 
 `amount` respeta el mismo rango de `POST` (arriba), y el mismo `422` de dominio si el
 recálculo desborda el saldo de alguna cuenta involucrada (la única, o la vieja/nueva si la
@@ -788,6 +808,10 @@ petición sobre la misma transacción — también si llega en simultáneo desde
 reintento de red, o un atajo por API key — recibe `404` y **no** vuelve a revertir el saldo.
 Mismo `422` de dominio que `POST`/`PUT` si revertir el impacto desbordaría el saldo de la
 cuenta (Decisión B4).
+
+Gasto pagado con un sobre (Fase 36): se devuelve al sobre lo aplicado con una entrada `adjustment`
+positiva (el libro es append-only), **una sola vez** aunque lleguen dos `DELETE` simultáneos. Si el
+sobre ya no existe, o está archivado, no se devuelve nada y el borrado procede igual.
 
 ## Presupuestos
 
@@ -888,9 +912,19 @@ redondeado hacia arriba al centavo; `null` sin fecha, en el último mes, con la 
 aportar), `pace` (`completed` | `on_track` | `behind` | `null` — `null` sin fecha o
 sin meta; ritmo lineal por días desde la creación hasta `target_date`), `monthly_expense_avg` y
 `runway_months` (solo `emergency`), `backing_shortfall` (Σ saldos de sobres activos de la cuenta que
-excede el saldo de la cuenta, `0.00` si está respaldado), `created_at`. `FundDetailResponse` agrega
+excede el saldo de la cuenta, `0.00` si está respaldado), `linked_expenses_count` y
+`linked_expenses_total` (Fase 36: gastos vivos pagados con el sobre y la suma de sus montos totales; `0` /
+`"0.00"` sin ninguno), `created_at`. `FundDetailResponse` agrega
 `entries` (los 50 movimientos más recientes: `id`, `fund_id`, `amount` con signo, `type`, `occurred_at`,
-`period` `YYYY-MM`, `note`).
+`period` `YYYY-MM`, `note`, `transaction_id` — Fase 36: el gasto al que corresponde un retiro/ajuste
+enlazado, `null` en movimientos manuales) y `linked_expenses` (Fase 36: los 50 gastos más recientes
+pagados con el sobre — `transaction_id`, `amount` total de la transacción, `applied_amount` lo que salió
+del sobre, `date`, `description`, `category_name`).
+
+**Gasto contra sobre (Fase 36).** Un gasto se paga con un sobre mandando `fund_id` en
+`POST`/`PUT /transactions` (ver arriba). En el libro es un `withdrawal` negativo con `transaction_id` por el
+monto aplicado; los reajustes y devoluciones son `adjustment` con el mismo `transaction_id`. Un sobre con
+saldo `0` y gastos enlazados sigue `active` (la UI lo muestra "pagado"). Spec: `docs/specs/fase_36_spec.md`.
 
 ### `GET /api/v1/funds/`
 
@@ -931,6 +965,9 @@ Borra el sobre **y sus movimientos**, activo o archivado y con cualquier saldo. 
 como primera consulta; entradas y sobre se borran en la misma transacción. El saldo vuelve al disponible
 real (el sobre deja de contar en `committed`); `Account.balance` no cambia. Sobre ajeno o inexistente →
 `404`. Un aporte/retiro concurrente que espera el lock responde `404` (sin entradas huérfanas).
+Fase 36: **se permite aunque tenga gastos enlazados**: las transacciones quedan intactas (`Account.balance`
+y totales no cambian), solo pierden la marca de "planeado". `GET /funds/{id}` (y la lista) devuelven
+`linked_expenses_count`/`linked_expenses_total` para avisar antes de borrar; archivar conserva el historial.
 
 ## Dashboard
 
@@ -978,6 +1015,11 @@ Devuelve (`DashboardSummary`):
   moneda. No depende del mes consultado: no es un saldo histórico ni una foto del mes pedido.
 - `monthly_income_by_currency`: array de `{currency, total}` — ingresos del mes por moneda.
 - `monthly_expense_by_currency`: array de `{currency, total}` — gastos del mes por moneda.
+- `planned_expense` (Fase 36): array de `{currency, total}` — de ese gasto del mes, lo **planeado**
+  (pagado con un sobre): suma del monto **total** de las transacciones enlazadas, mismo universo de
+  cuentas y mismo rango que `monthly_expense_by_currency`. Es un **desglose**: no resta ni cambia
+  ninguna otra cifra (`monthly_flow_balance`, presupuestos y Analítica cuentan el gasto completo).
+  Una moneda sin gasto planeado no aparece (`[]` si no hay ninguno).
 - `monthly_flow_balance` (Fase 11 §11.3, Fase 29, reescrito en Fase 31 — Decisión B9, Q9):
   **siempre** ingresos reales registrados menos gastos reales, en la moneda preferida, del
   período consultado — igual en el mes en curso que en un mes ya cerrado. **Nunca es `null`**:
@@ -1107,6 +1149,8 @@ Salida (`CashflowSeries`):
   anterior, para compatibilidad con el gráfico de barras.
 - `total_income`: suma de `income` de todos los buckets (Decimal serializado como string).
 - `total_expense`: suma de `expense` de todos los buckets (Decimal serializado como string).
+- `planned_expense` (Fase 36): parte de `total_expense` pagada con un sobre (monto total de las
+  transacciones enlazadas, mismos filtros). Desglose: no altera `total_expense` ni `net`; `"0.00"` si no hay.
 - `net`: `total_income - total_expense` (Decimal serializado como string).
 
 **Zona del bucket (Fase 34, B8c):** en Postgres cada `date_label` (`YYYY-MM-DD` o `YYYY-MM`) es el

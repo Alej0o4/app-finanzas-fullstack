@@ -166,6 +166,15 @@ ya borró (también en simultáneo) recibe `404` y no vuelve a mover el saldo.
 `payment_method` (la web siempre manda `description`; `payment_method` ausente conserva,
 `null` limpia). `date` no acepta `null` explícito (el response exige `datetime` no opcional).
 
+**Pagar con un sobre (Fase 36)** — `POST` y `PUT` aceptan `fund_id` (solo gastos, y de la cuenta que
+respalda el sobre). En `PUT`: ausente conserva el enlace, `null` desvincula (devuelve lo aplicado),
+otro id mueve el gasto. Errores: `404` sobre inexistente/ajeno, `409` sobre archivado (o un gasto
+enlazado que cambia de cuenta o pasa a ingreso sin mandar `fund_id: null`), `422` ingreso o cuenta
+distinta. La respuesta trae `fund_id` y `fund_applied_amount` (lo que salió del sobre; el excedente
+sobre el saldo es gasto normal). Con el sobre en saldo `0` el gasto se crea sin enlace
+(`fund_id: null`, `fund_applied_amount: "0.00"`). El frontend **no calcula** cuánto se aplicará: lo
+lee de la respuesta. Las API keys lo aceptan igual.
+
 **`date` de la transacción (Fase 34, B9)** — en `POST` y `PUT` acepta `YYYY-MM-DD` **o** datetime
 ISO completo. Solo-día igual a hoy (zona del usuario) → hora real del registro; solo-día de otro
 día → 12:00 locales de ese día; datetime con zona → tal cual (sin zona = UTC). El frontend manda
@@ -486,10 +495,13 @@ El frontend asume:
 - `account_id`
 - `category_id`
 - `payment_method` (opcional: `"cash" | "card" | "transfer" | null`)
+- `fund_id` (`number | null`, Fase 36) — sobre con el que se pagó el gasto; `null` si no está enlazado
+- `fund_applied_amount` (`string | null`, Fase 36) — lo que salió del sobre (≤ `amount`); `null` si no está enlazado
 
 Reglas:
 
 - `currency` se hereda de la cuenta al crear; no se envía en el payload.
+- `fund_id` en el payload solo para gastos (Fase 36); una fila con `fund_id != null` se pinta con la insignia "Planeado".
 - En edición, si no se reenvía `payment_method`, el backend conserva el valor actual.
 - El feed principal debe ordenarse por fecha descendente desde el backend.
 - Los detalles por cuenta y categoría reutilizan el mismo contrato.
@@ -537,6 +549,7 @@ El frontend asume:
 - `first_transaction_month` (`string | null`, Fase 29) — mes `"YYYY-MM"` (en la zona del usuario, Fase 34) de la transacción más antigua del usuario, sobre todas las cuentas. Es el límite inferior del `◀`; `null` = usuario sin transacciones, la navegación no tiene hacia dónde ir.
 - `expense_currencies` (`string[]`, Fase 29) — monedas con gasto en el mes consultado, sobre **todas** las cuentas (no solo las destacadas), con la preferida primero. Alimenta los chips de moneda de "Gastos por categoría": las barras que el chip filtra cuentan todas las cuentas, así que el universo tiene que ser ese. La moneda preferida solo aparece si tiene gasto en el mes, y el frontend la suma igual a las opciones para que el chip nunca quede sin nada que mostrar.
 
+- `planned_expense` (`BalanceByCurrency[]`, Fase 36) — de `monthly_expense_by_currency`, lo **planeado** (gastos pagados con un sobre; monto total de la transacción), mismo universo de cuentas. **Desglose, no resta nada**: el gasto, el balance de flujo, los presupuestos y Analítica cuentan el total. Una moneda sin planeado no aparece. `GET /dashboard/cashflow-series` trae su par, `planned_expense: string` (parte de `total_expense`), para el KPI de Analítica.
 - `accounts_total`, `committed`, `free_to_spend` (`BalanceByCurrency[]`, Fase 35) — **disponible real**: saldo de **todas** las cuentas, lo apartado en sobres activos y la diferencia, con la misma lista de monedas y la preferida primero. Foto de **hoy** (no depende del mes consultado). `free_to_spend` **puede ser negativo** (estás usando dinero apartado): la UI lo explica, no bloquea nada. El flujo mensual sigue siendo la cifra principal; esto es una cifra secundaria.
 
 Para el progreso de presupuestos, el backend devuelve valores listos para pintar:
@@ -554,7 +567,9 @@ Los endpoints de series (`cashflow-series`, `category-distribution`) devuelven u
 
 ### Sobre (Fase 35)
 
-`Fund`: `id`, `name`, `kind` (`'annual_expense' | 'emergency' | 'goal'`), `status` (`'active' | 'archived'`), `account_id`, `currency`, `balance`, `target_amount` (meta efectiva; `null` en un fondo de emergencia sin historial de gasto), `target_months`, `target_date` (`YYYY-MM-DD` | `null`), `progress_pct` (0-100 | `null`), `remaining`, `months_remaining`, `required_contribution` (monto sugerido para aportar este mes | `null`), `next_month_contribution` (cuota sugerida del mes siguiente | `null`; la UI la muestra como "Cuota de {mes} cumplida ✓" cuando `remaining > 0` y `required_contribution` es `null`), `pace` (`'completed' | 'on_track' | 'behind' | null`; `null` = sin fecha o sin meta), `monthly_expense_avg` y `runway_months` (solo emergencia), `backing_shortfall` (`> 0` = "sobre sin respaldo"), `created_at`. `FundEntry`: `id`, `fund_id`, `amount` (con signo), `type` (`'contribution' | 'withdrawal' | 'adjustment'`), `occurred_at`, `period` (`YYYY-MM`), `note`.
+`Fund`: `id`, `name`, `kind` (`'annual_expense' | 'emergency' | 'goal'`), `status` (`'active' | 'archived'`), `account_id`, `currency`, `balance`, `target_amount` (meta efectiva; `null` en un fondo de emergencia sin historial de gasto), `target_months`, `target_date` (`YYYY-MM-DD` | `null`), `progress_pct` (0-100 | `null`), `remaining`, `months_remaining`, `required_contribution` (monto sugerido para aportar este mes | `null`), `next_month_contribution` (cuota sugerida del mes siguiente | `null`; la UI la muestra como "Cuota de {mes} cumplida ✓" cuando `remaining > 0` y `required_contribution` es `null`), `pace` (`'completed' | 'on_track' | 'behind' | null`; `null` = sin fecha o sin meta), `monthly_expense_avg` y `runway_months` (solo emergencia), `backing_shortfall` (`> 0` = "sobre sin respaldo"), `linked_expenses_count` y `linked_expenses_total` (Fase 36: gastos vivos pagados con el sobre y su monto total; alimentan el aviso del diálogo de borrar y el estado "Pagado" de un sobre en 0), `created_at`. `FundDetail` suma `linked_expenses`: `{ transaction_id, amount, applied_amount, date, description, category_name }[]` (los 50 más recientes). `FundEntry`: `id`, `fund_id`, `amount` (con signo), `type` (`'contribution' | 'withdrawal' | 'adjustment'`), `occurred_at`, `period` (`YYYY-MM`), `note`, `transaction_id` (Fase 36: el gasto al que corresponde un retiro/ajuste enlazado; `null` si es manual).
+
+Borrar un sobre con gastos enlazados se permite (Fase 36): las transacciones quedan intactas como gasto normal y solo pierden la marca de planeado; archivar conserva el historial.
 
 ### Notificación
 

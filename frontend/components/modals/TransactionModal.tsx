@@ -16,7 +16,9 @@ import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
-import type { CreateTransactionPayload } from '@/types/api';
+import PayWithFundSelect from '@/components/funds/PayWithFundSelect';
+import { fundSpendNotice } from '@/lib/fundSpendNotice';
+import type { CreateTransactionPayload, Transaction } from '@/types/api';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -47,6 +49,8 @@ export default function TransactionModal({
   const date = dateOverride ?? todayInZone(displayTimezone);
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  // Fase 36 (D14): sobre con el que se paga el gasto ('' = Ninguno).
+  const [fundId, setFundId] = useState('');
   const [showAllCategories, setShowAllCategories] = useState(false);
   // Fase 31 F2 (Q6, QA-013/H13): errores de campo — el modal pasa a `noValidate` (antes
   // dependía de los globos nativos del navegador, a diferencia del resto de la app).
@@ -88,9 +92,11 @@ export default function TransactionModal({
   const createMutation = useMutation({
     mutationFn: async (newTx: CreateTransactionPayload) => {
       const response = await api.post('transactions/', newTx);
-      return response.data;
+      return response.data as Transaction;
     },
-    onSuccess: async () => {
+    onSuccess: async (created, variables) => {
+      // Antes de invalidar: el nombre del sobre sale del caché de la lista de sobres.
+      const fundNotice = fundSpendNotice(queryClient, created, variables.fund_id);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() }),
@@ -100,9 +106,12 @@ export default function TransactionModal({
         queryClient.invalidateQueries({ queryKey: ['analytics-categories'] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() }),
+        // Fase 36: un gasto enlazado cambia el saldo y los gastos enlazados de algún sobre.
+        queryClient.invalidateQueries({ queryKey: queryKeys.funds.all() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.funds.details() }),
       ]);
 
-      toast.success('Transacción creada correctamente');
+      toast.success('Transacción creada correctamente', { description: fundNotice });
       onSuccess?.();
       onClose();
     },
@@ -124,6 +133,7 @@ export default function TransactionModal({
 
   const handleTypeChange = (newType: 'income' | 'expense') => {
     setType(newType);
+    setFundId('');
     resetCategoryIfNotVisible(newType, showAllCategories);
   };
 
@@ -154,6 +164,7 @@ export default function TransactionModal({
       date,
       account_id: Number(accountId),
       category_id: Number(categoryId),
+      ...(type === 'expense' && fundId ? { fund_id: Number(fundId) } : {}),
     });
   };
 
@@ -210,7 +221,10 @@ export default function TransactionModal({
             label="Cuenta"
             required
             value={accountId}
-            onChange={(event) => setAccountId(event.target.value)}
+            onChange={(event) => {
+              setAccountId(event.target.value);
+              setFundId('');
+            }}
             error={fieldErrors.account}
             className="bg-background"
           >
@@ -253,6 +267,10 @@ export default function TransactionModal({
             </button>
           </div>
         </div>
+
+        {type === 'expense' && (
+          <PayWithFundSelect accountId={accountId} value={fundId} onChange={setFundId} />
+        )}
 
         <Input
           label="Fecha"

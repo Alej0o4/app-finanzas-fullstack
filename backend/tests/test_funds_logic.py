@@ -201,3 +201,45 @@ class TestPromedioGastoMensual:
         gasto(datetime(2026, 9, 1, 12, tzinfo=UTC), "100.00")
         gasto(datetime(2026, 10, 1, 3, tzinfo=UTC), "200.00")
         assert svc.promedio_gasto_mensual(db_session, uid, "COP", self.ahora, BOGOTA) == D("300.00")
+
+
+class TestMontoAAplicar:
+    """Fase 36 D3: el gasto aplica `min(gasto, saldo)` al sobre; el resto es gasto normal."""
+
+    def test_gasto_menor_al_saldo(self):
+        assert svc.monto_a_aplicar(D("300.00"), D("1000.00")) == D("300.00")
+
+    def test_gasto_igual_al_saldo(self):
+        assert svc.monto_a_aplicar(D("1000.00"), D("1000.00")) == D("1000.00")
+
+    def test_gasto_mayor_al_saldo_se_topa(self):
+        assert svc.monto_a_aplicar(D("1500.00"), D("1000.00")) == D("1000.00")
+
+    def test_saldo_cero_no_aplica_nada(self):
+        assert svc.monto_a_aplicar(D("300.00"), D("0.00")) == D("0.00")
+
+    def test_saldo_negativo_no_aplica_nada(self):
+        assert svc.monto_a_aplicar(D("300.00"), D("-5.00")) == D("0.00")
+
+
+class TestDeltaReajuste:
+    """Fase 36 D5: diferencia a mover del sobre al editar el monto de un gasto enlazado.
+    Positivo = el sobre paga más (sale más de él); negativo = se devuelve."""
+
+    def test_sin_cambio(self):
+        assert svc.delta_reajuste(D("300.00"), D("300.00"), D("500.00")) == D("0.00")
+
+    def test_sube_con_saldo_suficiente(self):
+        assert svc.delta_reajuste(D("300.00"), D("400.00"), D("500.00")) == D("100.00")
+
+    def test_sube_topado_por_el_saldo(self):
+        assert svc.delta_reajuste(D("300.00"), D("1000.00"), D("50.00")) == D("50.00")
+
+    def test_baja_devuelve(self):
+        assert svc.delta_reajuste(D("300.00"), D("100.00"), D("0.00")) == D("-200.00")
+
+    def test_baja_no_depende_del_saldo(self):
+        assert svc.delta_reajuste(D("300.00"), D("250.00"), D("999.00")) == D("-50.00")
+
+    def test_sube_con_saldo_cero(self):
+        assert svc.delta_reajuste(D("300.00"), D("400.00"), D("0.00")) == D("0.00")

@@ -178,8 +178,10 @@ class FundEntry(Base):
     """Libro append-only de un sobre (Fase 35 §B2): la API nunca actualiza filas; solo se borran
     en bloque al eliminar el sobre (Ajuste A1).
 
-    `amount` con signo (aporte > 0, retiro < 0). `transaction_id` queda siempre NULL en la
-    Fase 35 (lo usa la Fase 36). Sin UNIQUE (fund_id, period): permite aportes extra.
+    `amount` con signo (aporte > 0, retiro < 0). `transaction_id` enlaza un gasto con el sobre
+    (Fase 36): el gasto es un `withdrawal` y sus reajustes/devoluciones son `adjustment` con el
+    mismo `transaction_id`; NULL en movimientos manuales. Sin UNIQUE (fund_id, period): permite
+    aportes extra.
     """
 
     __tablename__ = "fund_entries"
@@ -203,6 +205,8 @@ class FundEntry(Base):
             name="ck_fund_entries_sign",
         ),
         Index("ix_fund_entries_fund_id_occurred_at", "fund_id", "occurred_at"),
+        # Fase 36 (D13): no único; "a lo sumo un sobre por transacción" lo garantiza el servicio.
+        Index("ix_fund_entries_transaction_id", "transaction_id"),
     )
 
 

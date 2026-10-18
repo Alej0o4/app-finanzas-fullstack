@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Archive } from 'lucide-react';
 import DeleteFundButton from '@/components/funds/DeleteFundButton';
 import FundProgress from '@/components/funds/FundProgress';
-import { KIND_LABELS, PaceChip } from '@/components/funds/fundPresentation';
+import { KIND_LABELS, FundStatusChip } from '@/components/funds/fundPresentation';
 import type { Fund } from '@/types/api';
 
 export default function FundCard({ fund }: { fund: Fund }) {
@@ -27,7 +27,7 @@ export default function FundCard({ fund }: { fund: Fund }) {
               Archivado
             </span>
           ) : (
-            <PaceChip pace={fund.pace} />
+            <FundStatusChip fund={fund} />
           )}
           <DeleteFundButton fund={fund} variant="icon" />
         </div>

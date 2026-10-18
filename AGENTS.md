@@ -86,7 +86,7 @@ lo comprometido en sobres**. El flujo sigue siendo la cifra principal del dashbo
 disponible real, **36** gasto contra sobre, **37** recurrentes + calendario de cargos anuales (era
 la 35), **38** CDT, **39** "págate primero", **40** cierre de mes con puntaje. Regla ya decidida:
 el **fondo de emergencia solo cuenta dinero líquido** y el CDT es un módulo aparte, nunca parte del
-fondo. **La Fase 35 (2026-10-17) está implementada** y lo demás no; cada feature con su justificación, el diseño base y las
+fondo. **Las Fases 35 y 36 (2026-10-17) están implementadas** y lo demás no; cada feature con su justificación, el diseño base y las
 decisiones abiertas están en [docs/VISION_FINANZAS_RESPONSABLES.md](docs/VISION_FINANZAS_RESPONSABLES.md)
 (los nombres de tablas y columnas ahí son propuestas sin verificar contra `models.py`). La Fase 35
 original (recurrentes) pasó a la Fase 37; las menciones anteriores a esta fecha son históricas.
@@ -102,6 +102,17 @@ siendo la cifra principal. Se hizo **sin `/grilling`**: las decisiones D1–D10 
 previo; la migración `d5f2a8c1e703` corre sola en el `CMD` de Docker. **Ajustes post-uso (2026-10-17,
 implementados):** `DELETE /funds/{id}` borra el sobre y su libro (archivar sigue exigiendo saldo 0);
 `FundResponse.next_month_contribution`; `annual_expense` exige `target_date` (`422`); sin migración nueva.
+
+**Fase 36 — gasto contra sobre (hecho operativo vigente):** un gasto se paga con un sobre mandando
+`fund_id` en `POST`/`PUT /transactions` (solo `expense`, de la **misma cuenta** del sobre; sin
+transferencias). Se aplica `min(gasto, saldo)` como un `withdrawal` enlazado por
+`fund_entries.transaction_id` (reajustes y devoluciones: `adjustment` con el mismo `transaction_id`); el
+gasto **sigue siendo gasto real** en flujo, presupuestos y Analítica y solo se desglosa como
+`planned_expense` (`/dashboard/summary` y `/cashflow-series`). Orden de locks transacción → sobre →
+cuentas; la lógica vive en `app/services/funds.py` y `ledger.py` no cambió. Borrar un sobre con gastos
+enlazados se permite (las transacciones quedan como gasto normal). El fondo de emergencia excluye lo pagado
+con sobre. Decisiones D1–D17 de `docs/specs/fase_36_spec.md`, tomadas por el dueño en un `/grilling`.
+Despliegue: `pg_dump` previo; la migración `e8a1c4d7b290` (solo un índice) corre sola en el `CMD` de Docker.
 
 Algunos hechos operativos de esa historia siguen vigentes hoy, no son solo registro:
 

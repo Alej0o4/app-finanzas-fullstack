@@ -23,6 +23,7 @@ import { formatCurrency, formatDateLabel, getApiError } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useConfirmStore } from '@/store/useConfirmStore';
 import { queryKeys } from '@/lib/queryKeys';
+import { fundSpendNotice } from '@/lib/fundSpendNotice';
 import QueryErrorState from '@/components/ui/QueryErrorState';
 import { useCategories } from '@/lib/hooks/useCategories';
 import { useAccounts } from '@/lib/hooks/useAccounts';
@@ -159,9 +160,16 @@ export default function AccountDetailPage() {
   const updateMutation = useMutation({
     mutationFn: async (payload: UpdateTransactionPayload) => {
       const response = await api.put(`transactions/${payload.id}`, payload);
-      return response.data;
+      return response.data as Transaction;
     },
-    onSuccess: () => {
+    onSuccess: (updated, variables) => {
+      // Antes de invalidar: el nombre del sobre sale del caché de la lista de sobres.
+      const fundNotice = fundSpendNotice(
+        queryClient,
+        updated,
+        variables.fund_id,
+        selectedTransaction
+      );
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all() });
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.byAccount(id as string) });
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.byId(id as string) });
@@ -172,6 +180,9 @@ export default function AccountDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['analytics-categories'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() });
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() });
+      // Fase 36: un gasto enlazado cambia el saldo y los gastos enlazados de algún sobre.
+      queryClient.invalidateQueries({ queryKey: queryKeys.funds.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.funds.details() });
       // Fase 17 §17.1: monthly-summary, desglose por categoría y progreso de presupuestos de
       // esta cuenta dependen de las transacciones — invalidar las claves propias por cuenta.
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.monthlySummary(id as string) });
@@ -179,7 +190,7 @@ export default function AccountDetailPage() {
         queryKey: queryKeys.accounts.categoryBreakdown(id as string),
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.budgetsProgress(id as string) });
-      toast.success('Transacción actualizada');
+      toast.success('Transacción actualizada', { description: fundNotice });
       setIsModalOpen(false);
       setSelectedTransaction(null);
     },
@@ -203,6 +214,9 @@ export default function AccountDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['analytics-categories'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() });
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() });
+      // Fase 36: un gasto enlazado cambia el saldo y los gastos enlazados de algún sobre.
+      queryClient.invalidateQueries({ queryKey: queryKeys.funds.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.funds.details() });
       // Fase 17 §17.1: monthly-summary, desglose por categoría y progreso de presupuestos de
       // esta cuenta dependen de las transacciones — invalidar las claves propias por cuenta.
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.monthlySummary(id as string) });
@@ -235,6 +249,9 @@ export default function AccountDetailPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.byId(id as string) });
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.all() });
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts.summary() });
+      // Fase 36: un gasto enlazado cambia el saldo y los gastos enlazados de algún sobre.
+      queryClient.invalidateQueries({ queryKey: queryKeys.funds.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.funds.details() });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() });
       // Fase 17 §17.1: por coherencia se invalidan también las claves propias de la cuenta;
       // el recálculo cambia el saldo, no el balance del mes, pero la invalidación es barata.

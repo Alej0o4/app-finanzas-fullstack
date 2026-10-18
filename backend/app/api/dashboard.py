@@ -159,6 +159,26 @@ def obtener_resumen(
         .all()
     )
 
+    # Fase 36 (D9): de ese gasto del mes, cuánto fue planeado (pagado con un sobre) — monto total
+    # de las transacciones enlazadas, mismo universo de cuentas y mismo rango que `expense_rows`.
+    # Es un desglose: no cambia ninguna cifra de gasto (D1).
+    planned_rows = (
+        db.query(
+            models.Transaction.currency,
+            func.sum(models.Transaction.amount).label("total"),
+        )
+        .filter(
+            models.Transaction.user_id == current_user.id,
+            models.Transaction.type == "expense",
+            models.Transaction.account_id.in_(tx_account_ids),
+            models.Transaction.date >= primer_dia,
+            models.Transaction.date < limite_gasto,
+            models.Transaction.id.in_(funds_service.ids_transacciones_enlazadas(db, current_user.id)),
+        )
+        .group_by(models.Transaction.currency)
+        .all()
+    )
+
     # Ordenar: moneda preferida primero, luego alfabético
     def sort_key(currency: str) -> tuple[int, str]:
         return (0 if currency == preferred_currency else 1, currency)
@@ -170,6 +190,9 @@ def obtener_resumen(
     balances.sort(key=lambda x: sort_key(x["currency"]))
     income.sort(key=lambda x: sort_key(x["currency"]))
     expense.sort(key=lambda x: sort_key(x["currency"]))
+    planned = sorted(
+        ({"currency": r.currency, "total": r.total} for r in planned_rows), key=lambda x: sort_key(x["currency"])
+    )
 
     expense_currencies = _monedas_con_gasto(db, current_user.id, primer_dia, limite_gasto)
     expense_currencies.sort(key=sort_key)
@@ -205,6 +228,7 @@ def obtener_resumen(
         "balances": balances,
         "monthly_income_by_currency": income,
         "monthly_expense_by_currency": expense,
+        "planned_expense": planned,
         "monthly_flow_balance": monthly_flow_balance,
         "monthly_flow_basis": "actual",
         "first_transaction_month": _first_transaction_month(db, current_user.id, tz),
@@ -358,10 +382,19 @@ def obtener_serie_flujo_caja(
         total_expense = sum((b["expense"] for b in buckets), Decimal("0.00"))
         net = total_income - total_expense
 
+        # Fase 36 (D9): parte del gasto del período que fue planeada (pagada con un sobre), con
+        # los mismos filtros que `total_expense`. Desglose: no altera `total_expense` ni `net`.
+        planned_expense = db.query(func.sum(models.Transaction.amount)).filter(
+            *filtros,
+            models.Transaction.type == "expense",
+            models.Transaction.id.in_(funds_service.ids_transacciones_enlazadas(db, current_user.id)),
+        ).scalar() or Decimal("0.00")
+
         return {
             "buckets": buckets,
             "total_income": total_income,
             "total_expense": total_expense,
+            "planned_expense": planned_expense,
             "net": net,
         }
     except Exception:

@@ -12,6 +12,7 @@ import { useAppConfig } from '@/providers/AppConfigProvider';
 import EmptyState from '@/components/ui/EmptyState';
 import QueryErrorState from '@/components/ui/QueryErrorState';
 import Skeleton from '@/components/ui/Skeleton';
+import PlannedBadge from '@/components/funds/PlannedBadge';
 import type { DateRange } from '@/lib/dateRanges';
 
 interface RecentTransactionsSectionProps {
@@ -117,11 +118,15 @@ export default function RecentTransactionsSection({
                   className="hover:bg-surface-elevated flex items-center justify-between gap-3 p-3 transition-colors sm:gap-4 sm:p-4 sm:px-6"
                 >
                   <div className="min-w-0">
-                    <p className="text-text truncate text-sm font-medium">
-                      {tx.description || categoryNames.get(tx.category_id) || 'Sin categoría'}
-                    </p>
-                    <p className="text-text-muted mt-0.5 text-xs">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="text-text truncate text-sm font-medium">
+                        {tx.description || categoryNames.get(tx.category_id) || 'Sin categoría'}
+                      </p>
+                      {tx.fund_id != null && <PlannedBadge className="hidden sm:inline-flex" />}
+                    </div>
+                    <p className="text-text-muted mt-0.5 flex items-center gap-2 text-xs">
                       {formatDateLabel(tx.date, config.locale, displayTimezone)}
+                      {tx.fund_id != null && <PlannedBadge className="inline-flex sm:hidden" />}
                     </p>
                   </div>
                   <p

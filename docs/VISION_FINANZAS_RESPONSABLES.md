@@ -131,7 +131,13 @@ cifra principal del dashboard con el disponible real al lado, o si el disponible
 principal. **Hasta decidirlo, rige lo vigente:** la cifra principal es el flujo (regla de la
 Fase 31: ingreso real − gasto real, `monthly_income` solo es referencia visual).
 
-### 2.3 Gasto contra sobre — *Fase 36*
+### 2.3 Gasto contra sobre — *Fase 36* — ✅ **implementado (2026-10-17)**
+
+> **Resuelto en el `/grilling` del 2026-10-17** (`docs/specs/fase_36_spec.md`, D1–D17): el gasto enlazado
+> **cuenta como gasto real** y se muestra aparte como **planeado** (`planned_expense`, un desglose que no
+> cambia ninguna cifra); si supera el saldo se aplica `min(gasto, saldo)` y el resto es gasto normal; editar
+> reajusta y borrar devuelve al sobre; borrar un sobre con gastos enlazados se permite. Las preguntas
+> "Pendiente de `/grilling`" de abajo se conservan como historia.
 
 **Qué es.** Al pagar un gasto planeado (el seguro, el computador) se imputa contra el sobre
 correspondiente: el sobre baja y la transacción se enlaza (`fund_entries.transaction_id`).
@@ -238,7 +244,7 @@ fondo, sobres al día y cumplimiento del presupuesto.
 ```
 Fase 35  Sobres + disponible real      (aditiva; sin tocar Transaction)
    │
-Fase 36  Gasto contra sobre            (toca ledger.py; /grilling previo obligatorio)
+Fase 36  Gasto contra sobre            ✅ implementada 2026-10-17
    │
 Fase 37  Recurrentes + calendario      (heredada de la Fase 35 original)
    │

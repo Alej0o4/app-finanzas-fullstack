@@ -187,9 +187,23 @@ Los hooks de mutación de `lib/hooks/useFunds.ts` invalidan siempre:
 el detalle ya no existe y, con la página aún montada, refetchearlo (o quitarlo del caché) daría un 404
 visible. La página de detalle navega a `/funds` tras borrar.
 
-Crear/editar/borrar una **cuenta** o una **transacción** ya invalidan `dashboard.summary()`, que es
-lo que refresca `free_to_spend`; no hace falta invalidar `funds` salvo que cambie el respaldo
-(`backing_shortfall`), que se refresca al volver a la pantalla de sobres.
+Crear/editar/borrar una **cuenta** ya invalida `dashboard.summary()`, que es lo que refresca
+`free_to_spend`; no hace falta invalidar `funds` salvo que cambie el respaldo (`backing_shortfall`),
+que se refresca al volver a la pantalla de sobres.
+
+**Fase 36 — crear/editar/borrar una transacción también invalida los sobres.** Un gasto enlazado
+(`fund_id`) cambia el saldo del sobre, sus `linked_expenses_*` y su "Pagado", así que cada mutación
+de transacción (`TransactionModal`, `TransactionCaptureForm`, y editar/borrar en `/transactions`,
+`/accounts/[id]` y `/categories/[id]`) suma a la lista de arriba:
+
+- `funds.all()` — lista de sobres (y su variante con archivados).
+- `funds.details()` → `['fund']` — prefijo de **todos** los detalles `['fund', id]` (no se sabe de
+  qué sobre era el gasto antes de editarlo, y puede haber cambiado de sobre).
+
+`dashboard.summary()` ya estaba en la lista y refresca `planned_expense` y `free_to_spend`; las keys
+de Analítica ya se invalidaban y refrescan `planned_expense` de `cashflow-series`. El aviso "X
+salieron del sobre «Nombre»" (`lib/fundSpendNotice.ts`) se arma **antes** de invalidar, con el nombre
+leído del caché de la lista de sobres.
 
 ### Crear/editar/eliminar categoría
 

@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy import desc, func, or_, update
@@ -28,10 +29,20 @@ from app.core.text import normalizar_nombre
 from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.schemas import schemas
+from app.services import funds as funds_service
 from app.services import ledger
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _adjuntar_enlaces(db: Session, transacciones: list[models.Transaction]) -> list[models.Transaction]:
+    """Fase 36 (D15): `fund_id`/`fund_applied_amount` de cada transacción, leídos del libro de
+    sobres en UNA consulta. Son atributos transitorios (no columnas) que el response serializa."""
+    mapa = funds_service.vinculos(db, [t.id for t in transacciones])
+    for t in transacciones:
+        t.fund_id, t.fund_applied_amount = mapa.get(t.id, (None, None))
+    return transacciones
 
 
 # --- Helpers de resolución por nombre (Fase 16 §16.2) ---
@@ -132,6 +143,17 @@ def _resolver_fecha(valor: date | datetime | None, tz) -> datetime | None:
     return instante_de_dia(valor, datetime.now(UTC), tz)
 
 
+def _replay_con_enlace(
+    db: Session, existente: models.IdempotencyKey, request_hash: str, fund_id_pedido: int | None
+) -> models.Transaction:
+    """Respuesta de un replay idempotente con los campos de sobre del original; si pidió sobre y el
+    original quedó sin enlace (sobre sin saldo, D3), `fund_applied_amount` es 0 igual que en el POST."""
+    tx = _adjuntar_enlaces(db, [_resolver_transaccion_idempotente(db, existente, request_hash)])[0]
+    if fund_id_pedido is not None and tx.fund_applied_amount is None:
+        tx.fund_applied_amount = Decimal("0.00")
+    return tx
+
+
 # --- RUTA PROTEGIDA ---
 @router.post("/", response_model=schemas.TransactionResponse)
 @limiter.limit("60/minute", key_func=key_func_por_usuario_o_ip)
@@ -160,7 +182,7 @@ def crear_transaccion(
             .first()
         )
         if existente:
-            return _resolver_transaccion_idempotente(db, existente, request_hash)
+            return _replay_con_enlace(db, existente, request_hash, transaccion.fund_id)
 
     # 🔒 1. Resolución de la cuenta (Fase 16 §16.2, Decisión 16.2.4 — ver
     # _resolver_cuenta). Aplica ANTES de la verificación de pertenencia de abajo: una vez
@@ -201,12 +223,29 @@ def crear_transaccion(
     # se calculó sobre el payload tal cual llegó).
     transaccion.date = _resolver_fecha(transaccion.date, get_zoneinfo(current_user.timezone))
 
+    # Fase 36 (D6, D17): pagar con un sobre. El sobre se valida y bloquea ANTES del INSERT y de
+    # tocar el saldo de la cuenta (orden de locks transacción → sobre → cuentas); los errores de
+    # dominio (404/409/422) salen limpios porque todavía no hay nada escrito.
+    fondo = None
+    if transaccion.fund_id is not None:
+        fondo = funds_service.bloquear_para_gasto(
+            db, current_user, transaccion.fund_id, account_id=cuenta.id, tipo=transaccion.type.value
+        )
+
     # 2. Ensamblar la transacción
-    nueva_transaccion = models.Transaction(**transaccion.model_dump(exclude_none=True), user_id=current_user.id)
+    nueva_transaccion = models.Transaction(
+        **transaccion.model_dump(exclude_none=True, exclude={"fund_id"}), user_id=current_user.id
+    )
     nueva_transaccion.currency = cuenta.currency  # hereda la moneda de la cuenta
+    aplicado = None
 
     try:
         db.add(nueva_transaccion)
+        if fondo is not None:
+            db.flush()  # asigna el id antes de enlazar la entrada del sobre
+            aplicado = funds_service.aplicar_gasto(
+                db, current_user, fondo, nueva_transaccion.id, nueva_transaccion.amount, datetime.now(UTC)
+            )
         # 🧮 3. Lógica Contable (Fase 25 §25.1 — extraída a app/services/ledger.py: el
         # signo del delta y el UPDATE atómico viven en ledger.registrar_impacto /
         # aplicar_delta, que documenta el filtro deleted_at IS NULL — Decisión 6.1: un
@@ -240,7 +279,7 @@ def crear_transaccion(
             .first()
         )
         if existente:
-            return _resolver_transaccion_idempotente(db, existente, request_hash)
+            return _replay_con_enlace(db, existente, request_hash, transaccion.fund_id)
         raise InternalServerError("Error interno al procesar la transacción contable.") from None
     except DataError:
         # Fase 31 (Decisión B4, QA-015): con B3 el monto en sí ya es válido — el único
@@ -270,6 +309,9 @@ def crear_transaccion(
             get_zoneinfo(current_user.timezone),
         )
 
+    _adjuntar_enlaces(db, [nueva_transaccion])
+    if fondo is not None and nueva_transaccion.fund_applied_amount is None:
+        nueva_transaccion.fund_applied_amount = aplicado  # D3: saldo 0 → sin enlace, aplicado = 0
     return nueva_transaccion
 
 
@@ -329,7 +371,7 @@ def obtener_transacciones(
     page = (skip // limit) + 1
 
     return schemas.PaginatedResponse(
-        items=transacciones,
+        items=_adjuntar_enlaces(db, transacciones),
         total=total,
         page=page,
         page_size=limit,
@@ -381,6 +423,11 @@ def eliminar_transaccion(
             db.rollback()
             raise NotFoundError("La transacción no existe o no tienes permisos.")
 
+        # Fase 36 (D4, D17): si el gasto estaba pagado con un sobre, se devuelve lo aplicado. Va
+        # DESPUÉS del borrado condicional exitoso (dos DELETE simultáneos devuelven una sola
+        # vez) y ANTES de tocar el saldo de la cuenta (orden de locks: transacción → sobre → cuentas).
+        funds_service.devolver_gasto(db, current_user, transaction_id, datetime.now(UTC))
+
         # 🧮 2. Lógica Contable Inversa: revertir el impacto de forma atómica (Fase 25
         # §25.1 — el filtro deleted_at IS NULL vive en ledger.aplicar_delta), SOLO
         # después de confirmar el borrado — antes el orden era el inverso (revertía el
@@ -408,7 +455,7 @@ def eliminar_transaccion(
 @router.put("/{transaction_id}", response_model=schemas.TransactionResponse)
 def actualizar_transaccion(
     transaction_id: int,
-    transaccion_actualizada: schemas.TransactionBase,
+    transaccion_actualizada: schemas.TransactionUpdate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ) -> models.Transaction:
@@ -475,6 +522,21 @@ def actualizar_transaccion(
 
     if not categoria:
         raise CategoryNotFoundError()  # 🔁 antes: raise HTTPException(404, "...")
+
+    # Fase 36 (D5, D16, D17): enlace con un sobre. Va antes de tocar el saldo de las cuentas
+    # (orden de locks transacción → sobre → cuentas) y fuera del `try` para que los errores de
+    # dominio (404/409/422) salgan tal cual. Con `fund_id` ausente se conserva el enlace actual.
+    destino = funds_service.sincronizar_enlace(
+        db,
+        current_user,
+        transaccion_db,
+        enviado="fund_id" in transaccion_actualizada.model_fields_set,
+        fund_id=transaccion_actualizada.fund_id,
+        cuenta_id=cuenta_nueva.id,
+        tipo=transaccion_actualizada.type.value,
+        monto=transaccion_actualizada.amount,
+        ahora=datetime.now(UTC),
+    )
 
     try:
         ledger.aplicar_edicion(
@@ -567,4 +629,7 @@ def actualizar_transaccion(
                 get_zoneinfo(current_user.timezone),
             )
 
+    _adjuntar_enlaces(db, [transaccion_db])
+    if destino is not None and transaccion_db.fund_applied_amount is None:
+        transaccion_db.fund_applied_amount = Decimal("0.00")  # D3: sobre sin saldo → sin enlace, aplicado = 0
     return transaccion_db

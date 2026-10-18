@@ -318,6 +318,7 @@ function AnalyticsPageContent() {
     totalIncome: Number(trendSeries?.total_income ?? 0),
     totalExpense: Number(trendSeries?.total_expense ?? 0),
     net: Number(trendSeries?.net ?? 0),
+    plannedExpense: Number(trendSeries?.planned_expense ?? 0),
   };
 
   // QA-040: con el backend caído fallan las DOS precondiciones de esta página — `/users/me` y
@@ -452,6 +453,7 @@ function AnalyticsPageContent() {
         totalIncome={totals.totalIncome}
         totalExpense={totals.totalExpense}
         net={totals.net}
+        plannedExpense={totals.plannedExpense}
         currency={effectiveCurrency}
         isError={trendError}
         onRetry={() => refetchTrend()}

@@ -571,8 +571,9 @@ Decisiones tomadas por el agente sin `/grilling`; el dueño las revisa (ver `doc
 - [ ] **Pendiente del dueño (A3):** contrastar con tus datos reales que USD "saldo en cuentas − apartado en
   sobres" cuadra con el neto que muestra la tarjeta; si no cuadra, es un bug de `disponibilidad()` y se
   abre aparte. En el stack dev cuadra (10.515 − 99 = 10.416).
-- [ ] **Fase 36 (`/grilling`):** definir qué hace borrar un sobre con movimientos enlazados a transacciones
-  (`fund_entries.transaction_id`); hoy el borrado no lo comprueba porque siempre es `NULL`.
+- [x] **Fase 36 (`/grilling`):** qué hace borrar un sobre con movimientos enlazados a transacciones —
+  resuelto 2026-10-17 (D12): se permite, las transacciones quedan intactas como gasto normal y el diálogo
+  avisa cuántos gastos y cuánto pierden la marca de planeado.
 
 **Deuda abierta de la revisión:**
 
@@ -588,6 +589,24 @@ Decisiones tomadas por el agente sin `/grilling`; el dueño las revisa (ver `doc
   (reservado para reconciliar un sobre).
 - [ ] **Movimientos del sobre sin paginar.** El detalle devuelve los 50 más recientes; si un sobre
   acumula muchos, agregar `GET /funds/{id}/entries` con `skip/limit`.
+
+## 🟡 Deuda de la Fase 36 (gasto contra sobre, 2026-10-17)
+
+Deuda consciente, acordada en el `/grilling` (spec `docs/specs/fase_36_spec.md`):
+
+- [ ] **No alertar por lo planeado en presupuestos (D8).** Los presupuestos y sus alertas cuentan **todo** el
+  gasto, incluido lo pagado con sobre: un seguro pagado con su sobre empuja la alerta del presupuesto de su
+  categoría aunque estuviera provisionado. Cuando se quiera, excluir (o mostrar aparte) lo enlazado en
+  `budget_alerts.spent_por_categoria_y_moneda` y en `GET /dashboard/budgets-progress`.
+- [ ] **`planned_expense` histórico no es una foto (D16).** Se calcula en vivo sobre las transacciones
+  enlazadas: editar o borrar un gasto enlazado de un mes pasado cambia el planeado de ese mes, y borrar el sobre
+  borra la marca de todos sus gastos. Si importa el histórico fiel, guardar el planeado en la propia entrada.
+- [ ] **Transferencias entre cuentas (QA-030).** El gasto debe salir de la cuenta del sobre (`422` si no); pagar
+  desde otra cuenta con el dinero de un sobre exige resolver transferencias antes.
+- [ ] **Renovación del sobre anual (Fase 37).** Un sobre pagado queda `active` en 0 como "Pagado"; la
+  renovación automática del gasto anual llega con recurrentes.
+- [ ] **Selector en edición con cuenta distinta.** Al cambiar la cuenta de un gasto enlazado desde la web el
+  modal lo desvincula (manda `fund_id: null`); solo un cliente API ve el `409`.
 
 ## 🟢 Modularidad — revisar cuando el código duela al modificarlo
 

@@ -16,6 +16,10 @@ class DashboardSummary(BaseModel):
     balances: list[BalanceByCurrency]
     monthly_income_by_currency: list[BalanceByCurrency]
     monthly_expense_by_currency: list[BalanceByCurrency]
+    # 🆕 Fase 36 (D9): de `monthly_expense_by_currency`, lo planeado (gastos pagados con un sobre,
+    # monto total de la transacción). Desglose: no cambia el gasto. Sin default, igual que
+    # `monthly_flow_basis`: el handler devuelve un dict plano.
+    planned_expense: list[BalanceByCurrency]
     # 🔁 Fase 31 (Decisión B9, Q9/Q14): ingreso real - gasto real en la moneda preferida,
     # igual en el mes en curso que en un mes cerrado. Nunca `None` (User Story 34): sin
     # filas vale 0.00, y puede ser negativo (a principio de mes, antes de cobrar). Antes
@@ -91,4 +95,6 @@ class CashflowSeries(BaseModel):
     buckets: list[CashflowData]
     total_income: Decimal
     total_expense: Decimal
+    # Fase 36 (D9): parte de `total_expense` pagada con un sobre. Desglose, no resta nada.
+    planned_expense: Decimal
     net: Decimal
