@@ -461,6 +461,13 @@ def actualizar(db: Session, user: models.User, fund_id: int, datos, ahora: datet
         fund.name = datos.name
 
     if "account_id" in enviados and datos.account_id is not None and datos.account_id != fund.account_id:
+        # Un gasto pagado con el sobre tiene que salir de la cuenta que lo respalda (Fase 36 D15);
+        # mover el sobre dejaría gastos enlazados a otra cuenta, y `sincronizar_enlace` seguiría
+        # reajustándolos como si nada.
+        if _resumen_enlazados(db, [fund.id]).get(fund.id, (0, Decimal("0.00")))[0] > 0:
+            raise ConflictError(
+                "El sobre tiene gastos pagados con él: desvincúlalos o bórralos antes de cambiar su cuenta."
+            )
         cuenta = _cuenta_del_usuario(db, user.id, datos.account_id)
         if cuenta.currency != fund.currency:
             raise ValidationError("La cuenta debe tener la misma moneda del sobre.")

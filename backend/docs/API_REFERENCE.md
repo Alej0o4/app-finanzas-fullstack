@@ -945,7 +945,7 @@ hereda de la cuenta. Errores: `404` cuenta ajena, `422` validación (incluye gas
 
 ### `PUT /api/v1/funds/{fund_id}`
 
-Parcial (solo lo enviado cambia): `name`, `account_id` (misma moneda, si no `422`; un `emergency` tampoco admite una cuenta `credit`, `422`), `target_amount` /
+Parcial (solo lo enviado cambia): `name`, `account_id` (misma moneda, si no `422`; un `emergency` tampoco admite una cuenta `credit`, `422`); con gastos pagados con el sobre aún vivos es `409`: desvincúlalos o bórralos antes de moverlo, `target_amount` /
 `target_months` (lo enviado reemplaza a la alternativa; `target_months` solo en `emergency`),
 `target_date` (`null` la quita salvo en `annual_expense`, donde es `422`; una fecha nueva no puede ser
 pasada). Un `annual_expense` legado sin fecha sigue siendo editable en otros campos. No cambia `kind` ni

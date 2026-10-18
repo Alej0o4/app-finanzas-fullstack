@@ -509,3 +509,39 @@ class TestBorrarSobreConGastos:
         tx = _gasto(client, auth_headers, cuenta["id"], categoria["id"], "100.00", fund_id=fondo["id"]).json()
         client.delete(f"{TX}{tx['id']}", headers=auth_headers)
         assert _fondo(client, auth_headers, fondo["id"])["linked_expenses_count"] == 0
+
+
+class TestCambiarCuentaDelSobre:
+    """QA 2026-10-18: mover un sobre con gastos enlazados rompía "el gasto sale de la cuenta del sobre"."""
+
+    def test_con_gastos_enlazados_409_y_no_cambia_nada(
+        self, client, auth_headers, cuenta, categoria, sobre, make_account
+    ):
+        otra = make_account(auth_headers, name="Otra", balance="5000.00")
+        fondo = sobre("600.00")
+        assert (
+            _gasto(client, auth_headers, cuenta["id"], categoria["id"], "100.00", fund_id=fondo["id"]).status_code
+            == 200
+        )
+        resp = client.put(f"{FUNDS}{fondo['id']}", json={"account_id": otra["id"]}, headers=auth_headers)
+        assert resp.status_code == 409, resp.text
+        despues = _fondo(client, auth_headers, fondo["id"])
+        assert despues["account_id"] == cuenta["id"]
+        assert despues["linked_expenses_count"] == 1
+
+    def test_tras_desvincular_o_borrar_el_gasto_si_se_puede_mover(
+        self, client, auth_headers, cuenta, categoria, sobre, make_account
+    ):
+        otra = make_account(auth_headers, name="Otra", balance="5000.00")
+        fondo = sobre("600.00")
+        gasto = _gasto(client, auth_headers, cuenta["id"], categoria["id"], "100.00", fund_id=fondo["id"]).json()
+        assert client.delete(f"{TX}{gasto['id']}", headers=auth_headers).status_code == 200
+        resp = client.put(f"{FUNDS}{fondo['id']}", json={"account_id": otra["id"]}, headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["account_id"] == otra["id"]
+
+    def test_sin_gastos_enlazados_sigue_permitido(self, client, auth_headers, sobre, make_account):
+        otra = make_account(auth_headers, name="Otra", balance="5000.00")
+        fondo = sobre("600.00")
+        resp = client.put(f"{FUNDS}{fondo['id']}", json={"account_id": otra["id"]}, headers=auth_headers)
+        assert resp.status_code == 200, resp.text
