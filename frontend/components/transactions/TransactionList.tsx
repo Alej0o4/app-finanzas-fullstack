@@ -78,10 +78,11 @@ export default function TransactionList({
                         <p className="text-text truncate text-sm font-medium">
                           {tx.description || category?.name || 'Sin categoría'}
                         </p>
-                        {tx.fund_id != null && <PlannedBadge />}
+                        {tx.fund_id != null && <PlannedBadge className="hidden sm:inline-flex" />}
                       </div>
-                      <div className="text-text-muted mt-0.5 flex space-x-2 text-xs">
+                      <div className="text-text-muted mt-0.5 flex items-center space-x-2 text-xs">
                         <span className="truncate">{account?.name || 'Cuenta eliminada'}</span>
+                        {tx.fund_id != null && <PlannedBadge className="inline-flex sm:hidden" />}
                         <span className="hidden sm:inline">•</span>
                         <span className="hidden items-center gap-1 sm:inline-flex">
                           <CategoryIcon

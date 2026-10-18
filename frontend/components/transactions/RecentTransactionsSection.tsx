@@ -122,10 +122,11 @@ export default function RecentTransactionsSection({
                       <p className="text-text truncate text-sm font-medium">
                         {tx.description || categoryNames.get(tx.category_id) || 'Sin categoría'}
                       </p>
-                      {tx.fund_id != null && <PlannedBadge />}
+                      {tx.fund_id != null && <PlannedBadge className="hidden sm:inline-flex" />}
                     </div>
-                    <p className="text-text-muted mt-0.5 text-xs">
+                    <p className="text-text-muted mt-0.5 flex items-center gap-2 text-xs">
                       {formatDateLabel(tx.date, config.locale, displayTimezone)}
+                      {tx.fund_id != null && <PlannedBadge className="inline-flex sm:hidden" />}
                     </p>
                   </div>
                   <p

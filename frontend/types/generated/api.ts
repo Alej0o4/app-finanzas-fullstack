@@ -526,6 +526,111 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/funds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Listar Sobres */
+    get: operations['listar_sobres_api_v1_funds__get'];
+    put?: never;
+    /** Crear Sobre */
+    post: operations['crear_sobre_api_v1_funds__post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/funds/{fund_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Obtener Sobre */
+    get: operations['obtener_sobre_api_v1_funds__fund_id__get'];
+    /** Actualizar Sobre */
+    put: operations['actualizar_sobre_api_v1_funds__fund_id__put'];
+    post?: never;
+    /** Eliminar Sobre */
+    delete: operations['eliminar_sobre_api_v1_funds__fund_id__delete'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/funds/{fund_id}/contributions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Aportar */
+    post: operations['aportar_api_v1_funds__fund_id__contributions_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/funds/{fund_id}/withdrawals': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Retirar */
+    post: operations['retirar_api_v1_funds__fund_id__withdrawals_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/funds/{fund_id}/archive': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Archivar Sobre */
+    post: operations['archivar_sobre_api_v1_funds__fund_id__archive_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/funds/{fund_id}/unarchive': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Desarchivar Sobre */
+    post: operations['desarchivar_sobre_api_v1_funds__fund_id__unarchive_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/users/me/preferences': {
     parameters: {
       query?: never;
@@ -1091,6 +1196,8 @@ export interface components {
       total_income: string;
       /** Total Expense */
       total_expense: string;
+      /** Planned Expense */
+      planned_expense: string;
       /** Net */
       net: string;
     };
@@ -1147,6 +1254,8 @@ export interface components {
       monthly_income_by_currency: components['schemas']['BalanceByCurrency'][];
       /** Monthly Expense By Currency */
       monthly_expense_by_currency: components['schemas']['BalanceByCurrency'][];
+      /** Planned Expense */
+      planned_expense: components['schemas']['BalanceByCurrency'][];
       /** Monthly Flow Balance */
       monthly_flow_balance: string;
       /**
@@ -1157,11 +1266,202 @@ export interface components {
       monthly_flow_basis: 'actual';
       /** First Transaction Month */
       first_transaction_month?: string | null;
+      /** Accounts Total */
+      accounts_total: components['schemas']['BalanceByCurrency'][];
+      /** Committed */
+      committed: components['schemas']['BalanceByCurrency'][];
+      /** Free To Spend */
+      free_to_spend: components['schemas']['BalanceByCurrency'][];
       /**
        * Expense Currencies
        * @default []
        */
       expense_currencies: string[];
+    };
+    /** FundCreate */
+    FundCreate: {
+      /** Name */
+      name: string;
+      kind: components['schemas']['FundKind'];
+      /** Account Id */
+      account_id: number;
+      /** Target Amount */
+      target_amount?: number | string | null;
+      /** Target Months */
+      target_months?: number | null;
+      /** Target Date */
+      target_date?: string | null;
+    };
+    /** FundDetailResponse */
+    FundDetailResponse: {
+      /** Id */
+      id: number;
+      /** Name */
+      name: string;
+      kind: components['schemas']['FundKind'];
+      status: components['schemas']['FundStatus'];
+      /** Account Id */
+      account_id: number;
+      /** Currency */
+      currency: string;
+      /** Balance */
+      balance: string;
+      /** Target Amount */
+      target_amount?: string | null;
+      /** Target Months */
+      target_months?: number | null;
+      /** Target Date */
+      target_date?: string | null;
+      /** Progress Pct */
+      progress_pct?: number | null;
+      /** Remaining */
+      remaining?: string | null;
+      /** Months Remaining */
+      months_remaining?: number | null;
+      /** Required Contribution */
+      required_contribution?: string | null;
+      /** Next Month Contribution */
+      next_month_contribution?: string | null;
+      /** Pace */
+      pace?: ('completed' | 'on_track' | 'behind') | null;
+      /** Monthly Expense Avg */
+      monthly_expense_avg?: string | null;
+      /** Runway Months */
+      runway_months?: string | null;
+      /** Backing Shortfall */
+      backing_shortfall: string;
+      /**
+       * Linked Expenses Count
+       * @default 0
+       */
+      linked_expenses_count: number;
+      /**
+       * Linked Expenses Total
+       * @default 0.00
+       */
+      linked_expenses_total: string;
+      /** Created At */
+      created_at?: string | null;
+      /** Entries */
+      entries: components['schemas']['FundEntryResponse'][];
+      /**
+       * Linked Expenses
+       * @default []
+       */
+      linked_expenses: components['schemas']['LinkedExpense'][];
+    };
+    /** FundEntryResponse */
+    FundEntryResponse: {
+      /** Id */
+      id: number;
+      /** Fund Id */
+      fund_id: number;
+      /** Amount */
+      amount: string;
+      /**
+       * Type
+       * @enum {string}
+       */
+      type: 'contribution' | 'withdrawal' | 'adjustment';
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+      /** Period */
+      period: string;
+      /** Note */
+      note?: string | null;
+      /** Transaction Id */
+      transaction_id?: number | null;
+    };
+    /**
+     * FundKind
+     * @enum {string}
+     */
+    FundKind: 'annual_expense' | 'emergency' | 'goal';
+    /**
+     * FundMovement
+     * @description Body de aportar y de retirar: el monto es siempre positivo; el signo lo pone el tipo.
+     */
+    FundMovement: {
+      /** Amount */
+      amount: number | string;
+      /** Note */
+      note?: string | null;
+    };
+    /** FundResponse */
+    FundResponse: {
+      /** Id */
+      id: number;
+      /** Name */
+      name: string;
+      kind: components['schemas']['FundKind'];
+      status: components['schemas']['FundStatus'];
+      /** Account Id */
+      account_id: number;
+      /** Currency */
+      currency: string;
+      /** Balance */
+      balance: string;
+      /** Target Amount */
+      target_amount?: string | null;
+      /** Target Months */
+      target_months?: number | null;
+      /** Target Date */
+      target_date?: string | null;
+      /** Progress Pct */
+      progress_pct?: number | null;
+      /** Remaining */
+      remaining?: string | null;
+      /** Months Remaining */
+      months_remaining?: number | null;
+      /** Required Contribution */
+      required_contribution?: string | null;
+      /** Next Month Contribution */
+      next_month_contribution?: string | null;
+      /** Pace */
+      pace?: ('completed' | 'on_track' | 'behind') | null;
+      /** Monthly Expense Avg */
+      monthly_expense_avg?: string | null;
+      /** Runway Months */
+      runway_months?: string | null;
+      /** Backing Shortfall */
+      backing_shortfall: string;
+      /**
+       * Linked Expenses Count
+       * @default 0
+       */
+      linked_expenses_count: number;
+      /**
+       * Linked Expenses Total
+       * @default 0.00
+       */
+      linked_expenses_total: string;
+      /** Created At */
+      created_at?: string | null;
+    };
+    /**
+     * FundStatus
+     * @enum {string}
+     */
+    FundStatus: 'active' | 'archived';
+    /**
+     * FundUpdate
+     * @description Actualización parcial (`model_fields_set`): solo cambian los campos enviados. No se puede
+     *     cambiar `kind` ni la moneda. Enviar `target_date: null` quita la fecha.
+     */
+    FundUpdate: {
+      /** Name */
+      name?: string | null;
+      /** Account Id */
+      account_id?: number | null;
+      /** Target Amount */
+      target_amount?: number | string | null;
+      /** Target Months */
+      target_months?: number | null;
+      /** Target Date */
+      target_date?: string | null;
     };
     /**
      * GoogleLoginRequest
@@ -1181,6 +1481,25 @@ export interface components {
     HTTPValidationError: {
       /** Detail */
       detail?: components['schemas']['ValidationError'][];
+    };
+    /**
+     * LinkedExpense
+     * @description Un gasto pagado con el sobre (Fase 36 D9): `amount` es el total de la transacción y
+     *     `applied_amount` lo que salió del sobre (puede ser menos, D3).
+     */
+    LinkedExpense: {
+      /** Transaction Id */
+      transaction_id: number;
+      /** Amount */
+      amount: string;
+      /** Applied Amount */
+      applied_amount: string;
+      /** Date */
+      date?: string | null;
+      /** Description */
+      description?: string | null;
+      /** Category Name */
+      category_name?: string | null;
     };
     /** LogoutRequest */
     LogoutRequest: {
@@ -1327,31 +1646,6 @@ export interface components {
        */
       token_type: string;
     };
-    /** TransactionBase */
-    TransactionBase: {
-      /**
-       * Amount
-       * @description El monto debe ser mayor a cero
-       */
-      amount: number | string;
-      /**
-       * Currency
-       * @default COP
-       */
-      currency: string;
-      type: components['schemas']['TransactionType'];
-      /** Description */
-      description?: string | null;
-      /** Account Id */
-      account_id?: number | null;
-      /** Category Id */
-      category_id?: number | null;
-      /** Category */
-      category?: string | null;
-      /** Date */
-      date?: string | null;
-      payment_method?: components['schemas']['PaymentMethod'] | null;
-    };
     /** TransactionCreate */
     TransactionCreate: {
       /**
@@ -1376,6 +1670,8 @@ export interface components {
       /** Date */
       date?: string | null;
       payment_method?: components['schemas']['PaymentMethod'] | null;
+      /** Fund Id */
+      fund_id?: number | null;
     };
     /** TransactionResponse */
     TransactionResponse: {
@@ -1408,12 +1704,47 @@ export interface components {
       id: number;
       /** User Id */
       user_id: number;
+      /** Fund Id */
+      fund_id?: number | null;
+      /** Fund Applied Amount */
+      fund_applied_amount?: string | null;
     };
     /**
      * TransactionType
      * @enum {string}
      */
     TransactionType: 'income' | 'expense';
+    /**
+     * TransactionUpdate
+     * @description Body del `PUT`. `fund_id` ausente conserva el enlace; `null` explícito lo desvincula
+     *     (`model_fields_set`, mismo idioma que QA-026).
+     */
+    TransactionUpdate: {
+      /**
+       * Amount
+       * @description El monto debe ser mayor a cero
+       */
+      amount: number | string;
+      /**
+       * Currency
+       * @default COP
+       */
+      currency: string;
+      type: components['schemas']['TransactionType'];
+      /** Description */
+      description?: string | null;
+      /** Account Id */
+      account_id?: number | null;
+      /** Category Id */
+      category_id?: number | null;
+      /** Category */
+      category?: string | null;
+      /** Date */
+      date?: string | null;
+      payment_method?: components['schemas']['PaymentMethod'] | null;
+      /** Fund Id */
+      fund_id?: number | null;
+    };
     /** UnreadCountResponse */
     UnreadCountResponse: {
       /** Count */
@@ -1864,7 +2195,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['TransactionBase'];
+        'application/json': components['schemas']['TransactionUpdate'];
       };
     };
     responses: {
@@ -2791,6 +3122,298 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CategoryDistributionData'][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  listar_sobres_api_v1_funds__get: {
+    parameters: {
+      query?: {
+        /** @description Incluye los sobres archivados */
+        include_archived?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FundResponse'][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  crear_sobre_api_v1_funds__post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FundCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FundResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  obtener_sobre_api_v1_funds__fund_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        fund_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FundDetailResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  actualizar_sobre_api_v1_funds__fund_id__put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        fund_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FundUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FundResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  eliminar_sobre_api_v1_funds__fund_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        fund_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  aportar_api_v1_funds__fund_id__contributions_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        fund_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FundMovement'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FundEntryResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  retirar_api_v1_funds__fund_id__withdrawals_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        fund_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FundMovement'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FundEntryResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  archivar_sobre_api_v1_funds__fund_id__archive_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        fund_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FundResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  desarchivar_sobre_api_v1_funds__fund_id__unarchive_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        fund_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FundResponse'];
         };
       };
       /** @description Validation Error */
