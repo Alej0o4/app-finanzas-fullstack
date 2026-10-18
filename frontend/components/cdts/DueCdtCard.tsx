@@ -21,7 +21,9 @@ export default function DueCdtCard() {
     >
       <span className="flex items-center gap-3">
         <Landmark size={20} className="text-primary shrink-0" aria-hidden="true" />
-        <span className="text-text text-sm font-medium">{count} CDT por vencer</span>
+        <span className="text-text text-sm font-medium">
+          {count} {count === 1 ? 'CDT por vencer o vencido' : 'CDT por vencer o vencidos'}
+        </span>
       </span>
       <span className="text-primary inline-flex shrink-0 items-center gap-1 text-sm font-medium">
         Revisar

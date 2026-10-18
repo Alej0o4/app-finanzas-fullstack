@@ -63,7 +63,7 @@ export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
     if (principalError) next.principal = principalError;
     const rateNumber = Number(rate);
     if (!rate.trim() || !Number.isFinite(rateNumber) || rateNumber <= 0 || rateNumber > 100) {
-      next.rate = 'Indica la tasa E.A. entre 0 y 100 (ej. 11.5).';
+      next.rate = 'Indica una tasa E.A. mayor que 0 y hasta 100 (ej. 11.5).';
     }
     if (!openedOn) next.opened = 'Indica la fecha de apertura.';
     if (!maturityOn) next.maturity = 'Indica la fecha de vencimiento.';
