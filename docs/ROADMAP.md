@@ -29,7 +29,7 @@ sale de ella: **disponible real = saldo de las cuentas − lo comprometido**. Co
 |---|---|---|
 | 35 ✅ | **Sobres virtuales** (provisiones, fondo de emergencia, metas) + **disponible real** | **Completada 2026-10-17** (ver `docs/CHANGELOG.md`). Primitiva de la que cuelga todo; aditiva, sin tocar `Transaction`. |
 | 36 ✅ | **Gasto contra sobre** | **Completada 2026-10-17** (ver `docs/CHANGELOG.md`). Hizo reales las provisiones: un gasto se paga con un sobre y se muestra como "planeado" sin cambiar el gasto real. |
-| 37 | **Recurrentes + calendario de cargos anuales** | Era la Fase 35; base del pronóstico y fuente de sobres sugeridos. |
+| 37 ✅ | **Recurrentes + calendario de cargos anuales** | **Completada 2026-10-18** (ver `docs/CHANGELOG.md`). Una regla propone la transacción y el dueño la confirma o salta; calendario de 12 meses y sugerencias de cargos anuales. Base del pronóstico y de los sobres sugeridos. |
 | 38 | **CDT** (módulo independiente) | Bajo acoplamiento; cualquier hueco entre fases. **No** se mezcla con el fondo de emergencia, que solo cuenta lo líquido. |
 | 39 | **Págate primero** | Engancha la creación de ingresos; necesita sobres probados. |
 | 40 | **Cierre de mes con puntaje de cumplimiento** | Necesita jobs mensuales por zona del usuario y datos de todo lo anterior. |
@@ -227,6 +227,25 @@ recurrentes más bien alimentan sugerencias de sobres. Detalle, diseño base y d
 `docs/VISION_FINANZAS_RESPONSABLES.md` §2.1 y §2.2. Antes de implementar toca `/grilling` →
 `/to-spec` → `/analyze-spec`.
 
+## Completada — Fase 37: recurrentes y calendario de cargos anuales (2026-10-18)
+
+**Implementada** (spec `docs/specs/fase_37_spec.md`, historia en `docs/CHANGELOG.md`; 783 tests en Postgres 16).
+Tabla nueva `recurring_rules` (migración `a9c3d6e1f845`), servicio `app/services/recurring.py` y router
+`/api/v1/recurring`; página `/recurring` y tarjeta "N por confirmar" en el dashboard. Aditiva: no toca
+`Transaction`, `ledger.py` ni ninguna cifra existente.
+
+- **Propone, no registra solo:** cada ocurrencia vencida se confirma (monto editable) o se salta, en orden.
+- **Pendientes perezosas:** se calculan desde `next_date`, sin job nuevo.
+- **Frecuencias** semanal, mensual y anual; pausar y reanudar sin acumular atrasos.
+- **Calendario de 12 meses** con costo mensualizado (`monthly_commitment`, informativo) y **sugerencias**
+  de cargos anuales detectados en el historial.
+- **Revisión del dueño (2026-10-18):** D1–D20 se mantuvieron una por una. Único cambio: `PUT /accounts/{id}`
+  bloquea el cambio de moneda de una cuenta con reglas (`400`, como con sobres).
+- **Queda (ver `docs/TODO.md`):** sobres sugeridos desde el calendario, pagar la ocurrencia con un sobre,
+  push de pendientes, guardar sugerencias descartadas y el pronóstico de caja 30/60/90 días.
+
+Lo que sigue en el nuevo enfoque es la **Fase 38 (CDT)**.
+
 ## Fase 37 (antes 35): ingresos y gastos recurrentes
 
 **✅ Implementada (2026-10-18)** — spec `docs/specs/fase_37_spec.md`, historia en `docs/CHANGELOG.md`.
@@ -296,7 +315,7 @@ abajo siguen el orden de `docs/VISION_FINANZAS_RESPONSABLES.md` §4.
 |---|---|---|
 | ✅ Hecho | **Sobres virtuales + disponible real** (provisiones, fondo de emergencia, metas) | **Fase 35, completada 2026-10-17.** Absorbe la fila de *sinking funds* (validado por YNAB). Primitiva del enfoque de finanzas responsables: dinero comprometido pero no gastado. Aditiva, sin tocar `Transaction`. |
 | ✅ Hecho | **Gasto contra sobre** | **Fase 36, completada 2026-10-17.** `fund_id` en transacciones; `planned_expense` como desglose; sin tocar `ledger.py`. Deuda: presupuestos no distinguen lo planeado (D8), ver `docs/TODO.md`. |
-| ✅ Hecho | **Automatización de ingresos/gastos recurrentes** + calendario de cargos anuales | **Fase 37, completada 2026-10-18** (decisiones del agente a revisar). Propone y el dueño confirma; calendario 12 meses; sugerencias de cargos anuales. Queda: sobres sugeridos desde el calendario, pagar con sobre, push de pendientes (ver `docs/TODO.md`). El pronóstico de caja 30/60/90 días ya tiene su base. |
+| ✅ Hecho | **Automatización de ingresos/gastos recurrentes** + calendario de cargos anuales | **Fase 37, completada 2026-10-18** (decisiones D1–D20 revisadas y mantenidas por el dueño). Propone y el dueño confirma; calendario 12 meses; sugerencias de cargos anuales. Queda: sobres sugeridos desde el calendario, pagar con sobre, push de pendientes (ver `docs/TODO.md`). El pronóstico de caja 30/60/90 días ya tiene su base. |
 | Media | **CDT** (capital, tasa E.A., vencimiento, interés causado, aviso) | **Fase 38.** Módulo independiente; no se mezcla con el fondo de emergencia. Redención depende de resolver transferencias (QA-030). |
 | Media | **Págate primero** (reparto a sobres al registrar un ingreso) y tasa de ahorro | **Fase 39.** Necesita sobres probados. |
 | Media | **Cierre de mes con puntaje de cumplimiento** | **Fase 40.** Necesita jobs mensuales por zona del usuario. |
