@@ -561,6 +561,24 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 Decisiones tomadas por el agente sin `/grilling`; el dueño las revisa (ver `docs/specs/fase_35_spec.md`).
 
+**Ajustes post-uso acordados el 2026-10-17 (detalle en la spec, "Ajustes post-uso"):**
+
+- [ ] **A1 — Borrar sobres (revisa D4).** `DELETE /funds/{id}` borra el sobre y sus movimientos en
+  cualquier estado y con cualquier saldo (el dinero vuelve al disponible), con confirmación que dice
+  cuánto se libera. Archivar se mantiene. Un sobre de prueba o creado por error hoy no se puede quitar.
+  Para la Fase 36: definir qué hace borrar un sobre con gastos imputados.
+- [ ] **A2 — Mensaje de "cuota cumplida".** Tras cubrir la cuota del mes el sugerido desaparece sin
+  explicación. Agregar `next_month_contribution` y mostrar "cuota de {mes} cumplida ✓ — el mes que
+  viene ~{monto}".
+- [ ] **A3 — Desglose por cada moneda en "Disponible real".** Solo la principal muestra "saldo en
+  cuentas − apartado"; las demás solo el neto. Verificar con los números reales de USD del dueño; si no
+  cuadran es un bug de `disponibilidad()`.
+- [ ] **A4 — `annual_expense` exige `target_date`.** Hoy es idéntico a `goal`; la fecha obligatoria es la
+  diferencia real. `422` al crear sin fecha o al quitársela; sin CHECK ni migración (los sobres
+  existentes sin fecha siguen válidos).
+
+**Deuda abierta de la revisión:**
+
 - [ ] **"Gasto esencial" para el fondo de emergencia (D3).** La meta en meses usa el gasto promedio
   total de los últimos 3 meses completos porque Oikos no clasifica necesidad/deseo. Cuando exista esa
   clasificación (backlog), el promedio debe excluir lo no esencial.

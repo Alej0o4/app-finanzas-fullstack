@@ -188,7 +188,8 @@ emergencia por usuario.
 
 **D4. Archivar, borrar y "sin respaldo".** Archivar exige **saldo 0** (si no, 409 "Retira el saldo
 antes de archivar"): retirar es lo que libera el dinero al disponible; así nunca hay saldo
-"huérfano". Un archivado se puede desarchivar. No hay borrado de sobres (el libro es histórico).
+"huérfano". Un archivado se puede desarchivar. No hay borrado de sobres (el libro es histórico) — **revisada el 2026-10-17: pasa a haber
+borrado, ver A1 en "Ajustes post-uso".**
 No se puede borrar una cuenta con sobres activos (400). Aparte, el saldo de una cuenta puede bajar de
 lo apartado en sus sobres (gastaste de ella): `backing_shortfall` = `max(Σ sobres activos de esa
 cuenta − saldo de la cuenta, 0)`, que la UI muestra como alerta "sobre sin respaldo". Descartado:
@@ -319,3 +320,127 @@ refinamientos hallados en la verificación en navegador y en `/code-review`, tod
     Depende de: 7, 9, 10, 11
 13. [docs] cierre (CHANGELOG, ROADMAP, TODO, AGENTS, VISION), `graphify update .`, PR — X3.
     Depende de: 12
+
+## Ajustes post-uso (2026-10-17) — PENDIENTES DE IMPLEMENTAR
+
+> El dueño probó la Fase 35 en su stack real y revisó las decisiones D1–D10 con el agente. De ahí
+> salen cuatro cambios, **acordados el 2026-10-17 y todavía sin código**: este bloque es el registro
+> de lo que se va a hacer. Se implementan juntos, en una sola rama, en el flujo del `docs/WORKFLOW.md`
+> (correr `/analyze-spec 35` antes de empezar y de nuevo al cerrar). Convención de IDs: **A** = ajuste.
+> De D1–D10 solo cambian **D4** (A1) y la presentación de **D2** (A2); el resto no se tocó y sigue
+> pendiente de confirmación. D1 (cuentas de crédito) y D3 (gasto esencial) siguen abiertas en
+> `docs/TODO.md`.
+
+### Hallazgos que los originan
+
+1. **El monto sugerido desapareció tras un aporte grande.** Fondo de emergencia de $2.000.000 para el
+   2027-01-01, sugerido $666.667; tras aportar $1.000.000 el mensaje se esfumó. No es un bug: la cuota
+   de este mes (D2 refinada) ya estaba cubierta de sobra. Lo que falla es que **no se explica**, y el
+   dueño no sabía si el mes siguiente volvería a pedir $666.667. No lo hace: la cuota se recalcula con el
+   saldo real (en noviembre sería $500.000, en diciembre lo que falte).
+2. **No se puede borrar un sobre.** Un sobre creado por error o de prueba queda para siempre (solo se
+   archiva, y solo con saldo 0). El argumento original (libro histórico, enlace con transacciones en la
+   Fase 36) pesa poco en una herramienta de un solo dueño.
+3. **`annual_expense` y `goal` hacen exactamente lo mismo.** En el servicio solo `emergency` tiene
+   lógica propia; la diferencia entre los otros dos es la etiqueta.
+4. **La tarjeta "Disponible real" solo desglosa la moneda principal.** Las demás monedas muestran el
+   neto (`free_to_spend`) sin "saldo en cuentas − apartado", así que los sobres en USD parecen no
+   contar. Es presentación, no cálculo (`disponibilidad()` ya devuelve las tres listas por moneda).
+
+### A1. Borrar sobres (revisa D4)
+
+- **`DELETE /api/v1/funds/{id}` → `204`.** Borra el sobre **y sus movimientos**, en cualquier estado
+  (`active` o `archived`) y con cualquier saldo. Toma `SELECT … FOR UPDATE` del sobre como primera
+  consulta (patrón de aportar/retirar); sobre ajeno o inexistente ⇒ `404` con el mismo mensaje de
+  siempre. Borrar entradas primero y luego el sobre, en la misma transacción (no hay `ON DELETE
+  CASCADE`; **sin migración**).
+- **Qué pasa con el dinero:** el saldo del sobre vuelve al disponible real (deja de contar en
+  `committed`); `Account.balance` no cambia (nunca se había tocado).
+- **Archivar se mantiene** (sigue exigiendo saldo 0, D4 intacta en ese punto) para conservar el
+  historial de sobres ya cumplidos, p. ej. el seguro ya pagado. Borrar es para lo que no vale la pena
+  conservar.
+- **Frontend:** acción "Eliminar" en la tarjeta y el detalle, con `ConfirmDialog` que dice cuánto se
+  libera ("Se liberan $X al disponible y se borra el historial del sobre"); tras borrar, invalida
+  `funds` y `dashboardSummary`.
+- **Desbloquea** `DELETE /accounts/{id}` para cuentas con sobres: se borran los sobres y después la
+  cuenta (el guard de sobres activos, 400, no cambia).
+- **Para la Fase 36 (`/grilling` previo):** cuando existan movimientos enlazados a transacciones
+  (`transaction_id`), definir qué hace borrar un sobre con gastos imputados. El enlace va de la entrada a
+  la transacción, así que borrar nunca destruye transacciones; lo abierto es cómo cuenta eso en el flujo.
+- **Tests:** borrar con saldo (baja `committed`, sube `free_to_spend`), sobre archivado, ajeno ⇒ `404`,
+  movimientos borrados, `Account.balance` intacto, borrar cuenta tras borrar su sobre, concurrencia
+  (borrar vs. aportar en paralelo no deja entradas huérfanas).
+
+### A2. Mensaje de "cuota cumplida" con la próxima cuota (refina la presentación de D2)
+
+- **Backend:** `FundResponse` suma `next_month_contribution` (`Decimal | None`) = `remaining /
+  (months_remaining − 1)` redondeado hacia arriba al centavo, con el saldo actual. `null` si
+  `months_remaining ≤ 1`, no hay fecha o no queda nada por aportar. `required_contribution` **no
+  cambia** (sigue siendo la cuota de este mes, `null` al cumplirla). Función pura nueva en
+  `services/funds.py` con tests sin DB (cuota cumplida, parcial, último mes, sin fecha, cruce de año).
+- **Frontend:** cuando `remaining > 0` y `required_contribution == null` y `next_month_contribution !=
+  null`, la tarjeta y el detalle muestran "Cuota de {mes} cumplida ✓ — el mes que viene te sugerimos
+  ~{monto}" (nombre del mes con `Intl` en la zona del usuario, nunca hardcodeado). Con aporte parcial
+  nada cambia: sigue mostrando lo que falta de este mes.
+- **Contratos:** actualizar `backend/docs/API_REFERENCE.md` **y** `frontend/docs/API_CONTRACT.md`
+  (campo nuevo) y `types/api.ts`.
+
+### A3. Desglose completo por cada moneda en "Disponible real"
+
+- **Solo frontend** (`AvailableCard.tsx`): la moneda principal sigue como cifra grande; **cada**
+  moneda adicional pasa de una sola fila neta a un bloque con "Saldo en cuentas", "− Apartado en
+  sobres" y el disponible. Todo viene de `accounts_total`/`committed`/`free_to_spend`; el frontend no
+  resta nada (regla del repo).
+- **Verificación pendiente con datos reales del dueño:** el USD mostraba US$ 101,00 y no se pudo
+  comprobar que sea el neto correcto. Al implementar A3, el dueño contrasta saldo en cuentas USD y lo
+  apartado en sobres USD; si no cuadra, es un bug de `disponibilidad()` y se abre aparte.
+- Mantener el aviso de "en otra moneda estás usando plata apartada" y verificar 390 px y claro/oscuro.
+
+### A4. `annual_expense` exige `target_date` (diferencia real frente a `goal`)
+
+- **Regla:** un gasto anual sin vencimiento no es un gasto anual. `POST /funds/` con
+  `kind = annual_expense` y sin `target_date` ⇒ `422`; `PUT` con `target_date: null` explícito en un
+  `annual_expense` ⇒ `422`. `goal` y `emergency` siguen con la fecha opcional.
+- **Sin CHECK ni migración:** se valida en el schema/servicio. Los `annual_expense` existentes sin fecha
+  siguen siendo válidos y legibles; solo se les exige fecha si se intenta quitársela o al editarla
+  desde la UI. (Descartado: CHECK en DB, que obligaría a una migración de datos sobre filas reales.)
+- **Frontend:** `FundFormModal` marca la fecha como obligatoria al elegir "Gasto anual" y muestra el
+  error de campo del `422`.
+- **Descartado (opción a):** unificar `annual_expense` y `goal` en un solo tipo. Se mantienen los dos
+  para conservar el vocabulario de la visión; la diferencia real hoy es la fecha obligatoria, y la
+  Fase 37 (calendario de cargos anuales) y la 36 (gasto contra sobre) le darán más a `annual_expense`.
+- **Tests:** crear sin fecha ⇒ `422`, con fecha ⇒ ok, `PUT` con `null` ⇒ `422`, `PUT` de solo el nombre
+  sobre un sobre legado sin fecha ⇒ ok, `goal` sin fecha ⇒ ok.
+
+### Docs a actualizar al implementar
+
+`backend/docs/API_REFERENCE.md` y `frontend/docs/API_CONTRACT.md` (`DELETE /funds/{id}`,
+`next_month_contribution`, el `422` de A4), `backend/docs/BUSINESS_RULES.md` (sección "Sobres": borrado,
+archivar, fecha obligatoria del gasto anual), `frontend/docs/STATE_AND_FETCHING.md` (invalidaciones del
+borrado), `docs/CHANGELOG.md`, y mover los ítems de `docs/TODO.md` y `docs/ROADMAP.md` a hechos.
+
+### Orden de ejecución
+
+1. [backend] A4: validación de `annual_expense` + tests.
+   Depende de: —
+2. [backend] [P] A2: `next_month_contribution` (función pura con TDD + campo en `FundResponse`).
+   Depende de: —
+3. [backend] [P] A1: `DELETE /funds/{id}` + servicio con lock + tests (incluye concurrencia).
+   Depende de: —
+4. [frontend] tipos y contrato (`types/api.ts`, hook de borrado, invalidaciones).
+   Depende de: 2, 3
+5. [frontend] [P] A1: "Eliminar" con `ConfirmDialog` en tarjeta y detalle.
+   Depende de: 4
+6. [frontend] [P] A2: mensaje de cuota cumplida en tarjeta y detalle.
+   Depende de: 4
+7. [frontend] [P] A4: fecha obligatoria en `FundFormModal`.
+   Depende de: 1
+8. [frontend] [P] A3: desglose por moneda en `AvailableCard`.
+   Depende de: —
+9. [docs] contratos, `BUSINESS_RULES`, `STATE_AND_FETCHING`.
+   Depende de: 1, 2, 3
+10. [verif] `/run-tests`, navegador (borrar un sobre con saldo, cuota cumplida, gasto anual sin fecha,
+    USD con datos reales del dueño, 390 px), `/code-review`, `/analyze-spec 35 cierre`.
+    Depende de: 5, 6, 7, 8, 9
+11. [docs] cierre (CHANGELOG, ROADMAP, TODO, VISION, `graphify update .`), PR.
+    Depende de: 10

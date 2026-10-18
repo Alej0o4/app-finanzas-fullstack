@@ -204,7 +204,20 @@ migración de datos. **Pendientes del dueño antes de desplegar:** respaldo, rep
 
 ## Completada — Fase 35: sobres virtuales + disponible real (2026-10-17)
 
-**Implementada** (spec `docs/specs/fase_35_spec.md`, historia en `docs/CHANGELOG.md`). Quedan sus decisiones de diseño tomadas por el agente a revisar por el dueño (spec, "Decisiones tomadas por el agente"). Lo que sigue en el nuevo enfoque es la **Fase 36 (gasto contra sobre)**, que exige `/grilling` previo. Contexto original de la decisión:
+**Implementada** (spec `docs/specs/fase_35_spec.md`, historia en `docs/CHANGELOG.md`). Quedan sus decisiones de diseño tomadas por el agente a revisar por el dueño (spec, "Decisiones tomadas por el agente"). Lo que sigue en el nuevo enfoque es la **Fase 36 (gasto contra sobre)**, que exige `/grilling` previo.
+
+**Ajustes post-uso acordados el 2026-10-17 — ⏳ pendientes de implementar** (detalle, orden de
+ejecución y tests en `docs/specs/fase_35_spec.md`, "Ajustes post-uso"). Salen de la primera prueba del
+dueño y de la revisión de D1–D10; van juntos en una rama antes de la Fase 36:
+
+| # | Cambio | Qué toca |
+|---|---|---|
+| A1 | **Borrar sobres** (`DELETE /funds/{id}`, con sus movimientos, cualquier estado/saldo; archivar se mantiene). Revisa D4. | backend + frontend |
+| A2 | **Mensaje de "cuota cumplida"** con la próxima cuota estimada (`next_month_contribution`) en vez de que el sugerido desaparezca sin explicación. | backend + frontend |
+| A3 | **Desglose completo por cada moneda** en la tarjeta "Disponible real" (hoy solo la principal). | solo frontend |
+| A4 | **`annual_expense` exige `target_date`** (única diferencia real frente a `goal`; se descartó unificar los dos tipos). Sin migración. | backend + frontend |
+
+Contexto original de la decisión:
 
 **Cambia (2026-10-17):** con el nuevo enfoque de finanzas responsables (ver arriba), la Fase 35 ya
 no es recurrentes sino **sobres virtuales + disponible real**. Los recurrentes pasan a la

@@ -94,7 +94,10 @@ viajes), **fondo de emergencia** y **meta** de mediano plazo (el computador en 1
 `UNIQUE (fund_id, period)` y sin idempotencia por header; moneda del sobre = la de su cuenta; no se borra
 una cuenta con sobres activos y la alerta "sin respaldo" es `backing_shortfall`; la meta del fondo de
 emergencia usa el gasto promedio total de 3 meses (el "gasto esencial" quedó como deuda en
-`docs/TODO.md`). El texto de abajo es el original.
+`docs/TODO.md`). **Ajustado tras la primera prueba (2026-10-17, pendiente de implementar):** los sobres
+se podrán borrar además de archivar; el gasto anual exigirá fecha (es lo que lo distingue de la meta);
+el sugerido de aporte explicará cuándo la cuota del mes ya está cubierta; y "Disponible real" desglosará
+cada moneda (spec, "Ajustes post-uso"). El texto de abajo es el original.
 
 **Pendiente de `/grilling` (original).**
 - ¿Una restricción `UNIQUE (fund_id, period)` para aportes? **Se recomienda no ponerla**: impide
