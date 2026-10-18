@@ -752,6 +752,59 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/cdts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Listar Cdts */
+    get: operations['listar_cdts_api_v1_cdts__get'];
+    put?: never;
+    /** Crear Cdt */
+    post: operations['crear_cdt_api_v1_cdts__post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/cdts/{cdt_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** Actualizar Cdt */
+    put: operations['actualizar_cdt_api_v1_cdts__cdt_id__put'];
+    post?: never;
+    /** Eliminar Cdt */
+    delete: operations['eliminar_cdt_api_v1_cdts__cdt_id__delete'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/cdts/{cdt_id}/redeem': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Redimir Cdt */
+    post: operations['redimir_cdt_api_v1_cdts__cdt_id__redeem_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/users/me/preferences': {
     parameters: {
       query?: never;
@@ -1415,6 +1468,132 @@ export interface components {
      * @enum {string}
      */
     CategoryType: 'income' | 'expense';
+    /** CdtCreate */
+    CdtCreate: {
+      /** Name */
+      name: string;
+      /**
+       * Currency
+       * @default COP
+       */
+      currency: string;
+      /** Principal */
+      principal: number | string;
+      /** Rate Ea */
+      rate_ea: number | string;
+      /**
+       * Opened On
+       * Format: date
+       */
+      opened_on: string;
+      /**
+       * Maturity On
+       * Format: date
+       */
+      maturity_on: string;
+    };
+    /** CdtListResponse */
+    CdtListResponse: {
+      /** Items */
+      items: components['schemas']['CdtResponse'][];
+      /** Totals */
+      totals: components['schemas']['CdtTotals'][];
+    };
+    /** CdtRedeem */
+    CdtRedeem: {
+      /** Redeemed On */
+      redeemed_on?: string | null;
+      /** Final Amount */
+      final_amount?: number | string | null;
+    };
+    /** CdtResponse */
+    CdtResponse: {
+      /** Id */
+      id: number;
+      /** Name */
+      name: string;
+      /** Currency */
+      currency: string;
+      /** Principal */
+      principal: string;
+      /** Rate Ea */
+      rate_ea: string;
+      /**
+       * Opened On
+       * Format: date
+       */
+      opened_on: string;
+      /**
+       * Maturity On
+       * Format: date
+       */
+      maturity_on: string;
+      status: components['schemas']['CdtStatus'];
+      /** Redeemed On */
+      redeemed_on?: string | null;
+      /** Final Amount */
+      final_amount?: string | null;
+      /** Realized Interest */
+      realized_interest?: string | null;
+      /** Term Days */
+      term_days: number;
+      /** Elapsed Days */
+      elapsed_days: number;
+      /** Accrued Interest */
+      accrued_interest: string;
+      /** Current Value */
+      current_value: string;
+      /** Maturity Interest */
+      maturity_interest: string;
+      /** Maturity Value */
+      maturity_value: string;
+      /** Days To Maturity */
+      days_to_maturity?: number | null;
+      /**
+       * Alert
+       * @enum {string}
+       */
+      alert: 'ok' | 'due_soon' | 'matured';
+      /** Created At */
+      created_at?: string | null;
+    };
+    /**
+     * CdtStatus
+     * @enum {string}
+     */
+    CdtStatus: 'active' | 'redeemed';
+    /** CdtTotals */
+    CdtTotals: {
+      /** Currency */
+      currency: string;
+      /** Principal */
+      principal: string;
+      /** Accrued Interest */
+      accrued_interest: string;
+      /** Current Value */
+      current_value: string;
+      /** Maturity Value */
+      maturity_value: string;
+    };
+    /**
+     * CdtUpdate
+     * @description Actualización parcial de un CDT vigente (`model_fields_set`). Campos desconocidos y `null`
+     *     explícito son `422`: nada se ignora en silencio.
+     */
+    CdtUpdate: {
+      /** Name */
+      name?: string | null;
+      /** Currency */
+      currency?: string | null;
+      /** Principal */
+      principal?: number | string | null;
+      /** Rate Ea */
+      rate_ea?: number | string | null;
+      /** Opened On */
+      opened_on?: string | null;
+      /** Maturity On */
+      maturity_on?: string | null;
+    };
     /** DashboardSummary */
     DashboardSummary: {
       /** Balances */
@@ -1441,6 +1620,10 @@ export interface components {
       committed: components['schemas']['BalanceByCurrency'][];
       /** Free To Spend */
       free_to_spend: components['schemas']['BalanceByCurrency'][];
+      /** Cdt Total */
+      cdt_total: components['schemas']['BalanceByCurrency'][];
+      /** Net Worth */
+      net_worth: components['schemas']['BalanceByCurrency'][];
       /**
        * Expense Currencies
        * @default []
@@ -3993,6 +4176,169 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RecurringResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  listar_cdts_api_v1_cdts__get: {
+    parameters: {
+      query?: {
+        status?: components['schemas']['CdtStatus'] | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CdtListResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  crear_cdt_api_v1_cdts__post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CdtCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CdtResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  actualizar_cdt_api_v1_cdts__cdt_id__put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        cdt_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CdtUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CdtResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  eliminar_cdt_api_v1_cdts__cdt_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        cdt_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  redimir_cdt_api_v1_cdts__cdt_id__redeem_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        cdt_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CdtRedeem'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CdtResponse'];
         };
       };
       /** @description Validation Error */

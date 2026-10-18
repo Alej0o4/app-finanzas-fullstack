@@ -305,6 +305,17 @@ Página `app/(dashboard)/recurring/page.tsx` y subcomponentes en `components/rec
 - `PendingRecurringCard` — aviso del dashboard "Tienes N recurrentes por confirmar" (solo si N > 0).
 - `recurringPresentation.tsx` — etiquetas de frecuencia, `formatDay`/`formatMonthLabel` y `Chip`.
 
+### CDT (Fase 38)
+
+Página `app/(dashboard)/cdts/page.tsx` y subcomponentes en `components/cdts/`:
+
+- `CdtCard` — tarjeta de CDT vigente (valor hoy, barra `elapsed_days / term_days`, rendimiento a hoy, valor al vencimiento, insignia de alerta; Redimir / Editar / Eliminar con confirmación vía `useConfirmStore`) o redimido (rendimiento realizado, fecha).
+- `CdtFormModal` — crear/editar sobre `ModalShell`; avisa que el CDT no mueve saldos de cuentas. Fechas como `YYYY-MM-DD`.
+- `CdtRedeemModal` — fecha de redención y monto recibido opcional (vacío = lo calcula el backend).
+- `DueCdtCard` — aviso del dashboard "N CDT por vencer" (solo si hay `due_soon`/`matured`).
+- `NetWorthLine` — línea "Patrimonio total" del dashboard (`net_worth` del backend).
+- `cdtPresentation.tsx` — `formatRate`, `daysToMaturityLabel` y `CdtAlertBadge`. Reusa `Chip`, `formatDay` y `money` de `recurringPresentation.tsx`.
+
 ### Cuentas y categorías
 
 - Usan tarjetas con lista y acciones flotantes.

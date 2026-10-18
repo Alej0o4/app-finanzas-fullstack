@@ -15,6 +15,7 @@ import {
   PieChart,
   Mail,
   Repeat,
+  Landmark,
   Tags,
   Settings,
   ChevronLeft,
@@ -67,6 +68,7 @@ export default function Sidebar() {
     { name: 'Presupuestos', href: '/budgets', icon: PieChart },
     { name: 'Sobres', href: '/funds', icon: Mail },
     { name: 'Recurrentes', href: '/recurring', icon: Repeat },
+    { name: 'CDT', href: '/cdts', icon: Landmark },
   ];
 
   const secondaryNavItems = [

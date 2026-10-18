@@ -1,11 +1,13 @@
 # Progreso Fase 38 (CDT)
-- [x] 1 Ubicar (38 libre, Fase 37 mergeada en main; rama worktree-fase-38 desde main 4f6887a)
-- [x] 2 Grilling sin dueño (D1–D16 en la spec)
-- [x] 3 to-spec -> docs/specs/fase_38_spec.md
-- [ ] 4 analyze-spec
-- [ ] 5 implementar backend / frontend / tests
-- [ ] 6 run-tests + Playwright
+- [x] 1 Ubicar
+- [x] 2 Grilling sin dueño (D1–D16)
+- [x] 3 to-spec
+- [x] 4 analyze-spec (solo MEDIO, corregidos)
+- [x] 5a backend (commit da81083, 874 tests verdes según el agente)
+- [x] 5b docs de contrato backend/frontend (API_REFERENCE, API_CONTRACT, BUSINESS_RULES, ARCHITECTURE)
+- [ ] 5c frontend (agente en curso; pasos 7–10)
+- [ ] 6 run-tests completo + Playwright 390 px / desktop (qa-engineer)
 - [ ] 7 code-review
 - [ ] 8 analyze-spec cierre
-- [ ] 9 docs de cierre + graphify update
-- [ ] 10 commits, push, PR borrador
+- [ ] 9 docs de cierre (CHANGELOG, ROADMAP, TODO, AGENTS, VISION) + graphify update
+- [ ] 10 push + PR borrador
