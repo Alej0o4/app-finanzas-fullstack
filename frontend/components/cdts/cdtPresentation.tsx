@@ -21,7 +21,13 @@ export function daysToMaturityLabel(days: number | null | undefined): string {
 /** Insignia de aviso; nada si el CDT está redimido o en orden. */
 export function CdtAlertBadge({ cdt }: { cdt: Cdt }) {
   if (cdt.status !== 'active') return null;
-  if (cdt.alert === 'matured') return <Chip tone="danger">Vencido: redímelo</Chip>;
+  if (cdt.alert === 'matured') {
+    return (
+      <Chip tone="danger">
+        {cdt.days_to_maturity === 0 ? 'Vence hoy: redímelo' : 'Vencido: redímelo'}
+      </Chip>
+    );
+  }
   if (cdt.alert === 'due_soon') return <Chip tone="primary">Por vencer</Chip>;
   return null;
 }

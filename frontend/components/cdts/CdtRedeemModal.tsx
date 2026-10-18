@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
-import { money } from '@/components/recurring/recurringPresentation';
 import { useRedeemCdt } from '@/lib/hooks/useCdts';
 import { useTimezone } from '@/lib/hooks/useTimezone';
 import { todayInZone } from '@/lib/dates';
@@ -83,7 +82,7 @@ export default function CdtRedeemModal({ cdt, onClose }: CdtRedeemModalProps) {
             value={finalAmount}
             onChange={(e) => setFinalAmount(e.target.value)}
             error={errors.amount}
-            placeholder={money(cdt.current_value, cdt.currency)}
+            placeholder="Se calcula a la fecha de redención"
             className="bg-background"
           />
           <p className="text-text-muted mt-1 text-xs">

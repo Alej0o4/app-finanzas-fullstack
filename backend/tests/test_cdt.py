@@ -165,6 +165,20 @@ class TestEditar:
         resp = client.put(f"{URL}{cdt['id']}", json={"maturity_on": "2025-01-01"}, headers=auth_headers)
         assert resp.status_code == 422
 
+    def test_renombrar_no_revalida_las_cotas_de_fechas(self, client, auth_headers, crear_cdt, db_session):
+        """Una fila cuyas fechas ya no cumplen la cota relativa a hoy se puede renombrar (code-review)."""
+        cdt = crear_cdt()
+        fila = db_session.get(models.Cdt, cdt["id"])
+        fila.opened_on = date(2010, 1, 1)
+        fila.maturity_on = date(2012, 1, 1)
+        db_session.commit()
+        resp = client.put(f"{URL}{cdt['id']}", json={"name": "Renombrado"}, headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["name"] == "Renombrado"
+        # tocar las fechas sí revalida las cotas
+        resp = client.put(f"{URL}{cdt['id']}", json={"maturity_on": "2012-06-01"}, headers=auth_headers)
+        assert resp.status_code == 422
+
     @pytest.mark.parametrize("body", [{"status": "redeemed"}, {"id": 5}, {"name": None}, {"rate_ea": 0}])
     def test_campos_desconocidos_nulos_o_invalidos_son_422(self, client, auth_headers, crear_cdt, body):
         cdt = crear_cdt()

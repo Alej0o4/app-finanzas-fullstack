@@ -195,7 +195,10 @@ def actualizar(db: Session, user: models.User, cdt_id: int, datos, ahora: dateti
     for campo in ("name", "currency", "principal", "rate_ea", "opened_on", "maturity_on"):
         if campo in enviados:
             setattr(cdt, campo, getattr(datos, campo))
-    _validar_fechas(cdt.opened_on, cdt.maturity_on, hoy)
+    # Las cotas relativas a hoy solo se revisan si la edición toca fechas: renombrar un CDT viejo
+    # no debe fallar por una cota que ya no cumple (hallazgo del code-review).
+    if "opened_on" in enviados or "maturity_on" in enviados:
+        _validar_fechas(cdt.opened_on, cdt.maturity_on, hoy)
     db.flush()
     db.refresh(cdt)
     return _item(cdt, hoy)
