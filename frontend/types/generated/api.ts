@@ -631,6 +631,127 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/recurring/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Listar Reglas */
+    get: operations['listar_reglas_api_v1_recurring__get'];
+    put?: never;
+    /** Crear Regla */
+    post: operations['crear_regla_api_v1_recurring__post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/recurring/pending': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Listar Pendientes */
+    get: operations['listar_pendientes_api_v1_recurring_pending_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/recurring/calendar': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Calendario */
+    get: operations['calendario_api_v1_recurring_calendar_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/recurring/suggestions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Sugerencias */
+    get: operations['sugerencias_api_v1_recurring_suggestions_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/recurring/{rule_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** Actualizar Regla */
+    put: operations['actualizar_regla_api_v1_recurring__rule_id__put'];
+    post?: never;
+    /** Eliminar Regla */
+    delete: operations['eliminar_regla_api_v1_recurring__rule_id__delete'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/recurring/{rule_id}/confirm': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Confirmar Ocurrencia */
+    post: operations['confirmar_ocurrencia_api_v1_recurring__rule_id__confirm_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/recurring/{rule_id}/skip': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Saltar Ocurrencia */
+    post: operations['saltar_ocurrencia_api_v1_recurring__rule_id__skip_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/users/me/preferences': {
     parameters: {
       query?: never;
@@ -1172,6 +1293,54 @@ export interface components {
       /** User Id */
       user_id: number;
     };
+    /** CalendarItem */
+    CalendarItem: {
+      /** Rule Id */
+      rule_id: number;
+      /** Name */
+      name: string;
+      type: components['schemas']['RecurringType'];
+      /** Amount */
+      amount: string;
+      /** Currency */
+      currency: string;
+      /**
+       * Date
+       * Format: date
+       */
+      date: string;
+      /** Is Annual */
+      is_annual: boolean;
+      /** Is Overdue */
+      is_overdue: boolean;
+    };
+    /** CalendarMonth */
+    CalendarMonth: {
+      /** Month */
+      month: string;
+      /** Items */
+      items: components['schemas']['CalendarItem'][];
+      /** Totals */
+      totals: components['schemas']['CalendarTotals'][];
+    };
+    /** CalendarResponse */
+    CalendarResponse: {
+      /** Months */
+      months: components['schemas']['CalendarMonth'][];
+      /** Monthly Commitment */
+      monthly_commitment: components['schemas']['MonthlyCommitment'][];
+    };
+    /** CalendarTotals */
+    CalendarTotals: {
+      /** Currency */
+      currency: string;
+      /** Income */
+      income: string;
+      /** Expense */
+      expense: string;
+      /** Net */
+      net: string;
+    };
     /** CashflowData */
     CashflowData: {
       /** Date Label */
@@ -1506,6 +1675,13 @@ export interface components {
       /** Refresh Token */
       refresh_token: string;
     };
+    /** MonthlyCommitment */
+    MonthlyCommitment: {
+      /** Currency */
+      currency: string;
+      /** Amount */
+      amount: string;
+    };
     /** NotificationResponse */
     NotificationResponse: {
       /** Id */
@@ -1570,6 +1746,30 @@ export interface components {
      * @enum {string}
      */
     PaymentMethod: 'cash' | 'card' | 'transfer';
+    /** PendingOccurrenceResponse */
+    PendingOccurrenceResponse: {
+      /** Rule Id */
+      rule_id: number;
+      /** Name */
+      name: string;
+      type: components['schemas']['RecurringType'];
+      /** Amount */
+      amount: string;
+      /** Currency */
+      currency: string;
+      /** Account Id */
+      account_id: number;
+      /** Category Id */
+      category_id: number;
+      frequency: components['schemas']['RecurringFrequency'];
+      /**
+       * Occurrence Date
+       * Format: date
+       */
+      occurrence_date: string;
+      /** Is Next */
+      is_next: boolean;
+    };
     /** PreferencesUpdate */
     PreferencesUpdate: {
       /** Preferred Currency */
@@ -1621,6 +1821,113 @@ export interface components {
        */
       created_at: string;
     };
+    /** RecurringConfirm */
+    RecurringConfirm: {
+      /**
+       * Occurrence Date
+       * Format: date
+       */
+      occurrence_date: string;
+      /** Amount */
+      amount?: number | string | null;
+    };
+    /** RecurringCreate */
+    RecurringCreate: {
+      /** Name */
+      name: string;
+      type: components['schemas']['RecurringType'];
+      /** Amount */
+      amount: number | string;
+      /** Account Id */
+      account_id: number;
+      /** Category Id */
+      category_id: number;
+      frequency: components['schemas']['RecurringFrequency'];
+      /**
+       * Start Date
+       * Format: date
+       */
+      start_date: string;
+    };
+    /**
+     * RecurringFrequency
+     * @enum {string}
+     */
+    RecurringFrequency: 'weekly' | 'monthly' | 'yearly';
+    /** RecurringResponse */
+    RecurringResponse: {
+      /** Id */
+      id: number;
+      /** Name */
+      name: string;
+      type: components['schemas']['RecurringType'];
+      /** Amount */
+      amount: string;
+      /** Currency */
+      currency?: string | null;
+      /** Account Id */
+      account_id: number;
+      /** Category Id */
+      category_id: number;
+      frequency: components['schemas']['RecurringFrequency'];
+      /**
+       * Start Date
+       * Format: date
+       */
+      start_date: string;
+      /**
+       * Next Date
+       * Format: date
+       */
+      next_date: string;
+      status: components['schemas']['RecurringStatus'];
+      /** Monthly Equivalent */
+      monthly_equivalent: string;
+      /** Is Annual */
+      is_annual: boolean;
+      /** Is Due */
+      is_due: boolean;
+      /** Account Missing */
+      account_missing: boolean;
+      /** Category Missing */
+      category_missing: boolean;
+      /** Created At */
+      created_at?: string | null;
+    };
+    /** RecurringSkip */
+    RecurringSkip: {
+      /**
+       * Occurrence Date
+       * Format: date
+       */
+      occurrence_date: string;
+    };
+    /**
+     * RecurringStatus
+     * @enum {string}
+     */
+    RecurringStatus: 'active' | 'paused';
+    /**
+     * RecurringType
+     * @enum {string}
+     */
+    RecurringType: 'income' | 'expense';
+    /**
+     * RecurringUpdate
+     * @description Actualización parcial (`model_fields_set`). `frequency`, `start_date` y `type` no se editan
+     *     (D6): enviarlos es un `422` (`extra="forbid"`), no se ignoran en silencio.
+     */
+    RecurringUpdate: {
+      /** Name */
+      name?: string | null;
+      /** Amount */
+      amount?: number | string | null;
+      /** Account Id */
+      account_id?: number | null;
+      /** Category Id */
+      category_id?: number | null;
+      status?: components['schemas']['RecurringStatus'] | null;
+    };
     /** RefreshRequest */
     RefreshRequest: {
       /** Refresh Token */
@@ -1633,6 +1940,31 @@ export interface components {
        * Format: email
        */
       email: string;
+    };
+    /** SuggestionResponse */
+    SuggestionResponse: {
+      /** Name */
+      name: string;
+      /** Account Id */
+      account_id: number;
+      /** Category Id */
+      category_id: number;
+      /** Currency */
+      currency: string;
+      /** Amount */
+      amount: string;
+      /**
+       * Last Date
+       * Format: date
+       */
+      last_date: string;
+      /**
+       * Suggested Start Date
+       * Format: date
+       */
+      suggested_start_date: string;
+      /** Occurrences */
+      occurrences: number;
     };
     /** TokenResponse */
     TokenResponse: {
@@ -3414,6 +3746,253 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FundResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  listar_reglas_api_v1_recurring__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RecurringResponse'][];
+        };
+      };
+    };
+  };
+  crear_regla_api_v1_recurring__post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecurringCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RecurringResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  listar_pendientes_api_v1_recurring_pending_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingOccurrenceResponse'][];
+        };
+      };
+    };
+  };
+  calendario_api_v1_recurring_calendar_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CalendarResponse'];
+        };
+      };
+    };
+  };
+  sugerencias_api_v1_recurring_suggestions_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SuggestionResponse'][];
+        };
+      };
+    };
+  };
+  actualizar_regla_api_v1_recurring__rule_id__put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        rule_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecurringUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RecurringResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  eliminar_regla_api_v1_recurring__rule_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        rule_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  confirmar_ocurrencia_api_v1_recurring__rule_id__confirm_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        rule_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecurringConfirm'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TransactionResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  saltar_ocurrencia_api_v1_recurring__rule_id__skip_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        rule_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecurringSkip'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RecurringResponse'];
         };
       };
       /** @description Validation Error */

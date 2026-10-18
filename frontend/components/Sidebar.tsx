@@ -14,6 +14,7 @@ import {
   ArrowLeftRight,
   PieChart,
   Mail,
+  Repeat,
   Tags,
   Settings,
   ChevronLeft,
@@ -65,6 +66,7 @@ export default function Sidebar() {
     { name: 'Transacciones', href: '/transactions', icon: ArrowLeftRight },
     { name: 'Presupuestos', href: '/budgets', icon: PieChart },
     { name: 'Sobres', href: '/funds', icon: Mail },
+    { name: 'Recurrentes', href: '/recurring', icon: Repeat },
   ];
 
   const secondaryNavItems = [

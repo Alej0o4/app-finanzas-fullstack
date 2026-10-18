@@ -6,7 +6,7 @@ La aplicación sigue una arquitectura simple por capas:
 
 - `app/main.py` ensambla la aplicación FastAPI, CORS y routers.
 - `app/core/` concentra configuración, base de datos, seguridad y rate limiting (`rate_limit.py`).
-- `app/models/` define el modelo relacional con SQLAlchemy (15 modelos desde la Fase 35; ver `models.py` — User, Account, Category, Transaction, Budget, Fund, FundEntry, tokens y demás).
+- `app/models/` define el modelo relacional con SQLAlchemy (16 modelos desde la Fase 37; ver `models.py` — User, Account, Category, Transaction, Budget, Fund, FundEntry, tokens y demás).
 - `app/schemas/` define contratos de entrada y salida con Pydantic.
 - `app/api/` implementa los endpoints por dominio funcional.
 
@@ -67,3 +67,9 @@ En cada arranque, `main.py` ejecuta:
 - No hay logging estructurado ni observabilidad avanzada.
 - La sesión de navegador usa cookies `httpOnly` + CSRF double-submit desde Fase 26 (antes: JWT en `localStorage`, vulnerable a XSS). Los clientes no-browser (API keys `oikos_pat_...`) siguen autenticando por header `Authorization: Bearer` sin cookies.
 - Las rutas agregadas del dashboard incluyen resumen, progreso de presupuestos, serie temporal de flujo de caja y distribución por categoría.
+
+## Recurrentes y calendario (Fase 37)
+
+- `RecurringRule` (migración `a9c3d6e1f845`, tabla nueva; 16.º modelo). No toca `Transaction`, `Account.balance` ni `services/ledger.py`: confirmar una ocurrencia crea una transacción normal con `ledger.registrar_impacto`.
+- `app/services/recurring.py`: funciones **puras** (`siguiente_ocurrencia`, `primera_desde`, `ocurrencias_en`, `equivalente_mensual`, `es_candidato_anual`; fechas ya resueltas en la zona del usuario, la aritmética de meses vive en `core/periods.py`) y casos de uso con DB (`crear`, `actualizar`, `eliminar`, `pendientes`, `confirmar`, `saltar`, `calendario`, `sugerencias`). `api/recurring.py` es un router delgado dueño del `commit`.
+- Las ocurrencias pendientes son **perezosas**: `next_date <= hoy` (no hay job ni tabla de ocurrencias). `confirmar`/`saltar` bloquean la regla (`SELECT … FOR UPDATE`) y exigen `occurrence_date == next_date`; verificado con `tests/test_recurring_concurrency.py` (`@pytest.mark.concurrencia`).

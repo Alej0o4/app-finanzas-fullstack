@@ -158,7 +158,9 @@ correspondiente: el sobre baja y la transacción se enlaza (`fund_entries.transa
 - Qué pasa al editar o borrar la transacción enlazada (¿devuelve el monto al sobre?).
 - Qué pasa si el gasto supera el saldo del sobre.
 
-### 2.4 Recurrentes y calendario de cargos anuales — *Fase 37*
+### 2.4 Recurrentes y calendario de cargos anuales — *Fase 37* ✅ implementada 2026-10-18
+
+> Implementada con decisiones D1–D20 del agente, sin `/grilling` (spec `docs/specs/fase_37_spec.md`): la app propone y el dueño confirma; sobres sugeridos desde el calendario quedan para después.
 
 **Qué es.** Ingresos y gastos que se repiten (arriendo, suscripciones, salario), más una línea de
 tiempo de los próximos 12 meses con el costo mensualizado de cada obligación y detección de cargos
@@ -246,7 +248,7 @@ Fase 35  Sobres + disponible real      (aditiva; sin tocar Transaction)
    │
 Fase 36  Gasto contra sobre            ✅ implementada 2026-10-17
    │
-Fase 37  Recurrentes + calendario      (heredada de la Fase 35 original)
+Fase 37  Recurrentes + calendario      ✅ implementada 2026-10-18 (heredada de la Fase 35 original)
    │
 Fase 38  CDT                           (independiente: puede ir en cualquier hueco)
    │

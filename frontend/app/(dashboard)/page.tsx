@@ -15,6 +15,7 @@ import BudgetRing from '@/components/charts/BudgetRing';
 import CategoryBreakdownSection from '@/components/charts/CategoryBreakdownSection';
 import RecentTransactionsSection from '@/components/transactions/RecentTransactionsSection';
 import AvailableCard from '@/components/funds/AvailableCard';
+import PendingRecurringCard from '@/components/recurring/PendingRecurringCard';
 import PeriodNavigator from '@/components/PeriodNavigator';
 import SummaryCard from '@/components/ui/SummaryCard';
 import Button from '@/components/ui/Button';
@@ -419,6 +420,9 @@ function DashboardScreen() {
           onReset={isCurrentMonth ? undefined : () => setMonthParam('')}
         />
       </div>
+
+      {/* Fase 37 F5: aviso de recurrentes por confirmar (solo si hay alguno). */}
+      <PendingRecurringCard />
 
       {/* Summary Cards — la card principal mide flujo mensual (Fase 11 §11.3); el saldo total
           de cuentas vive ahora en /accounts como vista secundaria (§11.5). */}

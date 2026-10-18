@@ -317,6 +317,22 @@ Un sobre reserva dinero de una cuenta **sin moverlo**: aportar o retirar no crea
 - `DELETE /api/v1/funds/{id}` → `204` sin body: borra el sobre y su historial en cualquier estado o saldo (el saldo vuelve al disponible; las cuentas no cambian). Al borrar, invalida `funds` y `dashboardSummary` (no toca el detalle, la página navega a `/funds`).
 - `GET /api/v1/dashboard/summary` suma `accounts_total`, `committed` y `free_to_spend` (ver "Contratos de datos > Dashboard").
 
+### Recurrentes (Fase 37)
+
+Una regla propone una transacción cuando vence una ocurrencia; el dueño la confirma o la salta. Fechas = días `YYYY-MM-DD` en la zona del usuario. El backend calcula todo (próxima fecha, pendientes, calendario, costo mensualizado, sugerencias). Detalle en `backend/docs/API_REFERENCE.md` ("Recurrentes").
+
+- `GET /api/v1/recurring/` — `RecurringRule[]` (activas y pausadas).
+- `POST /api/v1/recurring/` — body `{ name, type, amount, account_id, category_id, frequency, start_date }`. `404` cuenta/categoría ajena; `422` monto, `start_date` fuera de rango o tope de 100 reglas.
+- `PUT /api/v1/recurring/{id}` — parcial: `name`, `amount`, `account_id`, `category_id`, `status` (`active`/`paused`). Enviar `frequency`, `start_date` o `type` es `422`.
+- `DELETE /api/v1/recurring/{id}` → `204`.
+- `GET /api/v1/recurring/pending` — `PendingOccurrence[]`; solo la ocurrencia con `is_next` es accionable.
+- `POST /api/v1/recurring/{id}/confirm` — body `{ occurrence_date, amount? }` → `Transaction`. `409` si no es la próxima, no venció o la regla está pausada; `404` regla/cuenta/categoría.
+- `POST /api/v1/recurring/{id}/skip` — body `{ occurrence_date }` → `RecurringRule`. Mismos `409`.
+- `GET /api/v1/recurring/calendar` — `{ months: [{ month, items, totals }], monthly_commitment: [{ currency, amount }] }` (12 meses).
+- `GET /api/v1/recurring/suggestions` — `RecurringSuggestion[]`; no hay endpoint de "aceptar": el formulario prellena `POST /recurring/` con `frequency: 'yearly'`.
+
+`RecurringRule`: `id`, `name`, `type`, `amount`, `currency` (`null` si la cuenta se borró), `account_id`, `category_id`, `frequency` (`'weekly' | 'monthly' | 'yearly'`), `start_date`, `next_date`, `status`, `monthly_equivalent`, `is_annual`, `is_due`, `account_missing`, `category_missing`, `created_at`. Tipos en `types/api.ts` (y generados en `types/generated/api.ts`).
+
 ### Notificaciones (Fase 13 §13.5)
 
 Los avisos los escribe el motor de alertas del backend (transacciones de gasto que cruzan

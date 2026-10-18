@@ -173,6 +173,7 @@ Las páginas del dashboard deben limitarse a composición, fetching y UX local.
 - `app/(dashboard)/page.tsx`: dashboard principal, resumen, presupuestos y transacciones recientes.
 - `app/(dashboard)/analytics/page.tsx`: analítica financiera, cashflow y distribución por categorías.
 - `app/(dashboard)/transactions/page.tsx`: feed de transacciones con filtros.
+- `app/(dashboard)/recurring/page.tsx` (Fase 37): reglas recurrentes, por confirmar, calendario de 12 meses y sugerencias. Subcomponentes en `components/recurring/`, queries/mutaciones en `lib/hooks/useRecurring.ts`, keys bajo `['recurring']`. Todo lo calculado (pendientes, calendario, costo mensualizado) llega del servidor; la tarjeta `PendingRecurringCard` del dashboard enlaza a la página.
 - `app/(dashboard)/funds/page.tsx` y `funds/[id]/page.tsx` (Fase 35): lista y detalle de sobres. Los subcomponentes viven en `components/funds/` (`FundCard`, `FundProgress`, `FundEntriesList`, `FundFormModal`, `FundMovementModal`, `AvailableCard` — la tarjeta secundaria "Disponible real" del dashboard) y las queries/mutaciones en `lib/hooks/useFunds.ts`. Todo cálculo (progreso, aporte sugerido, ritmo, runway) llega del servidor.
 - `app/(dashboard)/accounts/page.tsx`: listado de cuentas.
 - `app/(dashboard)/accounts/[id]/page.tsx`: detalle de cuenta.

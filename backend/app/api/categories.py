@@ -229,6 +229,17 @@ def eliminar_categoria(
             "No se puede eliminar la categoría porque tiene presupuestos activos. Elimínalos primero."
         )
 
+    # Fase 37: una regla recurrente (activa o pausada) usa esta categoría.
+    tiene_reglas = (
+        db.query(models.RecurringRule)
+        .filter(models.RecurringRule.category_id == category_id, models.RecurringRule.user_id == current_user.id)
+        .first()
+    )
+    if tiene_reglas:
+        raise ConflictError(
+            "No se puede eliminar la categoría porque tiene reglas recurrentes. Elimínalas o cámbialas de categoría primero."
+        )
+
     categoria.deleted_at = datetime.now(UTC)
     db.commit()
     return {"estado": "OK", "mensaje": "Categoría eliminada exitosamente."}

@@ -205,6 +205,29 @@ de Analítica ya se invalidaban y refrescan `planned_expense` de `cashflow-serie
 salieron del sobre «Nombre»" (`lib/fundSpendNotice.ts`) se arma **antes** de invalidar, con el nombre
 leído del caché de la lista de sobres.
 
+### Recurrentes (Fase 37)
+
+Keys nuevas en `lib/queryKeys.ts`, todas colgando del prefijo `['recurring']`: `recurring.rules()`,
+`recurring.pending()`, `recurring.calendar()` y `recurring.suggestions()`. Los hooks viven en
+`lib/hooks/useRecurring.ts` (`useRecurringRules`, `usePendingRecurring`, `useRecurringCalendar`,
+`useRecurringSuggestions` y las mutaciones). Las lecturas usan `staleTime: 0`: las pendientes dependen
+de "hoy" y de resolver en orden, así que se re-leen al montar la página y la tarjeta del dashboard.
+El frontend no proyecta fechas ni suma montos: `is_next`, `is_due`, `monthly_equivalent`, los totales
+del calendario y `monthly_commitment` llegan del backend.
+
+- **Crear / editar / pausar-reanudar / saltar / borrar regla:** solo `invalidateQueries(recurring.all())`.
+  Saltar también invalida en error (un `409` por ocurrencia ya resuelta se arregla re-leyendo).
+- **Confirmar una ocurrencia** (`useConfirmRecurring`) crea una transacción normal y mueve el saldo, así
+  que además de `recurring` invalida lo mismo que crear una transacción: `transactions`, `accounts`,
+  `accounts-summary`, `dashboardSummary` (por prefijo), `dashboard-category-breakdown`, `budgets-progress`,
+  `budgets`, `analytics-cashflow`, `analytics-categories`, `funds` y `funds.details()`. Si falla (`409`/`404`)
+  no movió dinero y solo se invalida `recurring`.
+- **Toasts en el hook, no en `mutate(..., { onSuccess })`:** al confirmar/saltar/borrar, la fila o tarjeta se
+  desmonta al refrescar la lista y TanStack no ejecuta los callbacks por-llamada de un observer
+  desmontado (el toast no salía). Por eso `skip`, `confirm` y `delete` notifican desde `useMutation`.
+- La tarjeta del dashboard (`PendingRecurringCard`) lee `recurring.pending()`, así que se refresca sola con
+  cualquier acción de la página `/recurring`.
+
 ### Crear/editar/eliminar categoría
 
 Después de mutar una categoría:

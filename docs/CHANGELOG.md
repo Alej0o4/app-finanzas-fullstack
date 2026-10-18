@@ -9,6 +9,23 @@
 
 ---
 
+## Fase 37 — Recurrentes y calendario de cargos anuales (2026-10-18)
+
+Spec: `docs/specs/fase_37_spec.md` (decisiones D1–D20 **tomadas por el agente, sin `/grilling`, pendientes de
+revisión del dueño**). Una **regla recurrente** (`recurring_rules`: semanal/mensual/anual, cuenta, categoría,
+monto) **propone** una transacción cada vez que vence una ocurrencia y el dueño la **confirma** (monto editable)
+o la **salta**; nada se registra solo. Las pendientes se calculan al consultar a partir de `next_date` (sin job
+nuevo, nada se pierde si el servidor estuvo apagado). `GET /recurring/calendar` proyecta 12 meses con totales por
+moneda y costo mensualizado (`monthly_commitment`, informativo); `GET /recurring/suggestions` detecta cargos
+anuales en el historial. Confirmar crea una transacción normal (`ledger.registrar_impacto` + alertas de
+presupuesto); no cambia ninguna cifra existente ni `Transaction`. Migración `a9c3d6e1f845` (tabla nueva).
+Frontend: página `/recurring` (Por confirmar, Reglas, Calendario, Sugerencias) y tarjeta en el dashboard.
+783 tests en Postgres 16 (incl. concurrencia de `confirm`), `/code-review` high (hallazgos reales
+corregidos), verificado en navegador (390 px/escritorio). **Despliegue:** `pg_dump` previo; la migración corre
+sola en el `CMD` de Docker; reconstruir la imagen (solo código).
+
+---
+
 ## Fase 36 — Gasto contra sobre (2026-10-17)
 
 Spec: `docs/specs/fase_36_spec.md` (decisiones D1–D17 del `/grilling` del dueño). Un **gasto** se paga con un

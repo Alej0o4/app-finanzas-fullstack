@@ -2,6 +2,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -416,3 +417,39 @@ class ApiKey(Base):
     owner = relationship("User", backref="api_keys")
 
     __table_args__ = (Index("ix_api_keys_user_id_revoked_at", "user_id", "revoked_at"),)
+
+
+class RecurringRule(Base):
+    """Regla recurrente (Fase 37 §B1): propone una transacción cada vez que vence una ocurrencia.
+
+    `start_date` es el ancla del calendario y `next_date` la próxima ocurrencia **no resuelta**
+    (ambas son días de calendario en la zona del usuario, no instantes). La moneda no se guarda:
+    es la de la cuenta. Sin `SoftDeleteMixin`: borrar la regla es un borrado real y no toca las
+    transacciones ya confirmadas (que no recuerdan de qué regla vinieron).
+    """
+
+    __tablename__ = "recurring_rules"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    name = Column(String(100), nullable=False)
+    type = Column(String(10), nullable=False)
+    amount = Column(Numeric(14, 2), nullable=False)
+    frequency = Column(String(10), nullable=False)
+    start_date = Column(Date, nullable=False)
+    next_date = Column(Date, nullable=False)
+    status = Column(String(10), nullable=False, default="active", server_default="active")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now())
+
+    account = relationship("Account")
+    category = relationship("Category")
+
+    __table_args__ = (
+        CheckConstraint("type IN ('income', 'expense')", name="ck_recurring_rules_type"),
+        CheckConstraint("amount > 0", name="ck_recurring_rules_amount_positive"),
+        CheckConstraint("frequency IN ('weekly', 'monthly', 'yearly')", name="ck_recurring_rules_frequency"),
+        CheckConstraint("status IN ('active', 'paused')", name="ck_recurring_rules_status"),
+        Index("ix_recurring_rules_user_id_status", "user_id", "status"),
+    )

@@ -608,6 +608,26 @@ Deuda consciente, acordada en el `/grilling` (spec `docs/specs/fase_36_spec.md`)
 - [ ] **Selector en edición con cuenta distinta.** Al cambiar la cuenta de un gasto enlazado desde la web el
   modal lo desvincula (manda `fund_id: null`); solo un cliente API ve el `409`.
 
+## 🟡 Deuda de la Fase 37 (recurrentes, 2026-10-18)
+
+Deuda consciente (spec `docs/specs/fase_37_spec.md`; D1–D20 sin `/grilling`, a revisar por el dueño):
+
+- [ ] **Revisar D1–D20 con el dueño.** En especial D1 (propone/confirma, sin auto-registro), D2 (sin job ni
+  push de pendientes), D3 (sin quincena nativa: dos reglas mensuales) y D6 (frecuencia/inicio no editables).
+- [ ] **Notificar pendientes (D2).** Hoy solo se ven dentro de la app (tarjeta del dashboard y `/recurring`).
+- [ ] **Sobres sugeridos desde el calendario / pagar la ocurrencia con un sobre.** La visión §2.4 lo prevé;
+  fuera de alcance de la fase (hoy se enlaza editando la transacción, Fase 36).
+- [ ] **Sugerencias descartadas vuelven a salir** (D15): no se persisten descartes; solo anuales.
+- [ ] **`GET /recurring/suggestions` carga entidades ORM completas** (26 meses de gasto) y agrupa en Python;
+  el frontend la refresca en cada montaje. Seleccionar solo las columnas o agrupar en SQL si pesa.
+- [ ] **Tope de 100 reglas no atómico:** conteo + insert sin lock (dos POST simultáneos en 99 dejan 101).
+- [ ] **Helper de invalidaciones compartido en el frontend:** `useRecurring.ts` copia la lista de claves
+  que invalida crear una transacción (igual que `TransactionModal`/captura); extraer
+  `invalidateAfterTransactionChange(queryClient)`.
+- [ ] **Calendario largo en móvil:** 12 tarjetas apiladas; plegar por mes.
+- [ ] **`PUT /accounts/{id}` puede cambiar la moneda de una cuenta con reglas** (tiene guarda para sobres, no para reglas recurrentes).
+- [ ] **Cambiar `frequency`/`start_date` de una regla** exige borrar y recrear (D6).
+
 ## 🟢 Modularidad — revisar cuando el código duela al modificarlo
 
 - [x] **Lógica de negocio embebida en routers FastAPI — y la excepción ya existente apuntaba

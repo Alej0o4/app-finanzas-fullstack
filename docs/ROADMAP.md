@@ -229,6 +229,11 @@ recurrentes más bien alimentan sugerencias de sobres. Detalle, diseño base y d
 
 ## Fase 37 (antes 35): ingresos y gastos recurrentes
 
+**✅ Implementada (2026-10-18)** — spec `docs/specs/fase_37_spec.md`, historia en `docs/CHANGELOG.md`.
+Las decisiones D1–D20 las tomó el agente sin `/grilling` y esperan revisión del dueño (propone/confirma,
+ocurrencias perezosas sin job, semanal/mensual/anual, calendario de 12 meses, detección solo de cargos
+anuales). Abajo, el texto original de las preguntas abiertas (histórico).
+
 **Aplazada (2026-10-04) hasta cerrar la Fase 33 (QA) y la 34 (zonas horarias), ya completadas;
 renumerada de nuevo el 2026-10-17** (era la Fase 33, luego la 35). Contenido sin cambios. El
 scheduler ya existe desde la Fase 14. Preguntas abiertas: ¿la regla genera la transacción sola o
@@ -291,7 +296,7 @@ abajo siguen el orden de `docs/VISION_FINANZAS_RESPONSABLES.md` §4.
 |---|---|---|
 | ✅ Hecho | **Sobres virtuales + disponible real** (provisiones, fondo de emergencia, metas) | **Fase 35, completada 2026-10-17.** Absorbe la fila de *sinking funds* (validado por YNAB). Primitiva del enfoque de finanzas responsables: dinero comprometido pero no gastado. Aditiva, sin tocar `Transaction`. |
 | ✅ Hecho | **Gasto contra sobre** | **Fase 36, completada 2026-10-17.** `fund_id` en transacciones; `planned_expense` como desglose; sin tocar `ledger.py`. Deuda: presupuestos no distinguen lo planeado (D8), ver `docs/TODO.md`. |
-| Alta | **Automatización de ingresos/gastos recurrentes** + calendario de cargos anuales | **Fase 37** (era la 35; aplazada tras QA y zonas horarias, ya cerradas). El scheduler ya existe desde Fase 14. Reduce fricción de captura y es la base del pronóstico. |
+| ✅ Hecho | **Automatización de ingresos/gastos recurrentes** + calendario de cargos anuales | **Fase 37, completada 2026-10-18** (decisiones del agente a revisar). Propone y el dueño confirma; calendario 12 meses; sugerencias de cargos anuales. Queda: sobres sugeridos desde el calendario, pagar con sobre, push de pendientes (ver `docs/TODO.md`). El pronóstico de caja 30/60/90 días ya tiene su base. |
 | Media | **CDT** (capital, tasa E.A., vencimiento, interés causado, aviso) | **Fase 38.** Módulo independiente; no se mezcla con el fondo de emergencia. Redención depende de resolver transferencias (QA-030). |
 | Media | **Págate primero** (reparto a sobres al registrar un ingreso) y tasa de ahorro | **Fase 39.** Necesita sobres probados. |
 | Media | **Cierre de mes con puntaje de cumplimiento** | **Fase 40.** Necesita jobs mensuales por zona del usuario. |

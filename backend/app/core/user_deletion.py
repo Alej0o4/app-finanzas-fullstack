@@ -27,6 +27,8 @@ def delete_user_cascade(db: Session, user: models.User) -> None:
     # referencia transactions y `funds.account_id` referencia accounts, así que van antes.
     db.query(models.FundEntry).filter(models.FundEntry.user_id == user.id).delete()
     db.query(models.Fund).filter(models.Fund.user_id == user.id).delete()
+    # Fase 37: RecurringRule -> (Account, Category), antes de ambas.
+    db.query(models.RecurringRule).filter(models.RecurringRule.user_id == user.id).delete()
     db.query(models.Transaction).filter(models.Transaction.user_id == user.id).delete()
     db.query(models.Account).filter(models.Account.user_id == user.id).delete()
     db.query(models.Category).filter(models.Category.user_id == user.id).delete()
