@@ -199,3 +199,45 @@ def test_run_seed_saldos_cuadran_con_opening_balance_mas_transacciones(engine_se
         assert db.query(models.Budget).count() == 6
     finally:
         db.close()
+
+
+def test_run_seed_incluye_sobres_y_recurrentes_para_probar_fases_35_a_37(engine_seed, monkeypatch):
+    """El seed deja sobres (todas las situaciones), gastos pagados con sobre y reglas recurrentes
+    con pendientes, una pausada y un cargo anual aún no convertido en regla."""
+    from datetime import UTC, datetime
+
+    from app.services import funds as funds_service
+    from app.services import recurring as recurring_service
+
+    session_factory = sessionmaker(bind=engine_seed, autoflush=False, autocommit=False)
+    monkeypatch.setattr("app.core.seed.SessionLocal", session_factory)
+
+    run_seed()
+
+    db = session_factory()
+    try:
+        user = db.query(models.User).filter(models.User.email == "test@test.com").one()
+        ahora = datetime.now(UTC)
+
+        sobres = {f["name"]: f for f in funds_service.listar(db, user, ahora, include_archived=True)}
+        assert len(sobres) == 7
+        assert sobres["Matrícula 2025"]["status"] == "archived"
+        assert sobres["Regalos de diciembre"]["pace"] == "completed"
+        assert sobres["Pago de la tarjeta"]["backing_shortfall"] > 0  # sin respaldo
+        assert {f["currency"] for f in sobres.values()} == {"COP", "USD"}
+        # Dos gastos enlazados; el segundo excede el saldo y solo se aplica lo que había.
+        assert sobres["Ropa"]["linked_expenses_count"] == 2
+        assert sobres["Ropa"]["balance"] == 0
+        # Ninguno es un fondo de emergencia sobre una tarjeta de crédito.
+        tarjeta = db.query(models.Account).filter(models.Account.type == "credit").one()
+        assert not any(f["kind"] == "emergency" and f["account_id"] == tarjeta.id for f in sobres.values())
+
+        pendientes = recurring_service.pendientes(db, user, ahora)
+        assert len([p for p in pendientes if p["is_next"]]) >= 2
+        reglas = recurring_service.listar(db, user, ahora)
+        assert len(reglas) == 7
+        assert {r["status"] for r in reglas} == {"active", "paused"}
+        sugerencias = recurring_service.sugerencias(db, user, ahora)
+        assert [s["name"] for s in sugerencias] == ["Seguro de moto"]
+    finally:
+        db.close()

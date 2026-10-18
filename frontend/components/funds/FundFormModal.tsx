@@ -64,9 +64,11 @@ export default function FundFormModal({ fund, accounts, onClose, onCreated }: Fu
   const dateRequired = kind === 'annual_expense';
   // La moneda del sobre es la de su cuenta y no se elige; al editar solo caben cuentas de la
   // misma moneda (el backend responde 422 si no).
-  const selectableAccounts = isEdit
-    ? accounts.filter((a) => a.currency === fund.currency)
-    : accounts;
+  // El fondo de emergencia solo cuenta dinero líquido: el backend rechaza (422) una tarjeta de
+  // crédito, así que ni se ofrece.
+  const selectableAccounts = (
+    isEdit ? accounts.filter((a) => a.currency === fund.currency) : accounts
+  ).filter((a) => kind !== 'emergency' || a.type !== 'credit');
   const selectedAccount = accounts.find((a) => String(a.id) === accountId);
   const currency = isEdit ? fund.currency : selectedAccount?.currency;
 
@@ -161,8 +163,16 @@ export default function FundFormModal({ fund, accounts, onClose, onCreated }: Fu
             label="Tipo"
             value={kind}
             onChange={(e) => {
-              setKind(e.target.value as FundKind);
+              const nextKind = e.target.value as FundKind;
+              setKind(nextKind);
               setGoalMode('amount');
+              // Si la cuenta elegida es una tarjeta de crédito, ya no es válida para emergencia.
+              if (
+                nextKind === 'emergency' &&
+                accounts.find((a) => String(a.id) === accountId)?.type === 'credit'
+              ) {
+                setAccountId('');
+              }
             }}
             className="bg-background"
           >
@@ -192,6 +202,12 @@ export default function FundFormModal({ fund, accounts, onClose, onCreated }: Fu
             ))}
           </Select>
           {currency && <p className="text-text-muted mt-1 text-xs">Moneda del sobre: {currency}</p>}
+          {kind === 'emergency' && (
+            <p className="text-text-muted mt-1 text-xs">
+              El fondo de emergencia solo cuenta dinero líquido: no se puede respaldar con una
+              tarjeta de crédito.
+            </p>
+          )}
         </div>
 
         {kind === 'emergency' && (

@@ -95,7 +95,7 @@ export default function FundDetailPage() {
                 variant="secondary"
                 onClick={() => setModal('withdrawal')}
                 disabled={!hasBalance}
-                title={hasBalance ? undefined : 'El sobre no tiene saldo para retirar'}
+                aria-describedby={hasBalance ? undefined : 'retirar-motivo'}
               >
                 <Minus size={16} aria-hidden="true" />
                 Retirar
@@ -142,6 +142,11 @@ export default function FundDetailPage() {
           <DeleteFundButton fund={fund} onDeleted={() => router.replace('/funds')} />
         </div>
       </div>
+      {!isArchived && !hasBalance && (
+        <p id="retirar-motivo" className="text-text-muted -mt-3 text-xs">
+          Retirar se activa cuando el sobre tiene saldo apartado.
+        </p>
+      )}
 
       <div className="border-border bg-surface rounded-2xl border p-4 sm:p-6">
         <div className="mb-3 flex items-center justify-between gap-2">
