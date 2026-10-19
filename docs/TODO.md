@@ -639,6 +639,15 @@ Deuda consciente (spec `docs/specs/fase_38_spec.md`; D1–D16 sin `/grilling`, a
   ingreso) depende de las transferencias entre cuentas (QA-030). Hasta entonces el patrimonio cae al redimir.
 - [ ] **Push o aviso en la bandeja por vencimiento** (hoy solo UI; exigiría job o escritura perezosa).
 - [ ] **Interés neto** (retención en la fuente, GMF) y renovación de un CDT: fuera de alcance.
+- [ ] **Valor al vencimiento informado por el banco (2026-10-18).** Oikos calcula E.A. compuesto base 365 con días
+  calendario; el banco liquida la tasa nominal con interés simple, base 360 y meses de 30 días (caso real:
+  22.000.000, 10,6 % E.A. / 10,24 % nominal, 150 días → banco 938.850, Oikos 949.005; ~1 % de diferencia, no es la
+  retención). Opción si se quiere cuadrar al peso: campo opcional `bank_final_amount` que sobrescriba el estimado.
+  Decisión del dueño: no imitar el método del banco; el estimado de Oikos es aproximado y algo optimista.
+- [ ] **Mover saldo de una cuenta al CDT sin tocar el flujo (2026-10-18).** D1 asume un "ajuste manual" de la cuenta,
+  pero no existe endpoint: `PUT /accounts` no cambia `balance`, `opening_balance` es inmutable y `/reconcile` recalcula
+  desde las transacciones (deshace cualquier edición). Hoy la única vía es registrar un gasto, que infla el flujo.
+  Se resuelve con las transferencias (QA-030) o con un ajuste de saldo que no cuente como gasto/ingreso.
 - [ ] Tope de 50 CDT sin lock (carrera menor, igual que el tope de 100 de recurrentes).
 - [ ] Mover `Chip`/`formatDay`/`money` de `components/recurring/recurringPresentation` a un módulo compartido.
 - [ ] Validación de cliente en `CdtFormModal`: decimales de la tasa (4) y plazo máximo (10 años).
