@@ -47,6 +47,11 @@ class DashboardSummary(BaseModel):
     accounts_total: list[BalanceByCurrency]
     committed: list[BalanceByCurrency]
     free_to_spend: list[BalanceByCurrency]
+    # 🆕 Fase 38 (D5): CDT vigentes (capital + interés causado a hoy) y patrimonio total
+    # `net_worth = accounts_total + cdt_total`, por moneda. Foto de HOY, sin default (dict plano).
+    # El CDT no entra en `committed` ni en `free_to_spend`.
+    cdt_total: list[BalanceByCurrency]
+    net_worth: list[BalanceByCurrency]
     # 🆕 Fase 29 (B7): monedas distintas con gasto en el mes pedido, sobre TODAS las
     # cuentas (el mismo universo que las barras que filtra el chip), con la preferida
     # primero. La preferida NO se agrega si no tiene gasto: el front la suma a las

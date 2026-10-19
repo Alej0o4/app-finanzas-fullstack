@@ -58,6 +58,11 @@ export const queryKeys = {
     calendar: () => ['recurring', 'calendar'] as const,
     suggestions: () => ['recurring', 'suggestions'] as const,
   },
+  cdts: {
+    /** Fase 38: la lista (con sus `totals`) cuelga de aquí. Las mutaciones de CDT invalidan
+     *  solo este prefijo y `dashboard.summary()`; no tocan cuentas, transacciones ni sobres. */
+    all: () => ['cdts'] as const,
+  },
   budgets: {
     all: () => ['budgets'] as const,
     /** Listado de `/budgets` de un mes (`'YYYY-MM'`). Cuelga del prefijo `['budgets']`, así que

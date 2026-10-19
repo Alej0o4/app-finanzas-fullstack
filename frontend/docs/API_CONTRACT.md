@@ -317,6 +317,20 @@ Un sobre reserva dinero de una cuenta **sin moverlo**: aportar o retirar no crea
 - `DELETE /api/v1/funds/{id}` → `204` sin body: borra el sobre y su historial en cualquier estado o saldo (el saldo vuelve al disponible; las cuentas no cambian). Al borrar, invalida `funds` y `dashboardSummary` (no toca el detalle, la página navega a `/funds`).
 - `GET /api/v1/dashboard/summary` suma `accounts_total`, `committed` y `free_to_spend` (ver "Contratos de datos > Dashboard").
 
+### CDT (Fase 38)
+
+Módulo aislado: no mueve saldos de cuentas ni crea transacciones. Fechas = días `YYYY-MM-DD`. El backend calcula todo (interés causado, valor al vencimiento, días, alerta, totales); el frontend no recalcula. Detalle en `backend/docs/API_REFERENCE.md` ("CDT").
+
+- `GET /api/v1/cdts/?status=active|redeemed` → `{ items: Cdt[], totals: CdtTotals[] }` (`totals` por moneda, solo vigentes: `currency`, `principal`, `accrued_interest`, `current_value`, `maturity_value`).
+- `POST /api/v1/cdts/` — body `{ name, currency?, principal, rate_ea, opened_on, maturity_on }` (`rate_ea` en % E.A., `11.5` = 11,5 %).
+- `PUT /api/v1/cdts/{id}` — parcial; solo vigentes (`409` si está redimido).
+- `POST /api/v1/cdts/{id}/redeem` — body opcional `{ redeemed_on?, final_amount? }`; `409` si ya está redimido. No crea transacción.
+- `DELETE /api/v1/cdts/{id}` → `204`.
+- Invalidaciones: toda mutación invalida `cdts` y `dashboardSummary`; ninguna toca `accounts`, `transactions` ni `funds`.
+- `GET /api/v1/dashboard/summary` suma `cdt_total` y `net_worth` (`BalanceByCurrency[]`, foto de hoy): patrimonio = cuentas + CDT vigentes; **no** cambian `free_to_spend`/`committed`.
+
+`Cdt`: `id`, `name`, `currency`, `principal`, `rate_ea`, `opened_on`, `maturity_on`, `status` (`'active' | 'redeemed'`), `redeemed_on`, `final_amount`, `realized_interest`, `term_days`, `elapsed_days`, `accrued_interest`, `current_value`, `maturity_interest`, `maturity_value`, `days_to_maturity` (`null` si redimido; negativo si venció), `alert` (`'ok' | 'due_soon' | 'matured'`), `created_at`.
+
 ### Recurrentes (Fase 37)
 
 Una regla propone una transacción cuando vence una ocurrencia; el dueño la confirma o la salta. Fechas = días `YYYY-MM-DD` en la zona del usuario. El backend calcula todo (próxima fecha, pendientes, calendario, costo mensualizado, sugerencias). Detalle en `backend/docs/API_REFERENCE.md` ("Recurrentes").

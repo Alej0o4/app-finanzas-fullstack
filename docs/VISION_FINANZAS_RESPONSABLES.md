@@ -196,7 +196,13 @@ vencimiento. Mezclarlos obligaría a modelar "respaldos con fecha de disponibili
 *runway* con dinero que no se podría tocar. Regla resultante: **el fondo solo cuenta lo líquido**.
 El CDT cuenta en el patrimonio total (vista de stock), **no** en el disponible real ni en el fondo.
 
-**Pendiente de `/grilling`.**
+**Resuelto en la Fase 38** (2026-10-18, sin `/grilling`; decisiones D1–D16 del agente en
+`docs/specs/fase_38_spec.md`, a revisar por el dueño): tabla propia sin vínculo con cuentas ni transacciones;
+interés E.A. compuesto base 365, bruto, calculado por el backend; aviso de vencimiento solo en la UI (≤ 15 días);
+**redimir solo cambia de estado** y guarda fecha y monto final (el retorno a una cuenta espera a QA-030);
+`cdt_total`/`net_worth` en el dashboard, sin tocar `free_to_spend`. Lo de abajo se conserva como historia.
+
+**Pendiente de `/grilling` (original).**
 - Redención: ¿cómo vuelve el dinero a una cuenta sin inflar el flujo? Hoy **no hay transferencias
   entre cuentas** (QA-030): registrarlo como ingreso distorsionaría los KPI. Conviene resolverlo
   junto con QA-030.

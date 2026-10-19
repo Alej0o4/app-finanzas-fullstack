@@ -241,3 +241,33 @@ def test_run_seed_incluye_sobres_y_recurrentes_para_probar_fases_35_a_37(engine_
         assert [s["name"] for s in sugerencias] == ["Seguro de moto"]
     finally:
         db.close()
+
+
+def test_run_seed_incluye_cdt_en_cada_situacion_de_la_fase_38(engine_seed, monkeypatch):
+    """El seed deja CDT vigente, por vencer, vencido sin redimir, redimido con rendimiento y en USD,
+    con fechas relativas a hoy, sin tocar saldos ni transacciones."""
+    from datetime import UTC, datetime
+
+    from app.services import cdt as cdt_service
+
+    session_factory = sessionmaker(bind=engine_seed, autoflush=False, autocommit=False)
+    monkeypatch.setattr("app.core.seed.SessionLocal", session_factory)
+
+    run_seed()
+
+    db = session_factory()
+    try:
+        user = db.query(models.User).filter(models.User.email == "test@test.com").one()
+        resultado = cdt_service.listar(db, user, datetime.now(UTC))
+        items = {i["name"]: i for i in resultado["items"]}
+        assert len(items) == 5
+        assert items["CDT Bancolombia"]["alert"] == "ok"
+        assert items["CDT Davivienda"]["alert"] == "due_soon"
+        assert items["CDT Banco de Bogotá"]["alert"] == "matured"
+        assert items["CDT Banco de Bogotá"]["status"] == "active"
+        assert items["CDT Nu"]["status"] == "redeemed"
+        assert items["CDT Nu"]["realized_interest"] > 0
+        assert items["CDT en dólares"]["currency"] == "USD"
+        assert {t["currency"] for t in resultado["totals"]} == {"COP", "USD"}
+    finally:
+        db.close()

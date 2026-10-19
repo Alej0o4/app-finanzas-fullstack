@@ -9,6 +9,22 @@
 
 ---
 
+## Fase 38 — CDT (2026-10-18)
+
+Spec: `docs/specs/fase_38_spec.md` (decisiones D1–D16 **tomadas por el agente, sin `/grilling`, pendientes de
+revisión del dueño**). Módulo propio y aislado: tabla `cdts` (capital, tasa E.A., apertura, vencimiento, estado)
+con interés causado calculado por el backend (E.A. compuesto, base 365, `Decimal`, bruto), valor al vencimiento,
+días restantes y alerta `due_soon` (≤ 15 días) / `matured`. **No toca** `Account.balance`, `Transaction` ni
+`ledger.py`: redimir solo cambia de estado y guarda fecha y monto final (el retorno a una cuenta espera a las
+transferencias, QA-030). Suma al **patrimonio total** (`cdt_total` y `net_worth` en `GET /dashboard/summary`) y
+**no** al disponible real ni al fondo de emergencia. Aviso de vencimiento solo en la UI (sin job ni push).
+Migración `b4e7a2d9c613` (tabla nueva). Frontend: página `/cdts`, línea "Patrimonio total" y tarjeta "CDT por
+vencer" en el dashboard. 875 tests en Postgres 16 (incl. concurrencia de `redeem`), `/code-review` high (hallazgos
+reales corregidos), verificado en navegador (390 px/escritorio). **Despliegue:** `pg_dump` previo; la migración
+corre sola en el `CMD` de Docker; reconstruir la imagen (solo código).
+
+---
+
 ## Fase 37 — Recurrentes y calendario de cargos anuales (2026-10-18)
 
 Spec: `docs/specs/fase_37_spec.md` (decisiones D1–D20 **tomadas por el agente, sin `/grilling`, pendientes de

@@ -228,6 +228,20 @@ del calendario y `monthly_commitment` llegan del backend.
 - La tarjeta del dashboard (`PendingRecurringCard`) lee `recurring.pending()`, así que se refresca sola con
   cualquier acción de la página `/recurring`.
 
+### CDT (Fase 38)
+
+Una sola key, `cdts.all()` (`['cdts']`), para la lista con sus `totals`; el hook es `useCdts` en
+`lib/hooks/useCdts.ts` (más `useCreateCdt`, `useUpdateCdt`, `useRedeemCdt`, `useDeleteCdt`). La lectura usa
+`staleTime: 0` (interés y alerta dependen de "hoy") y trae todos los CDT sin filtro: la página `/cdts` los parte
+por `status` y la tarjeta del dashboard (`DueCdtCard`) comparte la misma entrada de caché. El frontend no calcula
+interés, valores, días ni totales.
+
+- **Toda mutación de CDT** (crear, editar, redimir, borrar) invalida solo `cdts.all()` y `dashboard.summary()`
+  (`cdt_total` / `net_worth`). Un CDT no mueve saldos (D1): **nunca** se invalida `accounts`, `transactions` ni
+  `funds`. Editar y redimir invalidan también en error (un `409` por CDT ya redimido se arregla re-leyendo).
+- El toast de borrar vive en el hook (la tarjeta se desmonta al refrescar la lista).
+- El dashboard muestra `net_worth` (`NetWorthLine`) y el conteo de CDT con `alert != 'ok'` (`DueCdtCard`).
+
 ### Crear/editar/eliminar categoría
 
 Después de mutar una categoría:

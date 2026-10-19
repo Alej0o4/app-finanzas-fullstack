@@ -114,6 +114,72 @@ export interface DashboardSummary {
   /** Fase 36 (D9): parte de `monthly_expense_by_currency` que corresponde a gastos enlazados a
    *  un sobre ("planeado"). Es un desglose: no se resta ni cambia el total. */
   planned_expense: BalanceByCurrency[];
+  /** Fase 38 (D5): capital + interés causado a hoy de los CDT vigentes, por moneda. Foto de HOY. */
+  cdt_total: BalanceByCurrency[];
+  /** Fase 38 (D5): `accounts_total + cdt_total`, por moneda. No altera `free_to_spend`. */
+  net_worth: BalanceByCurrency[];
+}
+
+export type CdtStatus = 'active' | 'redeemed';
+export type CdtAlert = 'ok' | 'due_soon' | 'matured';
+
+/** CDT (Fase 38). Los Decimal llegan como string: normalizar con `Number(...)`. Fechas = días
+ *  `YYYY-MM-DD` en la zona del usuario. Interés y valores los calcula el backend (E.A. bruto). */
+export interface Cdt {
+  id: number;
+  name: string;
+  currency: string;
+  principal: string;
+  /** Tasa E.A. en puntos porcentuales (`11.5` = 11,5 %). */
+  rate_ea: string;
+  opened_on: string;
+  maturity_on: string;
+  status: CdtStatus;
+  redeemed_on?: string | null;
+  final_amount?: string | null;
+  /** `final_amount - principal`; solo en redimidos (puede ser negativo). */
+  realized_interest?: string | null;
+  term_days: number;
+  elapsed_days: number;
+  accrued_interest: string;
+  current_value: string;
+  maturity_interest: string;
+  maturity_value: string;
+  /** Negativo si ya venció; `null` si está redimido. */
+  days_to_maturity?: number | null;
+  alert: CdtAlert;
+  created_at?: string | null;
+}
+
+/** Totales por moneda, solo de los CDT vigentes. */
+export interface CdtTotals {
+  currency: string;
+  principal: string;
+  accrued_interest: string;
+  current_value: string;
+  maturity_value: string;
+}
+
+export interface CdtListResponse {
+  items: Cdt[];
+  totals: CdtTotals[];
+}
+
+export interface CreateCdtPayload {
+  name: string;
+  currency: string;
+  principal: number;
+  rate_ea: number;
+  opened_on: string;
+  maturity_on: string;
+}
+
+/** Parcial: solo se mandan los campos que cambiaron (`null` explícito da 422). */
+export type UpdateCdtPayload = Partial<CreateCdtPayload>;
+
+export interface RedeemCdtPayload {
+  redeemed_on?: string;
+  final_amount?: number;
 }
 
 export type FundKind = 'annual_expense' | 'emergency' | 'goal';

@@ -11,6 +11,7 @@ from app.core.security import get_password_hash
 from app.core.timezones import DEFAULT_TIMEZONE, get_zoneinfo
 from app.core.user_deletion import delete_user_cascade
 from app.models import models
+from app.services import cdt as cdt_service
 from app.services import funds as funds_service
 from app.services import recurring as recurring_service
 from app.services.ledger import registrar_impacto
@@ -296,6 +297,41 @@ def _seed_recurrentes(db, user, cuenta, ahorros, hoy: date, today: datetime):
         registrar_impacto(db, cuenta.id, "expense", tx.amount)
 
 
+def _seed_cdts(db, user, hoy: date):
+    """CDT para probar la Fase 38: vigente, por vencer (<= 15 días), vencido sin redimir, redimido
+    con rendimiento y en USD. Fechas relativas a hoy; no tocan cuentas ni transacciones (D1)."""
+
+    def cdt(nombre, moneda, capital, tasa, abierto_hace, vence_en, *, redimido_hace=None):
+        abierto = hoy - timedelta(days=abierto_hace)
+        vence = hoy + timedelta(days=vence_en)
+        capital = Decimal(str(capital))
+        tasa = Decimal(str(tasa))
+        fila = models.Cdt(
+            user_id=user.id,
+            name=nombre,
+            currency=moneda,
+            principal=capital,
+            rate_ea=tasa,
+            opened_on=abierto,
+            maturity_on=vence,
+            status="active",
+        )
+        if redimido_hace is not None:
+            dia = hoy - timedelta(days=redimido_hace)
+            fila.status = "redeemed"
+            fila.redeemed_on = dia
+            fila.final_amount = capital + cdt_service.interes_causado(
+                capital, tasa, cdt_service.dias_transcurridos(abierto, vence, dia)
+            )
+        db.add(fila)
+
+    cdt("CDT Bancolombia", "COP", 10000000, 11.5, 120, 60)  # vigente
+    cdt("CDT Davivienda", "COP", 5000000, 10.8, 170, 10)  # por vencer
+    cdt("CDT Banco de Bogotá", "COP", 3000000, 12.0, 200, -5)  # vencido sin redimir
+    cdt("CDT Nu", "COP", 4000000, 11.0, 400, -35, redimido_hace=35)  # redimido con rendimiento
+    cdt("CDT en dólares", "USD", 2000, 5.2, 60, 300)  # otra moneda
+
+
 def run_seed():
     db = SessionLocal()
     try:
@@ -423,8 +459,10 @@ def run_seed():
         hoy = dia_local(today, get_zoneinfo(DEFAULT_TIMEZONE))
         _seed_sobres(db, user, cuenta, ahorros, tarjeta, hoy)
         _seed_recurrentes(db, user, cuenta, ahorros, hoy, today)
+        _seed_cdts(db, user, hoy)
         db.commit()
         print("Funds: 7 (1 archivado) con 2 gastos pagados con sobre · Recurring: 7 reglas + 1 cargo anual sugerido")
+        print("CDT: 5 (vigente, por vencer, vencido sin redimir, redimido, en USD)")
         print("\n--- SEED COMPLETE ---")
         print("Login: test@test.com / testpass123")
 

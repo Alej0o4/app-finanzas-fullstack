@@ -1057,6 +1057,47 @@ de 12 meses). Cada ítem: `name`, `account_id`, `category_id`, `currency`, `amou
 `last_date`, `suggested_start_date` (última + 1 año), `occurrences`. No hay endpoint de "aceptar": el
 frontend prellena `POST /recurring/` con `frequency = yearly`. Sin descartes persistidos.
 
+## CDT (Fase 38)
+
+Módulo aislado (`app/services/cdt.py`): no toca cuentas, transacciones ni `ledger.py`. Fechas = días
+`YYYY-MM-DD` en la zona del usuario. Todos requieren auth; las mutaciones pasan por CSRF.
+
+### `GET /api/v1/cdts/?status=active|redeemed` → `{ items: CdtResponse[], totals: CdtTotals[] }`
+
+Sin `status`: todos (vigentes por `maturity_on` ascendente, luego redimidos por `redeemed_on` descendente).
+`status` inválido → `422`. `totals` es por moneda (preferida primero) y **solo de los vigentes**:
+`currency`, `principal`, `accrued_interest`, `current_value` (capital + interés) y `maturity_value`.
+
+`CdtResponse`: `id`, `name`, `currency`, `principal`, `rate_ea` (puntos porcentuales; `11.5` = 11,5 % E.A.),
+`opened_on`, `maturity_on`, `status` (`active|redeemed`), `redeemed_on`, `final_amount`, `realized_interest`
+(`final_amount − principal`, solo redimidos), `term_days`, `elapsed_days`, `accrued_interest`, `current_value`,
+`maturity_interest`, `maturity_value`, `days_to_maturity` (negativo si ya venció; `null` si está redimido),
+`alert` (`ok` | `due_soon` si faltan 1-15 días | `matured` si vence hoy o ya venció y sigue vigente; un redimido
+siempre es `ok`), `created_at`. Interés: E.A. compuesto, base 365, **bruto** (sin retención ni GMF), acotado
+al plazo. De un CDT redimido, `elapsed_days` y `accrued_interest` se congelan en `redeemed_on` y
+`current_value` es `final_amount`.
+
+### `POST /api/v1/cdts/` → `CdtResponse`
+
+Body: `name` (1-100), `currency` (`^[A-Z]{3}$`, default `COP`), `principal` (`> 0`, 2 decimales), `rate_ea`
+(`0 < x <= 100`, hasta 4 decimales), `opened_on`, `maturity_on`. `422`: `maturity_on <= opened_on`, plazo
+> 10 años, `opened_on` fuera de [hoy − 10 años, hoy + 1 año], montos/tasa inválidos, más de 50 CDT.
+
+### `PUT /api/v1/cdts/{id}` → `CdtResponse`
+
+Parcial (`name`, `currency`, `principal`, `rate_ea`, `opened_on`, `maturity_on`); campo desconocido o `null`
+explícito → `422`. Solo vigentes: uno redimido → `409`. Otro usuario o inexistente → `404`.
+
+### `POST /api/v1/cdts/{id}/redeem` → `CdtResponse`
+
+Body opcional `{ redeemed_on?, final_amount? }` (`extra="forbid"`). Defaults: hoy y capital + interés causado a
+esa fecha. `redeemed_on` futura o anterior a `opened_on` → `422`; ya redimido → `409` (toma `FOR UPDATE`).
+**No crea transacción ni mueve saldos.**
+
+### `DELETE /api/v1/cdts/{id}` → `204`
+
+Borra la fila en cualquier estado; no toca nada más.
+
 ## Dashboard
 
 ### `GET /api/v1/dashboard/summary`
@@ -1140,6 +1181,11 @@ Devuelve (`DashboardSummary`):
   `accounts_total − committed`. **Pueden ser negativos** (`free_to_spend < 0` = estás usando
   dinero apartado; el backend no bloquea nada). Son una foto de **hoy**: no dependen de
   `year`/`month`. Sin conversión entre monedas. `balances` (cuentas destacadas) no cambia.
+- `cdt_total`, `net_worth` (Fase 38, **patrimonio total**): dos arrays de `{currency, total}` con la
+  misma lista de monedas que `accounts_total` (unión con las monedas de los CDT vigentes, preferida
+  primero). `cdt_total` = Σ (capital + interés causado a hoy) de los CDT **vigentes**; `net_worth` =
+  `accounts_total + cdt_total`. Foto de hoy (ignoran `year`/`month`). **No alteran** `free_to_spend`,
+  `committed` ni `balances`: el CDT no es dinero disponible.
 
 Universo de cuentas: `balances`, `monthly_income_by_currency` y `monthly_expense_by_currency`
 solo incluyen cuentas marcadas como destacadas (`highlighted=true`); si no hay destacadas,

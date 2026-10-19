@@ -15,6 +15,8 @@ import BudgetRing from '@/components/charts/BudgetRing';
 import CategoryBreakdownSection from '@/components/charts/CategoryBreakdownSection';
 import RecentTransactionsSection from '@/components/transactions/RecentTransactionsSection';
 import AvailableCard from '@/components/funds/AvailableCard';
+import DueCdtCard from '@/components/cdts/DueCdtCard';
+import NetWorthLine from '@/components/cdts/NetWorthLine';
 import PendingRecurringCard from '@/components/recurring/PendingRecurringCard';
 import PeriodNavigator from '@/components/PeriodNavigator';
 import SummaryCard from '@/components/ui/SummaryCard';
@@ -424,6 +426,9 @@ function DashboardScreen() {
       {/* Fase 37 F5: aviso de recurrentes por confirmar (solo si hay alguno). */}
       <PendingRecurringCard />
 
+      {/* Fase 38 F4: aviso de CDT por vencer o vencidos (solo si hay alguno). */}
+      <DueCdtCard />
+
       {/* Summary Cards — la card principal mide flujo mensual (Fase 11 §11.3); el saldo total
           de cuentas vive ahora en /accounts como vista secundaria (§11.5). */}
       <div className="grid gap-6 lg:grid-cols-3" aria-busy={summaryIsStale}>
@@ -471,6 +476,9 @@ function DashboardScreen() {
           loadingSummary && <Skeleton className="h-44 rounded-2xl" />
         )}
       </div>
+
+      {/* Fase 38 F4: patrimonio total (cuentas + CDT vigentes), secundario al flujo. */}
+      {summary && <NetWorthLine summary={summary} preferredCurrency={preferredCurrency} />}
 
       {/* Budget Rings */}
       <div>

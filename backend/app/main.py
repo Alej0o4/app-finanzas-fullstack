@@ -19,6 +19,7 @@ from app.api import (
     auth,
     budgets,
     categories,
+    cdt,
     dashboard,
     funds,
     notifications,
@@ -150,6 +151,7 @@ app.include_router(budgets.router, prefix="/api/v1/budgets", tags=["Presupuestos
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard"])
 app.include_router(funds.router, prefix="/api/v1/funds", tags=["Sobres"])
 app.include_router(recurring.router, prefix="/api/v1/recurring", tags=["Recurrentes"])
+app.include_router(cdt.router, prefix="/api/v1/cdts", tags=["CDT"])
 app.include_router(preferences.router, prefix="/api/v1/users", tags=["Preferencias"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notificaciones"])
 app.include_router(push.router, prefix="/api/v1/push", tags=["Push"])

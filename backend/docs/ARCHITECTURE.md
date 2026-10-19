@@ -68,6 +68,12 @@ En cada arranque, `main.py` ejecuta:
 - La sesión de navegador usa cookies `httpOnly` + CSRF double-submit desde Fase 26 (antes: JWT en `localStorage`, vulnerable a XSS). Los clientes no-browser (API keys `oikos_pat_...`) siguen autenticando por header `Authorization: Bearer` sin cookies.
 - Las rutas agregadas del dashboard incluyen resumen, progreso de presupuestos, serie temporal de flujo de caja y distribución por categoría.
 
+## CDT (Fase 38)
+
+- `Cdt` (migración `b4e7a2d9c613`, tabla `cdts`; 17.º modelo). Módulo aislado: no referencia cuentas ni transacciones y no toca `ledger.py`.
+- `app/services/cdt.py`: funciones **puras** (`dias_transcurridos`, `interes_causado`, `dias_para_vencer`, `alerta`) y casos de uso con DB (`listar`, `crear`, `actualizar`, `redimir`, `eliminar`, `patrimonio`); no comitean. `api/cdt.py` es un router delgado dueño del `commit`.
+- `api/dashboard.py` mezcla `cdt.patrimonio(...)` (`cdt_total`, `net_worth`) en el resumen; `free_to_spend`/`committed` no cambian.
+
 ## Recurrentes y calendario (Fase 37)
 
 - `RecurringRule` (migración `a9c3d6e1f845`, tabla nueva; 16.º modelo). No toca `Transaction`, `Account.balance` ni `services/ledger.py`: confirmar una ocurrencia crea una transacción normal con `ledger.registrar_impacto`.

@@ -30,7 +30,7 @@ sale de ella: **disponible real = saldo de las cuentas − lo comprometido**. Co
 | 35 ✅ | **Sobres virtuales** (provisiones, fondo de emergencia, metas) + **disponible real** | **Completada 2026-10-17** (ver `docs/CHANGELOG.md`). Primitiva de la que cuelga todo; aditiva, sin tocar `Transaction`. |
 | 36 ✅ | **Gasto contra sobre** | **Completada 2026-10-17** (ver `docs/CHANGELOG.md`). Hizo reales las provisiones: un gasto se paga con un sobre y se muestra como "planeado" sin cambiar el gasto real. |
 | 37 ✅ | **Recurrentes + calendario de cargos anuales** | **Completada 2026-10-18** (ver `docs/CHANGELOG.md`). Una regla propone la transacción y el dueño la confirma o salta; calendario de 12 meses y sugerencias de cargos anuales. Base del pronóstico y de los sobres sugeridos. |
-| 38 | **CDT** (módulo independiente) | Bajo acoplamiento; cualquier hueco entre fases. **No** se mezcla con el fondo de emergencia, que solo cuenta lo líquido. |
+| 38 ✅ | **CDT** (módulo independiente) | **Completada 2026-10-18** (ver `docs/CHANGELOG.md`). Aislado del ledger y del fondo de emergencia; suma al patrimonio total; redimir solo cambia de estado. |
 | 39 | **Págate primero** | Engancha la creación de ingresos; necesita sobres probados. |
 | 40 | **Cierre de mes con puntaje de cumplimiento** | Necesita jobs mensuales por zona del usuario y datos de todo lo anterior. |
 
@@ -244,7 +244,8 @@ Tabla nueva `recurring_rules` (migración `a9c3d6e1f845`), servicio `app/service
 - **Queda (ver `docs/TODO.md`):** sobres sugeridos desde el calendario, pagar la ocurrencia con un sobre,
   push de pendientes, guardar sugerencias descartadas y el pronóstico de caja 30/60/90 días.
 
-Lo que sigue en el nuevo enfoque es la **Fase 38 (CDT)**.
+La **Fase 38 (CDT)** se completó el 2026-10-18 (módulo aislado; redimir solo cambia de estado hasta que existan
+transferencias, QA-030). Lo que sigue en el nuevo enfoque es la **Fase 39 (págate primero)**.
 
 ## Fase 37 (antes 35): ingresos y gastos recurrentes
 
@@ -316,7 +317,7 @@ abajo siguen el orden de `docs/VISION_FINANZAS_RESPONSABLES.md` §4.
 | ✅ Hecho | **Sobres virtuales + disponible real** (provisiones, fondo de emergencia, metas) | **Fase 35, completada 2026-10-17.** Absorbe la fila de *sinking funds* (validado por YNAB). Primitiva del enfoque de finanzas responsables: dinero comprometido pero no gastado. Aditiva, sin tocar `Transaction`. |
 | ✅ Hecho | **Gasto contra sobre** | **Fase 36, completada 2026-10-17.** `fund_id` en transacciones; `planned_expense` como desglose; sin tocar `ledger.py`. Deuda: presupuestos no distinguen lo planeado (D8), ver `docs/TODO.md`. |
 | ✅ Hecho | **Automatización de ingresos/gastos recurrentes** + calendario de cargos anuales | **Fase 37, completada 2026-10-18** (decisiones D1–D20 revisadas y mantenidas por el dueño). Propone y el dueño confirma; calendario 12 meses; sugerencias de cargos anuales. Queda: sobres sugeridos desde el calendario, pagar con sobre, push de pendientes (ver `docs/TODO.md`). El pronóstico de caja 30/60/90 días ya tiene su base. |
-| Media | **CDT** (capital, tasa E.A., vencimiento, interés causado, aviso) | **Fase 38.** Módulo independiente; no se mezcla con el fondo de emergencia. Redención depende de resolver transferencias (QA-030). |
+| ✅ Hecho | **CDT** (capital, tasa E.A., vencimiento, interés causado, aviso) | **Fase 38, completada 2026-10-18** (D1–D16 del agente, a revisar por el dueño). Módulo independiente; no se mezcla con el fondo de emergencia. Redimir solo cambia de estado: registrar el retorno a una cuenta depende de las transferencias (QA-030). |
 | Media | **Págate primero** (reparto a sobres al registrar un ingreso) y tasa de ahorro | **Fase 39.** Necesita sobres probados. |
 | Media | **Cierre de mes con puntaje de cumplimiento** | **Fase 40.** Necesita jobs mensuales por zona del usuario. |
 | Media | **Simulador "¿me lo puedo permitir?"**, **clasificación necesidad/deseo/ahorro**, **pronóstico de caja 30/60/90 días** | Backlog del enfoque de finanzas responsables; se evalúan tras sobres y recurrentes. |
