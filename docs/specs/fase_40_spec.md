@@ -1,8 +1,7 @@
 # Fase 40 — Dashboard navegable y detalle de categoría con presupuesto
 
 **Estado:** especificada el 2026-10-24 tras un `/grilling` con el dueño (Q1–Q16). Marcadores
-`[NEEDS CLARIFICATION]` abiertos: **1** (D9, hallazgo de código posterior al grilling). Sin resolverlo
-no está lista para implementar.
+`[NEEDS CLARIFICATION]` abiertos: ninguno (D13–D15 resueltos con el dueño el 2026-10-24).
 
 **Numeración:** esta fase toma el número 40. "Págate primero" pasa a la **41** y el cierre de mes con
 puntaje a la **42** (corrida de numeración en `docs/ROADMAP.md` y `docs/VISION_FINANZAS_RESPONSABLES.md`,
@@ -67,11 +66,11 @@ transacciones del mes. Si no, solo las transacciones. Todo en la misma URL `/cat
 - **D11 — Historial.** Se navega mes a mes con el selector. El enlace "Ver todos los movimientos (N)" pasa a "Ver en Movimientos", hacia `/transactions` filtrado por la categoría y el mes (`monthTransactionsHref` + `category_id`). No hay modo "todo el historial".
 - **D12 — Docs de contrato.** Se actualizan `backend/docs/API_REFERENCE.md` y `frontend/docs/API_CONTRACT.md` en el mismo cambio, y `frontend/docs/STATE_AND_FETCHING.md` con las query keys nuevas.
 
-**Hallazgos de código posteriores al grilling (a revisar por el dueño)**
+**Hallazgos de código posteriores al grilling (confirmados por el dueño, 2026-10-24)**
 
 - **D13 — Filtro `currency` en `GET /transactions/`.** Hoy ese endpoint filtra por `category_id`, `start_date` y `end_date`, **pero no por moneda**. Filtrar en el cliente rompería la paginación y `total`. Se agrega un parámetro opcional `currency` (aditivo, sin migración; `Transaction.currency` ya existe). Esto amplía D9: el backend no se queda en solo `category_id`.
 - **D14 — Total del mes desde el backend.** `PaginatedResponse` solo trae el conteo (`total: int`), no una suma, y el frontend no debe sumar (regla del repo). El total del mes y la moneda sale de `GET /dashboard/category-distribution` (`start_date`/`end_date` del mes, `currency`, `type=expense`), tomando la fila de esa categoría. Se reutiliza un endpoint existente, sin campo nuevo. Cae a `0` si la categoría no tiene fila.
-- **D15 — Tipo de la categoría.** El total y el presupuesto aplican a categorías de gasto. Si la categoría es de ingreso, la vista no muestra el bloque de presupuesto y el total se pide con `type=income`. `[NEEDS CLARIFICATION: ¿el total del mes de una categoría de ingreso se muestra con ese mismo rótulo, o se oculta el total y se deja solo la lista? Recomendado: mostrarlo como "Total del mes" con `type=income`.]`
+- **D15 — Tipo de la categoría.** El total y el presupuesto aplican a categorías de gasto. Si la categoría es de ingreso, la vista no muestra el bloque de presupuesto y el total se pide con `type=income`. El total se muestra con el mismo rótulo "Total del mes", pedido con `type=income`.
 
 ## Testing Decisions
 
@@ -128,3 +127,5 @@ transacciones del mes. Si no, solo las transacciones. Todo en la misma URL `/cat
 ## Decisiones resueltas con el usuario (2026-10-24)
 
 - Q1–Q16 del `/grilling`, todas con la recomendación propuesta (D1–D12 y la numeración).
+- D13 (filtro `currency` en `GET /transactions/`) y D14 (total del mes desde `category-distribution`): confirmadas como se recomendaron.
+- D15: el total de una categoría de ingreso se muestra como "Total del mes" con `type=income` (antes marcador abierto).
