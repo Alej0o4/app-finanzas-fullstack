@@ -32,8 +32,9 @@ sale de ella: **disponible real = saldo de las cuentas − lo comprometido**. Co
 | 37 ✅ | **Recurrentes + calendario de cargos anuales** | **Completada 2026-10-18** (ver `docs/CHANGELOG.md`). Una regla propone la transacción y el dueño la confirma o salta; calendario de 12 meses y sugerencias de cargos anuales. Base del pronóstico y de los sobres sugeridos. |
 | 38 ✅ | **CDT** (módulo independiente) | **Completada 2026-10-18** (ver `docs/CHANGELOG.md`). Aislado del fondo de emergencia; suma al patrimonio total. Desde la Fase 39 puede vincularse a cuentas. |
 | 39 ✅ | **Transferencias entre cuentas + CDT vinculado** | **Completada 2026-10-24** (ver `docs/CHANGELOG.md`). Cierra QA-030; mover dinero propio no es flujo; constitución y redención de CDT mueven saldos. |
-| 40 | **Págate primero** | Engancha la creación de ingresos; necesita sobres probados. |
-| 41 | **Cierre de mes con puntaje de cumplimiento** | Necesita jobs mensuales por zona del usuario y datos de todo lo anterior. |
+| 40 | **Dashboard navegable y detalle de categoría con presupuesto** | Tarjetas de presupuesto y filas de gasto por categoría llevan al detalle por mes y moneda. Ver `docs/specs/fase_40_spec.md`. |
+| 41 | **Págate primero** | Engancha la creación de ingresos; necesita sobres probados. |
+| 42 | **Cierre de mes con puntaje de cumplimiento** | Necesita jobs mensuales por zona del usuario y datos de todo lo anterior. |
 
 **Qué NO cambia:** sigue siendo un solo dueño (nada de esto reabre seguridad/auth), el listón de
 calidad (Alembic, tests, servicios, `DomainError`) y que el backend es la fuente de verdad de todo
@@ -245,7 +246,7 @@ Tabla nueva `recurring_rules` (migración `a9c3d6e1f845`), servicio `app/service
   push de pendientes, guardar sugerencias descartadas y el pronóstico de caja 30/60/90 días.
 
 La **Fase 38 (CDT)** se completó el 2026-10-18 y la **Fase 39 (transferencias, QA-030, y CDT vinculado a cuentas)**
-el 2026-10-24. Lo que sigue en el nuevo enfoque es la **Fase 40 (págate primero)**.
+el 2026-10-24. Lo que sigue en el nuevo enfoque es la **Fase 40 (dashboard navegable)**, y después la 41 (págate primero).
 
 ## Fase 37 (antes 35): ingresos y gastos recurrentes
 
@@ -318,8 +319,8 @@ abajo siguen el orden de `docs/VISION_FINANZAS_RESPONSABLES.md` §4.
 | ✅ Hecho | **Gasto contra sobre** | **Fase 36, completada 2026-10-17.** `fund_id` en transacciones; `planned_expense` como desglose; sin tocar `ledger.py`. Deuda: presupuestos no distinguen lo planeado (D8), ver `docs/TODO.md`. |
 | ✅ Hecho | **Automatización de ingresos/gastos recurrentes** + calendario de cargos anuales | **Fase 37, completada 2026-10-18** (decisiones D1–D20 revisadas y mantenidas por el dueño). Propone y el dueño confirma; calendario 12 meses; sugerencias de cargos anuales. Queda: sobres sugeridos desde el calendario, pagar con sobre, push de pendientes (ver `docs/TODO.md`). El pronóstico de caja 30/60/90 días ya tiene su base. |
 | ✅ Hecho | **CDT** (capital, tasa E.A., vencimiento, interés causado, aviso) | **Fase 38, completada 2026-10-18** (D1–D16 del agente, a revisar por el dueño). Módulo independiente; no se mezcla con el fondo de emergencia. Desde la **Fase 39 (2026-10-24)** el CDT puede vincularse a cuentas: constituir y redimir mueven saldos vía transferencias y la ganancia entra como ingreso "Rendimientos". |
-| Media | **Págate primero** (reparto a sobres al registrar un ingreso) y tasa de ahorro | **Fase 40.** Necesita sobres probados. |
-| Media | **Cierre de mes con puntaje de cumplimiento** | **Fase 41.** Necesita jobs mensuales por zona del usuario. |
+| Media | **Págate primero** (reparto a sobres al registrar un ingreso) y tasa de ahorro | **Fase 41.** Necesita sobres probados. |
+| Media | **Cierre de mes con puntaje de cumplimiento** | **Fase 42.** Necesita jobs mensuales por zona del usuario. |
 | Media | **Simulador "¿me lo puedo permitir?"**, **clasificación necesidad/deseo/ahorro**, **pronóstico de caja 30/60/90 días** | Backlog del enfoque de finanzas responsables; se evalúan tras sobres y recurrentes. |
 | Media | **Filtro por categoría** (dashboard/Analítica) | Separado de la Fase 29 el 2026-09-26 — el dueño quiere revisarlo más a fondo antes de decidir alcance (¿una o varias categorías? ¿qué gráficos filtra? interacción con "ocultar categoría" de la dona). `GET /transactions/` ya soporta `category_id`; `category-distribution`/`cashflow-series` todavía no. |
 | Media | **Reembolsos como gasto negativo en toda la app** | Sale de la Q15 del grilling de la Fase 31. Hoy un ingreso en una categoría de gasto (p. ej. los amigos devuelven su parte del restaurante) solo se netea en la dona de Analítica (`?neto=true`): la tarjeta del dashboard y los KPIs lo cuentan como ingreso, y los presupuestos y sus alertas cuentan el gasto completo. Tratarlo como gasto negativo toca 5–6 cálculos del backend y varios contratos — a definir en su propio `/grilling`. |
