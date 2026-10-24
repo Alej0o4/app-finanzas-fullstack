@@ -529,7 +529,8 @@ Errores esperados:
 
 - `404` si la cuenta no existe o no pertenece al usuario autenticado.
 - `400` si se intenta cambiar `currency` a un valor distinto del actual y la cuenta
-  tiene transacciones asociadas.
+  tiene transacciones asociadas, o (Fase 39) transferencias: "No se puede cambiar la moneda de una cuenta
+  con transferencias." (cada transferencia guarda la moneda de sus cuentas al crearse).
 - `422` si `name` o `currency` fuera de patrón.
 
 ### `PATCH /api/v1/accounts/{account_id}/highlighted`
@@ -552,6 +553,9 @@ Salida (`AccountReconcileResponse`):
 - `recalculated_balance`: valor corregido.
 - `discrepancy`: `recalculated_balance - previous_balance` — `0.00` si no había desviación.
 - `opening_balance`
+
+Desde la Fase 39 el recálculo es `opening_balance` + neto de transacciones + `SUM(amount_in)` de las
+transferencias que llegan a la cuenta − `SUM(amount_out)` de las que salen (incluidas las de un CDT vinculado).
 
 Errores esperados:
 
@@ -588,6 +592,9 @@ Elimina la cuenta si no tiene transacciones asociadas.
 Errores esperados:
 
 - `400` si la cuenta tiene transacciones asociadas.
+- `409` (Fase 39, D17) si la cuenta tiene transferencias, como origen o destino (incluidas las de un CDT
+  vinculado): "No se puede eliminar la cuenta porque tiene transferencias. Elimínalas primero (las de un CDT,
+  desde el CDT)."; las transferencias hay que borrarlas antes.
 
 ## Categorías
 
@@ -1059,7 +1066,9 @@ frontend prellena `POST /recurring/` con `frequency = yearly`. Sin descartes per
 
 ## CDT (Fase 38)
 
-Módulo aislado (`app/services/cdt.py`): no toca cuentas, transacciones ni `ledger.py`. Fechas = días
+Módulo aislado por defecto (`app/services/cdt.py`): sin vínculo no toca cuentas ni transacciones. Desde la
+Fase 39 se puede vincular de forma **opcional** a cuentas (`source_account_id` al crear/editar, `account_id`
+al redimir) mediante transferencias (ver `/transfers`). Fechas = días
 `YYYY-MM-DD` en la zona del usuario. Todos requieren auth; las mutaciones pasan por CSRF.
 
 ### `GET /api/v1/cdts/?status=active|redeemed` → `{ items: CdtResponse[], totals: CdtTotals[] }`
@@ -1073,30 +1082,102 @@ Sin `status`: todos (vigentes por `maturity_on` ascendente, luego redimidos por 
 (`final_amount − principal`, solo redimidos), `term_days`, `elapsed_days`, `accrued_interest`, `current_value`,
 `maturity_interest`, `maturity_value`, `days_to_maturity` (negativo si ya venció; `null` si está redimido),
 `alert` (`ok` | `due_soon` si faltan 1-15 días | `matured` si vence hoy o ya venció y sigue vigente; un redimido
-siempre es `ok`), `created_at`. Interés: E.A. compuesto, base 365, **bruto** (sin retención ni GMF), acotado
+siempre es `ok`), `created_at`, y (Fase 39) `source_account_id` / `source_transfer_id` (cuenta y transferencia
+de constitución) y `redeem_account_id` / `redeem_transfer_id` (cuenta y transferencia de redención); todos
+`null` si el CDT no está vinculado. Interés: E.A. compuesto, base 365, **bruto** (sin retención ni GMF), acotado
 al plazo. De un CDT redimido, `elapsed_days` y `accrued_interest` se congelan en `redeemed_on` y
 `current_value` es `final_amount`.
 
 ### `POST /api/v1/cdts/` → `CdtResponse`
 
 Body: `name` (1-100), `currency` (`^[A-Z]{3}$`, default `COP`), `principal` (`> 0`, 2 decimales), `rate_ea`
-(`0 < x <= 100`, hasta 4 decimales), `opened_on`, `maturity_on`. `422`: `maturity_on <= opened_on`, plazo
+(`0 < x <= 100`, hasta 4 decimales), `opened_on`, `maturity_on`, `source_account_id?` (Fase 39, D12: crea la transferencia de constitución
+cuenta -> CDT en `opened_on`; la cuenta debe ser de la moneda del CDT, `422` si no; otro usuario o inexistente
+-> `404`). `422`: `maturity_on <= opened_on`, plazo
 > 10 años, `opened_on` fuera de [hoy − 10 años, hoy + 1 año], montos/tasa inválidos, más de 50 CDT.
 
 ### `PUT /api/v1/cdts/{id}` → `CdtResponse`
 
-Parcial (`name`, `currency`, `principal`, `rate_ea`, `opened_on`, `maturity_on`); campo desconocido o `null`
+Parcial (`name`, `currency`, `principal`, `rate_ea`, `opened_on`, `maturity_on`, `source_account_id`); con
+transferencia de constitución, cambiar capital, apertura, moneda o cuenta de origen la actualiza y reajusta los
+saldos en la misma transacción; enviar `source_account_id` en un CDT sin vínculo lo vincula (no se puede
+desvincular). Moneda de la cuenta distinta a la del CDT -> `422`. Campo desconocido o `null`
 explícito → `422`. Solo vigentes: uno redimido → `409`. Otro usuario o inexistente → `404`.
 
 ### `POST /api/v1/cdts/{id}/redeem` → `CdtResponse`
 
-Body opcional `{ redeemed_on?, final_amount? }` (`extra="forbid"`). Defaults: hoy y capital + interés causado a
-esa fecha. `redeemed_on` futura o anterior a `opened_on` → `422`; ya redimido → `409` (toma `FOR UPDATE`).
-**No crea transacción ni mueve saldos.**
+Body opcional `{ redeemed_on?, final_amount?, account_id? }` (`extra="forbid"`). Defaults: hoy y capital +
+interés causado a esa fecha. `redeemed_on` futura o anterior a `opened_on` → `422`; ya redimido → `409` (toma
+`FOR UPDATE`). **Sin `account_id` no crea transacción ni mueve saldos** (como en la Fase 38). **Con
+`account_id`** (Fase 39, D11): crea la transferencia de redención por el **capital** (CDT -> cuenta) y, si
+`final_amount > principal`, un ingreso (`Transaction` `income`) por `final_amount − principal` en esa cuenta,
+categoría base **"Rendimientos"**, fechado en `redeemed_on`, que cuenta como flujo. La cuenta debe ser de la
+moneda del CDT (`422`); `final_amount < principal` con cuenta -> `422` (la pérdida se registra a mano); cuenta
+ajena o inexistente -> `404`.
 
 ### `DELETE /api/v1/cdts/{id}` → `204`
 
-Borra la fila en cualquier estado; no toca nada más.
+Borra la fila. Un CDT **vigente** con transferencia de constitución la borra y devuelve el capital a la cuenta
+en la misma transacción. Un CDT **redimido con transferencias vinculadas** -> `409` (son historia real; no
+hay "deshacer redención"). Un CDT sin vínculo se borra en cualquier estado, sin tocar nada más.
+
+## Transferencias (Fase 39)
+
+Mueven saldo entre cuentas propias (o entre una cuenta y un CDT, ver arriba). **No son flujo**: no crean
+`Transaction` y ningún KPI, dona, Analítica, presupuesto, alerta ni resumen semanal las cuenta. Todos los
+endpoints requieren auth; las mutaciones pasan por CSRF. Montos `Decimal`, fechas como en `/transactions`
+(`YYYY-MM-DD` en la zona del usuario o datetime).
+
+`TransferResponse`: `id`, `from_account_id`, `to_account_id`, `cdt_id`, `cdt_name`, `amount_out`,
+`currency_out`, `amount_in`, `currency_in`, `exchange_rate` (derivada, COP por 1 unidad de la moneda extranjera;
+`null` si es de una sola moneda o sin COP; 4 decimales), `date`, `description`, `created_at`, `updated_at`,
+`warnings`. Las transferencias con `cdt_id` tienen solo una cuenta (la otra es `null`).
+
+### `GET /api/v1/transfers/` → `PaginatedResponse<TransferResponse>`
+
+Query: `skip` (>= 0), `limit` (1-1000, default 100), `account_id` (origen **o** destino), `start_date`,
+`end_date` (rango semiabierto en la zona del usuario; inicio > fin -> `400`). Orden `date` desc, `id` desc.
+
+### `POST /api/v1/transfers/` → `TransferResponse`
+
+Body (`extra="forbid"`): `from_account_id`, `to_account_id` (distintas, si no `422`), `amount_out` (`> 0`),
+`amount_in?`, `exchange_rate?`, `date?`, `description?` (<= 500). Las monedas no se envían: salen de las
+cuentas. Misma moneda: entra lo que sale (`amount_in` ausente o igual; `exchange_rate` -> `422`). Monedas
+distintas: exactamente uno de `amount_in` / `exchange_rate` (`422`); la tasa es siempre COP por 1 unidad
+extranjera, solo aplica a pares con COP (sin COP se exige `amount_in`), redondeo `ROUND_HALF_UP` a centavo
+(`422` si el monto de entrada da 0 o excede el máximo). Cuentas ajenas, borradas o inexistentes -> `404`;
+desborde de saldo `Numeric(14,2)` -> `422`. Las cuentas `credit` se permiten sin reglas especiales.
+
+`warnings` (D6): lista, vacía si no aplica. Si tras la operación el saldo de la cuenta **de origen** queda
+por debajo de lo comprometido en sus sobres activos, trae `{ code: "BELOW_COMMITTED", account_id, currency,
+committed, balance_after }`. Solo informa; nunca bloquea. `GET` siempre devuelve `warnings: []`.
+
+### `GET /api/v1/transfers/{id}` → `TransferResponse`
+
+Otro usuario o inexistente -> `404`.
+
+### `PUT /api/v1/transfers/{id}` → `TransferResponse`
+
+Reemplazo completo de cuentas y montos (mismo body y validaciones que `POST`). `date` ausente o `null`
+conserva la fecha; `description` ausente conserva, `null` explícito la limpia. Revierte el efecto anterior y
+aplica el nuevo con lock de ambas cuentas en orden de id. Devuelve `warnings`. Una transferencia de un CDT
+(`cdt_id` no nulo) -> `409` (se administra desde el CDT).
+
+### `DELETE /api/v1/transfers/{id}` → `204`
+
+Borrado real; revierte los saldos. `409` si pertenece a un CDT; `404` si no existe.
+
+## Movimientos (Fase 39)
+
+### `GET /api/v1/movements/` → `MovementsResponse`
+
+Feed unificado de transacciones (no eliminadas) y transferencias, paginado y ordenado en la base de datos por
+`date` desc, `id` desc. Respuesta `{ items, total, page, page_size }`; cada ítem trae `kind`:
+`"transaction"` (campos de `TransactionResponse`, incluidos los de sobre) o `"transfer"` (campos de
+`TransferResponse`). Query: `skip`, `limit` (1-1000, default 100), `account_id` (una transferencia aparece si
+la cuenta es origen o destino), `category_id`, `type` (`income|expense`), `search` (<= 100), `start_date`,
+`end_date`, `include_transfers` (default `true`). `category_id`, `type` y `search` **excluyen** las
+transferencias. Los totales/KPI no salen de este endpoint.
 
 ## Dashboard
 
