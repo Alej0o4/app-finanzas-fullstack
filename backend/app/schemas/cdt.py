@@ -24,6 +24,9 @@ class CdtCreate(BaseModel):
     # Días de calendario en la zona del usuario (D15).
     opened_on: date
     maturity_on: date
+    # Fase 39 (D12): cuenta de la que salió el capital. Opcional: sin ella el CDT queda aislado
+    # (el dinero nunca estuvo en la app). Con ella se crea la transferencia de constitución.
+    source_account_id: int | None = None
 
     @field_validator("name", mode="after")
     @classmethod
@@ -43,6 +46,8 @@ class CdtUpdate(BaseModel):
     rate_ea: Decimal | None = Field(None, gt=0, le=100, decimal_places=4, max_digits=7)
     opened_on: date | None = None
     maturity_on: date | None = None
+    # Fase 39 (D12): cambia la cuenta de origen (o vincula una si no había). No se puede desvincular.
+    source_account_id: int | None = None
 
     @field_validator("name", mode="after")
     @classmethod
@@ -62,6 +67,8 @@ class CdtRedeem(BaseModel):
 
     redeemed_on: date | None = None
     final_amount: Decimal | None = Field(None, ge=0, decimal_places=2, max_digits=MAX_DIGITS_MONEY)
+    # Fase 39 (D11): cuenta destino del capital; el interés entra como ingreso "Rendimientos".
+    account_id: int | None = None
 
 
 class CdtResponse(BaseModel):
@@ -85,6 +92,11 @@ class CdtResponse(BaseModel):
     days_to_maturity: int | None = None
     alert: Literal["ok", "due_soon", "matured"]
     created_at: datetime | None = None
+    # Fase 39: transferencias vinculadas (constitución: cuenta -> CDT; redención: CDT -> cuenta).
+    source_account_id: int | None = None
+    source_transfer_id: int | None = None
+    redeem_account_id: int | None = None
+    redeem_transfer_id: int | None = None
 
 
 class CdtTotals(BaseModel):

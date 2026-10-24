@@ -1,7 +1,7 @@
 """Tests de categorías de Fase 18 (categorías personalizables).
 
 Alcance:
-- §18.1: ampliación del pool de categorías default (11 → 19).
+- §18.1: ampliación del pool de categorías default (11 → 19; 20 con Rendimientos, Fase 39).
 - §18.2: pre-siembra de `hidden_categories` en el registro.
 - §18.3: categorías "ocultas para mí" (modelo, endpoints POST/DELETE /hide, `is_hidden`).
 - QA-027: `PUT` no puede cambiar el `type` de una categoría con transacciones o presupuestos.
@@ -55,18 +55,18 @@ def seed_system_categories(db_session):
 
 
 class TestPoolDefaultCategories:
-    """§18.1 — ampliar el pool de categorías default (11 → 19)."""
+    """§18.1 — ampliar el pool de categorías default (11 → 19; 20 con Rendimientos, Fase 39)."""
 
-    def test_get_categories_returns_all_19_system_categories(self, client, auth_headers, seed_system_categories):
+    def test_get_categories_returns_all_20_system_categories(self, client, auth_headers, seed_system_categories):
         seed_system_categories()
 
         categorias = _get_categorias(client, auth_headers)
 
-        assert len(categorias) == len(DEFAULT_CATEGORIES) == 19
+        assert len(categorias) == len(DEFAULT_CATEGORIES) == 20
         assert all(categoria["user_id"] is None for categoria in categorias)
 
         nombres = {categoria["name"] for categoria in categorias}
-        assert len(nombres) == 19  # sin duplicados de nombre
+        assert len(nombres) == 20  # sin duplicados de nombre
 
     def test_default_categories_have_no_normalized_name_type_collisions(self):
         """Ninguna colisión por (name, type) normalizado (case/acento-insensible) dentro del

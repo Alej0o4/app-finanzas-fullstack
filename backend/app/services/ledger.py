@@ -82,3 +82,42 @@ def aplicar_edicion(
     else:
         aplicar_delta(db, cuenta_nueva_id, new_delta)
         aplicar_delta(db, cuenta_vieja_id, -old_delta)
+
+
+# --------------------------------------------------------------------------------------
+# Transferencias (Fase 39, D1/D7)
+# --------------------------------------------------------------------------------------
+def deltas_transferencia(
+    from_account_id: int | None, to_account_id: int | None, monto_salida: Decimal, monto_entrada: Decimal
+) -> dict[int, Decimal]:
+    """Impacto de una transferencia por cuenta: el origen resta `monto_salida` y el destino suma
+    `monto_entrada` (pueden diferir si cambia la moneda). Una transferencia con CDT tiene una sola
+    cuenta (`None` en el otro extremo) y esa es la única que se mueve."""
+    deltas: dict[int, Decimal] = {}
+    if from_account_id is not None:
+        deltas[from_account_id] = -monto_salida
+    if to_account_id is not None:
+        deltas[to_account_id] = deltas.get(to_account_id, Decimal("0")) + monto_entrada
+    return deltas
+
+
+def aplicar_deltas(db: Session, deltas: dict[int, Decimal]) -> None:
+    """Aplica varios deltas de saldo en orden ascendente de `account_id` (mismo criterio anti-deadlock
+    que `aplicar_edicion`, Fase 31 B2): dos transferencias cruzadas A→B y B→A toman los locks de
+    fila de `accounts` en el mismo orden. Los deltas de una misma cuenta ya vienen sumados."""
+    for account_id in sorted(deltas):
+        if deltas[account_id] != 0:
+            aplicar_delta(db, account_id, deltas[account_id])
+
+
+def sumar_deltas(*grupos: dict[int, Decimal]) -> dict[int, Decimal]:
+    """Suma varios mapas de deltas por cuenta (p. ej. revertir el efecto viejo + aplicar el nuevo)."""
+    total: dict[int, Decimal] = {}
+    for grupo in grupos:
+        for cuenta, delta in grupo.items():
+            total[cuenta] = total.get(cuenta, Decimal("0")) + delta
+    return total
+
+
+def invertir_deltas(deltas: dict[int, Decimal]) -> dict[int, Decimal]:
+    return {cuenta: -delta for cuenta, delta in deltas.items()}
