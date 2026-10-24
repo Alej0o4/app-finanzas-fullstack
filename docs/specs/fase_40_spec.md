@@ -2,6 +2,7 @@
 
 **Estado:** especificada el 2026-10-24 tras un `/grilling` con el dueño (Q1–Q16). Marcadores
 `[NEEDS CLARIFICATION]` abiertos: ninguno (D13–D15 resueltos con el dueño el 2026-10-24).
+D16–D19 los agregó el agente tras `/analyze-spec` (2026-10-24) y **están pendientes de revisión del dueño**.
 
 **Numeración:** esta fase toma el número 40. "Págate primero" pasa a la **41** y el cierre de mes con
 puntaje a la **42** (corrida de numeración en `docs/ROADMAP.md` y `docs/VISION_FINANZAS_RESPONSABLES.md`,
@@ -63,7 +64,7 @@ transacciones del mes. Si no, solo las transacciones. Todo en la misma URL `/cat
 - **D8 — Diseño.** Escritorio: presupuesto a la izquierda, transacciones a la derecha. Móvil: apilado, presupuesto arriba. Sin presupuesto: la lista ocupa todo el ancho.
 - **D9 — Backend: `category_id` en `BudgetProgress`.** Campo aditivo en el schema y en `GET /dashboard/budgets-progress`; sin migración. La vista pide `budgets-progress?year=&month=` y busca por `category_id` y moneda. Sin endpoint nuevo para esto.
 - **D10 — Selector de mes compartido.** El selector de mes y el validador de `?month=` hoy viven dentro de `app/(dashboard)/page.tsx`. Se extraen a un componente y un hook compartidos, sin cambiar el comportamiento del dashboard. Es el único refactor de la fase.
-- **D11 — Historial.** Se navega mes a mes con el selector. El enlace "Ver todos los movimientos (N)" pasa a "Ver en Movimientos", hacia `/transactions` filtrado por la categoría y el mes (`monthTransactionsHref` + `category_id`). No hay modo "todo el historial".
+- **D11 — Historial.** Se navega mes a mes con el selector. El enlace "Ver todos los movimientos (N)" pasa a "Ver en Movimientos", hacia `/transactions` filtrado por la categoría y el mes. `/transactions` lee el parámetro de URL `category` (no `category_id`, que es el del API): `monthTransactionsHref` (`lib/dateRanges.ts`) recibe un `categoryId` opcional y agrega `&category=<id>`. No hay modo "todo el historial".
 - **D12 — Docs de contrato.** Se actualizan `backend/docs/API_REFERENCE.md` y `frontend/docs/API_CONTRACT.md` en el mismo cambio, y `frontend/docs/STATE_AND_FETCHING.md` con las query keys nuevas.
 
 **Hallazgos de código posteriores al grilling (confirmados por el dueño, 2026-10-24)**
@@ -72,13 +73,22 @@ transacciones del mes. Si no, solo las transacciones. Todo en la misma URL `/cat
 - **D14 — Total del mes desde el backend.** `PaginatedResponse` solo trae el conteo (`total: int`), no una suma, y el frontend no debe sumar (regla del repo). El total del mes y la moneda sale de `GET /dashboard/category-distribution` (`start_date`/`end_date` del mes, `currency`, `type=expense`), tomando la fila de esa categoría. Se reutiliza un endpoint existente, sin campo nuevo. Cae a `0` si la categoría no tiene fila.
 - **D15 — Tipo de la categoría.** El total y el presupuesto aplican a categorías de gasto. Si la categoría es de ingreso, la vista no muestra el bloque de presupuesto y el total se pide con `type=income`. El total se muestra con el mismo rótulo "Total del mes", pedido con `type=income`.
 
+**Decisiones tomadas por el agente tras `/analyze-spec` (2026-10-24, pendientes de revisión del dueño)**
+
+- **D16 — Lista y total coherentes con reembolsos.** Una categoría acepta `income` y `expense` (`BUSINESS_RULES.md`, reembolsos de la Fase 31), pero `category-distribution` suma un solo tipo. Para que el total mostrado y la lista coincidan, `GET /transactions/` gana un parámetro opcional `type` (`income|expense`, aditivo, sin migración) y la vista lo manda con el tipo de la categoría, el mismo que usa para pedir el total (D14/D15). Los reembolsos (movimientos del otro tipo) no aparecen en esta vista; siguen visibles en `/transactions`. Es la misma limitación que ya tienen la tarjeta del dashboard y los presupuestos; netear reembolsos sigue siendo backlog (Q15).
+- **D17 — Monedas del chip y moneda por defecto.** Las monedas candidatas son la unión de (a) las monedas de los presupuestos de la categoría ese mes (`budgets-progress` sin `currency`, filtrado por `category_id`) y (b) las monedas con total en `category-distribution` para esa categoría, pedido una vez por cada moneda de las cuentas del usuario (`useAccounts`). El chip aparece con 2 o más. Sin `?currency=` válido: la del presupuesto; si hay presupuestos en dos monedas, la preferida del usuario si está entre ellas, si no la primera en orden alfabético; sin presupuesto, la preferida del usuario. Sin endpoint nuevo.
+- **D18 — Piso del selector de mes.** El detalle reutiliza la query de `GET /dashboard/summary` para el `first_transaction_month` (mismo piso que el dashboard, D10: el hook compartido lo recibe como parámetro). El `?month=` anterior al piso no se rechaza: se muestra el mes vacío.
+- **D19 — Query keys.** Tres keys nuevas en `lib/queryKeys.ts`, todas colgando de prefijos que `updateMutation`/`deleteMutation` ya invalidan: lista `['transactions','category',id,month,currency]` (prefijo `transactions.byCategory(id)`), total `dashboard.categoryBreakdown(month, currency)` extendido con el id de la categoría (prefijo `dashboard-category-breakdown`), y el progreso reutiliza `budgets.progress(month)`. Queda anotado en `STATE_AND_FETCHING.md`.
+
 ## Testing Decisions
 
 - **Qué es un buen test aquí:** solo comportamiento externo: lo que devuelve la API y lo que el dueño ve en el navegador. Nada de pruebas de implementación interna de componentes.
 - **Seam principal (único alto):** la API HTTP. Tests de `pytest` con el cliente de FastAPI, igual que `backend/tests/test_zona_horaria.py` y `test_transfers.py`, que ya consultan `budgets-progress` por HTTP.
   - `budgets-progress` devuelve `category_id` y coincide con la categoría del presupuesto.
-  - `GET /transactions/` con `currency` filtra bien, respeta `skip`/`limit` y el `total` cuenta solo esa moneda.
-  - `category-distribution` del mes y la moneda coincide con la suma de las transacciones listadas (invariante entre el total mostrado y la lista).
+  - `budgets-progress` con `year`/`month` de un mes pasado también devuelve `category_id`.
+  - `GET /transactions/` con `currency` filtra bien, respeta `skip`/`limit` y el `total` cuenta solo esa moneda; sin `currency` el comportamiento actual no cambia.
+  - `GET /transactions/` con `type` filtra por tipo; combinado con `currency` y `category_id`.
+  - `category-distribution` del mes, la moneda y el tipo coincide con la suma de las transacciones listadas con el mismo `type` (D16), incluyendo una categoría con un reembolso del otro tipo (queda fuera de ambos).
 - **Seam secundario:** el navegador contra el stack de dev (`:3001`, nunca producción), con seed, vía Playwright, en escritorio y móvil. El repo no tiene tests de componentes. Casos: clic desde tarjeta y desde barra (URL con mes y moneda), categoría sin presupuesto, presupuesto excedido, cambio de mes con el botón atrás, chip de moneda, `?month=` inválido, "Cargar más", y que el dashboard se comporte igual tras extraer el selector.
 - **Cierre:** `/run-tests` completo (pytest, ruff, eslint, prettier) antes del PR.
 
@@ -103,21 +113,21 @@ transacciones del mes. Si no, solo las transacciones. Todo en la misma URL `/cat
 
 1. [backend] `schemas/dashboard.py` + `api/dashboard.py` — `category_id` en `BudgetProgress` — Decisión D9.
    Depende de: —
-2. [backend] [P] `api/transactions.py` — filtro opcional `currency` en `GET /transactions/` — Decisión D13.
+2. [backend] [P] `api/transactions.py` — filtros opcionales `currency` y `type` en `GET /transactions/` — Decisiones D13, D16.
    Depende de: —
-3. [backend] Tests de HTTP: `category_id`, filtro `currency`, invariante total vs. lista — Decisiones D9, D13, D14.
+3. [backend] Tests de HTTP: `category_id`, filtros `currency` y `type`, invariante total vs. lista — Decisiones D9, D13, D14, D16.
    Depende de: 1, 2
 4. [docs] `backend/docs/API_REFERENCE.md` + `frontend/docs/API_CONTRACT.md` — contrato nuevo — Decisión D12.
    Depende de: 1, 2
-5. [frontend] Extraer selector de mes y validador de `?month=` a componente y hook compartidos, sin cambiar el dashboard — Decisión D10.
+5. [frontend] Extraer selector de mes y validador de `?month=` a componente y hook compartidos (piso recibido por parámetro), sin cambiar el dashboard — Decisiones D10, D18.
    Depende de: —
-6. [frontend] `types/api.ts` + `lib/queryKeys.ts` + `frontend/docs/STATE_AND_FETCHING.md` — `category_id` en `BudgetProgress` y keys por categoría, mes y moneda — Decisiones D9, D12.
+6. [frontend] `types/api.ts` + `lib/queryKeys.ts` + `frontend/docs/STATE_AND_FETCHING.md` — `category_id` en `BudgetProgress` y keys por categoría, mes y moneda (D19) y `monthTransactionsHref` con `categoryId` — Decisiones D9, D11, D12, D19.
    Depende de: 1
 7. [frontend] Dashboard: tarjetas y filas clicables con `?month=` y `?currency=`, foco por teclado — Decisión D5.
    Depende de: 5, 6
-8. [frontend] `categories/[id]/page.tsx`: vista por mes y moneda, bloque de presupuesto, total, "Cargar más", chip de moneda, estado sin presupuesto, enlace "Ver en Movimientos" — Decisiones D1–D4, D6–D8, D11, D14, D15.
-   Depende de: 2, 5, 6
-9. [docs] `docs/ROADMAP.md` + `docs/VISION_FINANZAS_RESPONSABLES.md` — corrida de numeración (41 y 42) — Numeración.
+8. [frontend] `categories/[id]/page.tsx`: vista por mes y moneda, bloque de presupuesto, total, "Cargar más", chip de moneda, estado sin presupuesto, enlace "Ver en Movimientos" (`?category=`) — Decisiones D1–D4, D6–D8, D11, D14–D19.
+   Depende de: 1, 2, 5, 6
+9. [docs] `docs/ROADMAP.md` + `docs/VISION_FINANZAS_RESPONSABLES.md` + `AGENTS.md` (lista de orden del nuevo enfoque) — corrida de numeración (41 y 42) — Numeración.
    Depende de: —
 10. [verif] Playwright en dev (`:3001`) en escritorio y móvil, y `/run-tests` completo.
     Depende de: 3, 7, 8
@@ -129,3 +139,4 @@ transacciones del mes. Si no, solo las transacciones. Todo en la misma URL `/cat
 - Q1–Q16 del `/grilling`, todas con la recomendación propuesta (D1–D12 y la numeración).
 - D13 (filtro `currency` en `GET /transactions/`) y D14 (total del mes desde `category-distribution`): confirmadas como se recomendaron.
 - D15: el total de una categoría de ingreso se muestra como "Total del mes" con `type=income` (antes marcador abierto).
+- D16–D19: propuestas por el agente tras `/analyze-spec`; falta que el dueño las revise.
