@@ -1107,7 +1107,8 @@ explícito → `422`. Solo vigentes: uno redimido → `409`. Otro usuario o inex
 ### `POST /api/v1/cdts/{id}/redeem` → `CdtResponse`
 
 Body opcional `{ redeemed_on?, final_amount?, account_id? }` (`extra="forbid"`). Defaults: hoy y capital +
-interés causado a esa fecha. `redeemed_on` futura o anterior a `opened_on` → `422`; ya redimido → `409` (toma
+interés causado a esa fecha. `redeemed_on` futura, anterior a `opened_on` o **anterior a `maturity_on`** (no se redime
+antes del vencimiento; también aplica al defecto "hoy") → `422`; ya redimido → `409` (toma
 `FOR UPDATE`). **Sin `account_id` no crea transacción ni mueve saldos** (como en la Fase 38). **Con
 `account_id`** (Fase 39, D11): crea la transferencia de redención por el **capital** (CDT -> cuenta) y, si
 `final_amount > principal`, un ingreso (`Transaction` `income`) por `final_amount − principal` en esa cuenta,

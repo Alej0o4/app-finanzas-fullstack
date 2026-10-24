@@ -31,7 +31,7 @@ al disponible real ni al fondo de emergencia.
 1. Registrar "CDT Bancolombia, $10.000.000, 11,5 % E.A., del 2026-06-01 al 2026-12-01".
 2. Ver cuánto ha rendido a hoy, cuánto valdrá al vencimiento y en cuántos días vence.
 3. Ver un aviso claro cuando faltan 15 días o menos, y cuando ya venció sin redimir.
-4. Redimirlo (a tiempo o anticipado) registrando la fecha y el monto final recibido.
+4. Redimirlo desde el vencimiento (enmienda 2026-10-24: no anticipado) registrando la fecha y el monto final recibido.
 5. Ver mi patrimonio total (cuentas + CDT vigentes) sin que el CDT cuente como dinero disponible.
 6. Corregir un dato mal digitado mientras el CDT esté vigente; borrar uno creado por error.
 7. Tener CDT en dólares sin mezclar monedas.
@@ -73,7 +73,8 @@ no antes de `opened_on` ni futura) y `final_amount` (por defecto capital + inter
 transacción ni ingreso** y no mueve saldos (D1). Justificación (conservadora): registrar el retorno
 como ingreso inflaría el flujo mensual con capital propio, y el reingreso del capital a una cuenta
 necesita transferencias (QA-030). El interés realizado (`final_amount − principal`) queda
-disponible para esa fase. Se puede redimir antes o después del vencimiento. No hay "deshacer";
+disponible para esa fase. **Enmienda 2026-10-24 (dueño):** solo se puede redimir desde `maturity_on` (antes es `422`); la redención
+anticipada no se modela. No hay "deshacer";
 si fue un error se borra y se recrea.
 
 **D5 — Patrimonio total = cuentas + CDT vigentes.** Un CDT `active` aporta `principal +
@@ -114,8 +115,7 @@ El frontend **no recalcula** ninguna de estas cifras.
 FK). Borrar el usuario (`core/user_deletion.py`) borra sus CDT. El seed de dev crea CDT.
 
 **D14 — Interés realizado en redimidos.** Un ítem `redeemed` expone `final_amount` y
-`realized_interest = final_amount − principal` (puede ser < 0 si hubo penalización por redimir
-anticipado); no entra en `totals`.
+`realized_interest = final_amount − principal` (puede ser < 0 si el banco pagó menos que el capital); no entra en `totals`.
 
 **D15 — Zona horaria.** `opened_on`, `maturity_on`, `redeemed_on` son `Date` en la zona del
 usuario. Prohibido construir `datetime` naive o resolver "hoy" desde UTC fuera de `core/periods.py`.

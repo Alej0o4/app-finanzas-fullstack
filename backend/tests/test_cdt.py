@@ -17,6 +17,7 @@ D = Decimal
 URL = "/api/v1/cdts/"
 SUMMARY = "/api/v1/dashboard/summary"
 AHORA = "2026-03-15T15:00:00Z"  # 10:00 en Bogotá
+VENCE_HOY = "2026-03-15"  # CDT redimible: solo se redime desde el vencimiento
 
 pytestmark = pytest.mark.usefixtures("_congelar")
 
@@ -185,7 +186,7 @@ class TestEditar:
         assert client.put(f"{URL}{cdt['id']}", json=body, headers=auth_headers).status_code == 422
 
     def test_redimido_responde_409(self, client, auth_headers, crear_cdt):
-        cdt = crear_cdt()
+        cdt = crear_cdt(maturity_on=VENCE_HOY)
         assert client.post(f"{URL}{cdt['id']}/redeem", json={}, headers=auth_headers).status_code == 200
         assert client.put(f"{URL}{cdt['id']}", json={"name": "Otro"}, headers=auth_headers).status_code == 409
 
@@ -207,7 +208,7 @@ class TestAislamiento:
 
 class TestRedimir:
     def test_defaults_hoy_y_capital_mas_interes(self, client, auth_headers, crear_cdt):
-        cdt = crear_cdt()
+        cdt = crear_cdt(maturity_on=VENCE_HOY)
         resp = client.post(f"{URL}{cdt['id']}/redeem", json={}, headers=auth_headers)
         assert resp.status_code == 200, resp.text
         r = resp.json()
@@ -220,7 +221,7 @@ class TestRedimir:
         assert r["alert"] == "ok"
 
     def test_final_amount_explicito_y_fecha_anterior(self, client, auth_headers, crear_cdt):
-        cdt = crear_cdt()
+        cdt = crear_cdt(maturity_on="2026-01-10")
         resp = client.post(
             f"{URL}{cdt['id']}/redeem",
             json={"redeemed_on": "2026-01-10", "final_amount": "1050.50"},
@@ -231,41 +232,53 @@ class TestRedimir:
         assert _money(r["final_amount"]) == D("1050.50")
         assert _money(r["realized_interest"]) == D("50.50")
 
-    def test_redencion_anticipada_con_penalizacion_puede_dar_rendimiento_negativo(
-        self, client, auth_headers, crear_cdt
-    ):
-        cdt = crear_cdt()
+    def test_final_amount_menor_al_capital_da_rendimiento_negativo(self, client, auth_headers, crear_cdt):
+        cdt = crear_cdt(maturity_on=VENCE_HOY)
         r = client.post(f"{URL}{cdt['id']}/redeem", json={"final_amount": "980.00"}, headers=auth_headers).json()
         assert _money(r["realized_interest"]) == D("-20.00")
 
-    def test_default_por_fecha_usa_los_dias_de_esa_fecha(self, client, auth_headers, crear_cdt):
-        cdt = crear_cdt()
-        r = client.post(f"{URL}{cdt['id']}/redeem", json={"redeemed_on": "2025-03-15"}, headers=auth_headers).json()
-        assert _money(r["final_amount"]) == D("1000.00")
+    def test_default_por_fecha_acota_el_interes_al_plazo(self, client, auth_headers, crear_cdt):
+        cdt = crear_cdt(maturity_on="2025-09-15")  # vencido hace meses
+        r = client.post(f"{URL}{cdt['id']}/redeem", json={}, headers=auth_headers).json()
+        assert _money(r["final_amount"]) == _money(cdt["maturity_value"])
+
+    def test_antes_del_vencimiento_422_y_el_cdt_sigue_vigente(self, client, auth_headers, crear_cdt):
+        cdt = crear_cdt()  # vence 2026-09-15; hoy es 2026-03-15
+        for body in ({}, {"redeemed_on": "2026-03-15"}, {"redeemed_on": "2026-03-15", "final_amount": "980.00"}):
+            resp = client.post(f"{URL}{cdt['id']}/redeem", json=body, headers=auth_headers)
+            assert resp.status_code == 422, resp.text
+            assert "2026-09-15" in resp.json()["detail"]
+        item = client.get(URL, headers=auth_headers).json()["items"][0]
+        assert (item["status"], item["redeemed_on"], item["final_amount"]) == ("active", None, None)
+
+    def test_el_dia_del_vencimiento_se_puede_redimir(self, client, auth_headers, crear_cdt):
+        cdt = crear_cdt(maturity_on=VENCE_HOY)
+        resp = client.post(f"{URL}{cdt['id']}/redeem", json={"redeemed_on": VENCE_HOY}, headers=auth_headers)
+        assert resp.status_code == 200, resp.text
 
     @pytest.mark.parametrize(
         "body", [{"redeemed_on": "2026-03-16"}, {"redeemed_on": "2025-03-14"}, {"final_amount": "-1"}, {"x": 1}]
     )
     def test_invalidos_422(self, client, auth_headers, crear_cdt, body):
-        cdt = crear_cdt()
+        cdt = crear_cdt(maturity_on=VENCE_HOY)
         assert client.post(f"{URL}{cdt['id']}/redeem", json=body, headers=auth_headers).status_code == 422
         assert client.get(URL, headers=auth_headers).json()["items"][0]["status"] == "active"
 
     def test_doble_redencion_409(self, client, auth_headers, crear_cdt):
-        cdt = crear_cdt()
+        cdt = crear_cdt(maturity_on=VENCE_HOY)
         assert client.post(f"{URL}{cdt['id']}/redeem", json={}, headers=auth_headers).status_code == 200
         assert client.post(f"{URL}{cdt['id']}/redeem", json={}, headers=auth_headers).status_code == 409
 
     def test_no_crea_transaccion_ni_mueve_saldo(self, client, auth_headers, make_account, db_session, crear_cdt):
         cuenta = make_account(auth_headers, balance="5000.00")
-        cdt = crear_cdt()
+        cdt = crear_cdt(maturity_on=VENCE_HOY)
         client.post(f"{URL}{cdt['id']}/redeem", json={}, headers=auth_headers)
         assert db_session.query(models.Transaction).count() == 0
         saldo = client.get(f"/api/v1/accounts/{cuenta['id']}", headers=auth_headers).json()["balance"]
         assert _money(saldo) == D("5000.00")
 
     def test_borrar_redimido_es_real(self, client, auth_headers, crear_cdt, db_session):
-        cdt = crear_cdt()
+        cdt = crear_cdt(maturity_on=VENCE_HOY)
         client.post(f"{URL}{cdt['id']}/redeem", json={}, headers=auth_headers)
         assert client.delete(f"{URL}{cdt['id']}", headers=auth_headers).status_code == 204
         assert db_session.query(models.Cdt).count() == 0
@@ -275,8 +288,8 @@ class TestListaYTotales:
     def test_orden_vigentes_por_vencimiento_luego_redimidos_recientes_primero(self, client, auth_headers, crear_cdt):
         tarde = crear_cdt(name="Tarde", maturity_on="2027-01-01")
         temprano = crear_cdt(name="Temprano", maturity_on="2026-06-01")
-        viejo = crear_cdt(name="Redimido viejo")
-        nuevo = crear_cdt(name="Redimido nuevo")
+        viejo = crear_cdt(name="Redimido viejo", maturity_on="2026-01-01")
+        nuevo = crear_cdt(name="Redimido nuevo", maturity_on="2026-02-01")
         client.post(f"{URL}{viejo['id']}/redeem", json={"redeemed_on": "2026-01-01"}, headers=auth_headers)
         client.post(f"{URL}{nuevo['id']}/redeem", json={"redeemed_on": "2026-02-01"}, headers=auth_headers)
         items = client.get(URL, headers=auth_headers).json()["items"]
@@ -285,7 +298,7 @@ class TestListaYTotales:
 
     def test_filtro_por_estado(self, client, auth_headers, crear_cdt):
         crear_cdt(name="Vigente")
-        redimido = crear_cdt(name="Redimido")
+        redimido = crear_cdt(name="Redimido", maturity_on=VENCE_HOY)
         client.post(f"{URL}{redimido['id']}/redeem", json={}, headers=auth_headers)
         activos = client.get(f"{URL}?status=active", headers=auth_headers).json()
         assert [i["name"] for i in activos["items"]] == ["Vigente"]
@@ -297,7 +310,7 @@ class TestListaYTotales:
         crear_cdt(principal="1000.00")
         crear_cdt(principal="500.00")
         crear_cdt(principal="200.00", currency="USD")
-        redimido = crear_cdt(principal="9999.00")
+        redimido = crear_cdt(principal="9999.00", maturity_on=VENCE_HOY)
         client.post(f"{URL}{redimido['id']}/redeem", json={}, headers=auth_headers)
         totales = {t["currency"]: t for t in client.get(URL, headers=auth_headers).json()["totals"]}
         assert set(totales) == {"COP", "USD"}
@@ -353,13 +366,13 @@ class TestZonaHoraria:
         assert (item["days_to_maturity"], item["alert"]) == (-1, "matured")
 
     def test_redimir_por_defecto_usa_el_dia_local(self, client, auth_headers, crear_cdt):
-        cdt = crear_cdt()
+        cdt = crear_cdt(maturity_on=VENCE_HOY)
         self._zona(client, auth_headers, "Pacific/Kiritimati")
         r = client.post(f"{URL}{cdt['id']}/redeem", json={}, headers=auth_headers).json()
         assert r["redeemed_on"] == "2026-03-16"  # el 15 en UTC y en Bogotá
 
     def test_no_se_puede_redimir_con_el_dia_utc_si_el_local_va_atras(self, client, auth_headers, crear_cdt):
-        cdt = crear_cdt()
+        cdt = crear_cdt(maturity_on=VENCE_HOY)
         # En Bogotá hoy es el 15: el 16 es futuro.
         resp = client.post(f"{URL}{cdt['id']}/redeem", json={"redeemed_on": "2026-03-16"}, headers=auth_headers)
         assert resp.status_code == 422
@@ -393,7 +406,7 @@ class TestDashboard:
 
     def test_redimido_no_cuenta(self, client, auth_headers, make_account, crear_cdt):
         make_account(auth_headers, balance="5000.00")
-        cdt = crear_cdt()
+        cdt = crear_cdt(maturity_on=VENCE_HOY)
         client.post(f"{URL}{cdt['id']}/redeem", json={}, headers=auth_headers)
         r = self._resumen(client, auth_headers)
         assert self._por_moneda(r["cdt_total"]) == {"COP": D("0.00")}
@@ -418,10 +431,10 @@ class TestDashboard:
         sobres_antes = client.get("/api/v1/funds/", headers=auth_headers).json()
         cuentas_antes = client.get("/api/v1/accounts/", headers=auth_headers).json()
 
-        cdt = crear_cdt(principal="900000.00")
+        cdt = crear_cdt(principal="900000.00", maturity_on=VENCE_HOY)
         client.put(f"{URL}{cdt['id']}", json={"principal": "950000.00"}, headers=auth_headers)
         client.post(f"{URL}{cdt['id']}/redeem", json={}, headers=auth_headers)
-        crear_cdt(principal="123.00")
+        crear_cdt(principal="123.00", maturity_on=VENCE_HOY)
 
         despues = self._resumen(client, auth_headers)
         for campo in (

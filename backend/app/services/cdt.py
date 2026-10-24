@@ -335,7 +335,8 @@ def actualizar(db: Session, user: models.User, cdt_id: int, datos, ahora: dateti
 
 
 def redimir(db: Session, user: models.User, cdt_id: int, datos, ahora: datetime) -> dict:
-    """Marca el CDT como redimido (D4). Sin `account_id` solo cambia de estado, como en la Fase 38.
+    """Marca el CDT como redimido (D4), solo desde el vencimiento (antes es 422, no se modela la anticipada).
+    Sin `account_id` solo cambia de estado, como en la Fase 38.
     Con `account_id` (D11) el capital vuelve a esa cuenta con una transferencia de redención y el
     interés realizado entra como ingreso "Rendimientos"; la cuenta debe ser de la moneda del CDT y
     `final_amount < principal` es 422 (la pérdida se registra a mano). El segundo de dos `redeem`
@@ -349,6 +350,8 @@ def redimir(db: Session, user: models.User, cdt_id: int, datos, ahora: datetime)
         raise ValidationError("`redeemed_on` no puede ser anterior a la apertura del CDT.")
     if fecha > hoy:
         raise ValidationError("`redeemed_on` no puede ser una fecha futura.")
+    if fecha < cdt.maturity_on:
+        raise ValidationError(f"El CDT no se puede redimir antes de su vencimiento ({cdt.maturity_on.isoformat()}).")
     if datos.final_amount is not None:
         final = datos.final_amount
     else:
