@@ -6,6 +6,7 @@ import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
+import { useAccounts } from '@/lib/hooks/useAccounts';
 import { useCreateCdt, useUpdateCdt } from '@/lib/hooks/useCdts';
 import { useTimezone } from '@/lib/hooks/useTimezone';
 import { todayInZone } from '@/lib/dates';
@@ -33,6 +34,7 @@ type Errors = {
 /** Se monta solo mientras está abierto, así el estado arranca siempre desde el CDT actual. */
 export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
   const isEdit = cdt !== undefined;
+  const isLinked = Boolean(cdt?.source_account_id);
   const { displayTimezone } = useTimezone();
   const today = todayInZone(displayTimezone);
 
@@ -46,7 +48,14 @@ export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
   const [rate, setRate] = useState(cdt ? String(Number(cdt.rate_ea)) : '');
   const [openedOn, setOpenedOn] = useState(cdt?.opened_on ?? today);
   const [maturityOn, setMaturityOn] = useState(cdt?.maturity_on ?? '');
+  const [sourceId, setSourceId] = useState(
+    cdt?.source_account_id ? String(cdt.source_account_id) : ''
+  );
   const [errors, setErrors] = useState<Errors>({});
+  const { data: accounts } = useAccounts();
+  // Mismo filtro de moneda que el backend (presentación; la validación real es del servidor).
+  const sourceOptions = accounts?.filter((a) => a.currency === currency) ?? [];
+  const sourceValue = sourceOptions.some((a) => String(a.id) === sourceId) ? sourceId : '';
 
   const currencyOptions = CURRENCY_OPTIONS.includes(currency)
     ? CURRENCY_OPTIONS
@@ -83,6 +92,10 @@ export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
       if (rateNumber !== Number(cdt.rate_ea)) payload.rate_ea = rateNumber;
       if (openedOn !== cdt.opened_on) payload.opened_on = openedOn;
       if (maturityOn !== cdt.maturity_on) payload.maturity_on = maturityOn;
+      // `null` explícito da 422: solo se manda al elegir una cuenta distinta de la actual.
+      if (sourceValue && Number(sourceValue) !== cdt.source_account_id) {
+        payload.source_account_id = Number(sourceValue);
+      }
       if (Object.keys(payload).length === 0) return onClose();
       updateMutation.mutate(payload, {
         onSuccess: () => {
@@ -101,6 +114,7 @@ export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
       rate_ea: rateNumber,
       opened_on: openedOn,
       maturity_on: maturityOn,
+      ...(sourceValue ? { source_account_id: Number(sourceValue) } : {}),
     };
     createMutation.mutate(payload, {
       onSuccess: () => {
@@ -115,8 +129,9 @@ export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
     <ModalShell isOpen onClose={onClose} title={isEdit ? 'Editar CDT' : 'Nuevo CDT'}>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <p className="bg-primary/10 text-text rounded-xl p-2.5 text-xs">
-          Un CDT no mueve el saldo de tus cuentas. Si el capital sigue en una cuenta, ajusta el
-          saldo de esa cuenta para que el dinero no se cuente dos veces en tu patrimonio.
+          Si eliges la cuenta de la que sale el capital, se registra una transferencia y el saldo de
+          esa cuenta baja. Sin cuenta, el CDT no mueve ningún saldo: ajusta la cuenta a mano para no
+          contar el dinero dos veces.
         </p>
 
         <Input
@@ -134,6 +149,7 @@ export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
             label="Moneda"
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
+            disabled={isLinked}
             className="bg-background"
           >
             {currencyOptions.map((c) => (
@@ -156,6 +172,12 @@ export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
             className="bg-background"
           />
         </div>
+
+        {isLinked && (
+          <p className="text-text-muted -mt-2 text-xs">
+            La moneda no se puede cambiar mientras el CDT esté vinculado a una cuenta de origen.
+          </p>
+        )}
 
         <Input
           label={`Capital (${currency})`}
@@ -186,6 +208,26 @@ export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
             error={errors.maturity}
             className="bg-background"
           />
+        </div>
+
+        <div>
+          <Select
+            label="Cuenta de origen del capital (opcional)"
+            value={sourceValue}
+            onChange={(e) => setSourceId(e.target.value)}
+            className="bg-background"
+          >
+            <option value="">Ninguna (no mover saldos)</option>
+            {sourceOptions.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.currency})
+              </option>
+            ))}
+          </Select>
+          <p className="text-text-muted mt-1 text-xs">
+            Solo cuentas en {currency}, la moneda del CDT.
+            {isEdit && ' Cambiar la cuenta ajusta la transferencia ya registrada.'}
+          </p>
         </div>
 
         {errors.form && (

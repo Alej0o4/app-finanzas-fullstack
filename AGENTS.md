@@ -84,9 +84,9 @@ comprometido pero no gastado, una capa de asignación sobre las cuentas (no una 
 lo comprometido en sobres**. El flujo sigue siendo la cifra principal del dashboard hasta que un
 `/grilling` decida otra cosa. Orden acordado (numeración tentativa): **Fase 35** sobres +
 disponible real, **36** gasto contra sobre, **37** recurrentes + calendario de cargos anuales (era
-la 35), **38** CDT, **39** "págate primero", **40** cierre de mes con puntaje. Regla ya decidida:
+la 35), **38** CDT, **39** transferencias entre cuentas, **40** "págate primero", **41** cierre de mes con puntaje. Regla ya decidida:
 el **fondo de emergencia solo cuenta dinero líquido** y el CDT es un módulo aparte, nunca parte del
-fondo. **Las Fases 35, 36, 37 y 38 (2026-10-17/18) están implementadas** y lo demás no; cada feature con su justificación, el diseño base y las
+fondo. **Las Fases 35, 36, 37, 38 y 39 (2026-10-17/24) están implementadas** y lo demás no; cada feature con su justificación, el diseño base y las
 decisiones abiertas están en [docs/VISION_FINANZAS_RESPONSABLES.md](docs/VISION_FINANZAS_RESPONSABLES.md)
 (los nombres de tablas y columnas ahí son propuestas sin verificar contra `models.py`). La Fase 35
 original (recurrentes) pasó a la Fase 37; las menciones anteriores a esta fecha son históricas.
@@ -103,12 +103,24 @@ previo; la migración `d5f2a8c1e703` corre sola en el `CMD` de Docker. **Ajustes
 implementados):** `DELETE /funds/{id}` borra el sobre y su libro (archivar sigue exigiendo saldo 0);
 `FundResponse.next_month_contribution`; `annual_expense` exige `target_date` (`422`); sin migración nueva.
 
+**Fase 39 — transferencias (hecho operativo vigente):** `Transfer` (`/api/v1/transfers`, `/api/v1/movements`,
+`app/services/transfers.py`, tabla `transfers`) mueve dinero propio entre cuentas y **no es flujo**: no cuenta en
+KPI, dona, presupuestos ni Analítica. `ledger.py` y `reconciliar_cuenta` **ahora incluyen** las transferencias en el
+saldo. Entre monedas distintas el servidor deriva la tasa de los dos montos. `GET /movements` mezcla transacciones y
+transferencias (UNION). **CDT vinculado opcional** (`source_account_id`/`destination_account_id`): crear
+constituye (transferencia cuenta→CDT), redimir con cuenta acredita y registra el interés como ingreso
+"Rendimientos"; `/transfers` no acepta `cdt_id` (esas nacen solo desde `/cdts`). Cuentas con transferencias no se
+borran, archivan ni cambian de moneda. Cierra QA-030. Decisiones D1–D17 de `docs/specs/fase_39_spec.md`, tomadas por
+el dueño en un `/grilling`. Despliegue: `pg_dump` previo; la migración `c2f8a5d1e764` corre sola en el `CMD` de
+Docker; el dueño corre **a mano** `scripts/fase39_corregir_bancolombia.py --confirmo-copia` solo tras verificar
+25.620.000 contra el extracto, y reclasifica los dólares desde la UI.
+
 **Fase 38 — CDT (hecho operativo vigente):** `Cdt` (`/api/v1/cdts`, `app/services/cdt.py`) es un módulo
-**aislado**: no referencia cuentas ni transacciones y no toca `Account.balance`, `Transaction` ni `ledger.py`
-(crear/editar/redimir/borrar no mueven saldos). El interés causado lo calcula el backend (E.A. compuesto, base
+**aislado por defecto**: sin cuentas vinculadas no toca `Account.balance`, `Transaction` ni `ledger.py`; desde la
+Fase 39 puede vincularse a cuentas (ver abajo) y entonces sí mueve saldos vía transferencias. El interés causado lo calcula el backend (E.A. compuesto, base
 365, `Decimal`, bruto, acotado al plazo); `alert` = `due_soon` (≤ 15 días) / `matured`, solo en la UI (sin job ni
-push). **Redimir solo cambia de estado** y guarda `redeemed_on` + `final_amount`; el retorno a una cuenta espera
-a las transferencias (QA-030). `GET /dashboard/summary` suma `cdt_total` y `net_worth` (cuentas + CDT vigentes);
+push). **Redimir sin cuenta solo cambia de estado** y guarda `redeemed_on` + `final_amount`; con cuenta de destino
+(Fase 39) crea la transferencia de retorno. `GET /dashboard/summary` suma `cdt_total` y `net_worth` (cuentas + CDT vigentes);
 `free_to_spend`, `committed` y el fondo de emergencia **no cambian** (solo cuentan dinero líquido). Se hizo
 **sin `/grilling`**: las decisiones D1–D16 de `docs/specs/fase_38_spec.md` las tomó el agente y esperan
 revisión del dueño. Despliegue: `pg_dump` previo; la migración `b4e7a2d9c613` (tabla nueva) corre sola en el
@@ -283,8 +295,8 @@ directamente en los routers, a propósito a esta escala):
   `ServiceUnavailableError`, más `AccountNotFoundError`/`CategoryNotFoundError`; empezó como
   piloto en la Fase 25 y se extendió a todos los routers en la Fase 28 — todo router lanza
   subclases de `DomainError`, no `HTTPException` directo), `seed.py`.
-- `models/models.py` — 17 modelos SQLAlchemy en un archivo (User, Account, Category,
-  HiddenCategory, Transaction, Budget, Fund, FundEntry, RecurringRule, Cdt, RefreshToken, PasswordResetToken,
+- `models/models.py` — 18 modelos SQLAlchemy en un archivo (User, Account, Category,
+  HiddenCategory, Transaction, Transfer, Budget, Fund, FundEntry, RecurringRule, Cdt, RefreshToken, PasswordResetToken,
   EmailVerificationToken, IdempotencyKey, Notification, PushSubscription, ApiKey).
 - `schemas/` — schemas Pydantic divididos por dominio desde la Fase 25 (`accounts.py`,
   `api_keys.py`, `auth.py`, `budgets.py`, `categories.py`, `common.py`, `dashboard.py`,

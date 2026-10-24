@@ -310,11 +310,16 @@ Página `app/(dashboard)/recurring/page.tsx` y subcomponentes en `components/rec
 Página `app/(dashboard)/cdts/page.tsx` y subcomponentes en `components/cdts/`:
 
 - `CdtCard` — tarjeta de CDT vigente (valor hoy, barra `elapsed_days / term_days`, rendimiento a hoy, valor al vencimiento, insignia de alerta; Redimir / Editar / Eliminar con confirmación vía `useConfirmStore`) o redimido (rendimiento realizado, fecha).
-- `CdtFormModal` — crear/editar sobre `ModalShell`; avisa que el CDT no mueve saldos de cuentas. Fechas como `YYYY-MM-DD`.
-- `CdtRedeemModal` — fecha de redención y monto recibido opcional (vacío = lo calcula el backend).
+- `CdtFormModal` — crear/editar sobre `ModalShell`; selector opcional de cuenta de origen (misma moneda; sin cuenta no mueve saldos). Fechas como `YYYY-MM-DD`.
+- `CdtRedeemModal` — fecha de redención, monto recibido opcional (vacío = lo calcula el backend) y cuenta de destino opcional (misma moneda).
 - `DueCdtCard` — aviso del dashboard "N CDT por vencer" (solo si hay `due_soon`/`matured`).
 - `NetWorthLine` — línea "Patrimonio total" del dashboard (`net_worth` del backend).
 - `cdtPresentation.tsx` — `formatRate`, `daysToMaturityLabel` y `CdtAlertBadge`. Reusa `Chip`, `formatDay` y `money` de `recurringPresentation.tsx`.
+
+### Transferencias (Fase 39)
+
+- `components/modals/TransferModal.tsx` — "Transferir" (crear) y editar transferencia cuenta↔cuenta. Monto de entrada o tasa según las monedas; toasts con tasa implícita y avisos. Se abre desde el FAB (`FabManager`) y desde el botón de `/transactions`; para editar se monta con `key` y la prop `transfer`.
+- `TransactionList` renderiza filas `kind: 'transfer'` (icono de flechas, sin signo, `origen → destino`, ambos montos si cambia la moneda; las de CDT son solo lectura con nota). `TransactionFilters` suma el checkbox "Ocultar transferencias".
 
 ### Cuentas y categorías
 

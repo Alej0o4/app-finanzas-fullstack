@@ -203,13 +203,13 @@ interés E.A. compuesto base 365, bruto, calculado por el backend; aviso de venc
 `cdt_total`/`net_worth` en el dashboard, sin tocar `free_to_spend`. Lo de abajo se conserva como historia.
 
 **Pendiente de `/grilling` (original).**
-- Redención: ¿cómo vuelve el dinero a una cuenta sin inflar el flujo? Hoy **no hay transferencias
+- *(Resuelto en la Fase 39, 2026-10-24: las transferencias ya existen y el CDT puede vincularse a cuentas.)* Redención: ¿cómo vuelve el dinero a una cuenta sin inflar el flujo? Hoy **no hay transferencias
   entre cuentas** (QA-030): registrarlo como ingreso distorsionaría los KPI. Conviene resolverlo
   junto con QA-030.
 - El interés causado se muestra como rendimiento **informativo** y solo se registra como ingreso al
   redimir (no se meten ingresos que todavía no existen en el flujo).
 
-### 2.6 "Págate primero" — *Fase 39*
+### 2.6 "Págate primero" — *Fase 40*
 
 **Qué es.** Al registrar un ingreso, la app propone el reparto a los sobres (emergencia,
 provisiones, metas) **antes** de mostrar el resto como dinero libre. Suma la **tasa de ahorro**
@@ -222,7 +222,7 @@ como KPI.
 - Sin cron, el aporte manual depende de acordarse; este es el paso hacia el aporte que casi se hace
   solo, con el monto sugerido a un toque.
 
-### 2.7 Cierre de mes con puntaje de cumplimiento — *Fase 40*
+### 2.7 Cierre de mes con puntaje de cumplimiento — *Fase 41*
 
 **Qué es.** Un cierre guiado de 5 minutos: cuánto se ahorró, qué sobres quedaron cortos, qué
 categoría se desvió, qué ajustar. Un puntaje simple que combina tasa de ahorro, cobertura del
@@ -258,9 +258,11 @@ Fase 37  Recurrentes + calendario      ✅ implementada 2026-10-18 (heredada de 
    │
 Fase 38  CDT                           (independiente: puede ir en cualquier hueco)
    │
-Fase 39  Págate primero                (necesita sobres probados)
+Fase 39  Transferencias + CDT vinculado ✅ implementada 2026-10-24 (cierra QA-030)
    │
-Fase 40  Cierre de mes + puntaje       (necesita jobs mensuales y datos de todo lo anterior)
+Fase 40  Págate primero                (necesita sobres probados)
+   │
+Fase 41  Cierre de mes + puntaje       (necesita jobs mensuales y datos de todo lo anterior)
 ```
 
 Cada fase sigue el workflow completo de `docs/WORKFLOW.md` (`/grilling` → `/to-spec` →

@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -14,6 +14,15 @@ from app.models import models
 from app.schemas import schemas
 
 router = APIRouter()
+
+
+def _tiene_transferencias(db: Session, account_id: int) -> bool:
+    return (
+        db.query(models.Transfer.id)
+        .filter(or_(models.Transfer.from_account_id == account_id, models.Transfer.to_account_id == account_id))
+        .first()
+        is not None
+    )
 
 
 @router.post("/", response_model=schemas.AccountResponse)
@@ -78,7 +87,7 @@ def reconciliar_cuenta(
     current_user: models.User = Depends(get_current_user),
 ):
     """Reconcilia el saldo de una cuenta (Fase 16 §16.4, Decisión 16.4.2): recalcula
-    `balance` desde `opening_balance` + historial de transacciones no eliminadas y aplica
+    `balance` desde `opening_balance` + historial de transacciones no eliminadas + transferencias y aplica
     la corrección de inmediato (sin preview — la operación es explícita y no destructiva).
     """
     cuenta = (
@@ -102,7 +111,16 @@ def reconciliar_cuenta(
         .scalar()
     ) or Decimal("0.00")
 
-    saldo_recalculado = cuenta.opening_balance + neto
+    # Fase 39 (D1): las transferencias también mueven el saldo (entra `amount_in`, sale `amount_out`),
+    # incluidas las que vinculan la cuenta con un CDT.
+    entradas = (
+        db.query(func.sum(models.Transfer.amount_in)).filter(models.Transfer.to_account_id == account_id).scalar()
+    ) or Decimal("0.00")
+    salidas = (
+        db.query(func.sum(models.Transfer.amount_out)).filter(models.Transfer.from_account_id == account_id).scalar()
+    ) or Decimal("0.00")
+
+    saldo_recalculado = cuenta.opening_balance + neto + entradas - salidas
     saldo_anterior = cuenta.balance
     discrepancia = saldo_recalculado - saldo_anterior
 
@@ -232,6 +250,9 @@ def actualizar_cuenta(
             .first()
         ):
             raise BadRequestError("No se puede cambiar la moneda de una cuenta con reglas recurrentes.")
+        # Fase 39: cada transferencia guarda la moneda de sus cuentas al crearse.
+        if _tiene_transferencias(db, account_id):
+            raise BadRequestError("No se puede cambiar la moneda de una cuenta con transferencias.")
         cuenta.currency = cuenta_actualizada.currency
 
     db.commit()
@@ -285,6 +306,12 @@ def eliminar_cuenta(
     if tiene_reglas:
         raise ConflictError(
             "No se puede eliminar la cuenta porque tiene reglas recurrentes. Elimínalas o cámbialas de cuenta primero."
+        )
+
+    # Fase 39 (D17): borrarla alteraría el saldo de la otra cuenta (o del CDT) de cada transferencia.
+    if _tiene_transferencias(db, account_id):
+        raise ConflictError(
+            "No se puede eliminar la cuenta porque tiene transferencias. Elimínalas primero (las de un CDT, desde el CDT)."
         )
 
     cuenta.deleted_at = datetime.now(UTC)

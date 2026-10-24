@@ -1,6 +1,14 @@
 'use client';
 
-import { ArrowRightLeft, ArrowDownRight, ArrowUpRight, Trash2, Pencil, Circle } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  ArrowDownRight,
+  ArrowUpRight,
+  ArrowRight,
+  Trash2,
+  Pencil,
+  Circle,
+} from 'lucide-react';
 import { formatCurrency, formatDateLabel } from '@/lib/utils';
 import { useAppConfig } from '@/providers/AppConfigProvider';
 import { useTimezone } from '@/lib/hooks/useTimezone';
@@ -10,10 +18,10 @@ import { useConfirmStore } from '@/store/useConfirmStore';
 import CategoryIcon from '@/components/ui/CategoryIcon';
 import Button from '@/components/ui/Button';
 import PlannedBadge from '@/components/funds/PlannedBadge';
-import type { Account, Category, Transaction } from '@/types/api';
+import type { Account, Category, Transaction, Transfer, Movement } from '@/types/api';
 
 interface TransactionListProps {
-  items: Transaction[];
+  items: Movement[];
   accounts?: Account[];
   categories?: Category[];
   total: number;
@@ -21,6 +29,8 @@ interface TransactionListProps {
   loadingMore: boolean;
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: number) => void;
+  onEditTransfer: (transfer: Transfer) => void;
+  onDeleteTransfer: (id: number) => void;
   onLoadMore: () => void;
   /** Fase 31 F6 (Q7, QA-010): la consulta inicial falló y no hay ítems cargados — se
    *  muestra "No se pudieron cargar los movimientos." con "Reintentar" en vez del vacío de
@@ -38,6 +48,8 @@ export default function TransactionList({
   loadingMore,
   onEdit,
   onDelete,
+  onEditTransfer,
+  onDeleteTransfer,
   onLoadMore,
   isError,
   onRetry,
@@ -46,114 +58,196 @@ export default function TransactionList({
   const { displayTimezone } = useTimezone();
 
   return (
-    <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
-      {isError ? (
-        <QueryErrorState message="No se pudieron cargar los movimientos." onRetry={onRetry} />
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon={<ArrowRightLeft size={48} className="opacity-20" />}
-          message="Aún no tienes movimientos registrados."
-        />
-      ) : (
-        <>
-          <div className="divide-border/40 divide-y">
-            {items.map((tx) => {
-              const isExpense = tx.type === 'expense';
-              const account = accounts?.find((a) => a.id === tx.account_id);
-              const category = categories?.find((c) => c.id === tx.category_id);
-
-              return (
-                <div
-                  key={tx.id}
-                  className="hover:bg-surface-elevated group flex items-center justify-between gap-3 p-3 transition-colors sm:gap-4 sm:p-4 sm:px-6"
-                >
-                  <div className="flex min-w-0 items-center space-x-3 sm:space-x-4">
+    <div className="pb-24 sm:pb-0">
+      <div className="bg-surface border-border/70 shadow-background/20 overflow-hidden rounded-3xl border shadow-sm">
+        {isError ? (
+          <QueryErrorState message="No se pudieron cargar los movimientos." onRetry={onRetry} />
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={<ArrowRightLeft size={48} className="opacity-20" />}
+            message="Aún no tienes movimientos registrados."
+          />
+        ) : (
+          <>
+            <div className="divide-border/40 divide-y">
+              {items.map((tx) => {
+                if (tx.kind === 'transfer') {
+                  const fromAcc = accounts?.find((a) => a.id === tx.from_account_id);
+                  const toAcc = accounts?.find((a) => a.id === tx.to_account_id);
+                  const crossCurrency = tx.currency_out !== tx.currency_in;
+                  const linkedToCdt = tx.cdt_id != null;
+                  return (
                     <div
-                      className={`bg-background border-border/60 hidden shrink-0 rounded-full border p-2.5 sm:block ${isExpense ? 'text-text-muted' : 'text-primary'}`}
+                      key={`transfer-${tx.id}`}
+                      className="hover:bg-surface-elevated group flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-3 transition-colors sm:flex-nowrap sm:gap-4 sm:p-4 sm:px-6"
                     >
-                      {isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
+                      <div className="flex min-w-0 flex-1 items-center space-x-3 sm:space-x-4">
+                        <div className="bg-background border-border/60 text-text-muted hidden shrink-0 rounded-full border p-2.5 sm:block">
+                          <ArrowRightLeft size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-text text-sm font-medium break-words sm:truncate">
+                            {tx.description ||
+                              (linkedToCdt ? `CDT ${tx.cdt_name ?? ''}`.trim() : 'Transferencia')}
+                          </p>
+                          <div className="text-text-muted mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
+                            <span className="break-words sm:truncate">
+                              {fromAcc?.name || 'Cuenta eliminada'}
+                            </span>
+                            <ArrowRight size={12} className="shrink-0" aria-label="hacia" />
+                            <span className="break-words sm:truncate">
+                              {toAcc?.name || 'Cuenta eliminada'}
+                            </span>
+                          </div>
+                          {linkedToCdt && (
+                            <p className="text-text-muted mt-0.5 text-[11px]">
+                              Vinculada al CDT{tx.cdt_name ? ` ${tx.cdt_name}` : ''}: se administra
+                              desde el CDT.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <div className="text-right">
+                          <p className="text-text-soft font-sans text-sm font-semibold tabular-nums sm:text-base">
+                            {formatCurrency(Number(tx.amount_out), tx.currency_out)}
+                          </p>
+                          {crossCurrency && (
+                            <p className="text-text-muted text-[11px] tabular-nums">
+                              → {formatCurrency(Number(tx.amount_in), tx.currency_in)}
+                            </p>
+                          )}
+                          <p className="text-text-muted text-[11px]">
+                            {formatDateLabel(tx.date, config.locale, displayTimezone)}
+                          </p>
+                        </div>
+                      </div>
+                      {!linkedToCdt && (
+                        <div className="flex w-full items-center justify-end gap-1 opacity-100 sm:w-auto sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                          <button
+                            onClick={() => onEditTransfer(tx)}
+                            className="text-text-muted hover:text-text hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
+                            aria-label="Editar transferencia"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            onClick={() =>
+                              useConfirmStore
+                                .getState()
+                                .confirm(
+                                  '¿Borrar esta transferencia? Los saldos de ambas cuentas se revierten.',
+                                  () => onDeleteTransfer(tx.id)
+                                )
+                            }
+                            className="text-text-muted hover:text-danger hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
+                            aria-label="Eliminar transferencia"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <p className="text-text truncate text-sm font-medium">
-                          {tx.description || category?.name || 'Sin categoría'}
+                  );
+                }
+                const isExpense = tx.type === 'expense';
+                const account = accounts?.find((a) => a.id === tx.account_id);
+                const category = categories?.find((c) => c.id === tx.category_id);
+
+                return (
+                  <div
+                    key={`transaction-${tx.id}`}
+                    className="hover:bg-surface-elevated group flex items-center justify-between gap-3 p-3 transition-colors sm:gap-4 sm:p-4 sm:px-6"
+                  >
+                    <div className="flex min-w-0 items-center space-x-3 sm:space-x-4">
+                      <div
+                        className={`bg-background border-border/60 hidden shrink-0 rounded-full border p-2.5 sm:block ${isExpense ? 'text-text-muted' : 'text-primary'}`}
+                      >
+                        {isExpense ? <ArrowDownRight size={18} /> : <ArrowUpRight size={18} />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <p className="text-text truncate text-sm font-medium">
+                            {tx.description || category?.name || 'Sin categoría'}
+                          </p>
+                          {tx.fund_id != null && <PlannedBadge className="hidden sm:inline-flex" />}
+                        </div>
+                        <div className="text-text-muted mt-0.5 flex items-center space-x-2 text-xs">
+                          <span className="truncate">{account?.name || 'Cuenta eliminada'}</span>
+                          {tx.fund_id != null && <PlannedBadge className="inline-flex sm:hidden" />}
+                          <span className="hidden sm:inline">•</span>
+                          <span className="hidden items-center gap-1 sm:inline-flex">
+                            <CategoryIcon
+                              icon={category?.icon}
+                              size={12}
+                              fallback={<Circle size={12} className="opacity-30" />}
+                            />
+                            {category?.name || 'Sin categoría'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2 sm:gap-6">
+                      <div className="text-right">
+                        <p
+                          className={`font-sans text-sm font-semibold tabular-nums sm:text-base ${isExpense ? 'text-text' : 'text-primary'}`}
+                        >
+                          {isExpense ? '-' : '+'}
+                          {formatCurrency(tx.amount, tx.currency)}
                         </p>
-                        {tx.fund_id != null && <PlannedBadge className="hidden sm:inline-flex" />}
+                        <p className="text-text-muted text-[11px]">
+                          {formatDateLabel(tx.date, config.locale, displayTimezone)}
+                        </p>
                       </div>
-                      <div className="text-text-muted mt-0.5 flex items-center space-x-2 text-xs">
-                        <span className="truncate">{account?.name || 'Cuenta eliminada'}</span>
-                        {tx.fund_id != null && <PlannedBadge className="inline-flex sm:hidden" />}
-                        <span className="hidden sm:inline">•</span>
-                        <span className="hidden items-center gap-1 sm:inline-flex">
-                          <CategoryIcon
-                            icon={category?.icon}
-                            size={12}
-                            fallback={<Circle size={12} className="opacity-30" />}
-                          />
-                          {category?.name || 'Sin categoría'}
-                        </span>
+                      <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                        <button
+                          onClick={() => onEdit(tx)}
+                          className="text-text-muted hover:text-text hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
+                          aria-label="Editar transacción"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          onClick={() =>
+                            useConfirmStore
+                              .getState()
+                              .confirm('¿Borrar esta transacción?', () => onDelete(tx.id))
+                          }
+                          className="text-text-muted hover:text-danger hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
+                          aria-label="Eliminar transacción"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </div>
                   </div>
-
-                  <div className="flex shrink-0 items-center gap-2 sm:gap-6">
-                    <div className="text-right">
-                      <p
-                        className={`font-sans text-sm font-semibold tabular-nums sm:text-base ${isExpense ? 'text-text' : 'text-primary'}`}
-                      >
-                        {isExpense ? '-' : '+'}
-                        {formatCurrency(tx.amount, tx.currency)}
-                      </p>
-                      <p className="text-text-muted text-[11px]">
-                        {formatDateLabel(tx.date, config.locale, displayTimezone)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
-                      <button
-                        onClick={() => onEdit(tx)}
-                        className="text-text-muted hover:text-text hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
-                        aria-label="Editar transacción"
-                      >
-                        <Pencil size={16} />
-                      </button>
-                      <button
-                        onClick={() =>
-                          useConfirmStore
-                            .getState()
-                            .confirm('¿Borrar esta transacción?', () => onDelete(tx.id))
-                        }
-                        className="text-text-muted hover:text-danger hover:bg-surface-elevated rounded-lg p-2 transition-colors active:scale-95"
-                        aria-label="Eliminar transacción"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {hasMore && (
-            <div className="border-border/40 flex justify-center border-t py-6">
-              <Button
-                variant="secondary"
-                onClick={onLoadMore}
-                disabled={loadingMore}
-                loading={loadingMore}
-              >
-                {loadingMore ? 'Cargando...' : `Cargar más (${items.length} de ${total})`}
-              </Button>
+                );
+              })}
             </div>
-          )}
 
-          {!hasMore && items.length > 0 && (
-            <p className="text-text-muted border-border/40 border-t py-4 text-center text-sm">
-              Mostrando todas las {total} transacciones
-            </p>
-          )}
-        </>
-      )}
+            {hasMore && (
+              <div className="border-border/40 flex justify-center border-t py-6">
+                <Button
+                  variant="secondary"
+                  onClick={onLoadMore}
+                  disabled={loadingMore}
+                  loading={loadingMore}
+                >
+                  {loadingMore ? 'Cargando...' : `Cargar más (${items.length} de ${total})`}
+                </Button>
+              </div>
+            )}
+
+            {!hasMore && items.length > 0 && (
+              <p className="text-text-muted border-border/40 border-t py-4 text-center text-sm">
+                Mostrando todos los {total} movimientos
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

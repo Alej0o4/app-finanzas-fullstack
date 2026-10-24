@@ -23,6 +23,8 @@ DEFAULT_CATEGORIES = [
     {"name": "Otro", "type": "expense", "icon": "CircleEllipsis"},
     {"name": "Salario", "type": "income", "icon": "Wallet"},
     {"name": "Otros ingresos", "type": "income", "icon": "TrendingUp"},
+    # Fase 39 (D11): interés realizado al redimir un CDT con cuenta destino. Ingreso real (cuenta en flujo).
+    {"name": "Rendimientos", "type": "income", "icon": "Landmark"},
     # Fase 18 §18.1 (Decisión Q5): 8 categorías nuevas, todas type=expense, íconos
     # verificados contra lucide-react instalado. Son altas puras (no renombres): ningún
     # nombre choca con uno existente bajo la comparación case/acento-insensible de

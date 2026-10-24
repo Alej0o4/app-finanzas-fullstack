@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { getApiError } from '@/lib/utils';
+import { useInvalidateAfterTransfer } from '@/lib/hooks/useTransfers';
 import type {
   Cdt,
   CdtListResponse,
@@ -28,14 +29,21 @@ export function useCdts(options?: { enabled?: boolean }) {
   });
 }
 
-/** Un CDT no mueve saldos (D1): toda mutación invalida solo `cdts` y el resumen del dashboard
- *  (`cdt_total` / `net_worth`). Nunca `accounts`, `transactions` ni `funds`. */
+/** Fase 39: un CDT con cuenta de origen/destino crea o borra transferencias (y un ingreso
+ *  "Rendimientos"), así que toda mutación invalida lo mismo que una transferencia — cuentas,
+ *  movimientos, dashboard, sobres — más `cdts`. Sin cuenta vinculada sobra, pero es barato. */
 function useInvalidateCdts() {
   const queryClient = useQueryClient();
+  const invalidateTransferDeps = useInvalidateAfterTransfer();
   return () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.cdts.all() }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.summary() }),
+      invalidateTransferDeps(),
+      // El ingreso "Rendimientos" de una redención entra en flujo, presupuestos y Analítica.
+      queryClient.invalidateQueries({ queryKey: queryKeys.budgets.progress() }),
+      queryClient.invalidateQueries({ queryKey: ['analytics-cashflow'] }),
+      queryClient.invalidateQueries({ queryKey: ['analytics-categories'] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.categoryBreakdown() }),
     ]);
 }
 
@@ -78,6 +86,8 @@ export function useDeleteCdt(id: number) {
       toast.success('CDT eliminado');
       return invalidate();
     },
-    onError: (error) => toast.error(getApiError(error)),
+    // El 409 de un redimido con transferencias trae su propio copy desde el backend
+    // ("No se puede borrar un CDT redimido con transferencias vinculadas...").
+    onError: (error) => toast.error(getApiError(error), { duration: 8000 }),
   });
 }

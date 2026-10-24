@@ -37,6 +37,10 @@ export const queryKeys = {
     byAccount: (id: string | number) => ['transactions', 'account', id] as const,
     byCategory: (id: string | number) => ['transactions', 'category', id] as const,
     filtered: (filters: Record<string, unknown>) => ['transactions', filters] as const,
+    /** Fase 39: feed mixto (`GET /movements/`). Cuelga del prefijo `['transactions']`, así que
+     *  toda invalidación de `transactions.all()` lo cubre sin tocar los 17 call sites. */
+    movements: (filters: Record<string, unknown>) =>
+      ['transactions', 'movements', filters] as const,
   },
   funds: {
     /** Lista de sobres (Fase 35). La variante con archivados cuelga de este prefijo. */

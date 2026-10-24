@@ -277,6 +277,7 @@
 
 - No se puede borrar una cuenta con transacciones.
 - No se puede borrar una cuenta que respalda sobres activos (Fase 35).
+- No se puede borrar una cuenta con transferencias, como origen o destino (`409`, Fase 39 D17).
 - No se puede borrar una categoría con transacciones.
 - No se puede borrar una categoría con presupuestos activos.
 - No se pueden borrar categorías base del sistema.
@@ -425,9 +426,10 @@ Spec: `docs/specs/fase_36_spec.md` (decisiones D1–D17).
 
 ## CDT (Fase 38)
 
-- **Aislado del libro contable:** crear, editar, redimir o borrar un CDT no mueve `Account.balance`, no crea
-  `Transaction` y no usa `ledger.py`. Redimir solo cambia de estado y guarda `redeemed_on` y `final_amount`
-  (defecto: capital + interés causado a esa fecha); el retorno a una cuenta espera a las transferencias (QA-030).
+- **Aislado del libro contable salvo vínculo opcional (Fase 39):** sin vínculo, crear, editar, redimir o borrar un
+  CDT no mueve `Account.balance` ni crea `Transaction`. Redimir sin cuenta solo cambia de estado y guarda
+  `redeemed_on` y `final_amount` (defecto: capital + interés causado a esa fecha). Con vínculo, ver
+  "Transferencias entre cuentas".
 - **Interés causado:** `capital × ((1 + r)^(d/365) − 1)`, `r = rate_ea/100`, `Decimal`, redondeo `ROUND_HALF_UP`
   a centavo, bruto (sin retención ni GMF). `d` = días entre `opened_on` y hoy (zona del usuario), acotado a
   `[0, plazo]`: no se causa interés después del vencimiento ni antes de abrir.
@@ -440,7 +442,40 @@ Spec: `docs/specs/fase_36_spec.md` (decisiones D1–D17).
   edita (`409` si no). `0 < rate_ea <= 100`, `principal > 0`, `maturity_on > opened_on`, plazo <= 10 años,
   `opened_on` entre hoy − 10 años y hoy + 1 año, hasta 50 CDT por usuario. Moneda propia, sin conversión.
 - **Concurrencia:** `PUT`/`redeem`/`DELETE` toman `FOR UPDATE`; dos `redeem` simultáneos dan un `200` y un `409`.
-- **Borrado de usuario:** `delete_user_cascade` borra sus CDT.
+- **Borrado de usuario:** `delete_user_cascade` borra sus CDT (y antes sus transferencias).
+
+## Transferencias entre cuentas (Fase 39)
+
+- **Las transferencias no son flujo (D1).** Viven en su propia tabla `transfers`, no crean filas en
+  `Transaction` y ningún KPI, dona, `cashflow-series`, Analítica, presupuesto, alerta ni resumen semanal las lee.
+  Solo mueven `Account.balance` vía `ledger.py`: sale `amount_out` del origen, entra `amount_in` al destino. Por
+  eso `balance = opening_balance + neto de transacciones + entradas − salidas de transferencias`, y
+  `POST /accounts/{id}/reconcile` suma las transferencias (incluidas las de CDT).
+- **Monedas y tasa (D2/D9).** Las monedas salen de las cuentas y se guardan en la transferencia. Misma moneda:
+  `amount_in = amount_out`. Distintas: exactamente uno de `amount_in` / `exchange_rate` (COP por 1 unidad
+  extranjera, solo pares con COP). La tasa es un dato derivado que no se persiste; sin ganancia/pérdida
+  cambiaria. Por eso no se cambia la moneda de una cuenta con transferencias (`400`).
+- **Forma (D3/D10).** Sin `cdt_id`: ambas cuentas presentes y distintas. Con `cdt_id`: exactamente una cuenta
+  (origen = constitución, destino = redención); un CDT tiene a lo sumo una de cada una (`CHECK` + índices únicos
+  parciales). `amount_out` y `amount_in` > 0.
+- **Cuentas de crédito (D5).** Origen o destino sin reglas especiales; pagar la tarjeta es una transferencia,
+  comprar con ella sigue siendo gasto.
+- **Sobres (D6).** Una transferencia puede dejar la cuenta de origen bajo lo comprometido en sus sobres activos:
+  no bloquea; `POST`/`PUT` devuelven `warnings` `BELOW_COMMITTED` y el disponible real puede ser negativo.
+- **Editar, borrar y concurrencia (D7).** `PUT`/`DELETE` revierten el efecto anterior y aplican el nuevo en un
+  solo juego de `UPDATE` ordenado por `account_id`; las cuentas se bloquean con `FOR UPDATE` en ese orden, así
+  que A→B y B→A simultáneas no hacen deadlock. Borrado real. Las transferencias de un CDT solo se editan o borran
+  desde el CDT (`409` en `/transfers`).
+- **Fechas (D13).** Mismas reglas que `Transaction` (solo-día en la zona del usuario o datetime).
+- **Cuentas (D17).** `DELETE /accounts/{id}` -> `409` con transferencias; `delete_user_cascade` las borra antes
+  de cuentas y CDT.
+- **CDT vinculado (D11/D12).** El vínculo es opcional y la cuenta debe ser de la moneda del CDT (`422`).
+  Constitución (`source_account_id`): transferencia cuenta -> CDT en `opened_on`; editar capital, apertura,
+  moneda o cuenta la actualiza y reajusta saldos; no se puede desvincular. Redención (`account_id`): transferencia
+  CDT -> cuenta por el **capital** más, si `final_amount > principal`, un ingreso real por la diferencia en la
+  categoría base "Rendimientos" (cuenta como flujo; sin retención ni GMF); `final_amount < principal` con cuenta
+  es `422`. Borrar un CDT vigente vinculado revierte la constitución; uno redimido con transferencias es `409`.
+  `net_worth` no cuenta dos veces el capital: al constituir, sale de la cuenta y entra como CDT.
 
 ## Dashboard
 

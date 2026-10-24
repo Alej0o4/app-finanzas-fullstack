@@ -33,6 +33,9 @@ interface TransactionFiltersProps {
    *  (fecha final anterior a la inicial). Se muestra bajo "Fecha final"; la consulta no
    *  se ejecuta mientras este error está presente (ver `enabled: false` en la página). */
   endDateError?: string;
+  /** Fase 39: ocultar transferencias del feed (`include_transfers=false`). */
+  hideTransfers: boolean;
+  onHideTransfersChange: (value: boolean) => void;
 }
 
 export default function TransactionFilters({
@@ -50,6 +53,8 @@ export default function TransactionFilters({
   onCategoryFilterChange,
   onClearFilters,
   endDateError,
+  hideTransfers,
+  onHideTransfersChange,
 }: TransactionFiltersProps) {
   return (
     <div className="bg-surface border-border/70 shadow-background/20 min-w-0 space-y-4 overflow-x-hidden rounded-2xl border p-4 shadow-sm sm:p-5">
@@ -129,6 +134,16 @@ export default function TransactionFilters({
             ))}
           </Select>
         </div>
+
+        <label className="text-text-soft flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={hideTransfers}
+            onChange={(event) => onHideTransfersChange(event.target.checked)}
+            className="accent-primary h-4 w-4"
+          />
+          Ocultar transferencias entre cuentas
+        </label>
       </div>
     </div>
   );

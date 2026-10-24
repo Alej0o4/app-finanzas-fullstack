@@ -490,3 +490,62 @@ class Cdt(Base):
         ),
         Index("ix_cdts_user_id_status", "user_id", "status"),
     )
+
+
+class Transfer(Base):
+    """Transferencia entre cuentas propias o entre una cuenta y un CDT (Fase 39 §B1).
+
+    **No es flujo**: no crea filas en `Transaction` y ningún KPI, dona, Analítica, presupuesto ni
+    alerta la lee. Solo mueve `Account.balance` vía `ledger.py`. Se persisten `amount_out` y
+    `amount_in` (pueden diferir si cambia la moneda); la tasa es un dato derivado. Sin
+    `SoftDeleteMixin`: borrar es real (D7).
+
+    Sin `cdt_id`: ambas cuentas presentes y distintas. Con `cdt_id`: exactamente una cuenta
+    (origen = constitución del CDT, destino = redención); un CDT tiene a lo sumo una de cada una
+    (índices únicos parciales).
+    """
+
+    __tablename__ = "transfers"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    from_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    to_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    cdt_id = Column(Integer, ForeignKey("cdts.id"), nullable=True)
+    amount_out = Column(Numeric(14, 2), nullable=False)
+    currency_out = Column(String(3), nullable=False)
+    amount_in = Column(Numeric(14, 2), nullable=False)
+    currency_in = Column(String(3), nullable=False)
+    date = Column(DateTime(timezone=True), nullable=False)
+    description = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("amount_out > 0", name="ck_transfers_amount_out_positive"),
+        CheckConstraint("amount_in > 0", name="ck_transfers_amount_in_positive"),
+        CheckConstraint(
+            "(cdt_id IS NULL AND from_account_id IS NOT NULL AND to_account_id IS NOT NULL "
+            "AND from_account_id <> to_account_id) "
+            "OR (cdt_id IS NOT NULL AND ((from_account_id IS NULL) <> (to_account_id IS NULL)))",
+            name="ck_transfers_endpoints",
+        ),
+        Index("ix_transfers_user_id_date", "user_id", "date"),
+        Index("ix_transfers_from_account_id", "from_account_id"),
+        Index("ix_transfers_to_account_id", "to_account_id"),
+        Index("ix_transfers_cdt_id", "cdt_id"),
+        # A lo sumo una constitución y una redención por CDT (D3).
+        Index(
+            "uq_transfers_cdt_constitucion",
+            "cdt_id",
+            unique=True,
+            postgresql_where=text("cdt_id IS NOT NULL AND from_account_id IS NOT NULL"),
+            sqlite_where=text("cdt_id IS NOT NULL AND from_account_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_transfers_cdt_redencion",
+            "cdt_id",
+            unique=True,
+            postgresql_where=text("cdt_id IS NOT NULL AND to_account_id IS NOT NULL"),
+            sqlite_where=text("cdt_id IS NOT NULL AND to_account_id IS NOT NULL"),
+        ),
+    )

@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import ModalShell from '@/components/ui/ModalShell';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
+import { useAccounts } from '@/lib/hooks/useAccounts';
+import Select from '@/components/ui/Select';
 import { useRedeemCdt } from '@/lib/hooks/useCdts';
 import { useTimezone } from '@/lib/hooks/useTimezone';
 import { todayInZone } from '@/lib/dates';
@@ -25,6 +27,9 @@ export default function CdtRedeemModal({ cdt, onClose }: CdtRedeemModalProps) {
 
   const [redeemedOn, setRedeemedOn] = useState(today);
   const [finalAmount, setFinalAmount] = useState('');
+  const [accountId, setAccountId] = useState('');
+  const { data: accounts } = useAccounts();
+  const accountOptions = accounts?.filter((a) => a.currency === cdt.currency) ?? [];
   const [errors, setErrors] = useState<{ date?: string; amount?: string; form?: string }>({});
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -44,6 +49,7 @@ export default function CdtRedeemModal({ cdt, onClose }: CdtRedeemModalProps) {
 
     const payload: RedeemCdtPayload = { redeemed_on: redeemedOn };
     if (hasAmount) payload.final_amount = Number(finalAmount);
+    if (accountId) payload.account_id = Number(accountId);
     mutation.mutate(payload, {
       onSuccess: () => {
         toast.success('CDT redimido');
@@ -57,8 +63,9 @@ export default function CdtRedeemModal({ cdt, onClose }: CdtRedeemModalProps) {
     <ModalShell isOpen onClose={onClose} title={`Redimir ${cdt.name}`}>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <p className="bg-primary/10 text-text rounded-xl p-2.5 text-xs">
-          Redimir marca el CDT como cerrado y guarda cuánto recibiste. No crea ninguna transacción
-          ni cambia el saldo de tus cuentas: si el dinero volvió a una cuenta, ajusta su saldo.
+          Redimir marca el CDT como cerrado y guarda cuánto recibiste. Si eliges una cuenta de
+          destino, el dinero entra a ella como una transferencia; si recibiste más que el capital,
+          la diferencia se registra como ingreso en la categoría Rendimientos.
         </p>
 
         <Input
@@ -88,6 +95,26 @@ export default function CdtRedeemModal({ cdt, onClose }: CdtRedeemModalProps) {
           <p className="text-text-muted mt-1 text-xs">
             Si lo dejas vacío, se usa capital + rendimiento a la fecha de redención. Pon lo que el
             banco te pagó de verdad (ya neto de retención o penalización).
+          </p>
+        </div>
+
+        <div>
+          <Select
+            label="Cuenta de destino (opcional)"
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            className="bg-background"
+          >
+            <option value="">Ninguna (no mover saldos)</option>
+            {accountOptions.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.currency})
+              </option>
+            ))}
+          </Select>
+          <p className="text-text-muted mt-1 text-xs">
+            Solo cuentas en {cdt.currency}. Con cuenta de destino, el monto recibido no puede ser
+            menor al capital.
           </p>
         </div>
 

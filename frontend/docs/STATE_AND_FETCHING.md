@@ -236,11 +236,25 @@ Una sola key, `cdts.all()` (`['cdts']`), para la lista con sus `totals`; el hook
 por `status` y la tarjeta del dashboard (`DueCdtCard`) comparte la misma entrada de caché. El frontend no calcula
 interés, valores, días ni totales.
 
-- **Toda mutación de CDT** (crear, editar, redimir, borrar) invalida solo `cdts.all()` y `dashboard.summary()`
-  (`cdt_total` / `net_worth`). Un CDT no mueve saldos (D1): **nunca** se invalida `accounts`, `transactions` ni
-  `funds`. Editar y redimir invalidan también en error (un `409` por CDT ya redimido se arregla re-leyendo).
+- **Toda mutación de CDT** (crear, editar, redimir, borrar) invalida `cdts.all()` y, desde la Fase 39 (un CDT
+  vinculado crea/borra transferencias y un ingreso "Rendimientos"), lo mismo que una transferencia más
+  presupuestos y Analítica (`useInvalidateCdts` reutiliza `useInvalidateAfterTransfer`). Editar y redimir
+  invalidan también en error (un `409` por CDT ya redimido se arregla re-leyendo).
 - El toast de borrar vive en el hook (la tarjeta se desmonta al refrescar la lista).
 - El dashboard muestra `net_worth` (`NetWorthLine`) y el conteo de CDT con `alert != 'ok'` (`DueCdtCard`).
+
+### Transferencias y movimientos (Fase 39)
+
+- Feed: `useMovements` (`GET /movements/`) con key `transactions.movements(params)` = `['transactions', 'movements', params]`.
+  Cuelga del prefijo `['transactions']`, así que toda invalidación existente de `transactions.all()` lo refresca.
+  `/transactions` lo usa para la lista (dedupe por `kind-id`); dashboard y páginas de cuenta/categoría siguen con
+  `useTransactions`. El filtro "Ocultar transferencias" vive en la URL (`?notransfers=1` → `include_transfers=false`).
+- Mutaciones en `lib/hooks/useTransfers.ts` (`useCreateTransfer`, `useUpdateTransfer`, `useDeleteTransfer`). Todas
+  invalidan con `useInvalidateAfterTransfer`: `transactions.all()`, `accounts.all()`, `accounts.summary()`,
+  `dashboard.summary()`, `cdts.all()`, `funds.all()` y `funds.details()`. **No** invalidan presupuestos ni Analítica
+  (las transferencias no son flujo). Update y delete invalidan también en error (`409` de CDT).
+- Los avisos `BELOW_COMMITTED` y la tasa implícita salen de la respuesta del POST/PUT y se muestran en toasts
+  (`lib/transferWarnings.ts`); no se persisten en el caché.
 
 ### Crear/editar/eliminar categoría
 

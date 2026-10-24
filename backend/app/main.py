@@ -22,11 +22,13 @@ from app.api import (
     cdt,
     dashboard,
     funds,
+    movements,
     notifications,
     preferences,
     push,
     recurring,
     transactions,
+    transfers,
     users,
 )
 from app.core.csrf import csrf_protection_middleware  # 🆕 Fase 26
@@ -152,6 +154,8 @@ app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboar
 app.include_router(funds.router, prefix="/api/v1/funds", tags=["Sobres"])
 app.include_router(recurring.router, prefix="/api/v1/recurring", tags=["Recurrentes"])
 app.include_router(cdt.router, prefix="/api/v1/cdts", tags=["CDT"])
+app.include_router(transfers.router, prefix="/api/v1/transfers", tags=["Transferencias"])
+app.include_router(movements.router, prefix="/api/v1/movements", tags=["Movimientos"])
 app.include_router(preferences.router, prefix="/api/v1/users", tags=["Preferencias"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notificaciones"])
 app.include_router(push.router, prefix="/api/v1/push", tags=["Push"])

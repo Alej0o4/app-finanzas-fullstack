@@ -1,7 +1,11 @@
 """CDT: inversión a plazo fijo como módulo independiente (Fase 38, docs/specs/fase_38_spec.md).
 
-Un CDT no toca el libro contable (D1): ni `Account.balance`, ni `Transaction`, ni `ledger.py`.
-Este módulo calcula el interés causado, los días que faltan y el aviso de vencimiento, y suma el
+Un CDT es un módulo aparte del libro contable: por sí solo no toca `Account.balance` ni
+`Transaction`. Desde la Fase 39 puede vincularse a una cuenta de forma **opcional** mediante
+transferencias (`source_account_id` al crear/editar, `account_id` al redimir): la transferencia de
+constitución saca el capital de la cuenta, la de redención lo devuelve y el interés realizado entra
+como un ingreso normal en la categoría base "Rendimientos" (D11/D12). Sin vínculo todo sigue
+aislado como en la Fase 38. Este módulo calcula el interés causado, los días que faltan y el aviso de vencimiento, y suma el
 CDT vigente al patrimonio total (`net_worth`), nunca al disponible real ni al fondo de emergencia.
 
 Dos mitades: funciones **puras** arriba (solo `date`/`Decimal`; nunca leen el reloj ni construyen
@@ -15,10 +19,13 @@ from decimal import ROUND_HALF_UP, Decimal, localcontext
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ConflictError, NotFoundError, ValidationError
-from app.core.periods import dia_local, sumar_meses
+from app.core.default_categories import ensure_default_categories
+from app.core.exceptions import ConflictError, InternalServerError, NotFoundError, ValidationError
+from app.core.periods import dia_local, instante_de_dia, sumar_meses
 from app.core.timezones import get_zoneinfo
 from app.models import models
+from app.services import ledger
+from app.services.transfers import bloquear_cuentas
 
 CENTAVO = Decimal("0.01")
 CERO = Decimal("0.00")
@@ -27,6 +34,8 @@ MAX_CDT_POR_USUARIO = 50  # D11
 ANIOS_MAX_PLAZO = 10  # D8
 ANIOS_MAX_ATRAS = 10  # D8: `opened_on` desde hoy - 10 años
 _MSG_NO_EXISTE = "El CDT no existe o no tienes permisos."
+_MSG_MONEDA_CUENTA = "La moneda de la cuenta debe coincidir con la del CDT."
+CATEGORIA_RENDIMIENTOS = "Rendimientos"
 
 
 # --------------------------------------------------------------------------------------
@@ -72,7 +81,9 @@ def alerta(maturity_on: date, hoy: date, estado: str) -> str:
 # --------------------------------------------------------------------------------------
 # Presentación
 # --------------------------------------------------------------------------------------
-def _item(cdt: models.Cdt, hoy: date) -> dict:
+def _item(
+    cdt: models.Cdt, hoy: date, constitucion: models.Transfer | None = None, redencion: models.Transfer | None = None
+) -> dict:
     """Respuesta de un CDT con todas las cifras calculadas (D12, D14). Un CDT redimido congela
     las cifras al día de la redención: `current_value` es lo que realmente se recibió."""
     plazo = (cdt.maturity_on - cdt.opened_on).days
@@ -102,6 +113,10 @@ def _item(cdt: models.Cdt, hoy: date) -> dict:
         "days_to_maturity": dias_para_vencer(cdt.maturity_on, hoy) if activo else None,
         "alert": alerta(cdt.maturity_on, hoy, cdt.status),
         "created_at": cdt.created_at,
+        "source_account_id": constitucion.from_account_id if constitucion else None,
+        "source_transfer_id": constitucion.id if constitucion else None,
+        "redeem_account_id": redencion.to_account_id if redencion else None,
+        "redeem_transfer_id": redencion.id if redencion else None,
     }
 
 
@@ -152,6 +167,73 @@ def _validar_fechas(opened_on: date, maturity_on: date, hoy: date) -> None:
         raise ValidationError("`opened_on` no puede estar a más de un año en el futuro.")
 
 
+def _vinculos(db: Session, ids: list[int]) -> dict[int, dict[str, models.Transfer]]:
+    """Transferencias vinculadas por CDT: `constitucion` (cuenta -> CDT) y `redencion` (CDT -> cuenta)."""
+    mapa: dict[int, dict[str, models.Transfer]] = {}
+    if not ids:
+        return mapa
+    for t in db.query(models.Transfer).filter(models.Transfer.cdt_id.in_(ids)).all():
+        mapa.setdefault(t.cdt_id, {})["constitucion" if t.from_account_id is not None else "redencion"] = t
+    return mapa
+
+
+def _item_de(db: Session, cdt: models.Cdt, hoy: date) -> dict:
+    v = _vinculos(db, [cdt.id]).get(cdt.id, {})
+    return _item(cdt, hoy, v.get("constitucion"), v.get("redencion"))
+
+
+def _constitucion(db: Session, cdt_id: int, *, bloquear: bool = False) -> models.Transfer | None:
+    consulta = db.query(models.Transfer).filter(
+        models.Transfer.cdt_id == cdt_id, models.Transfer.from_account_id.is_not(None)
+    )
+    if bloquear:
+        consulta = consulta.with_for_update()
+    return consulta.first()
+
+
+def _constituir(
+    db: Session, user: models.User, cdt: models.Cdt, cuenta: models.Account, ahora: datetime
+) -> models.Transfer:
+    """Transferencia de constitución (D12): el capital sale de la cuenta en la fecha de apertura."""
+    t = models.Transfer(
+        user_id=user.id,
+        from_account_id=cuenta.id,
+        to_account_id=None,
+        cdt_id=cdt.id,
+        amount_out=cdt.principal,
+        currency_out=cdt.currency,
+        amount_in=cdt.principal,
+        currency_in=cdt.currency,
+        date=instante_de_dia(cdt.opened_on, ahora, get_zoneinfo(user.timezone)),
+        description=f"Constitución CDT {cdt.name}",
+    )
+    db.add(t)
+    db.flush()
+    ledger.aplicar_deltas(db, ledger.deltas_transferencia(cuenta.id, None, t.amount_out, t.amount_in))
+    return t
+
+
+def _categoria_rendimientos(db: Session) -> models.Category:
+    def _buscar():
+        return (
+            db.query(models.Category)
+            .filter(
+                models.Category.user_id.is_(None),
+                models.Category.name == CATEGORIA_RENDIMIENTOS,
+                models.Category.type == "income",
+            )
+            .first()
+        )
+
+    categoria = _buscar()
+    if categoria is None:  # base sin sembrar (p. ej. una base nueva antes del primer arranque)
+        ensure_default_categories(db)
+        categoria = _buscar()
+    if categoria is None:
+        raise InternalServerError("Falta la categoría base 'Rendimientos'.")
+    return categoria
+
+
 def listar(db: Session, user: models.User, ahora: datetime, estado: str | None = None) -> dict:
     hoy = _hoy(user, ahora)
     consulta = db.query(models.Cdt).filter(models.Cdt.user_id == user.id)
@@ -160,7 +242,11 @@ def listar(db: Session, user: models.User, ahora: datetime, estado: str | None =
     cdts = consulta.all()
     vigentes = sorted((c for c in cdts if c.status == "active"), key=lambda c: (c.maturity_on, c.id))
     redimidos = sorted((c for c in cdts if c.status == "redeemed"), key=lambda c: (c.redeemed_on, c.id), reverse=True)
-    items = [_item(c, hoy) for c in vigentes + redimidos]
+    vinculos = _vinculos(db, [c.id for c in cdts])
+    items = [
+        _item(c, hoy, vinculos.get(c.id, {}).get("constitucion"), vinculos.get(c.id, {}).get("redencion"))
+        for c in vigentes + redimidos
+    ]
     return {"items": items, "totals": _totales(items, user.preferred_currency)}
 
 
@@ -169,6 +255,11 @@ def crear(db: Session, user: models.User, datos, ahora: datetime) -> dict:
     _validar_fechas(datos.opened_on, datos.maturity_on, hoy)
     if db.query(models.Cdt).filter(models.Cdt.user_id == user.id).count() >= MAX_CDT_POR_USUARIO:
         raise ValidationError(f"Alcanzaste el máximo de {MAX_CDT_POR_USUARIO} CDT.")
+    cuenta = None
+    if datos.source_account_id is not None:
+        cuenta = bloquear_cuentas(db, user.id, {datos.source_account_id})[datos.source_account_id]
+        if cuenta.currency != datos.currency:
+            raise ValidationError(_MSG_MONEDA_CUENTA)
     cdt = models.Cdt(
         user_id=user.id,
         name=datos.name,
@@ -181,32 +272,74 @@ def crear(db: Session, user: models.User, datos, ahora: datetime) -> dict:
     )
     db.add(cdt)
     db.flush()
+    if cuenta is not None:
+        _constituir(db, user, cdt, cuenta, ahora)
     db.refresh(cdt)
-    return _item(cdt, hoy)
+    return _item_de(db, cdt, hoy)
 
 
 def actualizar(db: Session, user: models.User, cdt_id: int, datos, ahora: datetime) -> dict:
-    """Edita un CDT vigente (D9); uno redimido responde 409."""
+    """Edita un CDT vigente (D9); uno redimido responde 409. Si tiene transferencia de constitución,
+    cambiar capital, apertura o cuenta de origen la actualiza y reajusta los saldos (D12)."""
     hoy = _hoy(user, ahora)
     cdt = _obtener(db, user.id, cdt_id, bloquear=True)
     if cdt.status != "active":
         raise ConflictError("Un CDT redimido no se puede editar.")
     enviados = datos.model_fields_set
-    for campo in ("name", "currency", "principal", "rate_ea", "opened_on", "maturity_on"):
-        if campo in enviados:
-            setattr(cdt, campo, getattr(datos, campo))
+    nuevos = {
+        c: getattr(datos, c) if c in enviados else getattr(cdt, c)
+        for c in ("name", "currency", "principal", "rate_ea", "opened_on", "maturity_on")
+    }
     # Las cotas relativas a hoy solo se revisan si la edición toca fechas: renombrar un CDT viejo
     # no debe fallar por una cota que ya no cumple (hallazgo del code-review).
     if "opened_on" in enviados or "maturity_on" in enviados:
-        _validar_fechas(cdt.opened_on, cdt.maturity_on, hoy)
+        _validar_fechas(nuevos["opened_on"], nuevos["maturity_on"], hoy)
+
+    # Orden de locks: CDT -> transferencia -> cuentas por id (D7).
+    previa = _constitucion(db, cdt.id, bloquear=True)
+    cuenta_nueva_id = datos.source_account_id if "source_account_id" in enviados else None
+    if cuenta_nueva_id is None and previa is not None:
+        cuenta_nueva_id = previa.from_account_id
+    cuentas = {}
+    if cuenta_nueva_id is not None:
+        cuentas = bloquear_cuentas(db, user.id, {cuenta_nueva_id, previa.from_account_id if previa else None})
+        if cuentas[cuenta_nueva_id].currency != nuevos["currency"]:
+            raise ValidationError(_MSG_MONEDA_CUENTA)
+
+    for campo, valor in nuevos.items():
+        setattr(cdt, campo, valor)
+
+    if cuenta_nueva_id is not None:
+        if previa is None:
+            _constituir(db, user, cdt, cuentas[cuenta_nueva_id], ahora)
+        else:
+            fecha = instante_de_dia(cdt.opened_on, ahora, get_zoneinfo(user.timezone))
+            cambio_fecha = dia_local(previa.date, get_zoneinfo(user.timezone)) != cdt.opened_on
+            if (
+                previa.from_account_id != cuenta_nueva_id
+                or previa.amount_out != cdt.principal
+                or previa.currency_out != cdt.currency
+            ):
+                viejo = ledger.deltas_transferencia(previa.from_account_id, None, previa.amount_out, previa.amount_in)
+                nuevo = ledger.deltas_transferencia(cuenta_nueva_id, None, cdt.principal, cdt.principal)
+                ledger.aplicar_deltas(db, ledger.sumar_deltas(ledger.invertir_deltas(viejo), nuevo))
+                previa.from_account_id = cuenta_nueva_id
+                previa.amount_out = previa.amount_in = cdt.principal
+                previa.currency_out = previa.currency_in = cdt.currency
+            if cambio_fecha:
+                previa.date = fecha
+            previa.description = f"Constitución CDT {cdt.name}"
     db.flush()
     db.refresh(cdt)
-    return _item(cdt, hoy)
+    return _item_de(db, cdt, hoy)
 
 
 def redimir(db: Session, user: models.User, cdt_id: int, datos, ahora: datetime) -> dict:
-    """Marca el CDT como redimido (D4). No crea transacción ni mueve saldos (D1). El segundo de dos
-    `redeem` simultáneos espera el lock de la fila y ve `redeemed` -> 409."""
+    """Marca el CDT como redimido (D4). Sin `account_id` solo cambia de estado, como en la Fase 38.
+    Con `account_id` (D11) el capital vuelve a esa cuenta con una transferencia de redención y el
+    interés realizado entra como ingreso "Rendimientos"; la cuenta debe ser de la moneda del CDT y
+    `final_amount < principal` es 422 (la pérdida se registra a mano). El segundo de dos `redeem`
+    simultáneos espera el lock de la fila y ve `redeemed` -> 409."""
     hoy = _hoy(user, ahora)
     cdt = _obtener(db, user.id, cdt_id, bloquear=True)
     if cdt.status != "active":
@@ -221,17 +354,74 @@ def redimir(db: Session, user: models.User, cdt_id: int, datos, ahora: datetime)
     else:
         dias = dias_transcurridos(cdt.opened_on, cdt.maturity_on, fecha)
         final = cdt.principal + interes_causado(cdt.principal, cdt.rate_ea, dias)
+    cuenta = None
+    if datos.account_id is not None:
+        if final < cdt.principal:
+            raise ValidationError(
+                "Con cuenta destino, `final_amount` no puede ser menor que el capital; "
+                "redime sin cuenta y registra la pérdida a mano."
+            )
+        cuenta = bloquear_cuentas(db, user.id, {datos.account_id})[datos.account_id]
+        if cuenta.currency != cdt.currency:
+            raise ValidationError(_MSG_MONEDA_CUENTA)
     cdt.status = "redeemed"
     cdt.redeemed_on = fecha
     cdt.final_amount = final
+    if cuenta is not None:
+        instante = instante_de_dia(fecha, ahora, get_zoneinfo(user.timezone))
+        db.add(
+            models.Transfer(
+                user_id=user.id,
+                from_account_id=None,
+                to_account_id=cuenta.id,
+                cdt_id=cdt.id,
+                amount_out=cdt.principal,
+                currency_out=cdt.currency,
+                amount_in=cdt.principal,
+                currency_in=cdt.currency,
+                date=instante,
+                description=f"Redención CDT {cdt.name}",
+            )
+        )
+        ledger.aplicar_deltas(db, ledger.deltas_transferencia(None, cuenta.id, cdt.principal, cdt.principal))
+        interes = final - cdt.principal
+        if interes > 0:
+            # Ingreso real (cuenta en flujo). Los ingresos no disparan alertas de presupuesto (solo gasto).
+            db.add(
+                models.Transaction(
+                    user_id=user.id,
+                    account_id=cuenta.id,
+                    category_id=_categoria_rendimientos(db).id,
+                    type="income",
+                    amount=interes,
+                    currency=cuenta.currency,
+                    date=instante,
+                    description=f"Rendimientos CDT {cdt.name}",
+                )
+            )
+            ledger.registrar_impacto(db, cuenta.id, "income", interes)
     db.flush()
     db.refresh(cdt)
-    return _item(cdt, hoy)
+    return _item_de(db, cdt, hoy)
 
 
 def eliminar(db: Session, user: models.User, cdt_id: int) -> None:
-    """Borrado real en cualquier estado (D10); no toca nada más (D1)."""
+    """Borrado real (D10). Un CDT vigente con transferencia de constitución devuelve el capital a la
+    cuenta y borra la transferencia (D12); uno redimido con transferencias vinculadas es 409 (son
+    historia real); uno sin vínculo se borra como en la Fase 38."""
     cdt = _obtener(db, user.id, cdt_id, bloquear=True)
+    vinculadas = db.query(models.Transfer).filter(models.Transfer.cdt_id == cdt.id).with_for_update().all()
+    if vinculadas:
+        if cdt.status != "active":
+            raise ConflictError(
+                "No se puede borrar un CDT redimido con transferencias vinculadas: son parte del historial de tus cuentas."
+            )
+        bloquear_cuentas(db, user.id, {t.from_account_id for t in vinculadas})
+        for t in vinculadas:
+            viejo = ledger.deltas_transferencia(t.from_account_id, t.to_account_id, t.amount_out, t.amount_in)
+            ledger.aplicar_deltas(db, ledger.invertir_deltas(viejo))
+            db.delete(t)
+        db.flush()
     db.delete(cdt)
 
 
