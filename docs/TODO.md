@@ -640,6 +640,13 @@ Deuda consciente (spec `docs/specs/fase_38_spec.md`; D1–D16 sin `/grilling`, a
 
 Deuda nueva de la Fase 39 (2026-10-24):
 
+- [ ] **Bloquear la redención antes del vencimiento (decidido por el dueño, 2026-10-24).** En la realidad un CDT es
+  un depósito a término: el banco no lo paga antes (a lo sumo cancelación anticipada con penalización a discreción
+  del banco, o venta en mercado secundario con descuento), y el interés teórico que propone hoy `redimir` confunde.
+  Se va a cambiar para que `POST /cdts/{id}/redeem` rechace con `422` una `redeemed_on` anterior a `maturity_on`
+  (hoy solo exige `opened_on <= redeemed_on <= hoy`), y que la UI no ofrezca "Redimir" hasta el vencimiento. Al
+  implementarlo: actualizar `docs/specs/fase_38_spec.md` (D4 y la regla de "redimir a tiempo o anticipado"),
+  `backend/docs/BUSINESS_RULES.md`, `API_REFERENCE.md`/`API_CONTRACT.md` y los tests de `redimir`.
 - [ ] **El ingreso "Rendimientos" de una redención es una `Transaction` común**, editable y borrable por separado,
   sin vínculo con el CDT: editarlo o borrarlo desincroniza el CDT y la cuenta.
 - [ ] **`app/services/cdt.py` duplica** la construcción de `Transfer` de constitución y de redención y repite
