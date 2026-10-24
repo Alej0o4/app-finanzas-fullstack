@@ -458,7 +458,6 @@ function DashboardScreen() {
               <Link
                 key={budget.budget_id || `budget-ring-${index}`}
                 href={categoryDetailHref(budget.category_id, { year, month }, budget.currency)}
-                aria-label={`Ver detalle de ${budget.category_name}`}
                 className="focus-visible:ring-primary block cursor-pointer rounded-2xl focus-visible:ring-2 focus-visible:outline-none"
               >
                 <BudgetRing

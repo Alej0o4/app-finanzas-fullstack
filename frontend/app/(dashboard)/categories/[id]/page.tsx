@@ -27,7 +27,7 @@ import Skeleton from '@/components/ui/Skeleton';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import CategoryIcon from '@/components/ui/CategoryIcon';
 import BudgetRing from '@/components/charts/BudgetRing';
 import MonthNavigator from '@/components/MonthNavigator';
@@ -102,7 +102,8 @@ export default function CategoryDetailPage() {
   // misma query que el dashboard (`budgets.progress(apiMonth)`), sin `currency`.
   const {
     data: budgetsProgress,
-    isLoading: loadingBudgets,
+    isLoading: loadingBudgetsInitial,
+    isPlaceholderData: budgetsStale,
     isError: budgetsError,
     refetch: refetchBudgets,
   } = useQuery<BudgetProgress[]>({
@@ -112,16 +113,20 @@ export default function CategoryDetailPage() {
       (await api.get('dashboard/budgets-progress', { params: periodParams })).data,
     placeholderData: keepPreviousData,
   });
-  const categoryBudgets = useMemo(
-    () => (budgetsProgress ?? []).filter((b) => b.category_id === Number(id)),
-    [budgetsProgress, id]
-  );
+  // Con `keepPreviousData` los datos del mes anterior se tratan como "cargando".
+  const loadingBudgets = loadingBudgetsInitial || budgetsStale;
+  const categoryBudgets = (budgetsProgress ?? []).filter((b) => b.category_id === Number(id));
+  const budgetCurrencies = categoryBudgets.map((b) => b.currency);
 
-  // Monedas a consultar para el total (D17): la de cada cuenta del usuario más la preferida.
-  const probeCurrencies = useMemo(
-    () => [...new Set([preferredCurrency, ...(accounts ?? []).map((a) => a.currency)])].sort(),
-    [preferredCurrency, accounts]
-  );
+  // Monedas conocidas (D17): las de las cuentas, la preferida y las de los presupuestos de la
+  // categoría. Se consulta el total de cada una, así que la moneda activa siempre tiene query.
+  const probeCurrencies = [
+    ...new Set([
+      preferredCurrency,
+      ...(accounts ?? []).map((a) => a.currency),
+      ...budgetCurrencies,
+    ]),
+  ].sort();
 
   const totalQueries = useQueries({
     queries: probeCurrencies.map((cur) => ({
@@ -141,20 +146,18 @@ export default function CategoryDetailPage() {
       placeholderData: keepPreviousData,
     })),
   });
+  const totalsSettled = totalQueries.every((q) => !q.isPending && !q.isPlaceholderData);
   const totalFor = (cur: string) => {
     const q = totalQueries[probeCurrencies.indexOf(cur)];
-    return q?.data?.find((row) => row.category_id === Number(id));
+    return q && !q.isPlaceholderData
+      ? q.data?.find((row) => row.category_id === Number(id))
+      : undefined;
   };
 
-  // Moneda por defecto y candidatas del chip (D3/D17).
-  const budgetCurrencies = categoryBudgets.map((b) => b.currency);
+  // Candidatas del chip (D17): monedas con presupuesto o con total en el mes.
   const candidateCurrencies = [
-    ...new Set([
-      ...budgetCurrencies,
-      ...probeCurrencies.filter((cur) => totalFor(cur) !== undefined),
-    ]),
+    ...new Set([...budgetCurrencies, ...probeCurrencies.filter((cur) => totalFor(cur))]),
   ].sort();
-  const knownCurrencies = new Set([...probeCurrencies, ...budgetCurrencies]);
 
   const [currencyParam, setCurrencyParam] = useQueryParamState(
     'currency',
@@ -164,21 +167,23 @@ export default function CategoryDetailPage() {
   const defaultCurrency =
     budgetCurrencies.length === 0
       ? preferredCurrency
-      : budgetCurrencies.length === 1 || budgetCurrencies.includes(preferredCurrency)
-        ? budgetCurrencies.length === 1
-          ? budgetCurrencies[0]
-          : preferredCurrency
-        : [...budgetCurrencies].sort()[0];
+      : budgetCurrencies.length === 1
+        ? budgetCurrencies[0]
+        : budgetCurrencies.includes(preferredCurrency)
+          ? preferredCurrency
+          : [...budgetCurrencies].sort()[0];
+  // Moneda activa: la de `?currency=` si tiene presupuesto o datos; si no, la default (D3/D17).
   const currency =
-    currencyParam && knownCurrencies.has(currencyParam) ? currencyParam : defaultCurrency;
-  // Hasta conocer los presupuestos la moneda por defecto puede cambiar; no se pide la lista antes.
-  const currencyReady = ready && !!category && (!isExpense || !loadingBudgets);
-  const chipOptions = candidateCurrencies.includes(currency)
-    ? candidateCurrencies
-    : [...candidateCurrencies, currency].sort();
+    currencyParam && candidateCurrencies.includes(currencyParam) ? currencyParam : defaultCurrency;
+  // No se pide la lista hasta conocer usuario, cuentas, presupuestos y totales del mes visible
+  // (con datos del mes anterior o la moneda de config la moneda activa podría cambiar).
+  const currencyReady =
+    ready && !!category && !!user && !!accounts && (!isExpense || !loadingBudgets) && totalsSettled;
+  const chipOptions = candidateCurrencies;
 
   const budget = isExpense ? categoryBudgets.find((b) => b.currency === currency) : undefined;
   const totalQuery = totalQueries[probeCurrencies.indexOf(currency)];
+  const totalLoading = !totalQuery || totalQuery.isPending || totalQuery.isPlaceholderData;
   const monthTotal = Number(totalFor(currency)?.total ?? 0);
 
   // Lista paginada (D4/D19): una query por página (`skip` de 20 en 20), todas bajo el prefijo
@@ -186,6 +191,11 @@ export default function CategoryDetailPage() {
   // refresca todas. La página se reinicia sola al cambiar de mes o moneda (el contexto cambia).
   const listContext = `${apiMonth ?? 'current'}|${currency}`;
   const [pagination, setPagination] = useState({ context: listContext, skip: 0 });
+  // Cambió el mes o la moneda: se reinicia el estado de verdad (patrón "ajustar estado en el
+  // render"), así volver al mismo contexto no resucita un `skip` viejo.
+  if (pagination.context !== listContext) {
+    setPagination({ context: listContext, skip: 0 });
+  }
   const skip = pagination.context === listContext ? pagination.skip : 0;
   const pageSkips = Array.from({ length: skip / PAGE_SIZE + 1 }, (_, i) => i * PAGE_SIZE);
 
@@ -211,19 +221,16 @@ export default function CategoryDetailPage() {
   });
   const firstPage = pageQueries[0];
   const lastPage = pageQueries[pageQueries.length - 1];
-  const transactions = useMemo(() => {
-    const seen = new Set<number>();
-    const items: Transaction[] = [];
-    for (const q of pageQueries) {
-      for (const tx of q.data?.items ?? []) {
-        if (!seen.has(tx.id)) {
-          seen.add(tx.id);
-          items.push(tx);
-        }
+  const transactions: Transaction[] = [];
+  const seenIds = new Set<number>();
+  for (const q of pageQueries) {
+    for (const tx of q.data?.items ?? []) {
+      if (!seenIds.has(tx.id)) {
+        seenIds.add(tx.id);
+        transactions.push(tx);
       }
     }
-    return items;
-  }, [pageQueries]);
+  }
   const totalCount = firstPage?.data?.total ?? 0;
   const loadingTx = !currencyReady || (firstPage?.isLoading ?? true);
   const transactionsError = !!firstPage?.isError && !firstPage.data;
@@ -367,7 +374,7 @@ export default function CategoryDetailPage() {
           message="No se pudo cargar el total del mes."
           onRetry={() => totalQuery.refetch()}
         />
-      ) : !totalQuery || totalQuery.isLoading ? (
+      ) : totalLoading ? (
         <Skeleton className="mt-1 h-7 w-36" />
       ) : (
         <p className="text-text mt-0.5 font-sans text-2xl font-bold tabular-nums">
