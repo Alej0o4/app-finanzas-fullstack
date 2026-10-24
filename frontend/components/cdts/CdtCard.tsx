@@ -28,7 +28,7 @@ export default function CdtCard({ cdt, onEdit, onRedeem }: CdtCardProps) {
     useConfirmStore
       .getState()
       .confirm(
-        `¿Eliminar el CDT "${cdt.name}"? No se mueve ningún saldo de tus cuentas; solo deja de aparecer aquí${cdt.status === 'active' ? ' y de sumar a tu patrimonio' : ''}.`,
+        `¿Eliminar el CDT "${cdt.name}"? Si tiene transferencias vinculadas se revierten los saldos de sus cuentas; si no, no se mueve ningún saldo. Deja de aparecer aquí${cdt.status === 'active' ? ' y de sumar a tu patrimonio' : ''}.`,
         () => deleteMutation.mutate(),
         'Eliminar'
       );
