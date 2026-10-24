@@ -36,6 +36,15 @@ export const queryKeys = {
     all: () => ['transactions'] as const,
     byAccount: (id: string | number) => ['transactions', 'account', id] as const,
     byCategory: (id: string | number) => ['transactions', 'category', id] as const,
+    /** Fase 40 (D19): lista paginada del detalle de categoría por mes (`'YYYY-MM'`, o ausente en
+     *  el mes en curso), moneda y página. Cuelga de `byCategory(id)`, que las mutaciones ya
+     *  invalidan. */
+    byCategoryList: (
+      id: string | number,
+      month: string | undefined,
+      currency: string,
+      skip: number
+    ) => ['transactions', 'category', id, month, currency, skip] as const,
     filtered: (filters: Record<string, unknown>) => ['transactions', filters] as const,
     /** Fase 39: feed mixto (`GET /movements/`). Cuelga del prefijo `['transactions']`, así que
      *  toda invalidación de `transactions.all()` lo cubre sin tocar los 17 call sites. */
@@ -87,13 +96,23 @@ export const queryKeys = {
     /** Desglose de gastos del mes por categoría en el dashboard (Fase 11 §11.4).
      *  Clave propia: no reutiliza analytics.categories(), que exige período/tipo/neto.
      *  Fase 29: `month` y `currency` son los filtros de las barras; ambos se omiten si no
-     *  se pasan, por el mismo motivo que arriba. */
-    categoryBreakdown: (month?: string, currency?: string) =>
-      (month || currency
-        ? ['dashboard-category-breakdown', month, currency]
-        : ['dashboard-category-breakdown']) as
+     *  se pasan, por el mismo motivo que arriba. Fase 40 (D19): `categoryId` es un 3er argumento
+     *  opcional para el total del detalle de categoría; los llamadores de 2 argumentos no
+     *  cambian y el prefijo `dashboard-category-breakdown` sigue casando. */
+    categoryBreakdown: (month?: string, currency?: string, categoryId?: string | number) =>
+      (categoryId !== undefined
+        ? ['dashboard-category-breakdown', month, currency, categoryId]
+        : month || currency
+          ? ['dashboard-category-breakdown', month, currency]
+          : ['dashboard-category-breakdown']) as
         | readonly ['dashboard-category-breakdown']
-        | readonly ['dashboard-category-breakdown', string | undefined, string | undefined],
+        | readonly ['dashboard-category-breakdown', string | undefined, string | undefined]
+        | readonly [
+            'dashboard-category-breakdown',
+            string | undefined,
+            string | undefined,
+            string | number,
+          ],
   },
   analytics: {
     cashflow: (start: string, end: string, period: string, accountId?: string, currency?: string) =>

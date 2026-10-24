@@ -61,6 +61,7 @@ class DashboardSummary(BaseModel):
 
 class BudgetProgress(BaseModel):
     budget_id: int
+    category_id: int  # Fase 40 (D9): aditivo; la vista de categoría busca su presupuesto por id
     category_name: str
     category_icon: str | None = None
     amount_limit: Decimal  # 🔁 antes: float

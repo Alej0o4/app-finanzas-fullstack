@@ -753,6 +753,11 @@ Filtros opcionales:
 - `limit` (default: 100, validado `ge=1, le=1000`; `limit=0` o negativo → `422`; `limit>1000` → `422`)
 - `account_id`
 - `category_id`
+- `currency` (Fase 40, D13): código de 3 letras mayúsculas (`^[A-Z]{3}$`, otro formato → `422`); solo
+  transacciones en esa moneda. `total` y la paginación cuentan solo lo filtrado.
+- `type` (Fase 40, D16): `income` | `expense` (otro valor → `422`); solo transacciones de ese tipo.
+  Permite que la lista de una categoría cuadre con `category-distribution` (que suma un solo tipo)
+  cuando la categoría tiene reembolsos del otro tipo. Sin `currency`/`type` el comportamiento no cambia.
 - `start_date`, `end_date` (Fase 34, B7): cada extremo acepta **dos formatos con el mismo nombre**:
   - **solo-día** `YYYY-MM-DD` → se interpreta en la **zona horaria del usuario** (`User.timezone`):
     `start_date` = 00:00 local de ese día; `end_date` incluye **todo** ese día (hasta las 00:00
@@ -1281,6 +1286,7 @@ incluyen todas. Es el único agregado del dashboard con ese filtro — las barra
 Devuelve el progreso de los presupuestos del mes consultado, por defecto el mes actual, con:
 
 - `budget_id`
+- `category_id` (Fase 40, D9; aditivo: la vista de categoría busca su presupuesto por id y moneda; también en meses pasados)
 - `category_name`
 - `category_icon` (string | null, Fase 24 §24.4)
 - `amount_limit`

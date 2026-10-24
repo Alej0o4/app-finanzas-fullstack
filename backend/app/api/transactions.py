@@ -29,6 +29,7 @@ from app.core.text import normalizar_nombre
 from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.schemas import schemas
+from app.schemas.common import CURRENCY_PATTERN
 from app.services import funds as funds_service
 from app.services import ledger
 
@@ -325,6 +326,9 @@ def obtener_transacciones(
     limit: int = Query(100, ge=1, le=1000),
     account_id: int | None = None,
     category_id: int | None = None,
+    # Fase 40 (D13, D16): filtros opcionales, aditivos; `total` y la paginación cuentan solo lo filtrado.
+    currency: str | None = Query(None, pattern=CURRENCY_PATTERN, description="Solo transacciones en esta moneda"),
+    type: str | None = Query(None, pattern="^(income|expense)$", description="Solo transacciones de este tipo"),
     start_date: str | None = Query(None, description=RANGO_DESC),
     end_date: str | None = Query(None, description=RANGO_DESC),
     db: Session = Depends(get_db),
@@ -353,6 +357,12 @@ def obtener_transacciones(
 
     if category_id is not None:
         query = query.filter(models.Transaction.category_id == category_id)
+
+    if currency is not None:
+        query = query.filter(models.Transaction.currency == currency)
+
+    if type is not None:
+        query = query.filter(models.Transaction.type == type)
 
     if inicio is not None:
         query = query.filter(models.Transaction.date >= inicio)
