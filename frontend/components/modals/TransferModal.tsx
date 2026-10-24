@@ -82,6 +82,8 @@ export default function TransferModal({ isOpen, onClose, transfer }: TransferMod
         if (inError) next.amountIn = inError;
       } else if (!rate.trim() || !Number.isFinite(Number(rate)) || Number(rate) <= 0) {
         next.rate = 'Ingresa una tasa mayor a cero.';
+      } else if (!/^\d+(\.\d{1,6})?$/.test(rate.trim())) {
+        next.rate = 'La tasa admite hasta 6 decimales.';
       }
     }
     setErrors(next);
@@ -96,8 +98,10 @@ export default function TransferModal({ isOpen, onClose, transfer }: TransferMod
     // Al editar sin tocar el día se omite `date`: el backend conserva la fecha/hora original.
     if (!isEdit || date !== dayInZone(transfer.date, displayTimezone)) payload.date = date;
     if (crossCurrency) {
+      // Al editar siempre viaja `amount_in` (guardado o editado): la tasa del backend está
+      // redondeada y nunca se reenvía; solo se manda si el usuario eligió el modo tasa.
       if (effectiveMode === 'amount') payload.amount_in = Number(amountIn);
-      else payload.exchange_rate = Number(rate);
+      else payload.exchange_rate = rate.trim();
     }
 
     const onSuccess = (saved: Transfer) => {
@@ -234,7 +238,7 @@ export default function TransferModal({ isOpen, onClose, transfer }: TransferMod
                 type="number"
                 inputMode="decimal"
                 min={0}
-                step="0.0001"
+                step="any"
                 value={rate}
                 onChange={(e) => setRate(e.target.value)}
                 error={errors.rate}
@@ -260,7 +264,7 @@ export default function TransferModal({ isOpen, onClose, transfer }: TransferMod
         <Input
           label="Descripción"
           value={description}
-          maxLength={255}
+          maxLength={500}
           onChange={(e) => setDescription(e.target.value)}
           className="bg-background"
           placeholder="Opcional"

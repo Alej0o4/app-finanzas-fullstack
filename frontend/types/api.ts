@@ -227,7 +227,7 @@ export interface TransferPayload {
   amount_out: number;
   /** Exactamente uno de `amount_in` | `exchange_rate` cuando las monedas difieren. */
   amount_in?: number;
-  exchange_rate?: number;
+  exchange_rate?: number | string;
   date?: string | null;
   description?: string | null;
 }

@@ -34,6 +34,7 @@ type Errors = {
 /** Se monta solo mientras está abierto, así el estado arranca siempre desde el CDT actual. */
 export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
   const isEdit = cdt !== undefined;
+  const isLinked = Boolean(cdt?.source_account_id);
   const { displayTimezone } = useTimezone();
   const today = todayInZone(displayTimezone);
 
@@ -148,6 +149,7 @@ export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
             label="Moneda"
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
+            disabled={isLinked}
             className="bg-background"
           >
             {currencyOptions.map((c) => (
@@ -170,6 +172,12 @@ export default function CdtFormModal({ cdt, onClose }: CdtFormModalProps) {
             className="bg-background"
           />
         </div>
+
+        {isLinked && (
+          <p className="text-text-muted -mt-2 text-xs">
+            La moneda no se puede cambiar mientras el CDT esté vinculado a una cuenta de origen.
+          </p>
+        )}
 
         <Input
           label={`Capital (${currency})`}
