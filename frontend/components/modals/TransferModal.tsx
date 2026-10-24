@@ -91,9 +91,10 @@ export default function TransferModal({ isOpen, onClose, transfer }: TransferMod
       from_account_id: Number(fromId),
       to_account_id: Number(toId),
       amount_out: Number(amountOut),
-      date,
       description: description.trim() || null,
     };
+    // Al editar sin tocar el día se omite `date`: el backend conserva la fecha/hora original.
+    if (!isEdit || date !== dayInZone(transfer.date, displayTimezone)) payload.date = date;
     if (crossCurrency) {
       if (effectiveMode === 'amount') payload.amount_in = Number(amountIn);
       else payload.exchange_rate = Number(rate);
