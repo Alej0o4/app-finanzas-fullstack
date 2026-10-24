@@ -218,7 +218,13 @@ def detalle(db: Session, user: models.User, transfer_id: int) -> dict:
     return respuestas(db, [_obtener(db, user.id, transfer_id)])[0]
 
 
+def _exigir_cuentas_distintas(datos) -> None:
+    if datos.from_account_id == datos.to_account_id:
+        raise ValidationError("La cuenta de origen y la de destino deben ser distintas.")
+
+
 def crear(db: Session, user: models.User, datos, ahora: datetime) -> dict:
+    _exigir_cuentas_distintas(datos)
     cuentas = bloquear_cuentas(db, user.id, {datos.from_account_id, datos.to_account_id})
     origen, destino = cuentas[datos.from_account_id], cuentas[datos.to_account_id]
     monto_entrada = calcular_monto_entrada(
@@ -244,6 +250,7 @@ def crear(db: Session, user: models.User, datos, ahora: datetime) -> dict:
 
 def actualizar(db: Session, user: models.User, transfer_id: int, datos, ahora: datetime) -> dict:
     """Revierte el efecto anterior y aplica el nuevo en un solo juego de UPDATE ordenado por id (D7)."""
+    _exigir_cuentas_distintas(datos)
     t = _obtener(db, user.id, transfer_id, bloquear=True)
     _rechazar_si_cdt(t)
     cuentas = bloquear_cuentas(

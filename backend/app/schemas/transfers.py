@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 from app.schemas.common import MAX_DIGITS_MONEY, PaginatedResponse
 from app.schemas.transactions import TransactionResponse
@@ -42,12 +42,6 @@ class TransferBase(BaseModel):
         if isinstance(v, int | float) and not isinstance(v, bool):
             return _DATETIME_ADAPTER.validate_python(v)
         return v
-
-    @model_validator(mode="after")
-    def _cuentas_distintas(self) -> "TransferBase":
-        if self.from_account_id == self.to_account_id:
-            raise ValueError("La cuenta de origen y la de destino deben ser distintas.")
-        return self
 
 
 class TransferCreate(TransferBase):

@@ -1140,7 +1140,7 @@ Query: `skip` (>= 0), `limit` (1-1000, default 100), `account_id` (origen **o** 
 
 ### `POST /api/v1/transfers/` → `TransferResponse`
 
-Body (`extra="forbid"`): `from_account_id`, `to_account_id` (distintas, si no `422`), `amount_out` (`> 0`),
+Body (`extra="forbid"`): `from_account_id`, `to_account_id` (distintas, si no `422` con `detail` string), `amount_out` (`> 0`),
 `amount_in?`, `exchange_rate?`, `date?`, `description?` (<= 500). Las monedas no se envían: salen de las
 cuentas. Misma moneda: entra lo que sale (`amount_in` ausente o igual; `exchange_rate` -> `422`). Monedas
 distintas: exactamente uno de `amount_in` / `exchange_rate` (`422`); la tasa es siempre COP por 1 unidad

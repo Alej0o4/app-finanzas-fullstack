@@ -107,7 +107,9 @@ class TestCrear:
         transferir(cuentas["banco"], cuentas["efectivo"], "100.00", exchange_rate="1", status=422)
 
     def test_misma_cuenta_es_422(self, cuentas, transferir):
-        transferir(cuentas["banco"], cuentas["banco"], "100.00", status=422)
+        r = transferir(cuentas["banco"], cuentas["banco"], "100.00", status=422)
+        assert isinstance(r["detail"], str)
+        assert "distintas" in r["detail"]
 
     def test_monto_cero_y_campos_extra_son_422(self, cuentas, transferir):
         transferir(cuentas["banco"], cuentas["efectivo"], "0", status=422)
