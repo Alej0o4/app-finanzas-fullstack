@@ -635,6 +635,8 @@ Deuda consciente (spec `docs/specs/fase_38_spec.md`; D1–D16 sin `/grilling`, a
 - [ ] **Revisar D1–D16 con el dueño.** En especial D1 (el CDT no mueve saldos: el capital debe dejar de figurar en
   una cuenta por ajuste manual, si no el patrimonio lo cuenta dos veces), D4 (redimir solo cambia de estado) y D3
   (aviso de vencimiento solo en la UI).
+- [x] **Bloquear la redención antes del vencimiento** — resuelto (2026-10-24): `redimir` responde `422` si la fecha es
+  anterior a `maturity_on` y la UI deshabilita "Redimir" hasta el vencimiento; sin migración.
 - [x] **Redención con retorno a una cuenta** — resuelto en la Fase 39 (2026-10-24): redimir con cuenta de destino
   crea la transferencia y el ingreso "Rendimientos".
 

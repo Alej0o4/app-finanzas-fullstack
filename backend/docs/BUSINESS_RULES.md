@@ -426,6 +426,9 @@ Spec: `docs/specs/fase_36_spec.md` (decisiones D1–D17).
 
 ## CDT (Fase 38)
 
+- **Solo se redime desde el vencimiento:** `redeemed_on` (o hoy, si se omite) anterior a `maturity_on` es `422` y el CDT
+  sigue vigente. Un CDT es un depósito a término: la redención anticipada, la penalización del banco y la venta en
+  mercado secundario no se modelan.
 - **Aislado del libro contable salvo vínculo opcional (Fase 39):** sin vínculo, crear, editar, redimir o borrar un
   CDT no mueve `Account.balance` ni crea `Transaction`. Redimir sin cuenta solo cambia de estado y guarda
   `redeemed_on` y `final_amount` (defecto: capital + interés causado a esa fecha). Con vínculo, ver

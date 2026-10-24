@@ -18,7 +18,7 @@ interface CdtRedeemModalProps {
   onClose: () => void;
 }
 
-/** Redimir solo cambia el estado y guarda el monto final (D4): no crea transacción ni mueve
+/** Solo se redime desde el vencimiento (el servidor responde 422 antes). Redimir solo cambia el estado y guarda el monto final (D4): no crea transacción ni mueve
  *  saldos. El monto queda vacío por defecto y el servidor usa capital + interés a la fecha. */
 export default function CdtRedeemModal({ cdt, onClose }: CdtRedeemModalProps) {
   const { displayTimezone } = useTimezone();
@@ -38,7 +38,7 @@ export default function CdtRedeemModal({ cdt, onClose }: CdtRedeemModalProps) {
 
     const next: typeof errors = {};
     if (!redeemedOn) next.date = 'Indica la fecha de redención.';
-    else if (redeemedOn < cdt.opened_on) next.date = 'No puede ser anterior a la apertura.';
+    else if (redeemedOn < cdt.maturity_on) next.date = 'No puede ser anterior al vencimiento.';
     else if (redeemedOn > today) next.date = 'No puede ser una fecha futura.';
     const hasAmount = finalAmount.trim() !== '';
     if (hasAmount && (!Number.isFinite(Number(finalAmount)) || Number(finalAmount) < 0)) {
@@ -72,7 +72,7 @@ export default function CdtRedeemModal({ cdt, onClose }: CdtRedeemModalProps) {
           label="Fecha de redención"
           type="date"
           value={redeemedOn}
-          min={cdt.opened_on}
+          min={cdt.maturity_on}
           max={today}
           onChange={(e) => setRedeemedOn(e.target.value)}
           error={errors.date}
@@ -94,7 +94,7 @@ export default function CdtRedeemModal({ cdt, onClose }: CdtRedeemModalProps) {
           />
           <p className="text-text-muted mt-1 text-xs">
             Si lo dejas vacío, se usa capital + rendimiento a la fecha de redención. Pon lo que el
-            banco te pagó de verdad (ya neto de retención o penalización).
+            banco te pagó de verdad (ya neto de retención).
           </p>
         </div>
 

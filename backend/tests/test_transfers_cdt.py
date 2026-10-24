@@ -15,6 +15,7 @@ D = Decimal
 CDTS = "/api/v1/cdts/"
 SUMMARY = "/api/v1/dashboard/summary"
 AHORA = "2026-03-15T15:00:00Z"
+VENCE_HOY = "2026-03-15"  # CDT redimible: solo se redime desde el vencimiento
 
 pytestmark = pytest.mark.usefixtures("_congelar")
 
@@ -170,7 +171,7 @@ class TestRedimir:
     def test_con_cuenta_devuelve_el_capital_y_registra_el_interes_como_ingreso(
         self, client, auth_headers, crear, banco, saldo, db_session
     ):
-        cdt = crear(source_account_id=banco["id"])
+        cdt = crear(source_account_id=banco["id"], maturity_on=VENCE_HOY)
         resp = client.post(
             f"{CDTS}{cdt['id']}/redeem",
             json={"account_id": banco["id"], "final_amount": "2150000.00"},
@@ -191,7 +192,7 @@ class TestRedimir:
         assert ingreso.currency == "COP"
 
     def test_el_interes_cuenta_como_ingreso_del_flujo_y_el_capital_no(self, client, auth_headers, crear, banco):
-        cdt = crear(source_account_id=banco["id"])
+        cdt = crear(source_account_id=banco["id"], maturity_on="2026-03-14")
         client.post(
             f"{CDTS}{cdt['id']}/redeem",
             json={"account_id": banco["id"], "final_amount": "2150000.00", "redeemed_on": "2026-03-14"},
@@ -203,7 +204,7 @@ class TestRedimir:
         assert _m(resumen["monthly_flow_balance"]) == D("150000.00")
 
     def test_sin_final_amount_usa_el_interes_calculado(self, client, auth_headers, crear, banco, saldo):
-        cdt = crear(source_account_id=banco["id"])
+        cdt = crear(source_account_id=banco["id"], maturity_on=VENCE_HOY)
         resp = client.post(f"{CDTS}{cdt['id']}/redeem", json={"account_id": banco["id"]}, headers=auth_headers)
         assert resp.status_code == 200, resp.text
         final = _m(resp.json()["final_amount"])
@@ -211,7 +212,7 @@ class TestRedimir:
         assert saldo(banco["id"]) == D("8000000.00") + final
 
     def test_sin_interes_no_crea_ingreso(self, client, auth_headers, crear, banco, db_session):
-        cdt = crear(source_account_id=banco["id"])
+        cdt = crear(source_account_id=banco["id"], maturity_on=VENCE_HOY)
         client.post(
             f"{CDTS}{cdt['id']}/redeem",
             json={"account_id": banco["id"], "final_amount": "2000000.00"},
@@ -223,7 +224,7 @@ class TestRedimir:
         self, client, auth_headers, crear, banco, saldo, make_account
     ):
         otra = make_account(auth_headers, name="Nu", balance="0.00")
-        cdt = crear(source_account_id=banco["id"])
+        cdt = crear(source_account_id=banco["id"], maturity_on=VENCE_HOY)
         resp = client.post(
             f"{CDTS}{cdt['id']}/redeem",
             json={"account_id": otra["id"], "final_amount": "2100000.00"},
@@ -233,8 +234,21 @@ class TestRedimir:
         assert saldo(otra["id"]) == D("2100000.00")
         assert saldo(banco["id"]) == D("8000000.00")
 
+    def test_antes_del_vencimiento_es_422_sin_efectos(self, client, auth_headers, crear, banco, saldo, db_session):
+        cdt = crear(source_account_id=banco["id"])  # vence 2026-08-15; hoy es 2026-03-15
+        resp = client.post(
+            f"{CDTS}{cdt['id']}/redeem",
+            json={"account_id": banco["id"], "final_amount": "2100000.00"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422, resp.text
+        assert saldo(banco["id"]) == D("8000000.00")
+        assert db_session.query(models.Transaction).count() == 0
+        assert len(_transferencias(db_session, cdt["id"])) == 1  # solo la constitución
+        assert client.get(CDTS, headers=auth_headers).json()["items"][0]["status"] == "active"
+
     def test_final_menor_que_el_capital_con_cuenta_es_422(self, client, auth_headers, crear, banco, saldo):
-        cdt = crear(source_account_id=banco["id"])
+        cdt = crear(source_account_id=banco["id"], maturity_on=VENCE_HOY)
         resp = client.post(
             f"{CDTS}{cdt['id']}/redeem",
             json={"account_id": banco["id"], "final_amount": "1900000.00"},
@@ -246,20 +260,20 @@ class TestRedimir:
 
     def test_moneda_de_la_cuenta_distinta_es_422(self, client, auth_headers, crear, make_account):
         usd = make_account(auth_headers, name="USD", currency="USD", balance="0.00")
-        cdt = crear()
+        cdt = crear(maturity_on=VENCE_HOY)
         resp = client.post(f"{CDTS}{cdt['id']}/redeem", json={"account_id": usd["id"]}, headers=auth_headers)
         assert resp.status_code == 422
 
     def test_cuenta_ajena_es_404(self, client, auth_headers, crear, make_account, other_user):
         ajena = make_account(other_user["headers"], name="Ajena")
-        cdt = crear()
+        cdt = crear(maturity_on=VENCE_HOY)
         assert (
             client.post(f"{CDTS}{cdt['id']}/redeem", json={"account_id": ajena["id"]}, headers=auth_headers).status_code
             == 404
         )
 
     def test_sin_cuenta_se_comporta_como_hoy(self, client, auth_headers, crear, banco, saldo, db_session):
-        cdt = crear(source_account_id=banco["id"])
+        cdt = crear(source_account_id=banco["id"], maturity_on=VENCE_HOY)
         resp = client.post(f"{CDTS}{cdt['id']}/redeem", json={"final_amount": "2100000.00"}, headers=auth_headers)
         assert resp.status_code == 200, resp.text
         assert resp.json()["redeem_transfer_id"] is None
@@ -268,7 +282,7 @@ class TestRedimir:
         assert len(_transferencias(db_session, cdt["id"])) == 1  # solo la constitución
 
     def test_redimir_dos_veces_es_409_sin_duplicar_efectos(self, client, auth_headers, crear, banco, saldo):
-        cdt = crear(source_account_id=banco["id"])
+        cdt = crear(source_account_id=banco["id"], maturity_on=VENCE_HOY)
         body = {"account_id": banco["id"], "final_amount": "2100000.00"}
         assert client.post(f"{CDTS}{cdt['id']}/redeem", json=body, headers=auth_headers).status_code == 200
         assert client.post(f"{CDTS}{cdt['id']}/redeem", json=body, headers=auth_headers).status_code == 409
@@ -276,7 +290,7 @@ class TestRedimir:
 
     def test_siembra_la_categoria_si_la_base_no_la_tiene(self, client, auth_headers, crear, banco, db_session):
         assert db_session.query(models.Category).filter(models.Category.name == "Rendimientos").count() == 0
-        cdt = crear()
+        cdt = crear(maturity_on=VENCE_HOY)
         client.post(
             f"{CDTS}{cdt['id']}/redeem",
             json={"account_id": banco["id"], "final_amount": "2100000.00"},
@@ -295,7 +309,7 @@ class TestBorrar:
         assert client.delete(f"/api/v1/accounts/{banco['id']}", headers=auth_headers).status_code == 200
 
     def test_borrar_redimido_con_transferencias_es_409(self, client, auth_headers, crear, banco, saldo, db_session):
-        cdt = crear(source_account_id=banco["id"])
+        cdt = crear(source_account_id=banco["id"], maturity_on=VENCE_HOY)
         client.post(
             f"{CDTS}{cdt['id']}/redeem",
             json={"account_id": banco["id"], "final_amount": "2100000.00"},
@@ -307,12 +321,12 @@ class TestBorrar:
         assert len(_transferencias(db_session, cdt["id"])) == 2
 
     def test_borrar_redimido_solo_con_constitucion_tambien_es_409(self, client, auth_headers, crear, banco):
-        cdt = crear(source_account_id=banco["id"])
+        cdt = crear(source_account_id=banco["id"], maturity_on=VENCE_HOY)
         client.post(f"{CDTS}{cdt['id']}/redeem", json={}, headers=auth_headers)
         assert client.delete(f"{CDTS}{cdt['id']}", headers=auth_headers).status_code == 409
 
     def test_borrar_redimido_sin_vinculo_funciona_como_antes(self, client, auth_headers, crear):
-        cdt = crear()
+        cdt = crear(maturity_on=VENCE_HOY)
         client.post(f"{CDTS}{cdt['id']}/redeem", json={}, headers=auth_headers)
         assert client.delete(f"{CDTS}{cdt['id']}", headers=auth_headers).status_code == 204
 

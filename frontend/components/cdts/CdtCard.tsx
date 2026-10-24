@@ -19,6 +19,8 @@ interface CdtCardProps {
 export default function CdtCard({ cdt, onEdit, onRedeem }: CdtCardProps) {
   const deleteMutation = useDeleteCdt(cdt.id);
   const isActive = cdt.status === 'active';
+  // El servidor rechaza redimir antes del vencimiento (422); `days_to_maturity` ya viene en la zona del usuario.
+  const canRedeem = (cdt.days_to_maturity ?? 1) <= 0;
   const pct =
     cdt.term_days > 0 ? Math.min(Math.max((cdt.elapsed_days / cdt.term_days) * 100, 0), 100) : 0;
   const realized = Number(cdt.realized_interest ?? 0);
@@ -124,7 +126,12 @@ export default function CdtCard({ cdt, onEdit, onRedeem }: CdtCardProps) {
               size="sm"
               variant="secondary"
               onClick={() => onRedeem(cdt)}
-              disabled={deleteMutation.isPending}
+              disabled={deleteMutation.isPending || !canRedeem}
+              title={
+                canRedeem
+                  ? undefined
+                  : `Se puede redimir desde el vencimiento (${formatDay(cdt.maturity_on)})`
+              }
             >
               <CheckCircle2 size={14} aria-hidden="true" />
               Redimir
