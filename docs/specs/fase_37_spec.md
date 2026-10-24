@@ -52,7 +52,7 @@ propone, el usuario confirma). Sobre las reglas activas:
 Convención de IDs: **D** decisión (tomada por el agente, sección siguiente), **B** backend, **F**
 frontend, **T** testing, **X** docs.
 
-### Decisiones tomadas por el agente, pendientes de revisión del dueño
+### Decisiones tomadas por el agente, revisadas por el dueño el 2026-10-18 y mantenidas
 
 **D1 — Propone, no registra solo.** Una regla nunca crea una transacción sin que el dueño la
 confirme. Justificación: es el principio de fricción de la visión §2.4 ("la app propone, el usuario
