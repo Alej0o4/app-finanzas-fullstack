@@ -1,14 +1,18 @@
 """Router de CDT (Fase 38). Delgado: la lógica vive en `app/services/cdt.py`.
 
-El router es dueño del `commit`. Un CDT no toca cuentas, transacciones ni `ledger.py` (D1).
+El router es dueño del `commit`. Un CDT solo toca cuentas si el dueño lo vincula (Fase 39): la
+constitución/redención son transferencias y el interés realizado un ingreso "Rendimientos".
 """
 
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.exceptions import ValidationError
 from app.core.security import get_current_user
 from app.models import models
 from app.schemas import schemas
@@ -19,6 +23,16 @@ router = APIRouter()
 
 def _ahora() -> datetime:
     return datetime.now(UTC)
+
+
+@contextmanager
+def _sin_desborde(db: Session):
+    """Un desborde de `Numeric(14,2)` en el saldo de la cuenta vinculada es 422, no 500."""
+    try:
+        yield
+    except DataError:
+        db.rollback()
+        raise ValidationError("La operación dejaría el saldo de la cuenta fuera del rango permitido.") from None
 
 
 @router.get("/", response_model=schemas.CdtListResponse)
@@ -36,8 +50,9 @@ def crear_cdt(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    respuesta = servicio.crear(db, current_user, datos, _ahora())
-    db.commit()
+    with _sin_desborde(db):
+        respuesta = servicio.crear(db, current_user, datos, _ahora())
+        db.commit()
     return respuesta
 
 
@@ -48,8 +63,9 @@ def actualizar_cdt(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    respuesta = servicio.actualizar(db, current_user, cdt_id, datos, _ahora())
-    db.commit()
+    with _sin_desborde(db):
+        respuesta = servicio.actualizar(db, current_user, cdt_id, datos, _ahora())
+        db.commit()
     return respuesta
 
 
@@ -60,13 +76,15 @@ def redimir_cdt(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    respuesta = servicio.redimir(db, current_user, cdt_id, datos, _ahora())
-    db.commit()
+    with _sin_desborde(db):
+        respuesta = servicio.redimir(db, current_user, cdt_id, datos, _ahora())
+        db.commit()
     return respuesta
 
 
 @router.delete("/{cdt_id}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar_cdt(cdt_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    servicio.eliminar(db, current_user, cdt_id)
-    db.commit()
+    with _sin_desborde(db):
+        servicio.eliminar(db, current_user, cdt_id)
+        db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
