@@ -601,7 +601,7 @@ Deuda consciente, acordada en el `/grilling` (spec `docs/specs/fase_36_spec.md`)
 - [ ] **`planned_expense` histórico no es una foto (D16).** Se calcula en vivo sobre las transacciones
   enlazadas: editar o borrar un gasto enlazado de un mes pasado cambia el planeado de ese mes, y borrar el sobre
   borra la marca de todos sus gastos. Si importa el histórico fiel, guardar el planeado en la propia entrada.
-- [ ] **Transferencias entre cuentas (QA-030).** El gasto debe salir de la cuenta del sobre (`422` si no); pagar
+- [x] **Transferencias entre cuentas (QA-030)** — resuelto en la Fase 39 (2026-10-24). El gasto debe salir de la cuenta del sobre (`422` si no); pagar
   desde otra cuenta con el dinero de un sobre exige resolver transferencias antes.
 - [ ] **Renovación del sobre anual (Fase 37).** Un sobre pagado queda `active` en 0 como "Pagado"; la
   renovación automática del gasto anual llega con recurrentes.
@@ -635,8 +635,16 @@ Deuda consciente (spec `docs/specs/fase_38_spec.md`; D1–D16 sin `/grilling`, a
 - [ ] **Revisar D1–D16 con el dueño.** En especial D1 (el CDT no mueve saldos: el capital debe dejar de figurar en
   una cuenta por ajuste manual, si no el patrimonio lo cuenta dos veces), D4 (redimir solo cambia de estado) y D3
   (aviso de vencimiento solo en la UI).
-- [ ] **Redención con retorno a una cuenta.** Registrar `final_amount` en una cuenta (y el interés realizado como
-  ingreso) depende de las transferencias entre cuentas (QA-030). Hasta entonces el patrimonio cae al redimir.
+- [x] **Redención con retorno a una cuenta** — resuelto en la Fase 39 (2026-10-24): redimir con cuenta de destino
+  crea la transferencia y el ingreso "Rendimientos".
+
+Deuda nueva de la Fase 39 (2026-10-24):
+
+- [ ] **El ingreso "Rendimientos" de una redención es una `Transaction` común**, editable y borrable por separado,
+  sin vínculo con el CDT: editarlo o borrarlo desincroniza el CDT y la cuenta.
+- [ ] **`app/services/cdt.py` duplica** la construcción de `Transfer` de constitución y de redención y repite
+  `_constitucion`/`_vinculos`; extraer un helper en `services/transfers.py`.
+- [ ] **`_resolver_fecha` (router de transacciones) e `instante_de_fecha` (transfers) están duplicadas.**
 - [ ] **Push o aviso en la bandeja por vencimiento** (hoy solo UI; exigiría job o escritura perezosa).
 - [ ] **Interés neto** (retención en la fuente, GMF) y renovación de un CDT: fuera de alcance.
 - [ ] Tope de 50 CDT sin lock (carrera menor, igual que el tope de 100 de recurrentes).

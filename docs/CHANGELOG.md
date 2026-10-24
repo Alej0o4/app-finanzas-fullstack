@@ -9,6 +9,31 @@
 
 ---
 
+## Fase 39 — Transferencias entre cuentas y CDT vinculado (2026-10-24)
+
+Spec: `docs/specs/fase_39_spec.md` (decisiones D1–D17 **tomadas por el dueño en un `/grilling`**; desviaciones de
+la implementación en la sección final de la spec). Cierra **QA-030** y la deuda "redención con retorno a una cuenta"
+de la Fase 38. Tabla `transfers` (origen, destino, montos, tasa): mover dinero propio **no es flujo** (no es gasto
+ni ingreso, no entra a KPI, dona ni presupuestos). `ledger.py` y `reconciliar_cuenta` ahora incluyen las
+transferencias en el saldo. `GET /movements` mezcla transacciones y transferencias (UNION) en una sola lista
+paginada. Si las monedas difieren, el servidor deriva la tasa a partir de los dos montos (6 decimales, string).
+**CDT vinculado (opcional):** `Cdt.source_account_id`/`destination_account_id`; crear con cuenta de origen genera la
+transferencia de constitución, redimir con cuenta de destino genera la de redención y un ingreso "Rendimientos"
+(categoría base nueva) por la diferencia; borrar un CDT vinculado revierte. Un CDT sin cuenta sigue siendo el
+módulo aislado de la Fase 38. Guardas: no se puede borrar/archivar/cambiar de moneda una cuenta con transferencias;
+`warnings` `BELOW_COMMITTED` si una cuenta de origen queda por debajo de lo comprometido en sobres (no bloquea).
+Script de datos `scripts/fase39_corregir_bancolombia.py` (idempotente, una transacción): suma 25.620.000 COP al saldo
+inicial de Bancolombia y crea las dos constituciones de los CDT reales (22.000.000 el 2026-09-22 y 10.000.000 el
+2026-10-17). Migración `c2f8a5d1e764` (tabla `transfers`, columnas de vínculo en `cdts`, categoría Rendimientos).
+Frontend: modal Transferir, lista mixta de movimientos con filtro, selectores de cuenta en `/cdts`.
+**Despliegue:** `pg_dump` previo; la migración corre sola en el `CMD` de Docker; reconstruir la imagen; correr el
+script **a mano** solo después de verificar los 25.620.000 contra el extracto del banco; reclasificar los dólares
+desde la UI. **Desviaciones** (detalle en la spec): `/transfers` no acepta `cdt_id` (las de CDT nacen solo desde
+`/cdts`, `PUT`/`DELETE` → `409`); dos índices únicos parciales; `BELOW_COMMITTED` solo en POST/PUT; ingreso
+Rendimientos creado directo en el servicio CDT. QA en navegador T10 (8/8) y `/code-review` con hallazgos corregidos.
+
+---
+
 ## Fase 38 — CDT (2026-10-18)
 
 Spec: `docs/specs/fase_38_spec.md` (decisiones D1–D16 **tomadas por el agente, sin `/grilling`, pendientes de

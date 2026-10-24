@@ -6,7 +6,7 @@ La aplicación sigue una arquitectura simple por capas:
 
 - `app/main.py` ensambla la aplicación FastAPI, CORS y routers.
 - `app/core/` concentra configuración, base de datos, seguridad y rate limiting (`rate_limit.py`).
-- `app/models/` define el modelo relacional con SQLAlchemy (16 modelos desde la Fase 37; ver `models.py` — User, Account, Category, Transaction, Budget, Fund, FundEntry, tokens y demás).
+- `app/models/` define el modelo relacional con SQLAlchemy (18 modelos desde la Fase 39; ver `models.py` — User, Account, Category, Transaction, Budget, Fund, FundEntry, tokens y demás).
 - `app/schemas/` define contratos de entrada y salida con Pydantic.
 - `app/api/` implementa los endpoints por dominio funcional.
 
@@ -70,7 +70,7 @@ En cada arranque, `main.py` ejecuta:
 
 ## CDT (Fase 38)
 
-- `Cdt` (migración `b4e7a2d9c613`, tabla `cdts`; 17.º modelo). Módulo aislado: no referencia cuentas ni transacciones y no toca `ledger.py`.
+- `Cdt` (migración `b4e7a2d9c613`, tabla `cdts`; 17.º modelo). Aislado en la Fase 38; desde la Fase 39 puede vincularse a cuentas (`source_account_id`/`destination_account_id`, migración `c2f8a5d1e764`, 18.º modelo `Transfer`): constituir y redimir crean transferencias y mueven saldos vía `ledger.py`. Sin cuentas vinculadas sigue sin tocarlas.
 - `app/services/cdt.py`: funciones **puras** (`dias_transcurridos`, `interes_causado`, `dias_para_vencer`, `alerta`) y casos de uso con DB (`listar`, `crear`, `actualizar`, `redimir`, `eliminar`, `patrimonio`); no comitean. `api/cdt.py` es un router delgado dueño del `commit`.
 - `api/dashboard.py` mezcla `cdt.patrimonio(...)` (`cdt_total`, `net_worth`) en el resumen; `free_to_spend`/`committed` no cambian.
 

@@ -5,7 +5,7 @@
 > `reconciliar_cuenta` y el módulo CDT**: es la primera fase desde la 36 que cambia cifras
 > existentes (los saldos de cuentas con CDT) y por eso lleva migración de datos con respaldo.
 
-**Estado:** especificada el 2026-10-24. Decisiones D1–D17 tomadas por el dueño en un `/grilling`
+**Estado:** implementada el 2026-10-24 (ver `## Desviaciones de implementación` al final). Decisiones D1–D17 tomadas por el dueño en un `/grilling`
 (Q1–Q17 de la sesión; el ID de cada decisión conserva el número de la pregunta). Marcadores
 `[NEEDS CLARIFICATION]` abiertos: ninguno.
 
@@ -332,3 +332,20 @@ backend/frontend, `docs/CHANGELOG.md`, `docs/ROADMAP.md` (cerrar QA-030; renumer
     Depende de: 12
 14. [infra] Despliegue: `pg_dump`, migración, script de datos, reclasificación de dólares (D14).
     Depende de: 13
+
+## Desviaciones de implementación
+
+- `/transfers` **no acepta `cdt_id`**: las transferencias de CDT nacen solo desde `/cdts`; `PUT`/`DELETE` sobre ellas
+  en `/transfers` devuelven `409`. El modal Transferir es solo cuenta→cuenta (afecta D3/D10 y F1).
+- Dos índices únicos parciales: a lo sumo una constitución y una redención por CDT.
+- Cambiar la moneda de una cuenta con transferencias devuelve `400`.
+- `PUT /cdts` acepta `source_account_id` para vincular un CDT sin vínculo; no permite desvincular (`null` → `422`).
+- `BELOW_COMMITTED` solo se emite si `committed > 0`, solo para la cuenta de origen y solo en POST/PUT (GET devuelve
+  `warnings: []`).
+- El ingreso "Rendimientos" se crea directo en el servicio CDT, con `ensure_default_categories` como respaldo.
+- Rango de fechas invertido en los listados → `400`.
+- La moneda del CDT no es editable mientras esté vinculado (validación en el frontend).
+- Redimir con cuenta un CDT sin constitución acredita el capital completo a propósito: el dinero entra por primera
+  vez a la cuenta.
+- Resultados: QA en navegador T10, 8/8; hallazgos del `/code-review` corregidos en los commits `fix(transfers)` /
+  `fix(cdt)` de la rama.
