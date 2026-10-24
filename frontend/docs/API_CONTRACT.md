@@ -319,17 +319,27 @@ Un sobre reserva dinero de una cuenta **sin moverlo**: aportar o retirar no crea
 
 ### CDT (Fase 38)
 
-Módulo aislado: no mueve saldos de cuentas ni crea transacciones. Fechas = días `YYYY-MM-DD`. El backend calcula todo (interés causado, valor al vencimiento, días, alerta, totales); el frontend no recalcula. Detalle en `backend/docs/API_REFERENCE.md` ("CDT").
+Sin cuenta vinculada no mueve saldos (Fase 38); desde la Fase 39 puede vincularse a cuentas vía transferencias (ver "Transferencias"). Fechas = días `YYYY-MM-DD`. El backend calcula todo (interés causado, valor al vencimiento, días, alerta, totales); el frontend no recalcula. Detalle en `backend/docs/API_REFERENCE.md` ("CDT").
 
 - `GET /api/v1/cdts/?status=active|redeemed` → `{ items: Cdt[], totals: CdtTotals[] }` (`totals` por moneda, solo vigentes: `currency`, `principal`, `accrued_interest`, `current_value`, `maturity_value`).
-- `POST /api/v1/cdts/` — body `{ name, currency?, principal, rate_ea, opened_on, maturity_on }` (`rate_ea` en % E.A., `11.5` = 11,5 %).
+- `POST /api/v1/cdts/` — body `{ name, currency?, principal, rate_ea, opened_on, maturity_on, source_account_id? }` (`rate_ea` en % E.A., `11.5` = 11,5 %; `source_account_id` = cuenta de la misma moneda de la que sale el capital, crea una transferencia).
 - `PUT /api/v1/cdts/{id}` — parcial; solo vigentes (`409` si está redimido).
-- `POST /api/v1/cdts/{id}/redeem` — body opcional `{ redeemed_on?, final_amount? }`; `409` si ya está redimido. No crea transacción.
-- `DELETE /api/v1/cdts/{id}` → `204`.
-- Invalidaciones: toda mutación invalida `cdts` y `dashboardSummary`; ninguna toca `accounts`, `transactions` ni `funds`.
+- `POST /api/v1/cdts/{id}/redeem` — body opcional `{ redeemed_on?, final_amount?, account_id? }`; `409` si ya está redimido. Con `account_id` (misma moneda) el dinero entra por una transferencia y, si `final_amount > principal`, la diferencia es un ingreso "Rendimientos"; `final_amount < principal` con cuenta → `422`. Sin `account_id` no crea nada.
+- `PUT` también acepta `source_account_id` (no `null`).
+- `DELETE /api/v1/cdts/{id}` → `204`; `409` si es un CDT redimido con transferencias vinculadas (el backend envía el copy, el frontend lo muestra en un toast).
+- Invalidaciones: toda mutación invalida `cdts` y lo mismo que una transferencia (cuentas, movimientos, dashboard, sobres, presupuestos/analítica).
 - `GET /api/v1/dashboard/summary` suma `cdt_total` y `net_worth` (`BalanceByCurrency[]`, foto de hoy): patrimonio = cuentas + CDT vigentes; **no** cambian `free_to_spend`/`committed`.
 
-`Cdt`: `id`, `name`, `currency`, `principal`, `rate_ea`, `opened_on`, `maturity_on`, `status` (`'active' | 'redeemed'`), `redeemed_on`, `final_amount`, `realized_interest`, `term_days`, `elapsed_days`, `accrued_interest`, `current_value`, `maturity_interest`, `maturity_value`, `days_to_maturity` (`null` si redimido; negativo si venció), `alert` (`'ok' | 'due_soon' | 'matured'`), `created_at`.
+`Cdt`: `id`, `name`, `currency`, `principal`, `rate_ea`, `opened_on`, `maturity_on`, `status` (`'active' | 'redeemed'`), `redeemed_on`, `final_amount`, `realized_interest`, `term_days`, `elapsed_days`, `accrued_interest`, `current_value`, `maturity_interest`, `maturity_value`, `days_to_maturity` (`null` si redimido; negativo si venció), `alert` (`'ok' | 'due_soon' | 'matured'`), `created_at`, `source_account_id`, `source_transfer_id`, `redeem_account_id`, `redeem_transfer_id` (Fase 39, nullable).
+
+### Transferencias y movimientos (Fase 39)
+
+Una transferencia mueve dinero entre dos cuentas propias y **no es flujo** (ni gasto ni ingreso). El backend calcula `amount_in`/tasa implícita y los avisos; el frontend no recalcula nada. Detalle en `backend/docs/API_REFERENCE.md`.
+
+- `POST /api/v1/transfers/` / `PUT /api/v1/transfers/{id}` — body `{ from_account_id, to_account_id, amount_out, amount_in? | exchange_rate?, date?, description? }`. Monedas distintas: exactamente uno de `amount_in` | `exchange_rate` (COP por 1 unidad extranjera, solo pares con COP; sin COP exige `amount_in`). Misma moneda: sin `exchange_rate`.
+- Respuesta `Transfer`: `id`, `from_account_id`, `to_account_id`, `cdt_id`, `cdt_name`, `amount_out`, `currency_out`, `amount_in`, `currency_in`, `exchange_rate` (tasa implícita o `null`), `date`, `description`, `warnings[]` (solo POST/PUT: `{ code: 'BELOW_COMMITTED', account_id, currency, committed, balance_after }`).
+- `DELETE /api/v1/transfers/{id}` → `204`. Las transferencias con `cdt_id` no se editan ni borran (`409`): se administran desde el CDT. `/transfers` no acepta `cdt_id`.
+- `GET /api/v1/movements/` — feed mixto paginado `{ items, total, page, page_size }`; cada item trae `kind: 'transaction' | 'transfer'` (los ids se repiten entre tipos: key `kind-id`). Query: `skip`, `limit`, `start_date`, `end_date`, `account_id`, `include_transfers` (default `true`), `category_id`, `type`, `search` (los tres últimos excluyen transferencias). `/transactions` lista desde aquí; los KPI siguen en los endpoints de siempre.
 
 ### Recurrentes (Fase 37)
 
