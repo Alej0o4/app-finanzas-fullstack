@@ -153,7 +153,7 @@ cuentas − apartado) en la moneda preferida; si es negativa, mensaje explicativ
 invalida `funds`, `dashboardSummary`; mutaciones de cuentas/transacciones ya invalidan
 `dashboardSummary`. Textos en tuteo.
 
-### Decisiones tomadas por el agente (pendientes de revisión del dueño)
+### Decisiones tomadas por el agente (revisadas y confirmadas por el dueño el 2026-10-24)
 
 **D1. Qué saldos entran al "saldo de las cuentas".** *Todas* las cuentas activas del usuario, por
 moneda (Σ `Account.balance`), **no** solo las destacadas. Razón: los sobres cuelgan de cualquier

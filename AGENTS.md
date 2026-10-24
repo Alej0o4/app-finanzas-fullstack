@@ -98,7 +98,7 @@ aportar o retirar **no** crea transacción ni toca `Account.balance`/`ledger.py`
 `GET /dashboard/summary` suma `accounts_total`, `committed` y `free_to_spend` (disponible real, por
 moneda, sobre todas las cuentas; puede ser negativo y **no bloquea nada**). El flujo mensual sigue
 siendo la cifra principal. Se hizo **sin `/grilling`**: las decisiones D1–D10 de
-`docs/specs/fase_35_spec.md` las tomó el agente y esperan revisión del dueño. Despliegue: `pg_dump`
+`docs/specs/fase_35_spec.md` las tomó el agente y el dueño las revisó y confirmó (2026-10-24). Despliegue: `pg_dump`
 previo; la migración `d5f2a8c1e703` corre sola en el `CMD` de Docker. **Ajustes post-uso (2026-10-17,
 implementados):** `DELETE /funds/{id}` borra el sobre y su libro (archivar sigue exigiendo saldo 0);
 `FundResponse.next_month_contribution`; `annual_expense` exige `target_date` (`422`); sin migración nueva.
@@ -112,8 +112,8 @@ constituye (transferencia cuenta→CDT), redimir con cuenta acredita y registra 
 "Rendimientos"; `/transfers` no acepta `cdt_id` (esas nacen solo desde `/cdts`). Cuentas con transferencias no se
 borran, archivan ni cambian de moneda. Cierra QA-030. Decisiones D1–D17 de `docs/specs/fase_39_spec.md`, tomadas por
 el dueño en un `/grilling`. Despliegue: `pg_dump` previo; la migración `c2f8a5d1e764` corre sola en el `CMD` de
-Docker; el dueño corre **a mano** `scripts/fase39_corregir_bancolombia.py --confirmo-copia` solo tras verificar
-25.620.000 contra el extracto, y reclasifica los dólares desde la UI.
+Docker; el dueño ya corrió **a mano** `scripts/fase39_corregir_bancolombia.py --confirmo-copia` (verificado contra el
+extracto, 2026-10-24); los dólares se reclasifican desde la UI.
 
 **Fase 38 — CDT (hecho operativo vigente):** `Cdt` (`/api/v1/cdts`, `app/services/cdt.py`) es un módulo
 **aislado por defecto**: sin cuentas vinculadas no toca `Account.balance`, `Transaction` ni `ledger.py`; desde la
@@ -122,8 +122,8 @@ Fase 39 puede vincularse a cuentas (ver abajo) y entonces sí mueve saldos vía 
 push). **Redimir sin cuenta solo cambia de estado** y guarda `redeemed_on` + `final_amount`; con cuenta de destino
 (Fase 39) crea la transferencia de retorno. `GET /dashboard/summary` suma `cdt_total` y `net_worth` (cuentas + CDT vigentes);
 `free_to_spend`, `committed` y el fondo de emergencia **no cambian** (solo cuentan dinero líquido). Se hizo
-**sin `/grilling`**: las decisiones D1–D16 de `docs/specs/fase_38_spec.md` las tomó el agente y esperan
-revisión del dueño. Despliegue: `pg_dump` previo; la migración `b4e7a2d9c613` (tabla nueva) corre sola en el
+**sin `/grilling`**: las decisiones D1–D16 de `docs/specs/fase_38_spec.md` las tomó el agente y el dueño las
+revisó y confirmó (2026-10-24). Despliegue: `pg_dump` previo; la migración `b4e7a2d9c613` (tabla nueva) corre sola en el
 `CMD` de Docker.
 
 **Fase 37 — recurrentes y calendario (hecho operativo vigente):** `RecurringRule` (`/api/v1/recurring`,

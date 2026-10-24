@@ -6,7 +6,7 @@
 > no toca sobres, el fondo de emergencia ni el disponible real. Lo único que cambia en una cifra
 > existente es que `GET /dashboard/summary` **suma** dos campos nuevos (`cdt_total`, `net_worth`).
 
-**Estado:** especificada el 2026-10-18. **Sin `/grilling` con el dueño**: las decisiones D1–D16 las tomó el agente contra el código y la visión (precedente: Fases 35 y 37) y esperan su revisión. Marcadores `[NEEDS CLARIFICATION]` abiertos: ninguno (los puntos de producto tienen un default conservador y reversible).
+**Estado:** especificada el 2026-10-18. **Sin `/grilling` con el dueño**: las decisiones D1–D16 las tomó el agente contra el código y la visión (precedente: Fases 35 y 37) y el dueño las revisó y confirmó el 2026-10-24. Marcadores `[NEEDS CLARIFICATION]` abiertos: ninguno (los puntos de producto tienen un default conservador y reversible).
 
 ---
 
@@ -40,7 +40,7 @@ al disponible real ni al fondo de emergencia.
 
 Convención de IDs: **D** decisión, **B** backend, **F** frontend, **T** testing, **X** docs.
 
-### Decisiones tomadas por el agente, pendientes de revisión del dueño
+### Decisiones tomadas por el agente, revisadas y confirmadas por el dueño el 2026-10-24
 
 **D1 — El CDT es una tabla propia y no toca el libro contable.** `cdts` no referencia cuentas
 ni transacciones. Crear, editar, redimir o borrar un CDT **no** mueve `Account.balance`, no crea
