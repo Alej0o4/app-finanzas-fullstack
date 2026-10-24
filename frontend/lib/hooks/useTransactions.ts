@@ -3,7 +3,7 @@
 import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
-import type { PaginatedResponse, Transaction } from '@/types/api';
+import type { Movement, PaginatedResponse, Transaction } from '@/types/api';
 
 type TransactionsQueryKey = readonly ['transactions', Record<string, unknown>];
 
@@ -35,6 +35,19 @@ export function useTransactions(
     queryFn: async () => {
       const response = await api.get('transactions/', { params });
       return response.data as PaginatedResponse<Transaction>;
+    },
+    ...options,
+  });
+}
+
+/** Feed mixto transacciones + transferencias (`GET /movements/`, Fase 39). Misma forma de
+ *  params que `useTransactions` más `include_transfers`. Cada item trae `kind`. */
+export function useMovements(params: Record<string, unknown>, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.transactions.movements(params),
+    queryFn: async () => {
+      const response = await api.get('movements/', { params });
+      return response.data as PaginatedResponse<Movement>;
     },
     ...options,
   });

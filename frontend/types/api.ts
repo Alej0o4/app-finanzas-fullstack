@@ -149,6 +149,12 @@ export interface Cdt {
   days_to_maturity?: number | null;
   alert: CdtAlert;
   created_at?: string | null;
+  /** Fase 39: cuenta de origen del capital y su transferencia (opcional, solo lectura aquí). */
+  source_account_id?: number | null;
+  source_transfer_id?: number | null;
+  /** Fase 39: cuenta destino de la redención y su transferencia. */
+  redeem_account_id?: number | null;
+  redeem_transfer_id?: number | null;
 }
 
 /** Totales por moneda, solo de los CDT vigentes. */
@@ -172,6 +178,8 @@ export interface CreateCdtPayload {
   rate_ea: number;
   opened_on: string;
   maturity_on: string;
+  /** Fase 39: cuenta de la que sale el capital (misma moneda del CDT). */
+  source_account_id?: number | null;
 }
 
 /** Parcial: solo se mandan los campos que cambiaron (`null` explícito da 422). */
@@ -180,7 +188,52 @@ export type UpdateCdtPayload = Partial<CreateCdtPayload>;
 export interface RedeemCdtPayload {
   redeemed_on?: string;
   final_amount?: number;
+  /** Fase 39: cuenta (misma moneda del CDT) que recibe el dinero al redimir. */
+  account_id?: number | null;
 }
+
+/** Aviso de transferencia (Fase 39, D6): la cuenta quedó por debajo de lo comprometido en sobres. */
+export interface TransferWarning {
+  code: 'BELOW_COMMITTED';
+  account_id: number;
+  currency: string;
+  committed: string | number;
+  balance_after: string | number;
+}
+
+/** Transferencia entre cuentas (Fase 39). `exchange_rate` es la tasa implícita COP por unidad
+ *  extranjera, calculada por el backend (null si no aplica). `warnings` solo en POST/PUT. */
+export interface Transfer {
+  id: number;
+  from_account_id: number;
+  to_account_id: number;
+  cdt_id: number | null;
+  cdt_name: string | null;
+  amount_out: number | string;
+  currency_out: string;
+  amount_in: number | string;
+  currency_in: string;
+  exchange_rate: number | string | null;
+  date: string;
+  description: string | null;
+  created_at?: string;
+  updated_at?: string;
+  warnings?: TransferWarning[];
+}
+
+export interface TransferPayload {
+  from_account_id: number;
+  to_account_id: number;
+  amount_out: number;
+  /** Exactamente uno de `amount_in` | `exchange_rate` cuando las monedas difieren. */
+  amount_in?: number;
+  exchange_rate?: number;
+  date?: string | null;
+  description?: string | null;
+}
+
+/** Fila del feed `GET /movements/` (Fase 39). Los ids se repiten entre tipos: key `kind-id`. */
+export type Movement = (Transaction & { kind: 'transaction' }) | (Transfer & { kind: 'transfer' });
 
 export type FundKind = 'annual_expense' | 'emergency' | 'goal';
 export type FundPace = 'completed' | 'on_track' | 'behind';

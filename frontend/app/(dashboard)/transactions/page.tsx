@@ -8,14 +8,18 @@ import { getApiError } from '@/lib/utils';
 import { useQueryParamState, useQueryParamsBatch } from '@/hooks/useQueryParamState';
 import { queryKeys } from '@/lib/queryKeys';
 import { fundSpendNotice } from '@/lib/fundSpendNotice';
-import { useTransactions } from '@/lib/hooks/useTransactions';
+import { useMovements } from '@/lib/hooks/useTransactions';
 import { useAccounts } from '@/lib/hooks/useAccounts';
 import { useCategories } from '@/lib/hooks/useCategories';
 import TransactionFilters, { type DatePreset } from '@/components/transactions/TransactionFilters';
 import TransactionList from '@/components/transactions/TransactionList';
 import EditTransactionModal from '@/components/modals/EditTransactionModal';
 import Skeleton from '@/components/ui/Skeleton';
-import type { Transaction, UpdateTransactionPayload } from '@/types/api';
+import TransferModal from '@/components/modals/TransferModal';
+import { useDeleteTransfer } from '@/lib/hooks/useTransfers';
+import { Repeat } from 'lucide-react';
+import Button from '@/components/ui/Button';
+import type { Movement, Transaction, Transfer, UpdateTransactionPayload } from '@/types/api';
 import { currentCalendarPeriodRange } from '@/lib/dateRanges';
 import { todayInZone } from '@/lib/dates';
 import { useTimezone } from '@/lib/hooks/useTimezone';
@@ -49,6 +53,8 @@ const validatePreset = (raw: string): DatePreset =>
 
 const validateIdOrAll = (raw: string) => (raw === 'all' || /^\d+$/.test(raw) ? raw : 'all');
 
+const validateFlag = (raw: string) => (raw === '1' ? '1' : '');
+
 const validateDateParam = (raw: string) => (/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : '');
 
 function TransactionsPageContent() {
@@ -65,6 +71,13 @@ function TransactionsPageContent() {
     validateIdOrAll
   );
   const [accountFilter, setAccountFilter] = useQueryParamState('account', 'all', validateIdOrAll);
+  // Fase 39: `?notransfers=1` oculta las transferencias (include_transfers=false).
+  const [hideTransfersParam, setHideTransfersParam] = useQueryParamState(
+    'notransfers',
+    '',
+    validateFlag
+  );
+  const hideTransfers = hideTransfersParam === '1';
   const [rawDatePreset] = useQueryParamState('preset', 'all', validatePreset);
   // Un link viejo (?preset=7d&start=…&end=…) normaliza el preset a 'all' pero conserva las
   // fechas: con un rango activo el chip correcto es 'custom', no "Todo el histórico".
@@ -110,7 +123,7 @@ function TransactionsPageContent() {
 
   // Paginación
   const [skip, setSkip] = useState(0);
-  const [allItems, setAllItems] = useState<Transaction[]>([]);
+  const [allItems, setAllItems] = useState<Movement[]>([]);
   const [total, setTotal] = useState(0);
 
   const resetPagination = () => {
@@ -130,17 +143,18 @@ function TransactionsPageContent() {
   const dateRangeInverted = Boolean(startDate && endDate && startDate > endDate);
 
   const params = useMemo(() => {
-    const p: Record<string, string | number> = { skip, limit: PAGE_SIZE };
+    const p: Record<string, string | number | boolean> = { skip, limit: PAGE_SIZE };
 
     if (startDateParam) p.start_date = startDateParam;
     if (endDateParam) p.end_date = endDateParam;
     if (categoryFilter !== 'all') p.category_id = Number(categoryFilter);
     if (accountFilter !== 'all') p.account_id = Number(accountFilter);
+    if (hideTransfers) p.include_transfers = false;
 
     return p;
-  }, [skip, startDateParam, endDateParam, categoryFilter, accountFilter]);
+  }, [skip, startDateParam, endDateParam, categoryFilter, accountFilter, hideTransfers]);
 
-  const { data, isFetching, isError, error, refetch } = useTransactions(params, {
+  const { data, isFetching, isError, error, refetch } = useMovements(params, {
     enabled: !dateRangeInverted && timezoneReady,
   });
 
@@ -157,8 +171,9 @@ function TransactionsPageContent() {
     // React Query + "Cargar más" reintentando esa página tras un error, QA Fase 31).
     setAllItems((prev) => {
       if (skip === 0) return data.items;
-      const cargados = new Set(prev.map((t) => t.id));
-      return [...prev, ...data.items.filter((t) => !cargados.has(t.id))];
+      // Los ids se repiten entre transacciones y transferencias: la identidad es `kind-id`.
+      const cargados = new Set(prev.map((t) => `${t.kind}-${t.id}`));
+      return [...prev, ...data.items.filter((t) => !cargados.has(`${t.kind}-${t.id}`))];
     });
   }, [data]);
 
@@ -208,8 +223,19 @@ function TransactionsPageContent() {
 
   const clearFilters = () => {
     resetPagination();
-    setFilterParams({ start: null, end: null, category: null, account: null, preset: null });
+    setFilterParams({
+      start: null,
+      end: null,
+      category: null,
+      account: null,
+      preset: null,
+      notransfers: null,
+    });
   };
+
+  const deleteTransferMutation = useDeleteTransfer();
+  const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -295,6 +321,10 @@ function TransactionsPageContent() {
             El registro histórico de tus movimientos.
           </p>
         </div>
+        <Button variant="secondary" size="sm" onClick={() => setIsTransferOpen(true)}>
+          <Repeat size={14} aria-hidden="true" />
+          Transferir
+        </Button>
       </div>
 
       <TransactionFilters
@@ -323,6 +353,11 @@ function TransactionsPageContent() {
           setCategoryFilter(value);
         }}
         onClearFilters={clearFilters}
+        hideTransfers={hideTransfers}
+        onHideTransfersChange={(value) => {
+          resetPagination();
+          setHideTransfersParam(value ? '1' : '');
+        }}
         endDateError={dateRangeInverted ? 'La fecha final es anterior a la inicial' : undefined}
       />
 
@@ -338,9 +373,31 @@ function TransactionsPageContent() {
           loadingMore={loadingMore}
           onEdit={openEditModal}
           onDelete={(id) => deleteMutation.mutate(id)}
+          onEditTransfer={(t) => {
+            setEditingTransfer(t);
+            setIsTransferOpen(true);
+          }}
+          onDeleteTransfer={(id) =>
+            deleteTransferMutation.mutate(id, {
+              onSuccess: () => toast.success('Transferencia eliminada'),
+              onError: (e) => toast.error(getApiError(e)),
+            })
+          }
           onLoadMore={handleLoadMore}
           isError={initialLoadFailed}
           onRetry={() => refetch()}
+        />
+      )}
+
+      {isTransferOpen && (
+        <TransferModal
+          key={editingTransfer?.id ?? 'new'}
+          isOpen
+          transfer={editingTransfer ?? undefined}
+          onClose={() => {
+            setIsTransferOpen(false);
+            setEditingTransfer(null);
+          }}
         />
       )}
 
