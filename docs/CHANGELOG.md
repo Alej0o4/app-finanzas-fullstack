@@ -9,6 +9,20 @@
 
 ---
 
+## Fase 40 — Dashboard navegable y detalle de categoría con presupuesto (2026-10-24)
+
+Spec: `docs/specs/fase_40_spec.md` (D1–D19; Q1–Q16 del `/grilling` y D13–D19 confirmadas por el dueño). Las tarjetas
+de "Ejecución de Presupuestos" y las filas de "Gastos por Categoría" del dashboard son enlaces a
+`/categories/[id]?month=YYYY-MM&currency=XXX`. El detalle pasa a ser una vista por mes y moneda: bloque de presupuesto
+(`BudgetRing`, "Excedido por X"), "Total del mes" (de `category-distribution`), lista paginada con "Cargar más", chip
+de moneda y enlace "Ver en Movimientos". Backend aditivo, sin migración: `category_id` en `BudgetProgress` y filtros
+`currency`/`type` en `GET /transactions/`. El selector de mes y el validador de `?month=` se extrajeron a
+`useMonthParam`/`MonthNavigator`. Numeración: "págate primero" pasa a la 41 y el cierre de mes a la 42.
+**Desviación:** "Restante"/"Excedido por X" se muestran como la resta de dos cifras del backend (`amount_limit −
+spent`) en el cliente, solo para mostrar; la condición de exceso sí viene de `percentage`.
+
+---
+
 ## Fase 39 — Transferencias entre cuentas y CDT vinculado (2026-10-24)
 
 Spec: `docs/specs/fase_39_spec.md` (decisiones D1–D17 **tomadas por el dueño en un `/grilling`**; desviaciones de

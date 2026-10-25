@@ -32,7 +32,7 @@ sale de ella: **disponible real = saldo de las cuentas − lo comprometido**. Co
 | 37 ✅ | **Recurrentes + calendario de cargos anuales** | **Completada 2026-10-18** (ver `docs/CHANGELOG.md`). Una regla propone la transacción y el dueño la confirma o salta; calendario de 12 meses y sugerencias de cargos anuales. Base del pronóstico y de los sobres sugeridos. |
 | 38 ✅ | **CDT** (módulo independiente) | **Completada 2026-10-18** (ver `docs/CHANGELOG.md`). Aislado del fondo de emergencia; suma al patrimonio total. Desde la Fase 39 puede vincularse a cuentas. |
 | 39 ✅ | **Transferencias entre cuentas + CDT vinculado** | **Completada 2026-10-24** (ver `docs/CHANGELOG.md`). Cierra QA-030; mover dinero propio no es flujo; constitución y redención de CDT mueven saldos. |
-| 40 | **Dashboard navegable y detalle de categoría con presupuesto** | Tarjetas de presupuesto y filas de gasto por categoría llevan al detalle por mes y moneda. Ver `docs/specs/fase_40_spec.md`. |
+| 40 ✅ | **Dashboard navegable y detalle de categoría con presupuesto** | **Completada 2026-10-24** (ver `docs/CHANGELOG.md`). Tarjetas de presupuesto y filas de gasto por categoría llevan al detalle por mes y moneda. Ver `docs/specs/fase_40_spec.md`. |
 | 41 | **Págate primero** | Engancha la creación de ingresos; necesita sobres probados. |
 | 42 | **Cierre de mes con puntaje de cumplimiento** | Necesita jobs mensuales por zona del usuario y datos de todo lo anterior. |
 
@@ -246,7 +246,7 @@ Tabla nueva `recurring_rules` (migración `a9c3d6e1f845`), servicio `app/service
   push de pendientes, guardar sugerencias descartadas y el pronóstico de caja 30/60/90 días.
 
 La **Fase 38 (CDT)** se completó el 2026-10-18 y la **Fase 39 (transferencias, QA-030, y CDT vinculado a cuentas)**
-el 2026-10-24. Lo que sigue en el nuevo enfoque es la **Fase 40 (dashboard navegable)**, y después la 41 (págate primero).
+el 2026-10-24. La **Fase 40 (dashboard navegable)** se completó el mismo día. Lo que sigue es la 41 (págate primero).
 
 ## Fase 37 (antes 35): ingresos y gastos recurrentes
 

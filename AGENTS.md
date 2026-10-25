@@ -86,7 +86,7 @@ lo comprometido en sobres**. El flujo sigue siendo la cifra principal del dashbo
 disponible real, **36** gasto contra sobre, **37** recurrentes + calendario de cargos anuales (era
 la 35), **38** CDT, **39** transferencias entre cuentas, **40** dashboard navegable y detalle de categoría, **41** "págate primero", **42** cierre de mes con puntaje. Regla ya decidida:
 el **fondo de emergencia solo cuenta dinero líquido** y el CDT es un módulo aparte, nunca parte del
-fondo. **Las Fases 35, 36, 37, 38 y 39 (2026-10-17/24) están implementadas** y lo demás no; cada feature con su justificación, el diseño base y las
+fondo. **Las Fases 35 a 40 (2026-10-17/24) están implementadas** y lo demás no; cada feature con su justificación, el diseño base y las
 decisiones abiertas están en [docs/VISION_FINANZAS_RESPONSABLES.md](docs/VISION_FINANZAS_RESPONSABLES.md)
 (los nombres de tablas y columnas ahí son propuestas sin verificar contra `models.py`). La Fase 35
 original (recurrentes) pasó a la Fase 37; las menciones anteriores a esta fecha son históricas.
