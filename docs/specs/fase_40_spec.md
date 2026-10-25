@@ -140,3 +140,21 @@ transacciones del mes. Si no, solo las transacciones. Todo en la misma URL `/cat
 - D13 (filtro `currency` en `GET /transactions/`) y D14 (total del mes desde `category-distribution`): confirmadas como se recomendaron.
 - D15: el total de una categoría de ingreso se muestra como "Total del mes" con `type=income` (antes marcador abierto).
 - D16–D19: propuestas por el agente tras `/analyze-spec`; el dueño las confirmó.
+
+## Desviaciones registradas al cierre (2026-10-24)
+
+- **"Restante" / "Excedido por X" en el cliente (D7).** `BudgetProgress` no trae un campo de restante; el detalle
+  muestra `|amount_limit − spent|`, resta de dos cifras del backend solo para mostrarla. La condición de exceso
+  (`percentage > 100`) sí viene del backend. Para respetar al pie de la letra "el frontend nunca calcula", habría
+  que agregar `remaining` a `BudgetProgress`.
+- **Piso del selector (D10/D18).** El piso `first_transaction_month` entra a `MonthNavigator` como prop, no al hook
+  `useMonthParam` (el `summary` que lo da necesita `apiMonth`/`periodParams` del hook: dependencia circular).
+- **Moneda de `?currency=` (D3/D17).** Un `?currency=` que no sea candidata (sin presupuesto ni movimientos ese mes)
+  se ignora y se usa la moneda por defecto de D17, aunque haya cuentas en esa moneda.
+- **Costo de D17.** El total y el chip hacen una consulta de `category-distribution` por moneda (cuentas,
+  presupuestos y preferida). Si pesa, el remedio es un filtro `category_id` en ese endpoint.
+- **Observaciones menores de QA:** "Ver en Movimientos" no lleva moneda (D11 así lo define); el encabezado de un
+  mes vacío anterior dice "Movimientos de octubre" sin año.
+
+**Verificación de cierre:** pytest 995 pasados y 2 fallidos (`test_cdt_concurrency.py`, preexistentes, en
+`docs/TODO.md`); ruff, eslint y prettier limpios; Playwright en `oikos-dev` (escritorio y móvil) sin bugs.
