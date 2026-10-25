@@ -37,7 +37,6 @@ uvloop==0.22.1
 watchfiles==1.2.0
 websockets==16.0
 apscheduler>=3.10,<4
-ruff==0.12.7
 
 # --- Push web (Fase 13 §13.2, Decisión 13.2.1) ---
 # pywebpush implementa el protocolo Web Push estándar (VAPID) sin proveedor externo.
@@ -60,16 +59,3 @@ requests==2.34.2
 tzdata==2026.5
 urllib3==2.7.0
 yarl==1.24.5
-
-# --- Tests (Fase 7, §4.2) ---
-pytest==8.3.4
-httpx==0.28.1
-pytest-cov==6.0.0
-freezegun==1.5.1
-# Fase 32 (I1): levanta el `postgres:16-alpine` desechable que corre la suite por defecto.
-# El import va por `testcontainers.community.postgres` — `testcontainers.postgres` está
-# deprecado desde 4.15. Transitivos nuevos que agrega: `docker` y `wrapt` (`requests`,
-# `urllib3`, `python-dotenv` y `typing_extensions` ya estaban pinados).
-testcontainers==4.15.0
-docker==7.2.0
-wrapt==2.2.2

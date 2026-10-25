@@ -32,7 +32,7 @@ export function FundStatusChip({ fund }: { fund: Fund }) {
   return <PaceChip pace={fund.pace} />;
 }
 
-export function PaceChip({ pace }: { pace: FundPace | null }) {
+function PaceChip({ pace }: { pace: FundPace | null }) {
   if (!pace) return null;
   const { label, className } = PACE_STYLES[pace];
   return (

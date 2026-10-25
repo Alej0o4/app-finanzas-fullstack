@@ -122,8 +122,8 @@ export interface DashboardSummary {
   net_worth: BalanceByCurrency[];
 }
 
-export type CdtStatus = 'active' | 'redeemed';
-export type CdtAlert = 'ok' | 'due_soon' | 'matured';
+type CdtStatus = 'active' | 'redeemed';
+type CdtAlert = 'ok' | 'due_soon' | 'matured';
 
 /** CDT (Fase 38). Los Decimal llegan como string: normalizar con `Number(...)`. Fechas = días
  *  `YYYY-MM-DD` en la zona del usuario. Interés y valores los calcula el backend (E.A. bruto). */
@@ -160,7 +160,7 @@ export interface Cdt {
 }
 
 /** Totales por moneda, solo de los CDT vigentes. */
-export interface CdtTotals {
+interface CdtTotals {
   currency: string;
   principal: string;
   accrued_interest: string;
@@ -315,7 +315,7 @@ export interface UpdateFundPayload {
 }
 
 export type RecurringFrequency = 'weekly' | 'monthly' | 'yearly';
-export type RecurringStatus = 'active' | 'paused';
+type RecurringStatus = 'active' | 'paused';
 
 /** Regla recurrente (Fase 37). Los Decimal llegan como string: normalizar con `Number(...)`.
  *  Fechas = días de calendario `YYYY-MM-DD` en la zona del usuario, no instantes. */
@@ -376,7 +376,7 @@ export interface PendingOccurrence {
   is_next: boolean;
 }
 
-export interface RecurringCalendarItem {
+interface RecurringCalendarItem {
   rule_id: number;
   name: string;
   type: 'income' | 'expense';
@@ -387,14 +387,14 @@ export interface RecurringCalendarItem {
   is_overdue: boolean;
 }
 
-export interface RecurringCalendarTotals {
+interface RecurringCalendarTotals {
   currency: string;
   income: number | string;
   expense: number | string;
   net: number | string;
 }
 
-export interface RecurringCalendarMonth {
+interface RecurringCalendarMonth {
   /** `YYYY-MM`. */
   month: string;
   items: RecurringCalendarItem[];
