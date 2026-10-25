@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Wallet } from 'lucide-react';
 import type { CategoryDistributionItem } from '@/types/api';
 import CategoryIcon from '@/components/ui/CategoryIcon';
@@ -22,6 +23,8 @@ interface CategoryBreakdownBarsProps {
   /** Fase 29 §F5.4: el dashboard navega por mes, así que su mensaje de "sin gastos" nombra el
    *  mes visible. Si se omite queda el texto genérico (vista por cuenta, sin período). */
   emptyMessage?: string;
+  /** Fase 40 (D5): si se pasa, cada fila es un enlace real a ese destino (fila completa). */
+  getRowHref?: (item: CategoryDistributionItem) => string;
 }
 
 /**
@@ -39,6 +42,7 @@ export default function CategoryBreakdownBars({
   onRetry,
   currency,
   emptyMessage,
+  getRowHref,
 }: CategoryBreakdownBarsProps) {
   const { config } = useAppConfig();
   const rows = data ?? [];
@@ -71,32 +75,48 @@ export default function CategoryBreakdownBars({
         />
       ) : (
         <ul className="space-y-5">
-          {rows.map((item) => (
-            <li key={item.category_id}>
-              <div className="mb-1.5 flex items-center justify-between gap-3">
-                <span className="flex min-w-0 items-center gap-2">
-                  {/* Fase 24 §24.4: el contrato ahora incluye category_icon; el fallback solo
-                      cubre categorías sin ícono asignado (icon: null), no todas. */}
-                  <CategoryIcon
-                    icon={item.category_icon}
-                    fallback={<Wallet size={16} className="text-text-muted" />}
-                  />
-                  <span className="text-text truncate text-sm font-medium">
-                    {item.category_name}
+          {rows.map((item) => {
+            const content = (
+              <>
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    {/* Fase 24 §24.4: el contrato ahora incluye category_icon; el fallback solo
+                        cubre categorías sin ícono asignado (icon: null), no todas. */}
+                    <CategoryIcon
+                      icon={item.category_icon}
+                      fallback={<Wallet size={16} className="text-text-muted" />}
+                    />
+                    <span className="text-text truncate text-sm font-medium">
+                      {item.category_name}
+                    </span>
                   </span>
-                </span>
-                <span className="text-text shrink-0 text-sm font-semibold tabular-nums">
-                  {formatCurrency(Number(item.total), currency ?? config.currency)}
-                </span>
-              </div>
-              <div className="bg-surface-elevated h-2 w-full overflow-hidden rounded-full">
-                <div
-                  className="bg-primary h-full rounded-full"
-                  style={{ width: `${(Number(item.total) / maxTotal) * 100}%` }}
-                />
-              </div>
-            </li>
-          ))}
+                  <span className="text-text shrink-0 text-sm font-semibold tabular-nums">
+                    {formatCurrency(Number(item.total), currency ?? config.currency)}
+                  </span>
+                </div>
+                <div className="bg-surface-elevated h-2 w-full overflow-hidden rounded-full">
+                  <div
+                    className="bg-primary h-full rounded-full"
+                    style={{ width: `${(Number(item.total) / maxTotal) * 100}%` }}
+                  />
+                </div>
+              </>
+            );
+            return (
+              <li key={item.category_id}>
+                {getRowHref ? (
+                  <Link
+                    href={getRowHref(item)}
+                    className="hover:bg-surface-elevated/60 focus-visible:ring-primary -mx-3 block cursor-pointer rounded-xl px-3 py-1.5 transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  content
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

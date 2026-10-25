@@ -88,12 +88,14 @@ El dashboard navega por mes (`?month=YYYY-MM`, Fase 29 §F5.1), así que tres fa
 `lib/queryKeys.ts` ganaron argumentos opcionales. **Regla: un segmento opcional se omite del
 array cuando no se pasa, nunca queda como `undefined`**:
 
-| Factory                                          | Sin argumentos                     | Con argumentos                                                   |
-| ------------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------- |
-| `dashboard.summary(month?)`                      | `['dashboardSummary']`             | `['dashboardSummary', 'YYYY-MM']`                                |
-| `budgets.byMonth(month)`                         | —                                  | `['budgets', 'YYYY-MM']`                                         |
-| `budgets.progress(month?)`                       | `['budgets-progress']`             | `['budgets-progress', 'YYYY-MM']`                                |
-| `dashboard.categoryBreakdown(month?, currency?)` | `['dashboard-category-breakdown']` | `['dashboard-category-breakdown', month \| undefined, currency]` |
+| Factory                                                       | Sin argumentos                     | Con argumentos                                                                         |
+| ------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------- |
+| `dashboard.summary(month?)`                                   | `['dashboardSummary']`             | `['dashboardSummary', 'YYYY-MM']`                                                      |
+| `budgets.byMonth(month)`                                      | —                                  | `['budgets', 'YYYY-MM']`                                                               |
+| `budgets.progress(month?)`                                    | `['budgets-progress']`             | `['budgets-progress', 'YYYY-MM']`                                                      |
+| `dashboard.categoryBreakdown(month?, currency?)`              | `['dashboard-category-breakdown']` | `['dashboard-category-breakdown', month \| undefined, currency]`                       |
+| `dashboard.categoryBreakdown(month?, currency?, categoryId?)` | —                                  | `['dashboard-category-breakdown', month \| undefined, currency, categoryId]` (Fase 40) |
+| `transactions.byCategoryList(id, month?, currency, skip)`     | —                                  | `['transactions', 'category', id, month \| undefined, currency, skip]` (Fase 40)       |
 
 - **Por qué:** TanStack compara el prefijo elemento a elemento. Todas las invalidaciones
   existentes llaman a estas factories **sin argumentos**
@@ -108,6 +110,20 @@ array cuando no se pasa, nunca queda como `undefined`**:
 - `dashboard.categoryBreakdown` es la excepción parcial: la moneda de los chips siempre se
   pasa, así que en el mes en curso la key queda `['dashboard-category-breakdown', undefined,
 'COP']`. La invalidación sin argumentos la sigue cubriendo por prefijo.
+- **Fase 40 (D19) — detalle de categoría (`app/(dashboard)/categories/[id]/page.tsx`):**
+  - Lista: `transactions.byCategoryList(id, apiMonth, currency, skip)`, una query por página de 20
+    (`useQueries`; "Cargar más" avanza `skip` y concatena las páginas). Cuelga del prefijo
+    `transactions.byCategory(id)` que `updateMutation`/`deleteMutation` ya invalidan, así que
+    editar o borrar refresca todas las páginas cargadas. Si falla la última página, "Reintentar"
+    la refetchea en vez de avanzar `skip`. `id` va siempre como string en la key.
+  - Total del mes: `dashboard.categoryBreakdown(apiMonth, currency, id)` (respuesta de
+    `category-distribution`, se toma la fila de la categoría; una query por moneda de las cuentas
+    del usuario para decidir el chip, D17). Los llamadores del dashboard (2 argumentos) no cambian
+    y el prefijo `dashboard-category-breakdown` sigue casando.
+  - Progreso: reutiliza `budgets.progress(apiMonth)`; el piso del selector reutiliza
+    `dashboard.summary(apiMonth)`.
+  - El mes (`useMonthParam`) y la moneda (`?currency=`) viven en la URL; cambiar cualquiera
+    reinicia la paginación por clave de contexto, sin efectos.
 - El mes entra como `'YYYY-MM'` (segmento estable), nunca como un ISO de instante: un valor
   que cambia en cada render generaría una key nueva por render.
 

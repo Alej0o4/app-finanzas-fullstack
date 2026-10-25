@@ -136,6 +136,8 @@ mantener el `type` no se bloquea.
 - `PUT /api/v1/transactions/{transaction_id}`
 - `DELETE /api/v1/transactions/{transaction_id}`
 
+Fase 40: `GET /api/v1/transactions/` acepta además `currency` (código de 3 letras mayúsculas, D13) y `type` (`income` | `expense`, D16), ambos opcionales y aditivos; `total` y la paginación cuentan solo lo filtrado. El detalle de categoría los manda junto con `category_id`, `start_date`/`end_date` del mes, `skip` y `limit=20`.
+
 Filtros soportados por el feed:
 
 - `skip` (default: 0, validado `ge=0`)
@@ -239,7 +241,7 @@ en el frontend dice: "Se borra el de este mes. Si venía de meses anteriores, el
 ### Dashboard
 
 - `GET /api/v1/dashboard/summary` — incluye `monthly_flow_balance: number` desde Fase 11 §11.3, sin `null` desde Fase 31 (Decisión B9; ver "Contratos de datos" abajo). Desde Fase 29 acepta los query params `year`/`month` y devuelve tres campos nuevos: `monthly_flow_basis` (obsoleto desde Fase 31, siempre `"actual"`), `first_transaction_month` y `expense_currencies` (ver "Navegación por mes del dashboard" y "Contratos de datos > Dashboard"). El mes cerrado se acota hasta el primer instante del mes siguiente, exclusivo (Fase 31, Decisión B6).
-- `GET /api/v1/dashboard/budgets-progress` — cada fila incluye `currency` desde Fase 11 §11.1.
+- `GET /api/v1/dashboard/budgets-progress` — cada fila incluye `currency` desde Fase 11 §11.1 y `category_id: number` desde Fase 40 (D9, aditivo; el detalle `/categories/[id]` busca su presupuesto por `category_id` y moneda, también en meses pasados).
   Desde Fase 17 §17.2.3 acepta además un query param opcional `currency: string` (Decisión
   17.2.3): si se pasa, el backend filtra las filas a esa moneda **sin recalcular `spent`**
   (el gasto de cada presupuesto es la suma cruzada de todas las cuentas del usuario en esa

@@ -5,7 +5,8 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Tags } from 'lucide-react';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
-import type { DateRange } from '@/lib/dateRanges';
+import { categoryDetailHref } from '@/lib/dateRanges';
+import type { CalendarMonth, DateRange } from '@/lib/dateRanges';
 import type { CategoryDistributionItem } from '@/types/api';
 import CategoryBreakdownBars from '@/components/charts/CategoryBreakdownBars';
 import SegmentedControl from '@/components/ui/SegmentedControl';
@@ -22,6 +23,8 @@ interface CategoryBreakdownSectionProps {
   preferredCurrency: string;
   /** Mensaje de "sin gastos" que nombra el mes. `undefined` deja el texto genérico. */
   emptyMessage?: string;
+  /** Fase 40 (D5): mes visible; con él cada fila enlaza al detalle de su categoría. */
+  detailMonth?: CalendarMonth;
 }
 
 /**
@@ -40,6 +43,7 @@ export default function CategoryBreakdownSection({
   currencyOptions,
   preferredCurrency,
   emptyMessage,
+  detailMonth,
 }: CategoryBreakdownSectionProps) {
   // `null` = "la preferida", no una copia de ella: el padre pasa `config.currency` mientras
   // `/users/me` no resolvió y la preferida real llega después (o cambia desde Ajustes). Un
@@ -103,6 +107,11 @@ export default function CategoryBreakdownSection({
         onRetry={() => refetch()}
         currency={currency}
         emptyMessage={emptyMessage}
+        getRowHref={
+          detailMonth
+            ? (item) => categoryDetailHref(item.category_id, detailMonth, currency)
+            : undefined
+        }
       />
     </div>
   );

@@ -54,6 +54,8 @@ export interface Budget {
 
 export interface BudgetProgress {
   budget_id: number;
+  /** Fase 40 (D9): categoría del presupuesto; el detalle de categoría busca por ella y moneda. */
+  category_id: number;
   category_name: string;
   category_icon?: string;
   amount_limit: number;

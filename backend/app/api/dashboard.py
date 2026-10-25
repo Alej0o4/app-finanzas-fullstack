@@ -294,6 +294,7 @@ def obtener_progreso_presupuestos(
         progreso_lista.append(
             {
                 "budget_id": presupuesto.id,
+                "category_id": presupuesto.category_id,
                 "category_name": cat_name,
                 "category_icon": cat_icon,
                 "amount_limit": presupuesto.amount_limit,

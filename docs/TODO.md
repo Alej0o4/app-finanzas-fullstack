@@ -70,6 +70,8 @@ Formato: `[ ]` pendiente · `[x]` resuelto — marcar con fecha al resolver.
 
 ## 🟠 Bugs confirmados (auditoría 2026-08-22 + 2026-09-15)
 
+- [ ] **`tests/test_cdt_concurrency.py` falla con 422 en redención (2026-10-24)** — 🟠 tests — `test_dos_redenciones_simultaneas_un_200_y_un_409` y `test_redimir_y_editar_en_paralelo_no_dejan_estado_incoherente` dan `422` en vez de `200`/`409`. Preexistente: la Fase 40 no toca CDT. Sospecha: depende de la hora (corrió a las 23:55 UTC = 18:55 Bogotá, el día UTC y el local pueden diferir). Investigar la validación de la fecha de redención.
+
 - [x] **`/budgets` lista los presupuestos de todos los meses mezclados (2026-10-04)** — 🟠 UX — resuelto 2026-10-04.
   - Repro: tener presupuestos recurrentes en dos meses (p. ej. septiembre y octubre) y abrir
     Presupuestos: aparecen todas las tarjetas juntas, con cada recurrente duplicada por mes, y

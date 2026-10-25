@@ -162,13 +162,29 @@ export const formatMonthParam = ({ year, month }: CalendarMonth): string =>
  * El fin es el último día del mes y no "hoy" a propósito: el link tiene que seguir apuntando al
  * mismo período mañana. En el mes en curso la lista igual solo muestra lo que hay registrado.
  */
-export const monthTransactionsHref = (year: number, month: number): string => {
+export const monthTransactionsHref = (
+  year: number,
+  month: number,
+  categoryId?: number | string
+): string => {
   const firstDay = new Date(Date.UTC(year, month - 1, 1));
   const lastDay = new Date(Date.UTC(year, month, 0));
   // `preset=custom` explícito: sin él, `/transactions` valida el preset contra su whitelist y cae
   // en 'all', dejando el chip "Todo el histórico" resaltado con un rango activo (H5).
-  return `/transactions?start=${toDateParam(firstDay)}&end=${toDateParam(lastDay)}&preset=custom`;
+  const category = categoryId !== undefined ? `&category=${categoryId}` : '';
+  return `/transactions?start=${toDateParam(firstDay)}&end=${toDateParam(lastDay)}&preset=custom${category}`;
 };
+
+/**
+ * Fase 40 (D5): destino del clic en una tarjeta de presupuesto o fila de gasto por categoría del
+ * dashboard — el detalle `/categories/[id]` con el mes visible y la moneda de la tarjeta o chip.
+ */
+export const categoryDetailHref = (
+  categoryId: number | string,
+  { year, month }: CalendarMonth,
+  currency: string
+): string =>
+  `/categories/${categoryId}?month=${formatMonthParam({ year, month })}&currency=${encodeURIComponent(currency)}`;
 
 /** Rótulo legible del período: `"Agosto 2026"`. */
 export const formatMonthLabel = (year: number, month: number): string => {

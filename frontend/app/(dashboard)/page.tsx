@@ -3,6 +3,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { AlertCircle, PieChart } from 'lucide-react';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatCurrency, getApiError } from '@/lib/utils';
@@ -18,45 +19,18 @@ import AvailableCard from '@/components/funds/AvailableCard';
 import DueCdtCard from '@/components/cdts/DueCdtCard';
 import NetWorthLine from '@/components/cdts/NetWorthLine';
 import PendingRecurringCard from '@/components/recurring/PendingRecurringCard';
-import PeriodNavigator from '@/components/PeriodNavigator';
+import MonthNavigator from '@/components/MonthNavigator';
 import SummaryCard from '@/components/ui/SummaryCard';
 import Button from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
 import QueryErrorState from '@/components/ui/QueryErrorState';
 import Input from '@/components/ui/Input';
 import Skeleton from '@/components/ui/Skeleton';
-import { useQueryParamState } from '@/hooks/useQueryParamState';
+import { useMonthParam } from '@/hooks/useMonthParam';
 import { queryKeys } from '@/lib/queryKeys';
-import {
-  compareMonth,
-  monthOfDay,
-  formatMonthLabel,
-  formatMonthName,
-  formatMonthParam,
-  monthTransactionsHref,
-  parseMonthParam,
-  shiftMonth,
-  monthRange as buildMonthRange,
-} from '@/lib/dateRanges';
-import { hourInZone, todayInZone } from '@/lib/dates';
-import { useTimezone } from '@/lib/hooks/useTimezone';
-import type { CalendarMonth } from '@/lib/dateRanges';
+import { categoryDetailHref, monthTransactionsHref } from '@/lib/dateRanges';
+import { hourInZone } from '@/lib/dates';
 import type { BudgetProgress, DashboardSummary } from '@/types/api';
-
-/**
- * Fase 29 §F5.1 (Q6, H10, supuesto 3): validador read-time de `?month=YYYY-MM`, mismo patrón
- * que `validateDateParam` de transactions/page.tsx (Fase 13 §13.6). Un link con `?month=basura`,
- * `?month=2026-13` o con un mes futuro devuelve el mes actual en vez de dejar la vista rota
- * (User Story 8); la URL no se reescribe con el valor corregido, el re-normalizado por render
- * alcanza. Cubre los 422 de `core/periods.resolver_mes` (H13) antes de pedirle el mes al server.
- */
-const validateMonthParam = (raw: string, current: CalendarMonth): string => {
-  const parsed = parseMonthParam(raw);
-  if (!parsed || compareMonth(parsed, current) > 0) {
-    return formatMonthParam(current);
-  }
-  return raw;
-};
 
 /** Determina el saludo según la hora en la zona del usuario (Fase 30 F6, Fase 34 F7). */
 const getGreeting = (hours: number): string => {
@@ -87,42 +61,26 @@ function DashboardScreen() {
   const [monthlyIncomeError, setMonthlyIncomeError] = useState<string | null>(null);
   const monthlyIncomeRef = useRef<HTMLInputElement>(null);
 
-  // Fase 29 §F5.1 (Q6): el mes visible vive en `?month=YYYY-MM` (User Story 6) y el default
-  // nunca se escribe — `setMonthParam('')` borra la clave y deja la URL del mes en curso limpia
-  // (User Story 7).
-  // Fase 34 F1/F2: "hoy" y el mes en curso se resuelven en la zona del usuario. `today` es un
-  // string `YYYY-MM-DD` (estable durante el día): sirve de dep de memo y de techo del rango. Hasta
-  // que `/users/me` carga (`ready`) las queries que dependen del mes no se disparan.
-  const { displayTimezone, ready } = useTimezone();
-  const today = todayInZone(displayTimezone);
-  const { year: currentYear, month: currentMonth } = monthOfDay(today);
-
-  const [monthParam, setMonthParam] = useQueryParamState('month', '', (raw) =>
-    validateMonthParam(raw, { year: currentYear, month: currentMonth })
-  );
+  // Fase 29 §F5.1 (Q6) / Fase 40 D10: el mes visible vive en `?month=YYYY-MM` y lo gestiona el
+  // hook compartido (zona del usuario, `apiMonth`/`periodParams` con la regla H10, rango y
+  // rótulos). Hasta que `/users/me` carga (`ready`) las queries que dependen del mes no se
+  // disparan.
+  const monthState = useMonthParam();
+  const {
+    year,
+    month,
+    isCurrentMonth,
+    apiMonth,
+    periodParams,
+    monthRange,
+    monthNameLower,
+    displayTimezone,
+    ready,
+  } = monthState;
 
   // Fase 30 F6 (Q5/Q9): detecta si ya se montó en el cliente para evitar hydration mismatch
   // en el saludo dinámico. SSR renderiza 'Hola'; cliente tras montaje muestra el saludo por hora.
   const isMounted = useIsMounted();
-
-  // `?? { year: currentYear, month: currentMonth }` es defensivo: `validateMonthParam` ya
-  // garantiza un valor parseable, pero un `null` aquí dejaría el mes sin año ni número.
-  const selectedMonth = parseMonthParam(monthParam) ?? { year: currentYear, month: currentMonth };
-  const { year, month } = selectedMonth;
-  const isCurrentMonth = year === currentYear && month === currentMonth;
-
-  // H10: el mes en curso NUNCA viaja como `year`/`month`. El 422 de "mes futuro" lo evalúa el
-  // reloj del servidor y el del navegador puede ir atrasado justo en el cambio de mes, así que
-  // pedirlo explícito devolvería un 422 falso. De paso, la key del mes en curso es la de siempre
-  // (supuesto 4) y las ~17 invalidaciones por prefijo siguen matcheando (H7).
-  const apiMonth = isCurrentMonth ? undefined : monthParam;
-  const periodParams = isCurrentMonth ? undefined : { year, month };
-
-  // Rango del mes visible como días `YYYY-MM-DD` (Fase 34 F3): el backend los interpreta en la
-  // zona del usuario. El techo del mes en curso es `today`.
-  const monthRange = useMemo(() => buildMonthRange(year, month, today), [year, month, today]);
-  const monthLabel = formatMonthLabel(year, month);
-  const monthNameLower = formatMonthName(year, month);
 
   // La moneda preferida del usuario; config.currency es su espejo desde preferencias.
   const preferredCurrency = user?.preferred_currency ?? config.currency;
@@ -218,30 +176,6 @@ function DashboardScreen() {
   const cameFromOnboardingCapture = searchParams.get('onboarding') === '1';
   const preferredExpense =
     summary?.monthly_expense_by_currency.find((b) => b.currency === preferredCurrency)?.total ?? 0;
-
-  // Q9: `◀` no baja del mes de la primera transacción; con `first_transaction_month = null` no
-  // hay mes anterior al que llegar, así que queda siempre deshabilitado. `undefined` (summary
-  // aún en carga) NO deshabilita: con `keepPreviousData` los datos anteriores persisten y el
-  // piso se recalcula solo — solo en la carga inicial el piso se desconoce.
-  const floorMonth = summary?.first_transaction_month
-    ? parseMonthParam(summary.first_transaction_month)
-    : null;
-  // El objeto literal y no `selectedMonth`: si el objeto del que salieron `year`/`month` escapa
-  // a una llamada externa, el compilador de React los marca como "quizás mutados después" y
-  // termina invalidando el `useMemo` del rango (`preserve-manual-memoization`).
-  const prevDisabled =
-    floorMonth === null
-      ? summary?.first_transaction_month === null
-      : compareMonth({ year, month }, floorMonth) <= 0;
-
-  // User Story 7: el mes en curso se ve con la URL limpia. Si `▶` aterriza en el mes actual se
-  // borra `?month=` en vez de escribirlo explícito — si no, el link queda fijado a ese mes y
-  // un marcador guardado hoy seguiría abriendo este mes después del cambio de mes.
-  const handleNextMonth = () => {
-    const target = shiftMonth(selectedMonth, 1);
-    const isTargetCurrent = compareMonth(target, { year: currentYear, month: currentMonth }) >= 0;
-    setMonthParam(isTargetCurrent ? '' : formatMonthParam(target));
-  };
 
   // Fase 19 §19.2.1/19.2.2: fila secundaria compacta dentro de la card principal — reemplaza
   // el grid de 2 columnas (Ingresos/Gastos). Son sumas de transacciones del mes (no el
@@ -413,13 +347,9 @@ function DashboardScreen() {
         {/* Fase 29 §F5.2 (Q9, Q15): `◀ Agosto 2026 ▶` en el encabezado, sobre la tarjeta
             principal y NO sticky a propósito — el rótulo del mes acompaña el contexto y no
             debe flotar sobre el scroll. "Volver a este mes" solo fuera del mes en curso. */}
-        <PeriodNavigator
-          label={monthLabel}
-          onPrev={() => setMonthParam(formatMonthParam(shiftMonth(selectedMonth, -1)))}
-          onNext={() => handleNextMonth()}
-          prevDisabled={prevDisabled}
-          nextDisabled={isCurrentMonth}
-          onReset={isCurrentMonth ? undefined : () => setMonthParam('')}
+        <MonthNavigator
+          state={monthState}
+          firstTransactionMonth={summary?.first_transaction_month}
         />
       </div>
 
@@ -523,15 +453,22 @@ function DashboardScreen() {
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {budgetsProgress.map((budget, index) => (
-              <BudgetRing
+              // Fase 40 (D5): la tarjeta completa es un enlace real al detalle de la categoría,
+              // con el mes visible y la moneda del presupuesto.
+              <Link
                 key={budget.budget_id || `budget-ring-${index}`}
-                categoryName={budget.category_name}
-                categoryIcon={budget.category_icon}
-                budgetAmount={Number(budget.amount_limit)}
-                spentAmount={Number(budget.spent)}
-                percentage={Number(budget.percentage)}
-                currency={budget.currency}
-              />
+                href={categoryDetailHref(budget.category_id, { year, month }, budget.currency)}
+                className="focus-visible:ring-primary block cursor-pointer rounded-2xl focus-visible:ring-2 focus-visible:outline-none"
+              >
+                <BudgetRing
+                  categoryName={budget.category_name}
+                  categoryIcon={budget.category_icon}
+                  budgetAmount={Number(budget.amount_limit)}
+                  spentAmount={Number(budget.spent)}
+                  percentage={Number(budget.percentage)}
+                  currency={budget.currency}
+                />
+              </Link>
             ))}
           </div>
         )}
@@ -541,6 +478,7 @@ function DashboardScreen() {
       <CategoryBreakdownSection
         monthKey={apiMonth}
         range={monthRange}
+        detailMonth={{ year, month }}
         enabled={ready}
         currencyOptions={currencyOptions}
         preferredCurrency={preferredCurrency}
