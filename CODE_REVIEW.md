@@ -1,253 +1,266 @@
 # Auditoría de Proyecto: Oikos — Finanzas Personales
 
-**Fecha**: 18 de octubre de 2026
+**Fecha**: 25 de octubre de 2026
 **Analista**: Claude Code
 **Tipo de Proyecto**: Fullstack, uso personal de un solo dueño (ver `AGENTS.md` y `docs/ROADMAP.md`)
-**Stack**: FastAPI + SQLAlchemy + Alembic + PostgreSQL 16 / Next.js (App Router) + TanStack Query + Zustand + Tailwind
+**Stack**: FastAPI + SQLAlchemy + Alembic + PostgreSQL 16 / Next.js 16 (App Router) + TanStack Query + Zustand + Tailwind
 
 ---
 
 ## 0. Nota de calibración
 
-Igual que la auditoría del 2026-09-19: Oikos es una herramienta personal. Se evalúa con exigencia
-normal estructura, arquitectura, mantenibilidad, modularidad, testing, documentación y UX; **no**
-se penaliza hardening de seguridad más allá del baseline de la Fase 26 (cookies `httpOnly` + CSRF,
-verificación de email, rate limit en memoria). Un bug que rompe el uso diario del dueño (login de
-Google) se marca igual, como bug de producto.
+Igual que las auditorías del 2026-09-19 y 2026-10-18: Oikos es una herramienta personal. Se evalúa
+con exigencia normal estructura, arquitectura, mantenibilidad, modularidad, testing, documentación y
+UX; **no** se penaliza hardening de seguridad más allá del baseline de la Fase 26.
 
-Alcance de esta pasada: lectura de `AGENTS.md`, `docs/TODO.md` completo, estructura y tamaños de
-código, manejo de excepciones, locking, estado de tests/lint del frontend. **No** se corrió la suite
-del backend (requiere Docker/testcontainers; el `ruff` global no está instalado fuera del venv) ni
-se revisó cada router línea a línea.
+Alcance: lectura de `AGENTS.md`, `docs/TODO.md`, la auditoría anterior (2026-10-18), métricas de
+tamaño/funciones largas (AST), estado de CI/typecheck/tests de frontend y verificación puntual de
+cada hallazgo anterior. **No** se corrió la suite del backend (requiere Docker/testcontainers) ni se
+revisó cada router línea a línea. Esta pasada es un **delta** sobre la anterior: cubre las Fases 38
+(CDT), 39 (transferencias) y 40 (dashboard navegable) y la limpieza de código muerto (#29).
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-### Estado General: 8.1/10 (anterior: 7.6/10, 2026-09-19)
+### Estado General: 8.2/10 (anterior: 8.1/10, 2026-10-18)
 
-**Veredicto**: MUY BUENO. En un mes el proyecto pasó de las Fases 26 a 37 sin degradar la
-disciplina: ~717 tests backend (contra 251 de la auditoría anterior), Postgres real como default
-de la suite, guardia de `alembic check`, aritmética de calendario centralizada, y tres fases nuevas
-(sobres, gasto contra sobre, recurrentes) construidas **sin tocar `ledger.py` ni `Transaction`**.
-Las debilidades son ahora de escala interna, no de fundamentos: funciones de router largas,
-frontend sin tests ni typecheck en el flujo, sin CI, y la deuda de decisiones sin `/grilling`
-(Fases 35 y 37) que el dueño todavía debe cerrar.
+**Veredicto**: MUY BUENO, estable. En una semana entraron tres fases que tocan dinero (CDT,
+transferencias, dashboard por mes) sin romper el aislamiento de `ledger.py`/`Transaction` salvo
+donde la Fase 39 lo decidió explícitamente (transferencias dentro del saldo, con un `/grilling`).
+La suite creció de ~717 a **893 tests** en 46 archivos, y la limpieza #29 bajó funciones largas
+(`actualizar_transaccion` 204→180, `crear_transaccion` 160→156). Pero **ninguno de los tres
+problemas estructurales de la semana pasada se atacó**: sigue sin CI, sin typecheck ni tests de
+frontend, y las funciones del camino de dinero siguen siendo las más largas del repo. La deuda ya
+no es de fundamentos sino de *red de seguridad* justo cuando la superficie de dinero crece.
 
 ### Top 3 Problemas Críticos
 
-1. **Login con Google sigue caído en producción (`disabled_client`)** — Impacto: Alto (para el uso
-   diario). Abierto desde 2026-09-19, hace casi un mes sin resolución visible en `docs/TODO.md`.
-   No es código. Decisión pendiente: si la apelación no ha respondido, recrear el Client ID
-   (plan B ya documentado) en vez de seguir dependiendo del reset de contraseña como workaround.
-2. **Frontend sin red de seguridad automática** — Impacto: Medio. Cero tests (no hay runner),
-   `tsc` no está en ningún script ni hook (hoy pasa limpio, pero nada lo exige), y sin CI nada
-   corre `pnpm build`. Con la lógica de fechas en `lib/dates.ts`/`lib/dateRanges.ts` (367 líneas)
-   verificada solo con Playwright manual, es la zona más expuesta a regresiones silenciosas.
-3. **Funciones de router/servicio de gran tamaño en el camino de dinero** — Impacto: Medio.
-   `actualizar_transaccion` ≈ 204 líneas, `crear_transaccion` ≈ 160, `obtener_resumen`
-   (dashboard) ≈ 171, y `services/funds.py` 757 líneas. Cada fase añadió una rama (`fund_id`,
-   idempotencia, replay con enlace, alertas) al mismo cuerpo. Están bien cubiertas por tests, pero
-   son el siguiente lugar donde "el código duele al modificarlo".
+1. **Sin CI, sin `tsc` en el flujo y sin tests de frontend** — Impacto: Medio-Alto. Idéntico a la
+   semana pasada y sin movimiento, mientras la Fase 40 agregó `categories/[id]/page.tsx` (696
+   líneas, ahora la página más grande) y la 39 más lógica de monedas/fechas en el cliente.
+   `grep` no encuentra ningún runner (`vitest`/`jest`) ni script `typecheck` en `package.json`; el
+   skill `run-tests` incluso instruye "no inventes uno". Un 893-tests backend con frontend a ciegas
+   es una asimetría: los bugs de fecha/moneda que ya ocurrieron (QA-019, H11) vivían justo ahí.
+2. **Login con Google sigue caído en producción (`disabled_client`)** — Impacto: Alto para el uso
+   diario. Abierto desde 2026-09-19 (**5 semanas**). No es código; el plan B (recrear el Client ID)
+   está documentado en `docs/TODO.md` y no se ha ejecutado.
+3. **Funciones largas en el camino de dinero** — Impacto: Medio. `actualizar_transaccion` 180
+   líneas, `obtener_resumen` (dashboard) 172, `crear_transaccion` 156, más `funds.py` (751) y
+   `transactions.py` (645). Cada fase agrega una rama (`fund_id`, idempotencia, transferencias en
+   `GET /movements`) al mismo cuerpo. Bien cubiertas por tests, pero es donde el próximo cambio dolerá.
 
 ### Fortalezas Destacadas
 
-- ✅ **Invariantes financieras explícitas y testeadas**: libro append-only para sobres
-  (`SUM(fund_entries.amount)`, sin columna `balance`), row-locks con orden definido
-  (transacción → sobre → cuentas), tests de concurrencia dedicados (`test_concurrency.py`,
-  `test_funds_concurrency.py`, `test_recurring_concurrency.py`), dinero siempre `Decimal`/`Numeric(14,2)`.
-- ✅ **Suite de pruebas seria**: ~717 tests, Postgres 16 desechable por defecto, abort explícito
-  sin Docker, guarda contra bases sin "test" en el nombre, y `alembic check` que falla si
-  `models.py` diverge de las migraciones.
-- ✅ **Documentación y proceso excepcionales**: 32 specs con decisiones numeradas, `TODO.md` con
-  fechas y causas raíz, `AGENTS.md` como fuente única para tres herramientas, flujo
-  `grilling → spec → analyze → implementar → run-tests → review`.
+- ✅ **Disciplina de proceso intacta a ritmo alto**: Fases 38-40 con spec numerada, `/grilling` o
+  revisión del dueño documentada, `analyze-spec` y code review (commit `1f0eecd` corrige hallazgos
+  de revisión de la 40). 35 specs, CHANGELOG fase a fase.
+- ✅ **Suite seria y creciente**: 893 tests, Postgres 16 desechable por defecto, guarda `alembic
+  check`, tests de concurrencia dedicados. La caída de `test_cdt_concurrency` se diagnosticó y
+  corrigió en 1 día (`aa62aed`, fixture con CDT ya vencido tras bloquear redención anticipada).
+- ✅ **Invariantes financieras explícitas**: libro append-only de sobres, orden de locks
+  documentado, transferencias que "no son flujo", `Decimal`/`Numeric(14,2)` siempre, `0` usos de
+  `any`/`ts-ignore` en el frontend.
 
 ---
 
-## 2. Análisis por Área
+## 2. Estado de los hallazgos de la auditoría anterior (2026-10-18)
 
-### 2.1 Estructura
+| Hallazgo | Estado hoy |
+|---|---|
+| Login de Google caído | ❌ Abierto (5 semanas) |
+| `typecheck` en `package.json`/hook | ❌ Abierto |
+| CI mínimo | ❌ Abierto (no existe `.github/workflows`) |
+| Tests de frontend (Vitest) | ❌ Abierto |
+| Comentarios `# 🔁 antes: raise HTTPException` | ❌ **11** ocurrencias en backend (antes: 4 citadas) |
+| Helper `invalidateAfterTransactionChange` | ❌ Abierto: 21 archivos llaman `invalidateQueries`, ninguno usa un helper |
+| Tope de 100 reglas recurrentes no atómico | ❌ Abierto (y el de 50 CDT tiene el mismo patrón) |
+| Encabezado de `ROADMAP.md` ("Fase 0 a Fase 32") | ❌ Abierto (el CHANGELOG llega a la 40) |
+| `crear_/actualizar_transaccion` demasiado largas | 🟡 Apenas recortadas (156/180 líneas) |
+| `AGENTS.md` lista modelos | ✅ Correcto: 18 clases en `models.py`, coincide |
+| `test_cdt_concurrency` 422 | 🟡 Arreglado en `aa62aed`, pero `docs/TODO.md:73` sigue como `[ ]` |
+| `rclone.conf`/`.env`/`backups/` fuera de git | ✅ Verificado: ninguno está trackeado |
+
+---
+
+## 3. Análisis por Área
+
+### 3.1 Estructura
 **Score**: 8.5/10
 
 **Hallazgos**:
-- Separación clara `api/` · `core/` · `services/` · `schemas/` (por dominio) · `models/`; frontend
-  con route groups `(auth)`/`(dashboard)` y carpetas de componentes por dominio (`funds/`,
-  `recurring/`, `transactions/`, `modals/`).
-- `services/` ya no es "naciente": `ledger.py`, `funds.py`, `recurring.py` (atributos de dominio
-  reales, 757 y 524 líneas).
-- `AGENTS.md` describe `services/` como "naciente (ledger, funds)" y omite `recurring.py`; la
-  lista de modelos dice 16 (verificar contra `models.py`, ahora 455 líneas).
-- `frontend/types/generated/api.ts` (4.406 líneas) convive con `types/api.ts` manual (447) —
-  deliberado (Decisión 16.3.2), pero es duplicación a medio migrar.
+- Separación clara `api/` · `core/` · `services/` · `schemas/` · `models/`; backend ≈ 10 mil líneas
+  en `app/`. `services/` ya contiene `ledger`, `funds`, `recurring`, `cdt`, `transfers`: dejó de ser
+  "naciente" (la sección de arquitectura de `AGENTS.md` aún lo llama así y lista solo
+  `ledger`/`funds`, aunque los párrafos de fase sí citan los demás).
+- Frontend con route groups, carpetas por dominio y 16 hooks de lectura/mutación en `lib/hooks/`.
+- `types/generated/api.ts` (4.752 líneas) convive con `types/api.ts` manual (568) — deliberado pero
+  a medio migrar; la duplicación crece con cada endpoint nuevo.
 
 **Recomendaciones**:
-- Actualizar la descripción de `services/` en `AGENTS.md` para incluir `recurring.py`.
+- Actualizar la descripción de `services/` en `AGENTS.md` (incluir `recurring`, `cdt`, `transfers`).
 
 ---
 
-### 2.2 Arquitectura
+### 3.2 Arquitectura
 **Score**: 8.5/10
 
 **Hallazgos**:
-- La capa de "compromiso" (sobres) se montó como **capa de asignación** sobre las cuentas sin
-  alterar `Account.balance` ni `ledger.py`: aislamiento correcto, cero regresión en cifras existentes.
-- `core/periods.py` (funciones puras, zona inyectada, límite superior exclusivo) eliminó una
-  familia entera de bugs de borde de periodo (QA-019, H11, QA-038).
-- Excepciones de dominio uniformes: los únicos `HTTPException` restantes están en
-  `core/security.py` (dependencia de auth, aceptable). En `transactions.py` quedan comentarios
-  `# 🔁 antes: raise HTTPException(...)` (líneas 98, 208, 220, 524) — ruido de migración.
-- Hay 11 bloques `except Exception` (transactions ×3, dashboard, recurring, budget_alerts, etc.).
-  Los de "no tumbar la transacción por un fallo de alertas" están justificados y documentados;
-  los de `dashboard.py:400` y `transactions.py:291/449/597` convierten cualquier error en 500
-  genérico y ocultan bugs de programación detrás de un mensaje de dominio (se loguean con
-  `logger.exception`, así que es visibilidad, no pérdida).
-- Scheduler en proceso (solo resumen semanal) y rate limit en memoria: coherentes con un worker.
+- La Fase 39 cambió una invariante antigua (saldo = ledger **más** transferencias) pero lo hizo
+  declarado: `ledger.py` y `reconciliar_cuenta` incluyen transferencias, `GET /movements` hace UNION,
+  y hay un script de corrección de datos con `--confirmo-copia`. Es el cambio de mayor riesgo del
+  mes y se manejó con spec + `pg_dump` previo.
+- `core/periods.py` sigue siendo el único sitio de aritmética de calendario.
+- Excepciones de dominio uniformes; los 4 `HTTPException` restantes están en `core/security.py`
+  (dependencias de auth), aceptable. 12 bloques `except Exception`, la mayoría justificados
+  (alertas que no deben tumbar la transacción).
+- `_resolver_fecha` (router de transacciones) e `instante_de_fecha` (transfers) duplican lógica de
+  fecha (TODO Fase 38). Es precisamente el tipo de duplicación que la Fase 34 eliminó en otra
+  forma: hay riesgo de divergir en el borde día-local/UTC.
+- `services/cdt.py` duplica la construcción de `Transfer` de constitución/redención.
 
 **Recomendaciones**:
-- Dividir `actualizar_transaccion` y `crear_transaccion` en pasos de servicio
-  (`resolver_cuenta_y_categoria`, `aplicar_enlace_sobre`, `evaluar_alertas`) dentro de
-  `services/`, dejando el router como orquestador.
-- Borrar los comentarios `🔁 antes:` — la historia vive en git y `CHANGELOG`.
+- Unificar `_resolver_fecha`/`instante_de_fecha` en `core/periods.py` (1–2 h).
+- Extraer a `services/` los pasos de `crear_/actualizar_transaccion`.
 
 ---
 
-### 2.3 Mantenibilidad
+### 3.3 Mantenibilidad
 **Score**: 8/10
 
 **Hallazgos**:
-- Comentarios de decisión (`Fase 31 (Decisión B4, QA-015)…`) hacen trazable el porqué; costo:
-  densidad alta de comentarios con numeración de fases dentro del código (se vuelven ruido cuando
-  la fase deja de ser contexto vivo).
-- Nomenclatura mezclada español/inglés en backend (`crear_transaccion` / `models.Account`) —
-  consistente por convención (verbos de dominio en español), bajo impacto en solitario.
-- Duplicación conocida y anotada: lista de invalidaciones de TanStack Query copiada en
-  `useRecurring.ts`, `TransactionModal` y captura (`TODO` Fase 37). Es el patrón que históricamente
-  produce "olvidé invalidar X" cuando se añade una query nueva (ya pasó con `preferred_currency`).
-- `/accounts/[id]` (652 líneas) y `/categories/[id]` (414) tienen su propio modal de edición en
-  línea, no `EditTransactionModal` (TODO 🟡 abierto desde Fase 31).
-- `docs/ROADMAP.md` encabezado dice "Fase 0 a Fase 32" cuando el CHANGELOG llega a la 37.
+- Funciones >90 líneas en backend: `actualizar_transaccion` (180), `obtener_resumen` (172),
+  `crear_transaccion` (156), `run_seed` (140, datos de prueba, aceptable),
+  `ensure_recurring_budgets_for_period` (121), `obtener_serie_flujo_caja` (93).
+- Páginas de frontend de 450–700 líneas: `categories/[id]` 696, `accounts/[id]` 652, `settings` 606,
+  dashboard raíz 510, `analytics` 502. `categories/[id]` creció con la Fase 40; la regla de
+  "descomponer cuando se toque" no se aplicó esta vez.
+- 11 comentarios `🔁 antes:` y comentarios con numeración de fase/decisión dentro del código: útiles
+  hoy, ruido cuando la fase deje de ser contexto vivo.
+- `docs/TODO.md` tiene 831 líneas con 45 ítems `[ ]` mezclados con historial `[x]` largo: ya no
+  sirve de vista rápida de "qué está abierto".
 
 **Recomendaciones**:
-- Extraer `invalidateAfterTransactionChange(queryClient)` (≈1–2 h) y reutilizarlo en las tres copias.
-- Reusar `EditTransactionModal` en `/accounts/[id]` y `/categories/[id]`.
+- Borrar los `🔁 antes:` (15 min).
+- Archivar los `[x]` de `TODO.md` y cerrar la entrada de `test_cdt_concurrency` (1 h).
 
 ---
 
-### 2.4 Modularidad
+### 3.4 Modularidad
 **Score**: 8/10
 
 **Hallazgos**:
-- Servicios con funciones puras separadas de casos de uso con lock (`funds.py`:
-  ritmo/aporte requerido vs. operaciones) — testeables sin DB (`test_funds_logic.py`,
-  `test_recurring_logic.py`).
-- `models.py` sigue como archivo único (455 líneas, 16 modelos) — aún razonable.
-- `funds.py` (757 líneas) mezcla cálculo de ritmo, disponibilidad, casos de uso, y enlace a gastos.
-  Candidato a dividirse (`funds/pacing.py`, `funds/ledger.py`, `funds/spending.py`) cuando se
-  vuelva a tocar.
-- Frontend: páginas de 500–650 líneas (`accounts/[id]`, `settings`, dashboard raíz) siguen siendo
-  orquestadores largos aunque `transactions/page.tsx` se descompuso bien (370).
+- Funciones puras separadas de casos de uso con lock (`funds`, `recurring`, `cdt`) y testeables sin
+  DB. `models.py` único con 18 modelos (551 líneas): aún razonable.
+- `funds.py` (751 líneas) concentra ritmo, disponibilidad, casos de uso y enlace a gastos; sigue
+  siendo candidato a subpaquete, pero la recomendación vigente (no dividir preventivamente) es sensata.
+- Frontend: helpers de presentación (`Chip`, `formatDay`, `money`) viven en
+  `components/recurring/recurringPresentation` y los consumen otros dominios (CDT) — acoplamiento
+  por ubicación equivocada (TODO Fase 38).
+- La lista de invalidaciones de TanStack Query está copiada en 21 archivos; con transferencias
+  (que mueven saldos) la lista de "qué invalidar tras un movimiento" ya tiene más claves que en la
+  Fase 37, y olvidarse de una es el bug típico de este diseño.
 
 **Recomendaciones**:
-- No dividir `funds.py` preventivamente; hacerlo en la siguiente fase que lo modifique.
-- Dividir `settings/page.tsx` (606) por secciones (zona horaria, API keys, moneda, baja).
+- `invalidateAfterMovementChange(queryClient)` central (1–2 h) — ahora con más justificación que
+  hace una semana.
+- Mover `Chip`/`formatDay`/`money` a `components/ui` o `lib/format`.
 
 ---
 
-### 2.5 Seguridad (contexto personal)
+### 3.5 Seguridad (contexto personal)
 **Score**: 7.5/10
 
 **Hallazgos**:
-- Baseline sólido y vigente: cookies `httpOnly` + CSRF double-submit, refresh rotativo hasheado,
-  verificación de email obligatoria, fix del auto-link de Google (Fase 23), `rclone.conf`, `.env`
-  y `backups/` en `.gitignore` y fuera del índice de git (verificado).
-- Sigue publicado a internet vía Funnel con un único usuario; el dueño decidió explícitamente no
-  invertir más aquí. No se propone trabajo nuevo.
-- El runtime `docker-compose.yml` publica `0.0.0.0:8000/3000`; confirmado con el dueño como
-  riesgo teórico (host solo con Tailscale).
-- Sin escáner de dependencias automatizado (no hay CI); riesgo aceptado.
+- Baseline vigente (cookies `httpOnly` + CSRF, refresh rotativo, verificación de email); secretos
+  fuera del índice de git (verificado). Sin `dangerouslySetInnerHTML`; `localStorage` solo para
+  tema y flag de push (sin datos sensibles).
+- Publicado vía Funnel con un único usuario; compose publica `0.0.0.0:8000/3000` (riesgo teórico
+  aceptado). Sin escáner de dependencias (no hay CI).
+- Los scripts de corrección de datos (`fase34_reporte_x1.py`, `fase39_corregir_bancolombia.py`)
+  exigen `--confirmo-copia`: buena práctica para operaciones destructivas sobre datos reales.
 
-**Recomendaciones**: ninguna nueva. Revalidar solo si cambia el modelo de despliegue.
+**Recomendaciones**: ninguna nueva.
 
 ---
 
-### 2.6 Documentación
+### 3.6 Documentación
 **Score**: 9/10
 
 **Hallazgos**:
-- Referencia por capa (`ARCHITECTURE`, `BUSINESS_RULES`, `API_REFERENCE`, `API_CONTRACT`,
-  `STATE_AND_FETCHING`) y las dos últimas actualizadas con sobres y recurrentes.
-- `README.md` es breve (103 líneas) y correcto; menciona sobres y semilla de Fase 37.
-- Pequeños desfases: encabezado de `ROADMAP.md` (Fase 32), y `TODO.md` aún lista como "pendiente"
-  la revisión D1–D20 de la Fase 37 aunque `AGENTS.md` dice que el dueño las revisó el 2026-10-18
-  (la casilla debería cerrarse). `TODO.md` ya tiene 800 líneas: la sección "Resueltos" y las
-  entradas `[x]` largas dificultan ver lo abierto.
-- `.scratch/` (QA no versionado) guarda reportes con evidencia que `TODO.md` solo cita.
+- Doc por capa, 35 specs con decisiones numeradas, `AGENTS.md` como fuente única,
+  `VISION_FINANZAS_RESPONSABLES.md` que ordena las fases. Las Fases 38-40 cerraron con CHANGELOG,
+  ROADMAP, AGENTS y TODO actualizados en el mismo PR.
+- Desfases menores: encabezado de `ROADMAP.md` ("Fase 0 a Fase 32"); `TODO.md:73` sigue abierto
+  tras el fix; `ROADMAP.md` línea 101 aún dice "recurrentes como Fase 35 probable"; `AGENTS.md` es
+  ya un documento de ~5 mil palabras con mucho contexto histórico por fase — útil, pero cada agente lo
+  carga completo en cada sesión.
 
 **Recomendaciones**:
-- Mover los `[x]` de `TODO.md` a `docs/archive/TODO_resueltos.md` y dejar solo lo abierto (≈1 h).
-- Sincronizar encabezado de `ROADMAP.md` y casilla D1–D20 de la Fase 37.
+- Sincronizar encabezados y cerrar casillas (30 min).
+- Mover los párrafos "hecho operativo vigente" de Fases 34–39 de `AGENTS.md` a `docs/` y dejar en
+  `AGENTS.md` solo punteros: reduce el costo de contexto por sesión.
 
 ---
 
-### 2.7 UX/Usabilidad
+### 3.7 UX/Usabilidad
 **Score**: 8/10
 
 **Hallazgos**:
-- Tres QA completos (2026-09-26, 10-03, 10-18) con fixes sistemáticos: estados de error con
-  "Reintentar" (`QueryErrorState`), diálogos accesibles (`role`, trampa de foco), tuteo
-  consistente, zona horaria del usuario en todas las vistas.
-- Features nuevas bien pensadas para el flujo real: aviso antes de borrar un sobre con gastos,
-  "Cuota de {mes} cumplida ✓", pendientes recurrentes en el dashboard.
-- Abiertos y relevantes para el uso real: calendario recurrente de 12 tarjetas apiladas en móvil;
-  sugerencias descartadas que reaparecen (D15); sin notificación de pendientes recurrentes (D2);
-  "disponible real" sin decisión sobre cuentas `credit` (TODO Fase 35 D1).
-- Pendiente del dueño: contrastar el cuadre USD de "Disponible real" con datos reales (TODO A3).
+- La Fase 40 cierra la queja histórica de navegación (dashboard por mes, detalle de categoría con
+  presupuesto); `QueryErrorState`, diálogos accesibles y zona horaria del usuario se mantienen.
+- Abiertos relevantes para el uso real: login de Google; calendario recurrente de 12 tarjetas
+  apiladas en móvil; sugerencias descartadas que reaparecen; sin aviso de pendientes recurrentes ni
+  de CDT por vencer (solo UI); decisión sobre cuentas `credit` en "disponible real" (TODO Fase 35 D1);
+  contraste USD de "disponible real" con datos reales (A3).
+- Sin tests de frontend, los fixes de UX dependen de pasadas manuales de QA con Playwright.
 
 **Recomendaciones**:
-- Cerrar A3 con datos reales antes de confiar en la cifra de disponible.
+- Cerrar A3 y D1 con el dueño antes de apoyar decisiones en la cifra de disponible.
 - Plegar el calendario por mes en móvil.
 
 ---
 
-## 3. Recomendaciones Priorizadas
+## 4. Recomendaciones Priorizadas
 
 ### Quick Wins (Horas)
-1. Añadir `"typecheck": "tsc --noEmit"` a `frontend/package.json` y al `pre-commit`/`run-tests` — 1 h
-2. Extraer `invalidateAfterTransactionChange(queryClient)` y usarlo en 3 sitios — 1–2 h
-3. Eliminar comentarios `# 🔁 antes: raise HTTPException` en `transactions.py` — 15 min
-4. Corregir encabezado de `ROADMAP.md` y cerrar casilla D1–D20 en `TODO.md` — 30 min
-5. Archivar los `[x]` de `TODO.md` — 1 h
-6. Hacer atómico el tope de 100 reglas recurrentes (lock sobre el usuario o `COUNT` en la misma sentencia) — 1–2 h
+1. Añadir `"typecheck": "tsc --noEmit"` a `frontend/package.json`, al `pre-commit` y a la skill `run-tests` — 1 h
+2. Eliminar los 11 comentarios `# 🔁 antes:` — 15 min
+3. Cerrar `TODO.md:73` (fix `aa62aed`) y corregir encabezados de `ROADMAP.md` — 30 min
+4. Unificar `_resolver_fecha`/`instante_de_fecha` — 1–2 h
+5. Helper `invalidateAfterMovementChange` y reemplazar copias — 2 h
+6. Topes de 100 reglas / 50 CDT atómicos (lock sobre el usuario) — 1–2 h
 
 ### Mejoras Medianas (Días)
-1. Descomponer `crear_/actualizar_transaccion` en pasos de `services/` — 1–2 días
-2. Tests de frontend para `lib/dates.ts`, `lib/dateRanges.ts`, `validateAmount.ts` (Vitest, solo funciones puras) — 1 día
-3. CI mínimo (GitHub Actions): ruff + pytest con servicio Postgres + eslint + tsc + build — 0,5–1 día
-4. Reusar `EditTransactionModal` en `/accounts/[id]` y `/categories/[id]` — 0,5–1 día
-5. Decisión de producto + implementación: excluir lo pagado con sobre de alertas de presupuesto (Fase 36 D8) — 1 día
+1. CI mínimo (GitHub Actions): ruff + pytest con Postgres + eslint + tsc + build — 0,5–1 día
+2. Vitest para `lib/dates.ts`, `lib/dateRanges.ts`, `validateAmount.ts` (solo funciones puras) — 1 día
+3. Descomponer `crear_/actualizar_transaccion` y `obtener_resumen` en pasos de `services/` — 1–2 días
+4. Reducir `AGENTS.md` a punteros + archivar historial de fases en `docs/` — 0,5 día
+5. Archivar `[x]` de `TODO.md` (831 → vista de abiertos) — 1 h
 
 ### Refactoring Mayor (Semanas)
-1. Migrar los call sites de `types/api.ts` manual a `types/generated/api.ts` — 1 semana, oportunista
-2. Dividir `services/funds.py` en subpaquete cuando se toque en la próxima fase — ~2–3 días, no preventivo
+1. Migrar `types/api.ts` manual a `types/generated/api.ts` — ~1 semana, oportunista
+2. Dividir `services/funds.py` en subpaquete en la próxima fase que lo toque — 2–3 días, no preventivo
 
 ---
 
-## 4. Próximos Pasos Sugeridos
+## 5. Próximos Pasos Sugeridos
 
 ### Acciones Inmediatas (Esta semana)
-1. Resolver el login de Google (consultar apelación; si no hay respuesta, recrear Client ID + consent screen real).
-2. Cerrar los pendientes del dueño: contraste de A3 (USD en "Disponible real") y `pg_dump` + reporte X1 si aún no se desplegó Fase 34.
-3. Quick wins 1, 3 y 4 (< 2 h en total).
+1. Resolver el login de Google (apelación o recrear Client ID + consent screen).
+2. Quick wins 1, 2 y 3 (< 2 h en total).
+3. Antes de la Fase 41 ("págate primero"): CI mínimo + `typecheck`, para que la próxima fase entre
+   con red de seguridad.
 
 ### Roadmap de Mejoras (Próximo mes)
-1. CI mínimo + tests Vitest de utilidades de fecha antes de la Fase 38 (CDT), que volverá a tocar fechas y dinero.
-2. Refactor de `crear_/actualizar_transaccion` antes de agregar la próxima rama (p. ej. transferencias QA-030).
-3. Decidir con `/grilling` los puntos que las Fases 35 y 37 tomaron sin él y que condicionan las siguientes (cuentas de crédito en disponible real, notificar pendientes).
+1. Vitest sobre utilidades de fecha/moneda; el cliente ya concentra lógica de rangos y monedas.
+2. Refactor de `crear_/actualizar_transaccion` antes de que la Fase 41/42 agregue otra rama.
+3. Decidir con `/grilling` los puntos que las Fases 35, 37 y 38 tomaron sin él (crédito en
+   disponible real, notificar pendientes y vencimientos).
 
 ---
 
-## 5. Métricas Clave
+## 6. Métricas Clave
 
 | Área | Score | Prioridad |
 |------|-------|-----------|
@@ -259,7 +272,8 @@ frontend sin tests ni typecheck en el flujo, sin CI, y la deuda de decisiones si
 | Documentación | 9/10 | Baja |
 | UX/Usabilidad | 8/10 | Media |
 
-**Score General**: 8.1/10
+**Score General**: 8.2/10 (promedio simple 8.21)
 
-Datos de apoyo: ~717 tests backend en 35 archivos; backend ≈ 8,5 mil líneas en `app/`; frontend
-`tsc --noEmit` y `eslint` limpios al momento de la auditoría; 361 commits; 32 specs de fase.
+Datos de apoyo: 893 tests backend en 46 archivos; backend ≈ 10,1 mil líneas en `app/`; frontend
+≈ 22 mil líneas de TS/TSX (4,7 mil son tipos generados), 0 tests, 0 usos de `any`/`ts-ignore`;
+18 modelos; 35 specs; sin CI. No se ejecutaron `pytest`/`eslint`/`tsc` en esta pasada.
