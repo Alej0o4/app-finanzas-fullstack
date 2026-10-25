@@ -34,7 +34,7 @@ docker compose logs -f backend
 ### Sin Docker
 
 1. Crear y activar un entorno virtual.
-2. Instalar dependencias con `pip install -r requirements.txt`.
+2. Instalar dependencias con `pip install -r requirements.txt` (runtime) o `pip install -r requirements-dev.txt` (runtime + tests + ruff).
 3. Definir `SECRET_KEY` y `DATABASE_URL` en el archivo `.env`.
 4. Ejecutar la aplicación con Uvicorn apuntando a `app.main:app`.
 

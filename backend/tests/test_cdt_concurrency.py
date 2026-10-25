@@ -28,7 +28,8 @@ def _crear(real_client, headers) -> dict:
             "principal": "1000.00",
             "rate_ea": "10",
             "opened_on": (hoy - timedelta(days=100)).isoformat(),
-            "maturity_on": (hoy + timedelta(days=100)).isoformat(),
+            # Ya vencido: redimir antes del vencimiento es 422 (92f7e01).
+            "maturity_on": (hoy - timedelta(days=1)).isoformat(),
         },
         headers=headers,
     )

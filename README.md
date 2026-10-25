@@ -42,7 +42,7 @@ docker compose logs -f backend
 ```sh
 # Backend (necesita .env con SECRET_KEY)
 cd backend
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # requirements.txt = solo runtime (lo que instala la imagen Docker)
 uvicorn app.main:app --reload --host 0.0.0.0
 
 # Frontend

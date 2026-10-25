@@ -16,11 +16,12 @@ from decimal import ROUND_HALF_UP, Decimal
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import AccountNotFoundError, BadRequestError, ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import AccountNotFoundError, BadRequestError, ConflictError, ValidationError
 from app.core.periods import instante_de_dia, resolver_rango
 from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.services import ledger
+from app.services.ownership import obtener_propio
 
 CENTAVO = Decimal("0.01")
 CERO = Decimal("0.00")
@@ -147,13 +148,7 @@ def bloquear_cuentas(db: Session, user_id: int, ids: set[int | None]) -> dict[in
 
 
 def _obtener(db: Session, user_id: int, transfer_id: int, *, bloquear: bool = False) -> models.Transfer:
-    consulta = db.query(models.Transfer).filter(models.Transfer.id == transfer_id, models.Transfer.user_id == user_id)
-    if bloquear:
-        consulta = consulta.with_for_update()
-    t = consulta.first()
-    if t is None:
-        raise NotFoundError(_MSG_NO_EXISTE)
-    return t
+    return obtener_propio(db, models.Transfer, user_id, transfer_id, _MSG_NO_EXISTE, bloquear=bloquear)
 
 
 def _rechazar_si_cdt(t: models.Transfer) -> None:

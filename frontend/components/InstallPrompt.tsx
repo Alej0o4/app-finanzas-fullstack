@@ -10,8 +10,8 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 /** Umbral de promoción (Fase 13 §13.1): recién desde la segunda visita autenticada —
- *  no competir con el onboarding en el primer render. Mismo mecanismo simple de
- *  localStorage que usePersistedState. */
+ *  no competir con el onboarding en el primer render. Mecanismo simple de
+ *  localStorage. */
 const VISITS_KEY = 'oikos_install_visits';
 const DISMISSED_KEY = 'oikos_install_dismissed';
 const MIN_VISITS = 2;

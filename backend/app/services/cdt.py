@@ -20,11 +20,12 @@ from decimal import ROUND_HALF_UP, Decimal, localcontext
 from sqlalchemy.orm import Session
 
 from app.core.default_categories import ensure_default_categories
-from app.core.exceptions import ConflictError, InternalServerError, NotFoundError, ValidationError
+from app.core.exceptions import ConflictError, InternalServerError, ValidationError
 from app.core.periods import dia_local, instante_de_dia, sumar_meses
 from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.services import ledger
+from app.services.ownership import obtener_propio
 from app.services.transfers import bloquear_cuentas
 
 CENTAVO = Decimal("0.01")
@@ -146,13 +147,7 @@ def _hoy(user: models.User, ahora: datetime) -> date:
 
 
 def _obtener(db: Session, user_id: int, cdt_id: int, *, bloquear: bool = False) -> models.Cdt:
-    consulta = db.query(models.Cdt).filter(models.Cdt.id == cdt_id, models.Cdt.user_id == user_id)
-    if bloquear:
-        consulta = consulta.with_for_update()
-    cdt = consulta.first()
-    if cdt is None:
-        raise NotFoundError(_MSG_NO_EXISTE)
-    return cdt
+    return obtener_propio(db, models.Cdt, user_id, cdt_id, _MSG_NO_EXISTE, bloquear=bloquear)
 
 
 def _validar_fechas(opened_on: date, maturity_on: date, hoy: date) -> None:

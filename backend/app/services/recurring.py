@@ -23,7 +23,6 @@ from app.core.exceptions import (
     AccountNotFoundError,
     CategoryNotFoundError,
     ConflictError,
-    NotFoundError,
     ValidationError,
 )
 from app.core.periods import (
@@ -37,6 +36,7 @@ from app.core.periods import (
 from app.core.timezones import get_zoneinfo
 from app.models import models
 from app.services import ledger
+from app.services.ownership import obtener_propio
 
 CENTAVO = Decimal("0.01")
 MAX_REGLAS_POR_USUARIO = 100  # D17
@@ -129,27 +129,14 @@ def indice_ultima_pareja_anual(fechas: list[date], montos: list[Decimal]) -> int
     return None
 
 
-def es_candidato_anual(fechas: list[date], montos: list[Decimal]) -> bool:
-    """¿El grupo de gastos parece un cargo anual? (D15) Ver `indice_ultima_pareja_anual`."""
-    return indice_ultima_pareja_anual(fechas, montos) is not None
-
-
 # --------------------------------------------------------------------------------------
 # Consultas auxiliares
 # --------------------------------------------------------------------------------------
 def _obtener(db: Session, user_id: int, rule_id: int, *, bloquear: bool = False) -> models.RecurringRule:
-    consulta = db.query(models.RecurringRule).filter(
-        models.RecurringRule.id == rule_id, models.RecurringRule.user_id == user_id
-    )
-    if bloquear:
-        # `FOR UPDATE` es la PRIMERA consulta de confirmar/saltar/editar/borrar (D20): serializa
-        # dos confirmaciones de la misma ocurrencia y confirmar vs borrar. `populate_existing`
-        # fuerza a leer el `next_date` ya avanzado por quien tenía el lock.
-        consulta = consulta.with_for_update().populate_existing()
-    regla = consulta.first()
-    if regla is None:
-        raise NotFoundError(_MSG_NO_EXISTE)
-    return regla
+    # `bloquear` es la PRIMERA consulta de confirmar/saltar/editar/borrar (D20): serializa dos
+    # confirmaciones de la misma ocurrencia y confirmar vs borrar. `releer` fuerza a leer el
+    # `next_date` ya avanzado por quien tenía el lock.
+    return obtener_propio(db, models.RecurringRule, user_id, rule_id, _MSG_NO_EXISTE, bloquear=bloquear, releer=True)
 
 
 def _cuenta_del_usuario(db: Session, user_id: int, account_id: int, *, bloquear: bool = False) -> models.Account:

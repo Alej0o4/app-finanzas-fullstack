@@ -20,6 +20,7 @@ from app.core.exceptions import AccountNotFoundError, ConflictError, NotFoundErr
 from app.core.periods import dia_local, mediodia_local, rango_mes
 from app.core.timezones import get_zoneinfo
 from app.models import models
+from app.services.ownership import obtener_propio
 
 CENTAVO = Decimal("0.01")
 MESES_PROMEDIO = 3  # D3: meses completos que promedian el gasto del fondo de emergencia
@@ -366,15 +367,8 @@ def _construir(db: Session, user: models.User, fondos: list[models.Fund], ahora:
 
 
 def _obtener(db: Session, user_id: int, fund_id: int, *, bloquear: bool = False) -> models.Fund:
-    consulta = db.query(models.Fund).filter(models.Fund.id == fund_id, models.Fund.user_id == user_id)
-    if bloquear:
-        # Fase 31 (patrón): `FOR UPDATE` es la PRIMERA consulta de la operación; serializa
-        # aportes/retiros concurrentes del mismo sobre. En SQLite no genera nada.
-        consulta = consulta.with_for_update()
-    fund = consulta.first()
-    if fund is None:
-        raise NotFoundError(_MSG_NO_EXISTE)
-    return fund
+    # `bloquear` serializa aportes/retiros concurrentes del mismo sobre (patrón Fase 31).
+    return obtener_propio(db, models.Fund, user_id, fund_id, _MSG_NO_EXISTE, bloquear=bloquear)
 
 
 def _cuenta_del_usuario(db: Session, user_id: int, account_id: int) -> models.Account:

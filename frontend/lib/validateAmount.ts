@@ -1,8 +1,8 @@
 // Fase 31 F2 (Q6, QA-013): límites del rango real de `Numeric(14,2)` — los mismos que
 // valida el backend (B3 de la spec de Fase 31: 12 dígitos enteros, 2 decimales). Vive acá
 // para que el mensaje aparezca ANTES de enviar, no solo cuando el 422 del servidor vuelve.
-export const MAX_INTEGER_DIGITS = 12;
-export const MAX_DECIMAL_PLACES = 2;
+const MAX_INTEGER_DIGITS = 12;
+const MAX_DECIMAL_PLACES = 2;
 
 interface ValidateAmountOptions {
   /** `true` = el campo acepta 0 (ingreso esperado, saldo inicial); por default exige > 0

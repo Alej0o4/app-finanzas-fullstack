@@ -23,7 +23,7 @@ import { useTimezone } from '@/lib/hooks/useTimezone';
  * (User Story 8); la URL no se reescribe con el valor corregido, el re-normalizado por render
  * alcanza. Cubre los 422 de `core/periods.resolver_mes` (H13) antes de pedirle el mes al server.
  */
-export const validateMonthParam = (raw: string, current: CalendarMonth): string => {
+const validateMonthParam = (raw: string, current: CalendarMonth): string => {
   const parsed = parseMonthParam(raw);
   if (!parsed || compareMonth(parsed, current) > 0) {
     return formatMonthParam(current);
