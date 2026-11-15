@@ -513,6 +513,12 @@ en ese momento — no antes.
     ]
   }
   ```
+  > **Actualizado 2026-11-15:** `start_url` pasó a `"/"` (dashboard). Con la Fase 19 el login ya no
+  > redirige siempre a `/capture` (un usuario con 2+ transacciones va a `/`), y abrir la PWA con
+  > sesión activa mostraba la captura rápida en cada apertura, que el dueño leyó como "el
+  > onboarding de siempre". `/capture` sigue existiendo y en el `APP_SHELL` de `sw.js`.
+  > Lo de abajo es el razonamiento original, histórico.
+
   `start_url: "/capture"` a propósito, no `"/"`: coherente con la Decisión 10.1.4 de Fase 10 (el
   login ya redirige a `/capture` en todo inicio de sesión) — abrir la PWA instalada debe llevar al
   mismo punto de entrada que abrir la web y loguearse. `background_color`/`theme_color` toman el

@@ -9,6 +9,16 @@
 
 ---
 
+## PWA abre en el dashboard (2026-11-15)
+
+Ajuste sin fase ni spec. `frontend/public/manifest.json`: `start_url` pasó de `/capture` a `/`. Abrir la PWA
+instalada con sesión activa caía siempre en la pantalla de captura rápida (no en el wizard de onboarding, que solo
+vive en `/capture?onboarding=1`) aunque el usuario ya tuviera historial. `/capture` se mantiene (destino post-login
+sin historial, enlace desde el dashboard). Nota de actualización en `docs/specs/fase_13_spec.md` §13.1. Una PWA ya
+instalada puede tardar en recoger el manifest nuevo; si no, desinstalar y reinstalar.
+
+---
+
 ## Fase 40 — Dashboard navegable y detalle de categoría con presupuesto (2026-10-24)
 
 Spec: `docs/specs/fase_40_spec.md` (D1–D19; Q1–Q16 del `/grilling` y D13–D19 confirmadas por el dueño). Las tarjetas
